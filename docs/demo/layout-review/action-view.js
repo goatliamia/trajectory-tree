@@ -233,7 +233,7 @@
       '<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="#fff" stroke="#6a7f9a"/><text x="6" y="8.6" text-anchor="middle" font-size="7" fill="#4d6076">↻</text></svg>徽标数量</span>' +
       '<span class="br-key-item"><svg viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span>' +
       '<span class="br-key-item"><svg viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span>' +
-      '<span class="br-key-item"><svg viewBox="0 0 12 12"><rect x="1.5" y="6" width="9" height="4" class="br-glyph" opacity=".45"/></svg>上下文总趋势</span></div>' +
+      '</div>' +
       '<div class="review-action-guidance">点图标看这一步 · 双击看原始记录 · 缩小返回总览</div>' +
       '<div class="review-overlay-key" aria-hidden="' + !overviewLayers.has('context') + '"><span class="review-overlay-caption">上下文 <b>↑增 ↓减</b></span>' +
       CONTEXT_CATEGORIES.map(c => '<button class="review-overlay-source" data-action-source="' + c.key + '"><i style="background:' + c.color + '"></i>' + c.label + '</button>').join('') + '</div>';
