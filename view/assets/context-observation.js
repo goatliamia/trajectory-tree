@@ -32,14 +32,6 @@
   };
   function studySyncSources() {
     const region = $('geist-context-overview'); if (!region) return;
-    let actions = $('study-source-actions');
-    if (!actions) {
-      actions = document.createElement('div'); actions.id = 'study-source-actions'; actions.className = 'study-source-actions';
-      actions.innerHTML = '<span>点选构成 · 可多选</span><button id="study-all-sources">全选</button><button id="study-clear-sources">清空</button>';
-      region.querySelector('header').append(actions);
-      $('study-all-sources').onclick = () => { CONTEXT_CATEGORIES.forEach(c => studySources.add(c.key)); studyRefresh(); };
-      $('study-clear-sources').onclick = () => { studySources.clear(); studyRefresh(); };
-    }
     for (const button of region.querySelectorAll('[data-current-source]')) {
       const key = button.dataset.currentSource, category = geistContextCategory(key), selected = studySources.has(key);
       button.style.setProperty('--source-color', category.color);
