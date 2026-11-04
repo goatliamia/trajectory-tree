@@ -129,6 +129,35 @@ export function traceContext(events, payload, timeline) {
       context.route = { provider: timeline.provider, model: timeline.model, reasoningEffort: timeline.reasoningEffort };
     }
   }
+  // 目标从工具调用还原:create_goal / get_goal / update_goal 的参数与返回里就有目标字段。
+  // 观察事件流不含 goal/change,所以以调用记录为准。
+  const goalCalls = [];
+  for (const turn of session.turns || []) for (const step of turn.steps || []) for (const call of step.calls || []) {
+    if (!call || !['create_goal', 'get_goal', 'update_goal'].includes(call.name)) continue;
+    let payloadGoal = null;
+    const text = call.result?.text;
+    if (typeof text === 'string' && text.trim().startsWith('{')) {
+      try { payloadGoal = JSON.parse(text).goal || null; } catch { payloadGoal = null; }
+    }
+    let args = {};
+    if (typeof call.args?.text === 'string') { try { args = JSON.parse(call.args.text); } catch { args = {}; } }
+    else if (call.args && typeof call.args === 'object') args = call.args;
+    goalCalls.push({ turn: turn.number, step: step.number, seq: call.seq, time: call.start, name: call.name, args, goal: payloadGoal });
+  }
+  if (goalCalls.length) {
+    const withGoal = goalCalls.filter(c => c.goal);
+    const last = withGoal.length ? withGoal[withGoal.length - 1].goal : null;
+    context.goal = {
+      id: last?.id ?? null,
+      objective: last?.objective ?? '',
+      phase: last?.phase ?? null,
+      roundsStarted: Number.isFinite(last?.roundsStarted) ? last.roundsStarted : null,
+      maxGoalRounds: Number.isFinite(last?.maxGoalRounds) ? last.maxGoalRounds : null,
+      markers: goalCalls.map(c => ({ seq: c.seq, time: c.time, turn: c.turn,
+        operation: c.name === 'update_goal' ? (c.args.action || 'update') : c.name === 'create_goal' ? 'create' : 'read',
+        phase: c.goal?.phase ?? null, revision: c.goal?.revision ?? c.args.revision ?? null })),
+    };
+  }
   return context;
 }
 
@@ -238,19 +267,5 @@ export async function traceActors(events, payload, skillRecords, readEvents) {
       if (next < catalogs.length) await new Promise(resolve => setImmediate(resolve));
     }
   }));
-  // 目标由宿主记录的 goal/change 事件给出,不解析工具参数文本。
-  const goalChanges = (events || []).filter(e => e.type === 'goal/change' && e.data && e.data.goal);
-  let goal = null;
-  if (goalChanges.length) {
-    const last = goalChanges[goalChanges.length - 1].data;
-    goal = {
-      id: last.goal.id || null,
-      objective: last.goal.objective || '',
-      phase: last.goal.phase || null,
-      roundsStarted: Number.isFinite(last.roundsStarted) ? last.roundsStarted : null,
-      maxGoalRounds: Number.isFinite(last.goal.maxGoalRounds) ? last.goal.maxGoalRounds : null,
-      markers: goalChanges.map(e => ({ seq: e.seq, time: e.time, operation: e.data.operation || null, phase: e.data.goal.phase || null, revision: e.data.goal.revision ?? null })),
-    };
-  }
-  return { skillAnalysis, agentBranches, goal };
+  return { skillAnalysis, agentBranches };
 }
