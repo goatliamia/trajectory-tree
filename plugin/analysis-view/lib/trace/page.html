@@ -830,7 +830,7 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .review-action-ring.error { stroke: #c0503f; }
 .review-action-ring.timeout { stroke: #d08a2e; }
 .review-action-ring.blocked { stroke: #8a8f98; }
-.review-action-badge circle { fill: #fff; stroke-width: 1.2; }
+.review-action-badge circle { fill: var(--surface); stroke-width: 1.2; }
 .review-action-badge text { font-size: 9px; font-weight: 600; }
 .review-action-badge.error circle { stroke: #c0503f; } .review-action-badge.error text { fill: #c0503f; }
 .review-action-badge.timeout circle { stroke: #d08a2e; } .review-action-badge.timeout text { fill: #b0761f; }
@@ -856,7 +856,7 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .geist-review .geist-time-part.rest i { background: #dfe3e6; }
 
 /* 耗时构成:条形、底部栏圆点、抽屉三处共用同一套颜色。 */
-.geist-review { --time-wait: #8c9bb0; --time-model: #5286bf; --time-tool: #39a29b; --time-rest: #c9cfd4; }
+.geist-review { --time-wait: var(--muted); --time-model: var(--path); --time-tool: var(--tool); --time-rest: var(--line); }
 .review-time-tool { fill: var(--time-tool); }
 .review-time-model { fill: var(--time-model); }
 .review-time-rest { fill: var(--time-rest); }
@@ -877,7 +877,7 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .goal-dot.complete { fill: #3f7d55; }
 .goal-dot.blocked { fill: #c0503f; }
 .goal-label { font: 10px var(--sans); fill: var(--muted); }
-.goal-dot { stroke: #fff; stroke-width: 1; }
+.goal-dot { stroke: var(--surface); stroke-width: 1; }
 .goal-dot.create { fill: #5286bf; }
 .goal-dot.resume { fill: #c38a30; }
 .goal-dot.pause { fill: #8a8f98; }
@@ -888,6 +888,15 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .goal-block { fill: var(--surface); stroke: var(--line); }
 .goal-band:hover .goal-block { fill: var(--bg); }
 .goal-band { color: var(--muted); }
+
+/* 深色模式:语义色提亮,中性色已走变量。 */
+@media (prefers-color-scheme: dark) {
+  .geist-review { --time-wait: #93a3b5; --time-model: #7aa6e6; --time-tool: #4fbfae; --time-rest: #3a443d; }
+  .goal-dot.complete { fill: #5fbf86; }
+  .goal-dot.blocked { fill: #e0705c; }
+  .goal-dot.create { fill: #7aa6e6; }
+  .goal-dot.resume { fill: #d8a15a; }
+}
 .geist-review .review-action-mode .graph-scroll{flex:0 0 auto;min-height:0;height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
 .geist-review .review-action-mode .graph-wrap{display:block;align-items:initial;min-height:0;height:auto;padding:0}
 .geist-review .review-action-mode .step-panel.geist-step{max-height:none;overflow:visible;flex:none;padding-bottom:24px}
