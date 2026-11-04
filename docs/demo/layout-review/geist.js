@@ -56,7 +56,22 @@
     geistSyncLegend();
   }
   const geistOverviewBase = renderOverview;
-  renderOverview = function(...args) { geistSyncMeasureFont(); const value = geistOverviewBase(...args); geistArrangeCaption(); return value; };
+  renderOverview = function(...args) { geistSyncMeasureFont(); const value = geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); return value; };
+  // 目标入口放在观察行:caption 每次重排都会重建子节点,所以放在重排之后补。
+  function geistGoalChip() {
+    const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
+    if (!goal) return;
+    const caption = $('graph-caption');
+    if (!caption || caption.querySelector('#br-goal')) return;
+    const label = '目标 ' + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
+    caption.insertAdjacentHTML('afterbegin', '<button class="geist-text-action quiet" id="br-goal">' + label + ' ↗</button>');
+    $('br-goal').onclick = () => {
+      const rows = [['目标', goal.objective || '未记录'], ['阶段', goal.phase || '未记录'],
+        ['轮次', goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : '未记录'],
+        ['变更', (goal.markers || []).map(m => (m.operation || '') + '@' + m.seq).join(' · ') || '未记录']];
+      openDrawer('会话目标', label, '<dl class="geist-timing-facts">' + rows.map(([k, v]) => '<div><dt>' + k + '</dt><dd>' + String(v).replace(/</g, '&lt;') + '</dd></div>').join('') + '</dl>');
+    };
+  }
   const geistActionBase = renderActionPath;
   renderActionPath = function(...args) { geistSyncMeasureFont(); const value = geistActionBase(...args); geistArrangeCaption(); return value; };
   // Re-measure labels once the self-hosted font is ready; preserve the viewport.
