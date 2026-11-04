@@ -799,11 +799,11 @@ function turnMeaning(turn) {
 const CONTEXT_CATEGORIES = [
   { key: 'system', label: '系统提示', color: '#7065c6' },
   { key: 'tools', label: '工具定义', color: '#bf8b32' },
-  { key: 'user', label: '用户消息', color: '#4c946d' },
-  { key: 'inject', label: '补充内容', color: '#ab6ba4' },
+  { key: 'user', label: '用户输入', color: '#4c946d' },
+  { key: 'inject', label: '运行时注入', color: '#ab6ba4' },
   { key: 'skill', label: '技能内容', color: '#cf7950' },
-  { key: 'assistant', label: '助手消息', color: '#5286bf' },
-  { key: 'tool', label: '工具结果', color: '#39a29b' },
+  { key: 'assistant', label: '模型输出（含思考）', color: '#5286bf' },
+  { key: 'tool', label: '工具输出', color: '#39a29b' },
 ];
 
 // Independent implementation of the documented context turn/delta semantics:
@@ -1608,7 +1608,7 @@ function fileChangeHistory(operations, path) {
     }
     if (contextBarAmounts(row).increase > reviewContextScale.limit || row.decrease > reviewContextScale.limit) html += '<p class="review-quiet">图的柱高显示到 ' + reviewTokens(reviewContextScale.limit) + ' tokens，超过时用省略号收起柱高。这是显示范围，不是模型容量限制。这里显示完整数值。</p>';
     html += '<p class="review-quiet">' + (row.isBaseline ? '首轮显示已有量，作为下一轮的比较基线；不能把它称作相对上一轮的增量。' : '比较第 ' + row.baselineTurn + ' 轮与第 ' + row.turn + ' 轮的末次请求，反映每类内容的净变化。') + '这些不是累计花费，也不包括末次请求之后才产生的回复。</p>';
-    html += '<button class="back-link" id="review-context-sources">“补充内容”等来源分别是什么？</button>';
+    html += '<button class="back-link" id="review-context-sources">“运行时注入”等来源分别是什么？</button>';
     html += '<div class="drawer-actions"><button class="action-button primary" id="review-context-path">查看本轮行动路径 ↗</button><button class="action-button" id="review-context-focus">在全景中放大本轮</button></div>';
     openDrawer('第 ' + turnNumber + ' 轮 · 上下文变化', row.steps + ' 次请求 · 各来源均为估算', html);
     $('review-context-path').onclick = () => reviewEnterPath(turnNumber);
@@ -1677,7 +1677,7 @@ function fileChangeHistory(operations, path) {
   }
   function reviewOpenContextSources(selected = 'inject') {
     const definitions = {
-      system: '模型的基础行为规则。单独计入系统提示，不计入下面的补充内容。',
+      system: '模型的基础行为规则。单独计入系统提示，不计入下面的运行时注入。',
       tools: '本次可调用工具的名称、用途与参数说明。它是工具清单，不是执行工具后得到的结果。',
       user: '用户发来的消息。自动附加的环境说明与通知另计。',
       inject: '运行环境或插件自动补进来的文字，例如工作目录、项目说明、当前时间、后台任务通知，以及压缩后继续对话的说明。这里原来叫“注入内容”。',

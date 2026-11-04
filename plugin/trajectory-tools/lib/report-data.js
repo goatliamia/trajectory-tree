@@ -17,8 +17,8 @@ export const REPORT_COLUMNS = {
   name: ['工具', 'text', 'observed'], file: ['文件', 'text', 'observed'], status: ['返回状态', 'text', 'observed'],
   text: ['原文摘录', 'text', 'verbatim'], kind: ['记录类型', 'text', 'observed'],
   omittedCharacters: ['摘录省略字符', 'characters', 'observed'],
-  system: ['系统提示', 'tokens', 'estimated'], tools: ['工具定义', 'tokens', 'estimated'], user: ['用户消息', 'tokens', 'estimated'],
-  inject: ['补充内容', 'tokens', 'estimated'], skill: ['技能内容', 'tokens', 'estimated'], assistant: ['助手消息', 'tokens', 'estimated'], tool: ['工具结果', 'tokens', 'estimated'],
+  system: ['系统提示', 'tokens', 'estimated'], tools: ['工具定义', 'tokens', 'estimated'], user: ['用户输入', 'tokens', 'estimated'],
+  inject: ['运行时注入', 'tokens', 'estimated'], skill: ['技能内容', 'tokens', 'estimated'], assistant: ['模型输出（含思考）', 'tokens', 'estimated'], tool: ['工具输出', 'tokens', 'estimated'],
   total: ['构成估算合计', 'tokens', 'estimated'],
 };
 export function reportTable({ source, kind, rows, fields, coverage = {}, labels = {}, columnInfo = {} }) {
