@@ -238,5 +238,19 @@ export async function traceActors(events, payload, skillRecords, readEvents) {
       if (next < catalogs.length) await new Promise(resolve => setImmediate(resolve));
     }
   }));
-  return { skillAnalysis, agentBranches };
+  // 目标由宿主记录的 goal/change 事件给出,不解析工具参数文本。
+  const goalChanges = (events || []).filter(e => e.type === 'goal/change' && e.data && e.data.goal);
+  let goal = null;
+  if (goalChanges.length) {
+    const last = goalChanges[goalChanges.length - 1].data;
+    goal = {
+      id: last.goal.id || null,
+      objective: last.goal.objective || '',
+      phase: last.goal.phase || null,
+      roundsStarted: Number.isFinite(last.roundsStarted) ? last.roundsStarted : null,
+      maxGoalRounds: Number.isFinite(last.goal.maxGoalRounds) ? last.goal.maxGoalRounds : null,
+      markers: goalChanges.map(e => ({ seq: e.seq, time: e.time, operation: e.data.operation || null, phase: e.data.goal.phase || null, revision: e.data.goal.revision ?? null })),
+    };
+  }
+  return { skillAnalysis, agentBranches, goal };
 }
