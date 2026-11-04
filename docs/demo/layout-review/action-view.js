@@ -52,7 +52,25 @@
       let part = '<rect x="' + left + '" y="28" width="' + (right - left) + '" height="' + (height - 60) + '" class="br-hit"/>';
       // 步号与耗时并成一行,顶部少一行给图。
       part += brText(pos, 48, '第 ' + step.number + ' 步' + (showTime ? ' · ' + preciseTime(step.end - step.start) : ''), 'review-turn-duration');
-      part += '<path d="M' + left + ' 56v4H' + right + 'v-4" class="review-interval-guide"/>';
+      // 耗时条:用官方每步的构成画占比,取代原来的等宽区间引导线。
+      {
+        const stats = typeof geistStatsByStep !== 'undefined' ? geistStatsByStep.get(t.number + ':' + step.number) : null;
+        const total = Math.max(1, step.end - step.start);
+        const toolRaw = stats && Number.isFinite(stats.toolWall) ? stats.toolWall
+          : (step.calls || []).reduce((sum, c) => sum + (Number.isFinite(c.start) && Number.isFinite(c.end) ? c.end - c.start : 0), 0);
+        const tool = Math.max(0, Math.min(total, toolRaw));
+        const model = stats && Number.isFinite(stats.ttft) && Number.isFinite(stats.decode)
+          ? Math.max(0, Math.min(total - tool, stats.ttft + stats.decode)) : Math.max(0, total - tool);
+        const rest = Math.max(0, total - tool - model);
+        const width = Math.max(1, right - left);
+        let bx = left;
+        for (const [cls, value] of [['review-time-tool', tool], ['review-time-model', model], ['review-time-rest', rest]]) {
+          if (value <= 0) continue;
+          const w = Math.max(0.6, value / total * width);
+          part += '<rect x="' + bx + '" y="56" width="' + w + '" height="4" rx="1" class="' + cls + '"/>';
+          bx += w;
+        }
+      }
       if (showContext && info) {
         const values = CONTEXT_CATEGORIES.map(c => ({ ...c, value: info.parts[c.key] }));
         const plus = values.reduce((n, c) => n + Math.max(0, c.value), 0), minus = values.reduce((n, c) => n + Math.max(0, -c.value), 0);

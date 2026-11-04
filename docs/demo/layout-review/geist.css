@@ -474,3 +474,8 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 /* 抽屉底部动作区:统一间距,避免按钮挤在一起。 */
 .geist-review .drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .geist-review .drawer-actions .action-button { margin: 0; }
+
+/* 行动路径每步的耗时构成条:工具 / 模型 / 其它。 */
+.review-time-tool { fill: #39a29b; }
+.review-time-model { fill: #5286bf; }
+.review-time-rest { fill: #dfe3e6; }
