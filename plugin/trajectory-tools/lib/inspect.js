@@ -21,7 +21,8 @@ const sumSteps = steps => {
   const totals = Object.fromEntries(METRICS.map(k => [k, sum(steps.map(s => s.official[k]))]));
   // Preserve official per-step readings. A call spanning beyond a step cannot
   // decompose that step's active time (including later copies/background work).
-  if (steps.some(outsideStep)) totals.toolWall = null;
+  // 官方逐项 toolWall 已经是调用区间的并集;它偶尔大于活动步时长(调用跨步),
+  // 这不是错误,求和照旧,只在 coverage 里说明,不再把整项置空。
   return totals;
 };
 
@@ -277,7 +278,7 @@ export function inspectionPage(index, view, offset = 0, limit = 3, options = {})
   const coverage = structuredClone(index.coverage);
   const outsideCount = steps.filter(outsideStep).length;
   if (outsideCount) coverage.timing = { toolSpansOutsideStep: outsideCount,
-    toolWallAggregate: 'withheld: recorded call spans exceed active step; per-step raw official values preserved',
+    toolWallAggregate: 'sum of official per-step toolWall; spans crossing step boundaries can make it exceed active step time',
     tool: 'sum of paired call durations, may overlap; not tool wall coverage' };
   if (coverage.context.status !== 'unavailable') coverage.context.status = coverage.context.firstRecordedTurn > (turns?.from ?? ownTurns[0]?.turn ?? 1) ? 'partial' : 'available';
   const summary = { turns: ownTurns.length, steps: steps.length, calls: calls.length, official: sumSteps(steps),
