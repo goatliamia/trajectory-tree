@@ -180,12 +180,17 @@
     html=`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,'累计执行时间','br-note','end')}</g>`;
     const goalData = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
     if (goalData && Array.isArray(goalData.markers) && goalData.markers.length) {
-      const pts = goalData.markers.map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
+      const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
+      const reads = goalData.markers.filter(m => m.operation === 'read');
+      const pts = life.map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
+      const readPts = reads.map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
       if (pts.length) {
         const gy = h - 34;
         let band = '<g class="goal-band">';
-        band += '<path d="M' + pts[0].x + ' ' + gy + 'H' + pts[pts.length - 1].x + '" class="goal-line"/>';
-        for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="3.5" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ' · seq ' + m.seq + '</title></circle>';
+        // 只连生命周期事件:创建到完成/阻塞。中途的读取是观察,不是阶段,不拉长这条带。
+        if (pts.length > 1) band += '<path d="M' + pts[0].x + ' ' + gy + 'H' + pts[pts.length - 1].x + '" class="goal-line"/>';
+        for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="4" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ' · 第 ' + m.turn + ' 轮 · seq ' + m.seq + '</title></circle>';
+        for (const m of readPts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="1.8" class="goal-read"><title>读取目标 · 第 ' + m.turn + ' 轮 · seq ' + m.seq + '</title></circle>';
         band += '<text x="' + (pts[0].x + 8) + '" y="' + (gy - 7) + '" class="goal-label">目标 ' + (goalData.phase || '') + (goalData.roundsStarted != null ? ' ' + goalData.roundsStarted + '/' + (goalData.maxGoalRounds ?? '?') : '') + '</text></g>';
         html += band;
       }
