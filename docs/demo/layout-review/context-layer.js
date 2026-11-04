@@ -179,9 +179,11 @@
     }
     if (contextBarAmounts(row).increase > reviewContextScale.limit || row.decrease > reviewContextScale.limit) html += '<p class="review-quiet">图的柱高显示到 ' + reviewTokens(reviewContextScale.limit) + ' tokens，超过时用省略号收起柱高。这是显示范围，不是模型容量限制。这里显示完整数值。</p>';
     html += '<p class="review-quiet">' + (row.isBaseline ? '首轮显示已有量，作为下一轮的比较基线；不能把它称作相对上一轮的增量。' : '比较第 ' + row.baselineTurn + ' 轮与第 ' + row.turn + ' 轮的末次请求，反映每类内容的净变化。') + '这些不是累计花费，也不包括末次请求之后才产生的回复。</p>';
-    html += '<div class="drawer-actions"><button class="action-button primary" id="review-context-path">查看本轮行动路径 ↗</button><button class="action-button" id="review-context-focus">在全景中放大本轮</button></div>';
+    // 已经在行动路径里时,"查看本轮行动路径"是重复操作,只留定位与对话跳转。
+    const inPath = view === 'path';
+    html += '<div class="drawer-actions">' + (inPath ? '' : '<button class="action-button primary" id="review-context-path">查看本轮行动路径 ↗</button>') + '<button class="action-button" id="review-context-focus">在全景中放大本轮</button></div>';
     openDrawer('第 ' + turnNumber + ' 轮 · 上下文变化', row.steps + ' 次请求 · 各来源均为估算', html);
-    $('review-context-path').onclick = () => reviewEnterPath(turnNumber);
+    if ($('review-context-path')) $('review-context-path').onclick = () => reviewEnterPath(turnNumber);
     $('review-context-focus').onclick = () => reviewFocusTurn(turnNumber);
   }
   function reviewContextBind() {
