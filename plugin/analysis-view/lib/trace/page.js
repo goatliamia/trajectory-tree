@@ -2323,17 +2323,19 @@ function fileChangeHistory(operations, path) {
       // 按目标分组:一个会话可以有多个目标,各自一段,不要连成一条。
       const groups = new Map();
       for (const m of life) { const key = m.goalId || 'goal'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push({ ...m, x: mapTime(m.time) }); }
-      let band = '<g class="goal-band">';
+      let band = '<g class="goal-band" data-goal-band="1" style="cursor:pointer">';
       let drawn = 0;
       for (const [id, list] of groups) {
         const pts = list.filter(m => Number.isFinite(m.x));
         if (!pts.length) continue;
         drawn++;
-        if (pts.length > 1) band += '<path d="M' + pts[0].x + ' ' + gy + 'H' + pts[pts.length - 1].x + '" class="goal-line"/>';
+        const x0 = pts[0].x, x1 = pts[pts.length - 1].x, w = Math.max(18, x1 - x0);
+        band += '<rect x="' + x0 + '" y="' + (gy - 7) + '" width="' + w + '" height="14" rx="4" class="goal-block"/>';
+        if (pts.length > 1) band += '<path d="M' + x0 + ' ' + gy + 'H' + x1 + '" class="goal-line"/>';
         for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="4" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ' · 第 ' + m.turn + ' 轮 · seq ' + m.seq + '</title></circle>';
         const turns = pts[0].turn + (pts.length > 1 && pts[pts.length - 1].turn !== pts[0].turn ? '–' + pts[pts.length - 1].turn : '');
         const stage = pts[pts.length - 1].operation;
-        band += '<text x="' + (pts[0].x + 8) + '" y="' + (gy - 7) + '" class="goal-label">' + turns + ' 轮 · ' + stage + (goalData.maxGoalRounds != null ? ' · 上限 ' + goalData.maxGoalRounds : '') + '</text>';
+        band += '<text x="' + (pts[0].x + 8) + '" y="' + (gy - 9) + '" class="goal-label">' + turns + ' 轮 · ' + stage + (goalData.roundsStarted != null ? ' · 已跑 ' + goalData.roundsStarted + '/' + (goalData.maxGoalRounds ?? '?') : '') + '</text>';
       }
       for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + '" r="1.8" class="goal-read"><title>读取目标 · 第 ' + m.turn + ' 轮</title></circle>'; }
       band += '</g>';
@@ -2924,6 +2926,8 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     if (!caption || caption.querySelector('#br-goal')) return;
     const label = '目标 ' + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
     caption.insertAdjacentHTML('afterbegin', '<button class="geist-text-action quiet" id="br-goal">' + label + ' ↗</button>');
+    const bandEl = document.querySelector('[data-goal-band]');
+    if (bandEl && !bandEl.dataset.bound) { bandEl.dataset.bound = '1'; bandEl.onclick = () => $('br-goal')?.click(); }
     $('br-goal').onclick = () => {
       const rows = [['目标', goal.objective || '未记录'], ['阶段', goal.phase || '未记录'],
         ['轮次', goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : '未记录'],

@@ -519,3 +519,5 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .goal-dot.complete { fill: #3f7d55; }
 .goal-dot.blocked { fill: #c0503f; }
 .goal-read { fill: #9aa7b4; opacity: .55; }
+.goal-block { fill: #eef1f4; stroke: #d6dbe1; }
+.goal-band:hover .goal-block { fill: #e6ebf0; }

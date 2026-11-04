@@ -65,6 +65,8 @@
     if (!caption || caption.querySelector('#br-goal')) return;
     const label = '目标 ' + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
     caption.insertAdjacentHTML('afterbegin', '<button class="geist-text-action quiet" id="br-goal">' + label + ' ↗</button>');
+    const bandEl = document.querySelector('[data-goal-band]');
+    if (bandEl && !bandEl.dataset.bound) { bandEl.dataset.bound = '1'; bandEl.onclick = () => $('br-goal')?.click(); }
     $('br-goal').onclick = () => {
       const rows = [['目标', goal.objective || '未记录'], ['阶段', goal.phase || '未记录'],
         ['轮次', goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : '未记录'],
