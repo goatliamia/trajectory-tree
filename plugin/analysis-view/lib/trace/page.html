@@ -897,6 +897,10 @@ body { display: flex; flex-direction: column; align-items: stretch; }
   .goal-dot.create { fill: #7aa6e6; }
   .goal-dot.resume { fill: #d8a15a; }
 }
+
+/* 深色主题:画布与滚动容器统一用主题表面色,避免一半白一半深。 */
+.geist-review body, .geist-review .canvas, .geist-review .graph-scroll, .geist-review .graph-wrap { background: var(--surface); }
+.geist-review .canvas-bar, .geist-review .turn-heading, .geist-review .turn-strip { background: var(--surface); }
 .geist-review .review-action-mode .graph-scroll{flex:0 0 auto;min-height:0;height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
 .geist-review .review-action-mode .graph-wrap{display:block;align-items:initial;min-height:0;height:auto;padding:0}
 .geist-review .review-action-mode .step-panel.geist-step{max-height:none;overflow:visible;flex:none;padding-bottom:24px}
