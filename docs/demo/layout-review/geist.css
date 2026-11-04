@@ -501,3 +501,6 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .geist-review .geist-timing-row dt { display: inline-flex; align-items: center; gap: 6px; }
 .geist-review .geist-timing-row i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .geist-review .geist-timing-row.total dt { font-weight: 500; }
+
+/* 概览右下角的「行动路径 ↗」去掉;进入方式保留在每轮耗时等入口。 */
+.geist-review #review-path { display: none !important; }
