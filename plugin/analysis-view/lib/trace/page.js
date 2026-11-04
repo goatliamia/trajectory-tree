@@ -3019,7 +3019,10 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     if (overviewLayers.has('failures')) {
       const records = geistOutcomes.filter(r => r.turn === t.number);
       const indices = new Map(t.steps.map((s, i) => [s.number, i]));
-      const items = records.map(result => ({ id: result.id, at: result.time, x: x(indices.get(result.step) ?? 0) + Math.min(36, halfGap - 18), result }));
+      const items = records.map(result => ({ id: result.id, at: result.time, x: x(indices.get(result.step) ?? 0) + Math.min(36, halfGap - 18), result }))
+        // 行动路径的每一步已经是原子单元,普通工具结果的支线与其标注重复;
+        // 只保留子代理这类协作支线,其余交给柱子与步骤面板。
+        .filter(item => /subagent|子代理|协作/i.test(geistOutcomeText([item])));
       const contextLabels = [...$('graph').querySelectorAll('.review-context-overflow-label')];
       const obstacles = contextLabels.map(el => { const b = el.getBBox(); return { left: b.x - 1, right: b.x + b.width + 1, top: b.y - base - 1, bottom: b.y + b.height - base + 1 }; });
       const result = geistDrawResultBranches(items, base, frame.gutter, x(t.steps.length - 1) + halfGap, () => true, { slots: [-42, -64, -86, -104], aggregateSpan: 25, obstacles });
