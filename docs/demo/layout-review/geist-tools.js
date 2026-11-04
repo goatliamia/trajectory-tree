@@ -159,6 +159,8 @@
 
   function geistTimingLayer(t, step, mapTime, base, interactive = false) {
     if (!overviewLayers.has('duration')) return '';
+    // 行动路径的每步已经有耗时构成条,褐色时段标记会重复,只在总览保留。
+    if (view === 'path') return '';
     const stats = geistStatsByStep.get(t.number + ':' + step.number), timing = toolTiming(stats, step);
     if (timing.status !== 'measured' || !timing.spans.length) return '';
     let body = '';
@@ -271,7 +273,7 @@
     if (key && !key.querySelector('.geist-result-key')) {
       key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + STEP_ICON.read + '</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">' + STEP_ICON.write + '</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">' + geistReportIcon + '</svg>检查输出</span>');
     }
-    if (key && overviewLayers.has('duration') && !key.querySelector('.geist-tool-time-key')) {
+    if (key && overviewLayers.has('duration') && view !== 'path' && !key.querySelector('.geist-tool-time-key')) {
       key.insertAdjacentHTML('beforeend', '<span class="geist-tool-time-key" title="官方记录中工具从调用到返回的时间区间；点击本步工具时间查看覆盖与累计口径"><i></i>' + (view === 'path' ? '步内工具时段' : '工具执行区间') + '</span>');
     }
   };
