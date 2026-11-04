@@ -8,9 +8,12 @@ const SORTS = { overview: ['time', 'wall', 'input', 'output', 'returned', 'count
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('base64url');
 function selection(args, previous = {}) {
   const q = {};
-  for (const key of ['view', 'turns', 'focus', 'groupBy', 'sort', 'format']) q[key] = args[key] === undefined ? previous[key] ?? null : args[key];
+  for (const key of ['view', 'turns', 'focus', 'groupBy', 'sort', 'format', 'samples']) q[key] = args[key] === undefined ? previous[key] ?? null : args[key];
   q.view ||= 'overview';
   q.format ||= 'summary';
+  // 白名单外的新参数默认值在这里归一:null 会被下游当成 false,误省原文。
+  if (q.samples === null || q.samples === undefined) q.samples = true;
+  if (typeof q.samples !== 'boolean') throw Error('samples must be a boolean');
   if (!['summary', 'data'].includes(q.format)) throw Error('format must be summary or data');
   if (!INSPECT_VIEWS.includes(q.view)) throw Error('Unknown inspection view');
   if (q.turns && (typeof q.turns !== 'object' || Array.isArray(q.turns) || Object.keys(q.turns).some(k => !['from', 'to'].includes(k)) || !Number.isSafeInteger(q.turns.from) || !Number.isSafeInteger(q.turns.to) || q.turns.from < 1 || q.turns.to < q.turns.from)) throw Error('turns requires an inclusive {from,to} range');
