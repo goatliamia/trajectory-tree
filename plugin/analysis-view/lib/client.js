@@ -1079,7 +1079,24 @@ window.__ModuleLoader__.load({
       }
       if (snapshot || pressure || breakdown) {
         patch.officialStats = { context: { pressure, breakdown, source: "@deepseek-ai/dsh-token-meter" } };
-        if (snapshot) patch.officialStats.snapshot = snapshot;
+        if (snapshot) {
+          patch.officialStats.snapshot = snapshot;
+          // 页面按「轮 → 步」查每步的工具耗时;之前只传 snapshot,页面拿不到 turns,
+          // 于是每一步都显示"未记录"。这里把 snapshot 摊平成同构的 turns。
+          const list = Array.isArray(snapshot) ? snapshot
+            : Array.isArray(snapshot.turns) ? snapshot.turns
+              : Array.isArray(snapshot.nodes) ? snapshot.nodes : null;
+          if (list) {
+            const byTurn = new Map();
+            for (const item of list) {
+              const turn = Number(item && item.turn), step = Number(item && item.step);
+              if (!Number.isFinite(turn)) continue;
+              if (!byTurn.has(turn)) byTurn.set(turn, { turn, steps: [] });
+              if (Number.isFinite(step)) byTurn.get(turn).steps.push({ ...item, step });
+            }
+            if (byTurn.size) patch.officialStats.turns = [...byTurn.values()].sort((a, b) => a.turn - b.turn);
+          }
+        }
       }
       return Object.keys(patch).length ? patch : null;
     }
