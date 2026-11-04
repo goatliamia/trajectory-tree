@@ -1,4 +1,4 @@
-<h1 align="center">Trajectory Tree · 轨迹树</h1>
+﻿<h1 align="center">Trajectory Tree · 轨迹树</h1>
 
 <p align="center"><strong>从对话日志，看见 Agent 怎样工作。</strong></p>
 <p align="center">执行路径 · 上下文变化 · 工具证据 · 可视化诊断报告</p>
@@ -137,6 +137,7 @@ node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl
 
 ## 文档
 
+- [仓库索引](docs/INDEX.md)——目录、文档导航与常用命令
 - [宿主接入与命令](docs/host-entrypoints.md)
 - [工具配置、查询与正文续读](plugin/portable-tools/README.md)
 - [分析方法](skill/trace-analysis/SKILL.md) · [上下文与配置剖面](skill/context-profile/SKILL.md)
