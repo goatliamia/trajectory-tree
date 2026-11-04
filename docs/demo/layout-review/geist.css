@@ -458,3 +458,15 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .geist-review [data-current-source][data-muted="true"] { opacity: .45; }
 .geist-review .geist-context-occupied > span[data-muted="true"] { opacity: .12; }
 .geist-review [data-current-source][aria-pressed="false"] { opacity: .45; }
+
+/* 行动路径的步状态:环=最严重结局,徽标=数量。 */
+.review-action-ring { fill: none; stroke-width: 2; }
+.review-action-ring.error { stroke: #c0503f; }
+.review-action-ring.timeout { stroke: #d08a2e; }
+.review-action-ring.blocked { stroke: #8a8f98; }
+.review-action-badge circle { fill: #fff; stroke-width: 1.2; }
+.review-action-badge text { font-size: 9px; font-weight: 600; }
+.review-action-badge.error circle { stroke: #c0503f; } .review-action-badge.error text { fill: #c0503f; }
+.review-action-badge.timeout circle { stroke: #d08a2e; } .review-action-badge.timeout text { fill: #b0761f; }
+.review-action-badge.blocked circle { stroke: #8a8f98; } .review-action-badge.blocked text { fill: #6f757d; }
+.review-action-badge.retry circle { stroke: #6a7f9a; } .review-action-badge.retry text { fill: #4d6076; }

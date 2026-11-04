@@ -320,6 +320,25 @@ window.__geistBoot = () => {
       } else if (showContext) part += brText(pos, base - 30, '上下文未记录', 'br-note');
       if (active) part += '<circle cx="' + pos + '" cy="' + base + '" r="18" class="review-action-halo"/>';
       part += '<circle cx="' + pos + '" cy="' + base + '" r="13" class="review-action-node"/>';
+      // 步状态:环表示最严重的结局,徽标给数量。超时/拦截只看得到在支线里,
+      // 原子化之后要在这里补回来,否则评测信息在路径视图里消失。
+      const codes = step.calls.map(c => c.error?.code).filter(Boolean);
+      const timeouts = codes.filter(code => /TIMEOUT/i.test(code)).length;
+      const blocked = codes.filter(code => /^FS_|OBSERVED/i.test(code)).length;
+      const errors = step.calls.filter(c => c.status === 'error').length;
+      const retries = (step.retries || []).length;
+      const worst = errors ? 'error' : timeouts ? 'timeout' : blocked ? 'blocked' : '';
+      if (worst) part += '<circle cx="' + pos + '" cy="' + base + '" r="15.5" class="review-action-ring ' + worst + '"/>';
+      const badges = [];
+      if (errors) badges.push(['error', '×', '报错 ' + errors + ' 次']);
+      if (timeouts) badges.push(['timeout', '◷', '超时 ' + timeouts + ' 次']);
+      if (blocked) badges.push(['blocked', '⊣', '拦截 ' + blocked + ' 次']);
+      if (retries) badges.push(['retry', '↻', '重试 ' + retries + ' 次']);
+      badges.slice(0, 2).forEach(([kind, glyph, label], i) => {
+        const bx = pos + 17 + i * 17, by = base - 17;
+        part += '<g class="review-action-badge ' + kind + '" transform="translate(' + bx + ' ' + by + ')"><title>' + label + '</title>' +
+          '<circle r="7.5"/><text text-anchor="middle" y="3.2">' + glyph + '</text></g>';
+      });
       const icon = step.calls.length && step.calls.every(c => /^查询/.test(reviewContextData.callFacts?.[c.seq]?.title || '')) ? STEP_ICON.query : stepIcon(step);
       part += '<g transform="translate(' + pos + ' ' + base + ')" class="review-action-icon">' + icon + '</g>';
       part += brText(pos, base + 34, shorten(reviewActionStepLabel(step), 16), 'br-label');
@@ -429,6 +448,8 @@ window.__geistBoot = () => {
   function reviewRenderActionCaption() {
     $('graph-caption').innerHTML = '<div class="br-key"><span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" class="review-action-node"/></svg>操作步骤</span>' +
       '<span class="br-key-item"><svg viewBox="0 0 12 12">' + brCap(6, 6) + '</svg>报错</span>' +
+      '<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.2" fill="none" stroke="#c0503f" stroke-width="1.6"/></svg>步状态环（红报错 / 橙超时 / 灰拦截）</span>' +
+      '<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="#fff" stroke="#6a7f9a"/><text x="6" y="8.6" text-anchor="middle" font-size="7" fill="#4d6076">↻</text></svg>徽标数量</span>' +
       '<span class="br-key-item"><svg viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span>' +
       '<span class="br-key-item"><svg viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span>' +
       '<span class="br-key-item"><svg viewBox="0 0 12 12"><rect x="1.5" y="6" width="9" height="4" class="br-glyph" opacity=".45"/></svg>上下文总趋势</span></div>' +
