@@ -29,6 +29,7 @@
 - [宿主接入与命令](host-entrypoints.md) — 四个宿主各自的入口、构建与分发
 - [宿主接入文件清单](host-integration-files.md) — hook、插件清单、打包内容
 - [轨迹工具字段与统计口径（DSH）](trajectory-fields.md) — 字段、单位、上下文七类定义、已知边界
+- [本轮 UI 改动评审](ui-changes-review.md) — DSH 专用与通用改动分层、模板生成方式、遗留项
 - [轨迹工具设计](trajectory-tools-design.md) — 四个工具的取舍
 
 **视图**

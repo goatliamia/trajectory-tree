@@ -42,8 +42,8 @@
 | `official.model` | ms | 模型处理时间，含首字延迟与解码 |
 | `official.ttft` | ms | 首字延迟合计，已包含在 `model` 内，不可与 `model` 相加 |
 | `official.decode` | ms | 解码时间，同样包含在 `model` 内 |
-| `official.tool` | ms | 各次工具调用配对时长的总和；**可能重叠**，不是工具墙钟覆盖 |
-| `official.toolWall` | ms 或 null | 工具墙钟覆盖；记录跨度互相矛盾时给 `null`（"withheld"），逐值仍保留在逐步数据里 |
+| `official.tool` | ms | 各次工具调用配对时长的总和；**可能重叠**，与 `toolWall`（并集）分开 |
+| `official.toolWall` | ms | 官方逐项 `toolWall` 之和；每项是调用区间的并集（重叠只算一次），跨步调用时可能大于活动步时长，不再置空 |
 | `official.retries` / `toolErrors` | 个 | 重试次数、工具报错次数 |
 | `official.output` | tokens | 输出 token 合计 |
 | `usage.settlements` | 条 | 结算条数；`unknownSettlements` 是缺字段的条数 |
