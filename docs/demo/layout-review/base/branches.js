@@ -178,6 +178,18 @@
     const visibleTurns=layout.filter(l=>l.end>=left&&l.x<=right).map(l=>l.turn.number);
     const mode=detail?`第 ${visibleTurns.join('、')} 轮 · 动作展开`:'全览 · 事件折叠';
     html=`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,'累计执行时间','br-note','end')}</g>`;
+    const goalData = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
+    if (goalData && Array.isArray(goalData.markers) && goalData.markers.length) {
+      const pts = goalData.markers.map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
+      if (pts.length) {
+        const gy = h - 34;
+        let band = '<g class="goal-band">';
+        band += '<path d="M' + pts[0].x + ' ' + gy + 'H' + pts[pts.length - 1].x + '" class="goal-line"/>';
+        for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="3.5" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ' · seq ' + m.seq + '</title></circle>';
+        band += '<text x="' + (pts[0].x + 8) + '" y="' + (gy - 7) + '" class="goal-label">目标 ' + (goalData.phase || '') + (goalData.roundsStarted != null ? ' ' + goalData.roundsStarted + '/' + (goalData.maxGoalRounds ?? '?') : '') + '</text></g>';
+        html += band;
+      }
+    }
     $('graph').setAttribute('viewBox',`0 0 ${w} ${h}`);$('graph').setAttribute('height',h);$('graph').style.width=w+'px';$('graph').innerHTML=html;
     const bind=(selector,enter,click,dbl)=>$('graph').querySelectorAll(selector).forEach(el=>{el.onmouseenter=()=>enter?.(el);el.onclick=ev=>{ev.stopPropagation();click?.(el);};el.ondblclick=ev=>{ev.preventDefault();ev.stopPropagation();(dbl||click)?.(el);};el.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();click?.(el);}};});
     bind('[data-br-round]',el=>tlRoundReadout(brRound(Number(el.dataset.brRound))),el=>{const t=brRound(Number(el.dataset.brRound));turnIndex=turns.indexOf(t);header();tlFocusRange(t,t.start,endOf(t));tlRoundReadout(t);});

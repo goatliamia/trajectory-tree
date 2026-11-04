@@ -131,9 +131,13 @@
       title = title.slice(0, low) + '…';
     }
     const failures = steps.filter(s => s.calls.some(c => c.status === 'error')).length;
+    // 本轮若是目标事件的落点,在钉住标题右侧标出,与底部目标入口共用同一份数据。
+    const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
+    const goalHere = goal && (goal.markers || []).find(m => m.time >= t.start && m.time <= (t.end ?? Infinity));
+    const goalText = goalHere ? ' · 目标 ' + (goalHere.operation || '') + (goal.roundsStarted != null ? ' ' + goal.roundsStarted + '/' + (goal.maxGoalRounds ?? '?') : '') : '';
     html += '<g class="review-action-pinned" transform="translate(' + viewport.scrollLeft + ',0)">' + axisLabels +
       brText(gutter, 18, title, 'br-note', 'start') +
-      brText(viewportWidth - gutter, 18, count + ' 步' + (showTime ? ' · ' + reviewDuration(endOf(t) - t.start) : '') + (failures ? ' · ' + failures + ' 步受阻' : ''), 'br-note', 'end') +
+      brText(viewportWidth - gutter, 18, count + ' 步' + (showTime ? ' · ' + reviewDuration(endOf(t) - t.start) : '') + (failures ? ' · ' + failures + ' 步受阻' : '') + goalText, 'br-note', 'end') +
       brText(gutter, height - 12, showContext ? '每步上下文变化 · 显示至 ±' + reviewTokens(scale.limit) : '步骤从左到右排列', 'br-axis', 'start') +
       brText(viewportWidth - gutter, height - 12, '间距表示顺序 · 耗时见上方', 'br-axis', 'end') + '</g>';
     reviewActionFileFrame = { t, x, base, gutter, height, viewportWidth, viewportLeft };
