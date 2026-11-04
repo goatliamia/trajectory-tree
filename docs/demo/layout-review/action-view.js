@@ -11,7 +11,11 @@
     selectedStep = Math.max(0, Math.min(selectedStep, count - 1));
     const selected = steps[selectedStep], showContext = overviewLayers.has('context'), showTime = overviewLayers.has('duration');
     const geometry = typeof geistActionGeometry === 'function' ? geistActionGeometry(t) : { height: 360, base: 208 };
-    const viewportWidth = Math.max(300, viewport.clientWidth), viewportLeft = viewport.scrollLeft, gutter = 54, { height, base } = geometry;
+    const viewportWidth = Math.max(300, viewport.clientWidth), viewportLeft = viewport.scrollLeft, gutter = 54, { height, base: rawBase } = geometry;
+    // 文件行画在基线下方 78px,再留标签高度;基线太靠下时这一行会被画布裁掉,
+    // 所以按"文件行 + 底部刻度"反推一个安全基线,而不是固定 height-96。
+    const fileRow = overviewLayers.has('files') ? 46 : 0;
+    const base = Math.min(rawBase, height - 20 - fileRow - 78);
     const gap = Math.max(128, Math.min(176, (viewportWidth - gutter * 2) / count));
     const width = Math.max(viewportWidth, gutter * 2 + gap * count);
     const start = (width - gap * count) / 2, x = index => start + (index + .5) * gap;
