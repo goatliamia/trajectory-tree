@@ -159,8 +159,8 @@
 
   function geistTimingLayer(t, step, mapTime, base, interactive = false) {
     if (!overviewLayers.has('duration')) return '';
-    // 行动路径的每步已经有耗时构成条,褐色时段标记会重复,只在总览保留。
-    if (view === 'path') return '';
+    // 褐色时段标记在总览与路径都撤掉:路径看构成条,总览看柱与结果,重复。
+    return '';
     const stats = geistStatsByStep.get(t.number + ':' + step.number), timing = toolTiming(stats, step);
     if (timing.status !== 'measured' || !timing.spans.length) return '';
     let body = '';
@@ -249,8 +249,19 @@
     const meta = $('step-panel').querySelector('.geist-step-meta>span');
     if (meta && t.steps[selectedStep].calls.length && overviewLayers.has('duration') && !meta.querySelector('[data-native-tool-time]')) {
       const step = t.steps[selectedStep], timing = toolTiming(geistStatsByStep.get(t.number + ':' + step.number), step);
-      const button = document.createElement('button'); button.className = 'geist-text-action'; button.dataset.nativeToolTime = '';
-      button.textContent = timing.status === 'measured' ? '工具 ' + preciseTime(timing.coverage) : timing.status === 'inconsistent' ? '工具时间待核对' : '工具时间未记录';
+      const button = document.createElement('button'); button.className = 'geist-text-action geist-time-breakdown'; button.dataset.nativeToolTime = '';
+      // 底部栏给出构成:首字 / 解码 / 工具 / 其它,点开看口径。
+      const stats = geistStatsByStep.get(t.number + ':' + step.number) || {};
+      const total = Math.max(0, step.end - step.start);
+      const tool = timing.status === 'measured' ? timing.coverage : null;
+      const ttft = Number.isFinite(stats.ttft) ? stats.ttft : null;
+      const decode = Number.isFinite(stats.decode) ? stats.decode : null;
+      const model = ttft !== null && decode !== null ? Math.min(total, ttft + decode) : null;
+      const rest = model !== null && tool !== null ? Math.max(0, total - model - tool) : tool !== null ? Math.max(0, total - tool) : null;
+      const parts = [['首字', ttft, 'wait'], ['解码', decode, 'model'], ['工具', tool, 'tool'], ['其它', rest, 'rest']].filter(([, value]) => value !== null && value >= 0);
+      button.innerHTML = parts.length
+        ? parts.map(([name, value, kind]) => '<span class="geist-time-part ' + kind + '"><i></i>' + name + ' ' + preciseTime(value) + '</span>').join('')
+        : '耗时未记录';
       button.onclick = () => geistOpenTiming(t.number, step.number); meta.append(button);
     }
   }

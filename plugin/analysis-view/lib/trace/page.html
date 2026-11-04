@@ -845,6 +845,15 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .review-time-tool { fill: #39a29b; }
 .review-time-model { fill: #5286bf; }
 .review-time-rest { fill: #dfe3e6; }
+
+/* 底部栏的耗时构成:一项一个小圆点 + 数值。 */
+.geist-review .geist-time-breakdown { display: inline-flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.geist-review .geist-time-part { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--branch-muted); }
+.geist-review .geist-time-part i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.geist-review .geist-time-part.wait i { background: #8c9bb0; }
+.geist-review .geist-time-part.model i { background: #5286bf; }
+.geist-review .geist-time-part.tool i { background: #39a29b; }
+.geist-review .geist-time-part.rest i { background: #dfe3e6; }
 .geist-review .review-action-mode .graph-scroll{flex:0 0 auto;min-height:0;height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
 .geist-review .review-action-mode .graph-wrap{display:block;align-items:initial;min-height:0;height:auto;padding:0}
 .geist-review .review-action-mode .step-panel.geist-step{max-height:none;overflow:visible;flex:none;padding-bottom:24px}
