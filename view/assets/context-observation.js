@@ -162,6 +162,8 @@
     if (!totalToggle) { totalToggle = document.createElement('label'); totalToggle.id = 'study-total-toggle'; totalToggle.className = 'br-layer'; }
     label.after(totalToggle);
     const total = studyShowTotal && view === 'overview';
+    // 总趋势只在总览成立:行动路径按步排列、没有连续时间轴,叠存量带会与步布局打架。
+    totalToggle.style.display = view === 'path' ? 'none' : '';
     totalToggle.innerHTML = '<input type="checkbox" data-study-total' + (total ? ' checked' : '') + '>' + studyMeaning.total;
     totalToggle.title = '把保留量叠加在原图上，与增量共用主干和时间轴，可同时开启';
     totalToggle.querySelector('input').onchange = event => { studyShowTotal = event.target.checked; if (studyShowTotal && view !== 'overview') reviewReturnOverview(); studyRefresh({ geometryChanged: true }); };
