@@ -141,6 +141,10 @@
     const graph = $('graph');
     graph.setAttribute('viewBox', '0 0 ' + width + ' ' + height); graph.setAttribute('height', height);
     graph.style.width = width + 'px'; graph.innerHTML = html;
+    // 步骤分组整体是选中;柱段单独接管:点它看这一轮的上下文变化明细。
+    graph.querySelectorAll('[data-step] [data-context-segment]').forEach(el => {
+      el.onclick = e => { e.stopPropagation(); reviewOpenContext(t.number); };
+    });
     graph.querySelectorAll('[data-step]').forEach(el => {
       el.onclick = () => selectStep(Number(el.dataset.step));
       el.ondblclick = () => showStep(Number(el.dataset.step));
