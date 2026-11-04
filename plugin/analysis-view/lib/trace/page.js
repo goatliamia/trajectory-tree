@@ -2211,7 +2211,8 @@ function fileChangeHistory(operations, path) {
       const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
       if (goal) {
         const label = '目标 ' + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
-        $('turn-heading').insertAdjacentHTML('beforeend', '<button class="ov-focus-rule" id="br-goal">' + label + ' ↗</button>');
+        // 目标放到底部观察行,作为可选入口,不占标题。
+        $('graph-caption').insertAdjacentHTML('afterbegin', '<button class="geist-text-action quiet" id="br-goal">' + label + ' ↗</button>');
         $('br-goal').onclick = () => {
           const rows = [['目标', goal.objective || '未记录'], ['阶段', goal.phase || '未记录'],
             ['轮次', goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : '未记录'],
