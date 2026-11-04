@@ -90,12 +90,14 @@ export function toolResultEndpoint(members) {
 }
 
 // Native measurements are kept intact. Inconsistent historical timing is not drawn as a ratio.
+// 直接采用官方统计的数值:coverage 是官方 toolWall(调用区间并集),
+// cumulative 是官方 tool(各调用累计)。不再因为区间越界就把整项判成"未记录"。
 export function toolTiming(stats, step) {
-  if (!stats || !Number.isFinite(stats.toolWall)) return { status: 'missing', spans: [], coverage: null, cumulative: null };
-  const wall = step.end - step.start;
-  const candidates = stats.calls.filter(c => Number.isFinite(c.startedAt) && Number.isFinite(c.endedAt));
-  const valid = wall >= 0 && stats.toolWall >= 0 && stats.toolWall <= wall + 1 && candidates.every(c => c.startedAt >= step.start && c.endedAt >= c.startedAt && c.endedAt <= step.end + 1);
-  return { status: valid ? 'measured' : 'inconsistent', coverage: stats.toolWall, cumulative: stats.tool,
-    spans: valid ? candidates.map(c => ({ start: c.startedAt, end: c.endedAt, seq: c.seq })) : [],
-    pending: stats.toolPending, partial: stats.tools.reduce((sum, tool) => sum + tool.count, 0) > stats.calls.length };
+  if (!stats) return { status: 'missing', spans: [], coverage: null, cumulative: null };
+  const coverage = Number.isFinite(stats.toolWall) ? stats.toolWall : (Number.isFinite(stats.tool) ? stats.tool : null);
+  if (coverage === null) return { status: 'missing', spans: [], coverage: null, cumulative: null };
+  const candidates = (stats.calls || []).filter(c => Number.isFinite(c.startedAt) && Number.isFinite(c.endedAt));
+  return { status: 'measured', coverage, cumulative: Number.isFinite(stats.tool) ? stats.tool : null,
+    spans: candidates.map(c => ({ start: c.startedAt, end: c.endedAt, seq: c.seq })),
+    pending: stats.toolPending, partial: (stats.tools || []).reduce((sum, tool) => sum + tool.count, 0) > candidates.length };
 }
