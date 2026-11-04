@@ -7,7 +7,7 @@
     const category = geistContextCategory(key), item = summary.categories.find(c => c.key === key);
     const explanations = {
       system: '模型运行所需的系统提示。', tools: '供模型选择和调用的工具说明与参数结构。',
-      user: '用户直接发送的消息。', inject: '由运行环境补充的内容，例如环境信息、状态与通知。',
+      user: '用户自己输入的文本；带来源标记的附件与宿主注入不算在这里。', inject: '开发者消息，以及带来源标记的内容：附件、环境说明、状态与通知。',
       skill: '通过技能来源进入上下文的内容。', assistant: '仍保留在上下文中的助手回复与工具调用。',
       tool: '工具返回后仍保留在上下文中的内容。', messages: '除系统提示和工具定义之外，当前保留的消息内容。',
     };
