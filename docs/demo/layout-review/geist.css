@@ -488,3 +488,16 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .geist-review .geist-time-part.model i { background: #5286bf; }
 .geist-review .geist-time-part.tool i { background: #39a29b; }
 .geist-review .geist-time-part.rest i { background: #dfe3e6; }
+
+/* 耗时构成:条形、底部栏圆点、抽屉三处共用同一套颜色。 */
+.geist-review { --time-wait: #8c9bb0; --time-model: #5286bf; --time-tool: #39a29b; --time-rest: #c9cfd4; }
+.review-time-tool { fill: var(--time-tool); }
+.review-time-model { fill: var(--time-model); }
+.review-time-rest { fill: var(--time-rest); }
+.geist-review .geist-time-part.wait i, .geist-review .geist-timing-row.wait i { background: var(--time-wait); }
+.geist-review .geist-time-part.model i, .geist-review .geist-timing-row.model i { background: var(--time-model); }
+.geist-review .geist-time-part.tool i, .geist-review .geist-timing-row.tool i { background: var(--time-tool); }
+.geist-review .geist-time-part.rest i, .geist-review .geist-timing-row.rest i { background: var(--time-rest); }
+.geist-review .geist-timing-row dt { display: inline-flex; align-items: center; gap: 6px; }
+.geist-review .geist-timing-row i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.geist-review .geist-timing-row.total dt { font-weight: 500; }
