@@ -110,3 +110,35 @@ view/assets/                  # CSS 与宿主适配（geist.css、context-observ
 2. 图例里可能仍留着「上下文总趋势」一项（生成文本分散在多处，未清干净）；
 3. Pi / Codex 那份 `portable-tools` 还没有 `samples` 开关与这套命名；
 4. 官方统计的 `toolWall` 会因跨天调用被放大（如 subagent 跨日返回），目前原样展示，未做标注。
+
+---
+
+## 七、发布清单（改通用页面后必须全跑）
+
+只改 DSH 专用插件时，第 1–3 步可以跳过。
+
+```sh
+node scripts/build-preserved-demo.mjs
+node scripts/build-geist-demo.mjs
+node scripts/port-geist-page.mjs
+node scripts/sync-view-assets.mjs
+node scripts/check-trace-page.mjs
+
+# 通用改动必须重建三个宿主包,否则它们仍是旧页面
+node scripts/package-trajectory.mjs --host codex
+node scripts/package-trajectory.mjs --host pi
+node scripts/package-trajectory.mjs --host claude
+
+# DSH 本地生效:打包并安装到 profile
+cd plugin/analysis-view && pnpm pack && cd ../..
+# 更新 profile/package.json 的 tgz 名 → pnpm install
+```
+
+自检：三个 `dist/*/plugin/analysis-view/lib/trace/page.js` 与
+`plugin/analysis-view/lib/trace/page.js` 的 SHA-256 必须一致。
+
+```sh
+node -e "const{createHash}=require('crypto'),{readFileSync}=require('fs');const h=p=>createHash('sha256').update(readFileSync(p)).digest('hex');const s=h('plugin/analysis-view/lib/trace/page.js');for(const d of ['codex','pi','claude'])console.log(d,h('dist/trajectory-tree-'+d+'/plugin/analysis-view/lib/trace/page.js')===s?'一致':'不同')"
+```
+
+本次核对结果：三个宿主包均为「一致」。
