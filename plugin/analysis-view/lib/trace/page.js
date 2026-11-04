@@ -2319,18 +2319,25 @@ function fileChangeHistory(operations, path) {
     if (goalData && Array.isArray(goalData.markers) && goalData.markers.length) {
       const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
       const reads = goalData.markers.filter(m => m.operation === 'read');
-      const pts = life.map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
-      const readPts = reads.map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
-      if (pts.length) {
-        const gy = h - 34;
-        let band = '<g class="goal-band">';
-        // 只连生命周期事件:创建到完成/阻塞。中途的读取是观察,不是阶段,不拉长这条带。
+      const gy = h - 34;
+      // 按目标分组:一个会话可以有多个目标,各自一段,不要连成一条。
+      const groups = new Map();
+      for (const m of life) { const key = m.goalId || 'goal'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push({ ...m, x: mapTime(m.time) }); }
+      let band = '<g class="goal-band">';
+      let drawn = 0;
+      for (const [id, list] of groups) {
+        const pts = list.filter(m => Number.isFinite(m.x));
+        if (!pts.length) continue;
+        drawn++;
         if (pts.length > 1) band += '<path d="M' + pts[0].x + ' ' + gy + 'H' + pts[pts.length - 1].x + '" class="goal-line"/>';
         for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="4" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ' · 第 ' + m.turn + ' 轮 · seq ' + m.seq + '</title></circle>';
-        for (const m of readPts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="1.8" class="goal-read"><title>读取目标 · 第 ' + m.turn + ' 轮 · seq ' + m.seq + '</title></circle>';
-        band += '<text x="' + (pts[0].x + 8) + '" y="' + (gy - 7) + '" class="goal-label">目标 ' + (goalData.phase || '') + (goalData.roundsStarted != null ? ' ' + goalData.roundsStarted + '/' + (goalData.maxGoalRounds ?? '?') : '') + '</text></g>';
-        html += band;
+        const turns = pts[0].turn + (pts.length > 1 && pts[pts.length - 1].turn !== pts[0].turn ? '–' + pts[pts.length - 1].turn : '');
+        const stage = pts[pts.length - 1].operation;
+        band += '<text x="' + (pts[0].x + 8) + '" y="' + (gy - 7) + '" class="goal-label">' + turns + ' 轮 · ' + stage + (goalData.maxGoalRounds != null ? ' · 上限 ' + goalData.maxGoalRounds : '') + '</text>';
       }
+      for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + '" r="1.8" class="goal-read"><title>读取目标 · 第 ' + m.turn + ' 轮</title></circle>'; }
+      band += '</g>';
+      if (drawn) html += band;
     }
     $('graph').setAttribute('viewBox',`0 0 ${w} ${h}`);$('graph').setAttribute('height',h);$('graph').style.width=w+'px';$('graph').innerHTML=html;
     const bind=(selector,enter,click,dbl)=>$('graph').querySelectorAll(selector).forEach(el=>{el.onmouseenter=()=>enter?.(el);el.onclick=ev=>{ev.stopPropagation();click?.(el);};el.ondblclick=ev=>{ev.preventDefault();ev.stopPropagation();(dbl||click)?.(el);};el.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();click?.(el);}};});

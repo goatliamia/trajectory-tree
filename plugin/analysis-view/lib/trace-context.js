@@ -154,6 +154,7 @@ export function traceContext(events, payload, timeline) {
       roundsStarted: Number.isFinite(last?.roundsStarted) ? last.roundsStarted : null,
       maxGoalRounds: Number.isFinite(last?.maxGoalRounds) ? last.maxGoalRounds : null,
       markers: goalCalls.map(c => ({ seq: c.seq, time: c.time, turn: c.turn,
+        goalId: c.goal?.id ?? c.args.goal_id ?? null,
         operation: c.name === 'update_goal' ? (c.args.action || 'update') : c.name === 'create_goal' ? 'create' : 'read',
         phase: c.goal?.phase ?? null, revision: c.goal?.revision ?? c.args.revision ?? null })),
     };
