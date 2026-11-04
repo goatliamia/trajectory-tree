@@ -270,7 +270,11 @@ window.__geistBoot = () => {
       sideUp = Math.max(sideUp, plus); sideDown = Math.max(sideDown, minus);
     }
     const band = scale.pixels * 2;
-    const upPixels = sideUp + sideDown > 0 ? Math.max(28, band * sideUp / (sideUp + sideDown)) : scale.pixels;
+    // 顶部是步标题与材料行所在的安全区;柱子不能长进去,否则会盖住上方视图,
+    // 而这里滚轮是缩放、没有额外的纵向滚动可以躲。
+    const topSafe = 150;
+    const wantedUp = sideUp + sideDown > 0 ? Math.max(28, band * sideUp / (sideUp + sideDown)) : scale.pixels;
+    const upPixels = Math.max(28, Math.min(wantedUp, base - topSafe));
     const downPixels = band - upPixels;
     const upSide = { limit: Math.max(1, sideUp), pixels: upPixels }, downSide = { limit: Math.max(1, sideDown), pixels: downPixels };
     const gridTop = base - upPixels, gridBottom = base + downPixels;
