@@ -19,7 +19,8 @@
       button.dataset.chatJump = String(turn);
       button.textContent = '跳到第 ' + turn + ' 轮对话 ↗';
       button.onclick = () => window.parent.postMessage({ type: 'analysis-trace-jump', turn }, location.origin);
-      row.append(button);
-      body.append(row);
+      // 并到已有动作行里,不要另起一列。
+      const existing = body.querySelector('.drawer-actions');
+      if (existing) existing.append(button); else { row.append(button); body.append(row); }
     };
   })();
