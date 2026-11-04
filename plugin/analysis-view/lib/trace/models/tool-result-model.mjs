@@ -93,10 +93,34 @@ export function toolResultEndpoint(members) {
 // Native measurements are kept intact. Inconsistent historical timing is not drawn as a ratio.
 // 直接采用官方统计的数值:coverage 是官方 toolWall(调用区间并集),
 // cumulative 是官方 tool(各调用累计)。不再因为区间越界就把整项判成"未记录"。
+// 调用区间并集:官方 toolWall 的同一算法,按 start 排序合并重叠。
+function spanUnion(spans) {
+  if (!spans.length) return null;
+  const sorted = [...spans].sort((a, b) => a.start - b.start);
+  let total = 0, [start, end] = [sorted[0].start, sorted[0].end];
+  for (const span of sorted.slice(1)) {
+    if (span.start > end) { total += end - start; start = span.start; end = span.end; }
+    else end = Math.max(end, span.end);
+  }
+  return total + end - start;
+}
 export function toolTiming(stats, step) {
-  if (!stats) return { status: 'missing', spans: [], coverage: null, cumulative: null };
+  // 官方统计没到(补丁缺项)时,用同一套并集口径从本步调用直接算,避免整张表都是"未记录"。
+  const ownSpans = (step.calls || []).filter(c => Number.isFinite(c.start) && Number.isFinite(c.end))
+    .map(c => ({ start: c.start, end: c.end, seq: c.seq }));
+  if (!stats) {
+    const union = spanUnion(ownSpans);
+    if (union === null) return { status: 'missing', spans: [], coverage: null, cumulative: null };
+    return { status: 'measured', spans: ownSpans, coverage: union,
+      cumulative: ownSpans.reduce((sum, s) => sum + (s.end - s.start), 0), partial: false };
+  }
   const coverage = Number.isFinite(stats.toolWall) ? stats.toolWall : (Number.isFinite(stats.tool) ? stats.tool : null);
-  if (coverage === null) return { status: 'missing', spans: [], coverage: null, cumulative: null };
+  if (coverage === null) {
+    const union = spanUnion(ownSpans);
+    if (union === null) return { status: 'missing', spans: [], coverage: null, cumulative: null };
+    return { status: 'measured', spans: ownSpans, coverage: union,
+      cumulative: ownSpans.reduce((sum, s) => sum + (s.end - s.start), 0), partial: false };
+  }
   const candidates = (stats.calls || []).filter(c => Number.isFinite(c.startedAt) && Number.isFinite(c.endedAt));
   return { status: 'measured', coverage, cumulative: Number.isFinite(stats.tool) ? stats.tool : null,
     spans: candidates.map(c => ({ start: c.startedAt, end: c.endedAt, seq: c.seq })),
