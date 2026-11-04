@@ -172,11 +172,15 @@
   }
   function geistOpenTiming(number, stepNumber) {
     const t = brRound(number), step = t.steps.find(s => s.number === stepNumber), stats = geistStatsByStep.get(number + ':' + stepNumber), timing = toolTiming(stats, step);
-    let html = '<dl class="geist-timing-facts"><div><dt>这一步</dt><dd>' + preciseTime(step.end - step.start) + '</dd></div><div><dt>工具执行覆盖</dt><dd>' + (timing.status === 'measured' ? preciseTime(timing.coverage) : timing.status === 'inconsistent' ? '历史时间记录不一致' : '未记录') + '</dd></div><div><dt>各调用累计</dt><dd>' + (timing.cumulative == null ? '未记录' : preciseTime(timing.cumulative)) + '</dd></div></dl>';
-    html += '<p class="review-quiet">覆盖时间将重叠执行的区间只算一次；累计时间采用官方的工具调用计量口径。两者直接读取官方统计结果。</p>';
+    const coverageText = timing.status === 'measured' ? preciseTime(timing.coverage) : timing.status === 'inconsistent' ? '历史时间记录不一致' : '未记录';
+    // 调用之间不重叠时,累计就等于覆盖;单列出来只会让人以为两者有区别。
+    const showCumulative = timing.cumulative != null && (timing.coverage == null || Math.abs(timing.cumulative - timing.coverage) > 1);
+    let html = '<dl class="geist-timing-facts"><div><dt>这一步</dt><dd>' + preciseTime(step.end - step.start) + '</dd></div><div><dt>工具执行覆盖</dt><dd>' + coverageText + '</dd></div>' +
+      (showCumulative ? '<div><dt>各调用累计</dt><dd>' + preciseTime(timing.cumulative) + '</dd></div>' : '') + '</dl>';
+    html += '<p class="review-quiet">覆盖时间把重叠执行的区间只算一次' + (showCumulative ? '；累计时间把每次调用分别相加,重叠部分会重复计入' : '；本步调用之间没有重叠,累计与覆盖相同') + '。两者直接读取官方统计结果。</p>';
     if (timing.status === 'inconsistent') html += '<p class="review-quiet">这份历史记录的工具时间超出本步边界，因此没有按比例画进主图。</p>';
     if (timing.partial) html += '<p class="review-quiet">官方摘要最多列出每步 12 项调用，完整操作仍可在本步记录中查看。</p>';
-    html += '<button class="action-button" id="geist-timing-path">查看这一步 ↗</button>';
+    html += '<div class="drawer-actions"><button class="action-button" id="geist-timing-path">查看这一步 ↗</button></div>';
     openDrawer('工具执行时间', '第 ' + number + ' 轮 · 第 ' + stepNumber + ' 步', html);
     $('geist-timing-path').onclick = () => { closeDrawer(); reviewEnterPath(number, stepNumber); };
   }

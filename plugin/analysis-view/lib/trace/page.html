@@ -836,6 +836,10 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .review-action-badge.timeout circle { stroke: #d08a2e; } .review-action-badge.timeout text { fill: #b0761f; }
 .review-action-badge.blocked circle { stroke: #8a8f98; } .review-action-badge.blocked text { fill: #6f757d; }
 .review-action-badge.retry circle { stroke: #6a7f9a; } .review-action-badge.retry text { fill: #4d6076; }
+
+/* 抽屉底部动作区:统一间距,避免按钮挤在一起。 */
+.geist-review .drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.geist-review .drawer-actions .action-button { margin: 0; }
 .geist-review .review-action-mode .graph-scroll{flex:0 0 auto;min-height:0;height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
 .geist-review .review-action-mode .graph-wrap{display:block;align-items:initial;min-height:0;height:auto;padding:0}
 .geist-review .review-action-mode .step-panel.geist-step{max-height:none;overflow:visible;flex:none;padding-bottom:24px}
