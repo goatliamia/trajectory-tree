@@ -178,11 +178,11 @@
     const visibleTurns=layout.filter(l=>l.end>=left&&l.x<=right).map(l=>l.turn.number);
     const mode=detail?`第 ${visibleTurns.join('、')} 轮 · 动作展开`:'全览 · 事件折叠';
     html=`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,'累计执行时间','br-note','end')}</g>`;
-    const goalData = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
+    const goalData = overviewLayers.has('goal') ? ((typeof data !== 'undefined' && data.context && data.context.goal) || null) : null;
     if (goalData && Array.isArray(goalData.markers) && goalData.markers.length) {
       const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
       const reads = goalData.markers.filter(m => m.operation === 'read');
-      const gy = h - 62;
+      const gy = h - 30;
       // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
       const byGoalAll = new Map();
       for (const m of goalData.markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }

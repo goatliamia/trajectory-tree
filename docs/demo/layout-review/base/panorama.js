@@ -1,5 +1,5 @@
   let overviewScale=1;
-  const overviewLayers=new Set(['failures','duration','interruptions']);
+  const overviewLayers=new Set(['failures','duration','interruptions','goal']);
   let overviewProjection=null,overviewViewportBound=false;
   function setOverviewScale(nextScale,viewportX){
     const viewport=$('graph-scroll'),position=viewportX??viewport.clientWidth/2;

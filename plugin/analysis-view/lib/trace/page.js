@@ -496,7 +496,7 @@ window.__geistBoot = () => {
   }
 
   let overviewScale=1;
-  const overviewLayers=new Set(['failures','duration','interruptions']);
+  const overviewLayers=new Set(['failures','duration','interruptions','goal']);
   let overviewProjection=null,overviewViewportBound=false;
   function setOverviewScale(nextScale,viewportX){
     const viewport=$('graph-scroll'),position=viewportX??viewport.clientWidth/2;
@@ -2315,11 +2315,11 @@ function fileChangeHistory(operations, path) {
     const visibleTurns=layout.filter(l=>l.end>=left&&l.x<=right).map(l=>l.turn.number);
     const mode=overviewScale>1?'放大查看 · 点选细节':detail?`第 ${visibleTurns.join('、')} 轮 · 动作展开`:reviewOverviewSummary();
     html=`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,showTime?"总耗时 "+reviewDuration(active):"累计执行时间",'br-note','end')}</g>`;
-    const goalData = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
+    const goalData = overviewLayers.has('goal') ? ((typeof data !== 'undefined' && data.context && data.context.goal) || null) : null;
     if (goalData && Array.isArray(goalData.markers) && goalData.markers.length) {
       const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
       const reads = goalData.markers.filter(m => m.operation === 'read');
-      const gy = h - 62;
+      const gy = h - 30;
       // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
       const byGoalAll = new Map();
       for (const m of goalData.markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
@@ -2928,6 +2928,14 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
     if (!goal) return;
     const caption = $('graph-caption');
+    const row = caption && caption.querySelector('.geist-observe-row');
+    if (row && !row.querySelector('#br-goal-layer')) {
+      row.insertAdjacentHTML('beforeend', '<label class="br-layer"><input type="checkbox" id="br-goal-layer"' + (overviewLayers.has('goal') ? ' checked' : '') + '>目标</label>');
+      row.querySelector('#br-goal-layer').onchange = event => {
+        event.target.checked ? overviewLayers.add('goal') : overviewLayers.delete('goal');
+        renderOverview();
+      };
+    }
     if (!caption || caption.querySelector('#br-goal')) return;
     const label = '目标 ' + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · 目标轮 ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
     caption.insertAdjacentHTML('afterbegin', '<button class="geist-text-action quiet" id="br-goal">' + label + ' ↗</button>');
