@@ -90,13 +90,8 @@
   }
   reviewBranches = function(mapTime, base, visible, left, right, width) {
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
-    const items = records
-        .filter(item => !/^(create_goal|get_goal|update_goal)\b/.test(String(item.result?.title || '')))
-        .filter(item => /subagent|子代理|协作/i.test(geistOutcomeText([item])))
-        .map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    // 行动路径不画结果支线(子代理有自己的画法);总览保留。
-    const shown = (typeof view !== 'undefined' && view === 'path') ? [] : items;
-    const result = geistDrawResultBranches(shown, base, 20, width - 20, visible);
+    const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
+    const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
     reviewBranchesNow = geistOutcomeBranches;
     return result;
   };

@@ -65,7 +65,6 @@ window.__geistBoot = () => {
     for(const step of steps) {
       const byTool=new Map();
       for(const call of step.calls) {
-    if(['create_goal','get_goal','update_goal'].includes(call.name)) continue;
         const k=call.name+'|'+call.status;
         if(!byTool.has(k))byTool.set(k,{step,name:call.name,status:call.status,calls:[]});
         byTool.get(k).calls.push(call);
@@ -239,7 +238,7 @@ window.__geistBoot = () => {
     const t=turn(),step=t.steps[index];
     if(!step)return;
     let html='';
-    for(const c of step.calls){if(['create_goal','get_goal','update_goal'].includes(c.name))continue;html+=callEntry(c);}
+    for(const c of step.calls)html+=callEntry(c);
     if(!step.calls.length)html+='<div class="source-row">这一步没有工具调用,只有模型输出。</div>';
     if(step.reply)html+=`<span class="code-label">助手原文</span>${block(step.reply)}`;
     openDrawer(`第 ${t.number} 轮 · 第 ${step.number} 步`,`${clock(step.start)} → ${clock(step.end)} · ${step.calls.length} 次工具调用`,html);
@@ -353,7 +352,7 @@ window.__geistBoot = () => {
       const worst = errors ? 'error' : timeouts ? 'timeout' : blocked ? 'blocked' : '';
       if (worst) part += '<circle cx="' + pos + '" cy="' + base + '" r="15.5" class="review-action-ring ' + worst + '"/>';
     // 目标事件画成状态环外侧的一圈:创建/完成/阻塞各有颜色,读取不画。
-    const goalMark = ((reviewContextData.goal || (typeof traceData !== 'undefined' ? traceData.context?.goal : null) || {}).markers || []).find(m => (m.turn === step.number || m.turn === step.n) && m.operation && m.operation !== 'read');
+    const goalMark = (reviewContextData.goal?.markers || []).find(m => m.turn === step.number && m.operation && m.operation !== 'read');
     if (goalMark) part += '<circle cx="' + pos + '" cy="' + base + '" r="19.5" class="review-goal-ring ' + goalMark.operation + '"><title>目标' + (goalMark.operation === 'create' ? '创建' : goalMark.operation === 'complete' ? '完成' : '中止') + '</title></circle>';
       const badges = [];
       if (errors) badges.push(['error', '×', '报错 ' + errors + ' 次']);
@@ -3043,13 +3042,8 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   }
   reviewBranches = function(mapTime, base, visible, left, right, width) {
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
-    const items = records
-        .filter(item => !/^(create_goal|get_goal|update_goal)\b/.test(String(item.result?.title || '')))
-        .filter(item => /subagent|子代理|协作/i.test(geistOutcomeText([item])))
-        .map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    // 行动路径不画结果支线(子代理有自己的画法);总览保留。
-    const shown = (typeof view !== 'undefined' && view === 'path') ? [] : items;
-    const result = geistDrawResultBranches(shown, base, 20, width - 20, visible);
+    const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
+    const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
     reviewBranchesNow = geistOutcomeBranches;
     return result;
   };
