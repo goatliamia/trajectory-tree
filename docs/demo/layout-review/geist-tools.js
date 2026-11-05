@@ -90,8 +90,12 @@
   }
   reviewBranches = function(mapTime, base, visible, left, right, width) {
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
-    const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
+    const mapped = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
+    const items = mapped
+        .filter(item => !/^(create_goal|get_goal|update_goal)\b/.test(String(item.result?.title || '')))
+        .filter(item => /subagent|子代理|协作/i.test(geistOutcomeText([item])));
+    const inPath = Boolean(document.querySelector('.canvas.review-action-mode'));
+    const result = geistDrawResultBranches(inPath ? [] : items, base, 20, width - 20, visible);
     reviewBranchesNow = geistOutcomeBranches;
     return result;
   };
