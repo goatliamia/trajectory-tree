@@ -91,7 +91,8 @@
   reviewBranches = function(mapTime, base, visible, left, right, width) {
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
     const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
+    // 行动路径不画结果支线:由渲染入口设置的视图标记决定,不动概览。
+    const result = geistDrawResultBranches(window.__geistView === 'path' ? [] : items, base, 20, width - 20, visible);
     reviewBranchesNow = geistOutcomeBranches;
     return result;
   };

@@ -2934,7 +2934,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     geistSyncLegend();
   }
   const geistOverviewBase = renderOverview;
-  renderOverview = function(...args) { geistSyncMeasureFont(); const value = geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); return value; };
+  renderOverview = function(...args) { window.__geistView = 'overview'; geistSyncMeasureFont(); const value = geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); return value; };
   // 目标入口放在观察行:caption 每次重排都会重建子节点,所以放在重排之后补。
   function geistGoalChip() {
     const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
@@ -2950,7 +2950,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     }
   }
   const geistActionBase = renderActionPath;
-  renderActionPath = function(...args) { geistSyncMeasureFont(); const value = geistActionBase(...args); geistArrangeCaption(); return value; };
+  renderActionPath = function(...args) { window.__geistView = 'path'; geistSyncMeasureFont(); const value = geistActionBase(...args); geistArrangeCaption(); return value; };
   // Re-measure labels once the self-hosted font is ready; preserve the viewport.
   document.fonts.ready.then(() => {
     geistMeasureWidths.clear();
@@ -3052,7 +3052,8 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   reviewBranches = function(mapTime, base, visible, left, right, width) {
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
     const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
+    // 行动路径不画结果支线:由渲染入口设置的视图标记决定,不动概览。
+    const result = geistDrawResultBranches(window.__geistView === 'path' ? [] : items, base, 20, width - 20, visible);
     reviewBranchesNow = geistOutcomeBranches;
     return result;
   };
