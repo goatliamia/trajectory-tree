@@ -3050,12 +3050,12 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     return { html, bottom };
   }
   reviewBranches = function(mapTime, base, visible, left, right, width) {
-    const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
-    const mapped = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    const items = mapped
-        .filter(item => !/(create_goal|get_goal|update_goal)/.test([item.result?.title, item.result?.name, item.result?.tool, item.result?.id].filter(Boolean).join(' ')))
-        .filter(item => /subagent|子代理|协作/i.test(geistOutcomeText([item])));
-    const inPath = Boolean(document.querySelector('.canvas.review-action-mode'));
+    const all = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
+    // 目标工具在 calls 里,记录本身没有 name 字段。
+    const isGoal = record => (record.calls || []).some(call => ['create_goal', 'get_goal', 'update_goal'].includes(call.name));
+    const records = all.filter(record => !isGoal(record));
+    const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
+    const inPath = (typeof view !== 'undefined' && view === 'path');
     const result = geistDrawResultBranches(inPath ? [] : items, base, 20, width - 20, visible);
     reviewBranchesNow = geistOutcomeBranches;
     return result;
