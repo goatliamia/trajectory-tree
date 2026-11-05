@@ -90,7 +90,7 @@
   }
   reviewBranches = function(mapTime, base, visible, left, right, width) {
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
-    const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
+    const items = records.filter(result => !/^(create_goal|get_goal|update_goal)$/.test(String(result.name || result.tool || '')) && !/^(create_goal|get_goal|update_goal)$/.test(String(result.title || '').split(' ')[0])).map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
     const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
     reviewBranchesNow = geistOutcomeBranches;
     return result;
