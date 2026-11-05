@@ -3041,7 +3041,12 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     });
     return { html, bottom };
   }
-  reviewBranches = function() { reviewBranchesNow = geistOutcomeBranches; return ''; };
+  reviewBranches = function(mapTime, base, visible, left, right, width) {
+    // 空数据也要走同一套布局,否则高度算出 NaN。
+    const result = geistDrawResultBranches([], base, 20, width - 20, visible);
+    reviewBranchesNow = geistOutcomeBranches;
+    return result;
+  };
   reviewOverviewSummary = () => session.turns.length + ' 轮执行记录';
   function geistOutcomeFocus() {
     const relevant = new Set(reviewFileSelection ? reviewFileOperations.filter(o => fileIdentity(o.path) === reviewFileSelection).map(o => o.seq) : []);
