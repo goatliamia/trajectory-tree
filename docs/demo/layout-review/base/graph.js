@@ -180,7 +180,7 @@
     const t=turn(),step=t.steps[index];
     if(!step)return;
     let html='';
-    for(const c of step.calls)html+=callEntry(c);
+    for(const c of step.calls){if(['create_goal','get_goal','update_goal'].includes(c.name))continue;html+=callEntry(c);}
     if(!step.calls.length)html+='<div class="source-row">这一步没有工具调用,只有模型输出。</div>';
     if(step.reply)html+=`<span class="code-label">助手原文</span>${block(step.reply)}`;
     openDrawer(`第 ${t.number} 轮 · 第 ${step.number} 步`,`${clock(step.start)} → ${clock(step.end)} · ${step.calls.length} 次工具调用`,html);

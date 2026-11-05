@@ -239,7 +239,7 @@ window.__geistBoot = () => {
     const t=turn(),step=t.steps[index];
     if(!step)return;
     let html='';
-    for(const c of step.calls)html+=callEntry(c);
+    for(const c of step.calls){if(['create_goal','get_goal','update_goal'].includes(c.name))continue;html+=callEntry(c);}
     if(!step.calls.length)html+='<div class="source-row">这一步没有工具调用,只有模型输出。</div>';
     if(step.reply)html+=`<span class="code-label">助手原文</span>${block(step.reply)}`;
     openDrawer(`第 ${t.number} 轮 · 第 ${step.number} 步`,`${clock(step.start)} → ${clock(step.end)} · ${step.calls.length} 次工具调用`,html);
@@ -353,7 +353,7 @@ window.__geistBoot = () => {
       const worst = errors ? 'error' : timeouts ? 'timeout' : blocked ? 'blocked' : '';
       if (worst) part += '<circle cx="' + pos + '" cy="' + base + '" r="15.5" class="review-action-ring ' + worst + '"/>';
     // 目标事件画成状态环外侧的一圈:创建/完成/阻塞各有颜色,读取不画。
-    const goalMark = (reviewContextData.goal?.markers || []).find(m => m.turn === step.number && m.operation && m.operation !== 'read');
+    const goalMark = ((reviewContextData.goal || (typeof traceData !== 'undefined' ? traceData.context?.goal : null) || {}).markers || []).find(m => (m.turn === step.number || m.turn === step.n) && m.operation && m.operation !== 'read');
     if (goalMark) part += '<circle cx="' + pos + '" cy="' + base + '" r="19.5" class="review-goal-ring ' + goalMark.operation + '"><title>目标' + (goalMark.operation === 'create' ? '创建' : goalMark.operation === 'complete' ? '完成' : '中止') + '</title></circle>';
       const badges = [];
       if (errors) badges.push(['error', '×', '报错 ' + errors + ' 次']);
