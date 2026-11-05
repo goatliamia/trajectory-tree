@@ -2319,7 +2319,7 @@ function fileChangeHistory(operations, path) {
     if (goalData && Array.isArray(goalData.markers) && goalData.markers.length) {
       const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
       const reads = goalData.markers.filter(m => m.operation === 'read');
-      const gy = h - 30;
+      const gy = h - 46;
       // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
       const byGoalAll = new Map();
       for (const m of goalData.markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
@@ -2336,11 +2336,11 @@ function fileChangeHistory(operations, path) {
         band += '<rect x="' + x0 + '" y="' + (gy - 7) + '" width="' + w + '" height="14" rx="4" class="goal-block"/>';
         if (pts.length > 1) band += '<path d="M' + pts[0].x + ' ' + gy + 'H' + x1 + '" class="goal-line"/>';
         for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="4" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ' · 第 ' + m.turn + ' 轮 · seq ' + m.seq + '</title></circle>';
-        const startTurn = all.length ? all[0].turn : pts[0].turn, endTurn = pts[pts.length - 1].turn;
-        const head = pts[0].operation === 'create' ? '第 ' + startTurn + (endTurn !== startTurn ? '–' + endTurn : '') + ' 轮' : '第 ' + startTurn + (endTurn !== startTurn ? '–' + endTurn : '') + ' 轮（无创建记录）';
         const last = pts[pts.length - 1];
-        const rounds = last.roundsStarted != null ? ' · ' + last.roundsStarted + '/' + (last.maxGoalRounds ?? '?') : '';
-        band += '<text x="' + (x0 + 8) + '" y="' + (gy - 9) + '" class="goal-label">' + head + ' · ' + last.operation + rounds + '</text>';
+        const own = (goalData.goals || []).find(x => x.id === id) || null;
+        const objective = String(own?.objective || goalData.objective || '目标').replace(/\s+/g, ' ');
+        const compact = objective.length > 26 ? objective.slice(0, 26) + '…' : objective;
+        band += '<text x="' + (x0 + 8) + '" y="' + (gy + 16) + '" class="goal-label">' + compact + ' · ' + (last.operation || '') + '</text>';
       }
       for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + '" r="1.8" class="goal-read"><title>读取目标 · 第 ' + m.turn + ' 轮</title></circle>'; }
       band += '</g>';
