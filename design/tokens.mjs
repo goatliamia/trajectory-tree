@@ -14,6 +14,7 @@ export const VISUAL_TOKENS = {
   opacity:{source:1,area:.22,inactive:.18},motion:{feedback:140,mark:550,fracture:650,insert:850,hold:1000},
 };
 
+const DARK_TOKENS = { surface:'#0a0a0a', canvas:'#151515', ink:'#ededed', muted:'#a1a1a1', line:'#303030', grid:'#292929', soft:'#222222' };
 export function visualTokenCss({legacyAliases=false}={}){
   const t=VISUAL_TOKENS,vars=[];
   for(const key of ['surface','canvas','ink','muted','line','grid','soft','action','metric','success','error','warning','retry','changePulse'])vars.push('--tt-'+key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase())+':'+t[key]);
@@ -29,5 +30,7 @@ export function visualTokenCss({legacyAliases=false}={}){
     for(const [key,,color]of CONTEXT_SERIES)vars.push('--chart-'+key+':'+color);
     for(const [alias,key]of Object.entries({surface:'surface',ink:'ink',muted:'muted',line:'line',grid:'grid',soft:'soft',accent:'action',sans:'font-sans',mono:'font-mono'}))vars.push('--'+alias+':var(--tt-'+key+')');
   }
-  return ':root{'+vars.join(';')+'}\n';
+  // 亮暗两套都输出:只给亮色时,后注入的 legacy 别名会把 dark 变量覆盖回白色。
+  const dark = Object.entries(DARK_TOKENS).map(([key, value]) => '--tt-' + key + ':' + value).join(';');
+  return ':root{' + vars.join(';') + '}\n@media (prefers-color-scheme: dark){:root{' + dark + '}}\n';
 }

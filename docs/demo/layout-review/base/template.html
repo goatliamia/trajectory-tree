@@ -71,6 +71,13 @@ body{margin:0;background:var(--bg)}
 .canvas{border:0;border-radius:0}
 .heading{margin:10px 16px 12px}
 </style>
+<style id="theme-dark-fallback">
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#151515; --surface:#0a0a0a; --ink:#ededed; --muted:#a1a1a1; --line:#303030; --grid:#292929; --soft:#222; --accent:#64a8ff; --error:#ff7178; --error-bg:#3d2021; --branch-ink:#e2e8f0; --branch-muted:#aab3bf; }
+    html, body { background: var(--bg); color: var(--ink); }
+    .canvas, .graph-scroll, .graph-wrap, .graph-caption, .canvas-bar, .turn-heading { background: var(--surface); }
+  }
+</style>
 </head>
 <body>
 <div class="app">

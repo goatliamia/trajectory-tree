@@ -43,6 +43,6 @@ page = page.replace('<a href="/baseline" target="_blank">安装版原图 ↗</a>
 // Visual defaults and interaction fixes share the frozen event data and branch geometry.
 page = page.replace("overviewLayers.add('context');", "overviewLayers.add('context'); overviewLayers.add('files');");
 for (const script of page.matchAll(/<script(?![^>]*type="application\/json")[^>]*>([\s\S]*?)<\/script>/g)) new vm.Script(script[1]);
-page=page.replace('</head>','<style>@media not (prefers-color-scheme: dark){'+visualTokenCss({legacyAliases:true})+'}</style></head>');
+page=page.replace('</head>','<style>'+visualTokenCss({legacyAliases:true})+'</style></head>');
 writeFileSync(resolve('.dsh/layout-review/geist.html'), page);
 console.log('Built Geist study from frozen files-v1; original checkpoint unchanged.');
