@@ -939,6 +939,8 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .review-goal-icon.blocked path, .review-goal-icon.pause path { stroke: var(--error); }
 @media (prefers-color-scheme: dark) { .review-goal-icon.complete path { stroke: #6fd39a; } .review-goal-icon.create path { stroke: #6fa8ef; } }
 .review-action-node.goal { fill: none; }
+/* 目标图标所在的分组里,底圆不再填白,避免一圈白边。 */
+#graph g:has(> .review-goal-icon) > .review-action-node { fill: none; }
 .geist-review .review-action-mode .graph-scroll{flex:0 0 auto;min-height:0;height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
 .geist-review .review-action-mode .graph-wrap{display:block;align-items:initial;min-height:0;height:auto;padding:0}
 .geist-review .review-action-mode .step-panel.geist-step{max-height:none;overflow:visible;flex:none;padding-bottom:24px}
