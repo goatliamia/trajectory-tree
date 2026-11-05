@@ -62,10 +62,10 @@
     const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
     if (!goal) return;
     const caption = $('graph-caption');
-    const row = caption && caption.querySelector('.geist-observe-row');
-    if (row && !row.querySelector('#br-goal-layer')) {
-      row.insertAdjacentHTML('beforeend', '<label class="br-layer"><input type="checkbox" id="br-goal-layer"' + (overviewLayers.has('goal') ? ' checked' : '') + '>目标</label>');
-      row.querySelector('#br-goal-layer').onchange = event => {
+    const layers = caption && caption.querySelector('.br-layers');
+    if (layers && !layers.querySelector('[data-br-layer="goal"]')) {
+      layers.insertAdjacentHTML('beforeend', '<label class="br-layer"><input type="checkbox" data-br-layer="goal"' + (overviewLayers.has('goal') ? ' checked' : '') + '>目标</label>');
+      layers.querySelector('[data-br-layer="goal"]').onchange = event => {
         event.target.checked ? overviewLayers.add('goal') : overviewLayers.delete('goal');
         renderOverview();
       };

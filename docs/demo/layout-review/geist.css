@@ -510,7 +510,7 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .goal-dot { fill: #7d8fa6; }
 .goal-dot.complete { fill: #3f7d55; }
 .goal-dot.blocked { fill: #c0503f; }
-.goal-label { font: 10px var(--sans); fill: var(--muted); }
+.goal-label { font: 11px var(--sans); }
 .goal-dot { stroke: var(--surface); stroke-width: 1; }
 .goal-dot.create { fill: #5286bf; }
 .goal-dot.resume { fill: #c38a30; }
@@ -543,3 +543,9 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .geist-review .goal-strip-item.complete:before { background: var(--success, #3f7d55); }
 .geist-review .goal-strip-item.blocked:before { background: var(--error); }
 .geist-review .goal-strip-sep { opacity: .4; }
+.goal-text { fill: var(--muted); }
+.goal-state { font-weight: 650; }
+.goal-state.complete { fill: #3f7d55; }
+.goal-state.blocked, .goal-state.paused { fill: var(--error); }
+.goal-state.active, .goal-state.create, .goal-state.resume { fill: var(--accent); }
+@media (prefers-color-scheme: dark) { .goal-state.complete { fill: #5fbf86; } }
