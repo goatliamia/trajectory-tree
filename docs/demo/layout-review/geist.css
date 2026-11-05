@@ -531,3 +531,6 @@ body { display: flex; flex-direction: column; align-items: stretch; }
   .goal-dot.create { fill: #7aa6e6; }
   .goal-dot.resume { fill: #d8a15a; }
 }
+
+/* 图区底色跟随表面色:否则会命中别的主题块,出现两种深色。 */
+.geist-review .graph-scroll, .geist-review .graph-wrap { background: var(--surface); }
