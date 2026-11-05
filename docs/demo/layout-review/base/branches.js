@@ -203,7 +203,7 @@
         const own = (goalData.goals || []).find(x => x.id === id) || null;
         const objective = String(own?.objective || goalData.objective || '目标').replace(/\s+/g, ' ');
         const compact = objective.length > 26 ? objective.slice(0, 26) + '…' : objective;
-        band += '<text x="' + (x0 + 8) + '" y="' + (gy + 16) + '" class="goal-label"><tspan class="goal-text">' + compact + '</tspan><tspan class="goal-state ' + (last.operation || 'active') + '" dx="6">' + (last.operation || '') + '</tspan></text>';
+        band += '<text x="' + (x0 + w / 2) + '" y="' + (gy + 16) + '" text-anchor="middle" class="goal-label"><tspan class="goal-text">' + compact + '</tspan><tspan class="goal-state ' + (last.operation || 'active') + '" dx="6">' + (last.operation || '') + '</tspan></text>';
       }
       for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + '" r="1.8" class="goal-read"><title>读取目标 · 第 ' + m.turn + ' 轮</title></circle>'; }
       band += '</g>';
