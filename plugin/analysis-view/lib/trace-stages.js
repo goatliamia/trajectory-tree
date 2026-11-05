@@ -103,6 +103,8 @@ export class TraceStages {
       entry.startDetails = () => entry.details ||= this.resources.main.run(async () => {
         const rows = await ensureEvents(), at = Date.now();
         payload.context = structuredClone(traceContext(rows, payload, readContextTimeline(this.ctx, sessionId)));
+        // 目标事件不在 observeSession 的流里:单独读一次原始日志(按会话缓存,同 revision 不重读)。
+        try { applyGoalEvents(payload, await readGoalChanges(this.ctx, sessionId)); } catch { /* 目标事件缺失不影响其余数据 */ }
         entry.timing.details = Date.now() - at;
         this.resources.update(entry); return payload;
       }, controller.signal, 1);

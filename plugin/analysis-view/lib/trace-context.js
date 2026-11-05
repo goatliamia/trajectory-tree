@@ -270,3 +270,30 @@ export async function traceActors(events, payload, skillRecords, readEvents) {
   }));
   return { skillAnalysis, agentBranches };
 }
+
+/** 把宿主记录的 goal/change 事件并进 context.goal:事件优先,工具调用补轮次。 */
+export function applyGoalEvents(payload, events) {
+  if (!Array.isArray(events) || !events.length) return;
+  const session = payload.sessions?.[0];
+  if (!session || !payload.context) return;
+  const turnOf = time => {
+    const turn = (session.turns || []).find(t => time >= t.start && time <= (t.end ?? Infinity));
+    return turn ? turn.number : null;
+  };
+  const fromEvents = events.map(e => ({ ...e, turn: turnOf(e.time) })).filter(e => e.turn != null);
+  if (!fromEvents.length) return;
+  const existing = payload.context.goal || { markers: [] };
+  const bySeq = new Map((existing.markers || []).map(m => [m.seq, m]));
+  for (const e of fromEvents) {
+    const prev = bySeq.get(e.seq) || {};
+    bySeq.set(e.seq, { ...prev, ...e, source: 'event' });
+  }
+  const markers = [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+  const last = fromEvents[fromEvents.length - 1];
+  payload.context.goal = { ...existing, ...{
+    id: last.goalId ?? existing.id ?? null,
+    phase: last.phase ?? existing.phase ?? null,
+    roundsStarted: last.roundsStarted ?? existing.roundsStarted ?? null,
+    maxGoalRounds: last.maxGoalRounds ?? existing.maxGoalRounds ?? null,
+  }, markers };
+}
