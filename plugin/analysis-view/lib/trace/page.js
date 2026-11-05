@@ -3053,7 +3053,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
     const mapped = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
     const items = mapped
-        .filter(item => !/^(create_goal|get_goal|update_goal)\b/.test(String(item.result?.title || '')))
+        .filter(item => !/(create_goal|get_goal|update_goal)/.test([item.result?.title, item.result?.name, item.result?.tool, item.result?.id].filter(Boolean).join(' ')))
         .filter(item => /subagent|子代理|协作/i.test(geistOutcomeText([item])));
     const inPath = Boolean(document.querySelector('.canvas.review-action-mode'));
     const result = geistDrawResultBranches(inPath ? [] : items, base, 20, width - 20, visible);
