@@ -182,11 +182,11 @@
     if (goalData && Array.isArray(goalData.markers) && goalData.markers.length) {
       const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
       const reads = goalData.markers.filter(m => m.operation === 'read');
-      const gy = h - 34;
+      const gy = h - 62;
       // 按目标分组:一个会话可以有多个目标,各自一段,不要连成一条。
       const groups = new Map();
       for (const m of life) { const key = m.goalId || 'goal'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push({ ...m, x: mapTime(m.time) }); }
-      let band = '<g class="goal-band" data-goal-band="1" style="cursor:pointer">';
+      let band = '<g class="goal-band" data-goal-band="1" style="cursor:pointer;pointer-events:all">';
       let drawn = 0;
       for (const [id, list] of groups) {
         const pts = list.filter(m => Number.isFinite(m.x));

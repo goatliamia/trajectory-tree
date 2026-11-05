@@ -65,8 +65,28 @@
     if (!caption || caption.querySelector('#br-goal')) return;
     const label = '目标 ' + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
     caption.insertAdjacentHTML('afterbegin', '<button class="geist-text-action quiet" id="br-goal">' + label + ' ↗</button>');
-    const bandEl = document.querySelector('[data-goal-band]');
-    if (bandEl && !bandEl.dataset.bound) { bandEl.dataset.bound = '1'; bandEl.onclick = () => $('br-goal')?.click(); }
+    // 不做点击:SVG 里 z 序不可靠。改成悬停在带子所在的横带内弹出信息。
+    let tip = document.getElementById('goal-tip');
+    if (!tip) {
+      tip = document.createElement('div'); tip.id = 'goal-tip';
+      tip.style.cssText = 'position:fixed;z-index:80;max-width:360px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:12px/1.5 var(--sans);box-shadow:0 8px 28px #0003;display:none;pointer-events:none';
+      document.body.appendChild(tip);
+    }
+    tip.textContent = (goal.objective || '目标未记录') + ' · ' + (goal.phase || '') + (goal.roundsStarted != null ? ' · ' + goal.roundsStarted + '/' + (goal.maxGoalRounds ?? '?') : '');
+    const scroll = $('graph-scroll');
+    if (scroll && !scroll.dataset.goalTip) {
+      scroll.dataset.goalTip = '1';
+      scroll.addEventListener('mousemove', event => {
+        const band = document.querySelector('[data-goal-band]');
+        const tipEl = document.getElementById('goal-tip');
+        if (!band || !tipEl) return;
+        const r = band.getBoundingClientRect();
+        const inside = event.clientY >= r.top - 6 && event.clientY <= r.bottom + 6;
+        tipEl.style.display = inside ? 'block' : 'none';
+        if (inside) { tipEl.style.left = Math.min(window.innerWidth - 380, event.clientX + 14) + 'px'; tipEl.style.top = Math.max(8, event.clientY - 8) + 'px'; }
+      });
+      scroll.addEventListener('mouseleave', () => { const tipEl = document.getElementById('goal-tip'); if (tipEl) tipEl.style.display = 'none'; });
+    }
     $('br-goal').onclick = () => {
       const rows = [['目标', goal.objective || '未记录'], ['阶段', goal.phase || '未记录'],
         ['轮次', goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : '未记录'],
