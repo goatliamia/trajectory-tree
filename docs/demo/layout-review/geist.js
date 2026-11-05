@@ -63,7 +63,7 @@
     if (!goal) return;
     const caption = $('graph-caption');
     if (!caption || caption.querySelector('#br-goal')) return;
-    const label = '目标 ' + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
+    const label = '目标 ' + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · 目标轮 ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
     caption.insertAdjacentHTML('afterbegin', '<button class="geist-text-action quiet" id="br-goal">' + label + ' ↗</button>');
     // 不做点击:SVG 里 z 序不可靠。改成悬停在带子所在的横带内弹出信息。
     let tip = document.getElementById('goal-tip');
@@ -83,7 +83,7 @@
         const r = band.getBoundingClientRect();
         const inside = event.clientY >= r.top - 6 && event.clientY <= r.bottom + 6;
         tipEl.style.display = inside ? 'block' : 'none';
-        if (inside) { tipEl.style.left = Math.min(window.innerWidth - 380, event.clientX + 14) + 'px'; tipEl.style.top = Math.max(8, event.clientY - 8) + 'px'; }
+        if (inside) { const box = scroll.getBoundingClientRect(); tipEl.style.left = Math.max(8, box.right - 386) + 'px'; tipEl.style.top = (box.top + 10) + 'px'; }
       });
       scroll.addEventListener('mouseleave', () => { const tipEl = document.getElementById('goal-tip'); if (tipEl) tipEl.style.display = 'none'; });
     }

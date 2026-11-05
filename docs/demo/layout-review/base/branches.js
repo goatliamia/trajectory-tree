@@ -198,7 +198,7 @@
         for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="4" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ' · 第 ' + m.turn + ' 轮 · seq ' + m.seq + '</title></circle>';
         const turns = pts[0].turn + (pts.length > 1 && pts[pts.length - 1].turn !== pts[0].turn ? '–' + pts[pts.length - 1].turn : '');
         const stage = pts[pts.length - 1].operation;
-        band += '<text x="' + (pts[0].x + 8) + '" y="' + (gy - 9) + '" class="goal-label">' + turns + ' 轮 · ' + stage + (goalData.roundsStarted != null ? ' · 已跑 ' + goalData.roundsStarted + '/' + (goalData.maxGoalRounds ?? '?') : '') + '</text>';
+        band += '<text x="' + (pts[0].x + 8) + '" y="' + (gy - 9) + '" class="goal-label">' + '第 ' + turns + ' 轮 · ' + stage + '</text>';
       }
       for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + '" r="1.8" class="goal-read"><title>读取目标 · 第 ' + m.turn + ' 轮</title></circle>'; }
       band += '</g>';
