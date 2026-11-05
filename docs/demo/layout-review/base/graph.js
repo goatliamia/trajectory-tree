@@ -6,6 +6,7 @@
     for(const step of steps) {
       const byTool=new Map();
       for(const call of step.calls) {
+    if(['create_goal','get_goal','update_goal'].includes(call.name)) continue;
         const k=call.name+'|'+call.status;
         if(!byTool.has(k))byTool.set(k,{step,name:call.name,status:call.status,calls:[]});
         byTool.get(k).calls.push(call);
