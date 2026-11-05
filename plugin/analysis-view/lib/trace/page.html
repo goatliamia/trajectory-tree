@@ -907,6 +907,15 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 
 /* 图区底色跟随表面色:否则会命中别的主题块,出现两种深色。 */
 .geist-review .graph-scroll, .geist-review .graph-wrap { background: var(--surface); }
+
+/* 目标条:图下方一行,不参与图内布局。 */
+.geist-review .goal-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 24px; border-top: 1px solid var(--line); background: var(--surface); font-size: 11px; color: var(--muted); }
+.geist-review .goal-strip-title { color: var(--ink); font-weight: 500; }
+.geist-review .goal-strip-item { display: inline-flex; align-items: center; gap: 6px; }
+.geist-review .goal-strip-item:before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.geist-review .goal-strip-item.complete:before { background: var(--success, #3f7d55); }
+.geist-review .goal-strip-item.blocked:before { background: var(--error); }
+.geist-review .goal-strip-sep { opacity: .4; }
 .geist-review .review-action-mode .graph-scroll{flex:0 0 auto;min-height:0;height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
 .geist-review .review-action-mode .graph-wrap{display:block;align-items:initial;min-height:0;height:auto;padding:0}
 .geist-review .review-action-mode .step-panel.geist-step{max-height:none;overflow:visible;flex:none;padding-bottom:24px}
