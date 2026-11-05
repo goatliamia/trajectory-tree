@@ -2333,9 +2333,11 @@ function fileChangeHistory(operations, path) {
         band += '<rect x="' + x0 + '" y="' + (gy - 7) + '" width="' + w + '" height="14" rx="4" class="goal-block"/>';
         if (pts.length > 1) band += '<path d="M' + x0 + ' ' + gy + 'H' + x1 + '" class="goal-line"/>';
         for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="4" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ' · 第 ' + m.turn + ' 轮 · seq ' + m.seq + '</title></circle>';
-        const turns = pts[0].turn + (pts.length > 1 && pts[pts.length - 1].turn !== pts[0].turn ? '–' + pts[pts.length - 1].turn : '');
-        const stage = pts[pts.length - 1].operation;
-        band += '<text x="' + (pts[0].x + 8) + '" y="' + (gy - 9) + '" class="goal-label">' + '第 ' + turns + ' 轮 · ' + stage + '</text>';
+        const last = pts[pts.length - 1];
+        const turns = pts[0].turn + (last.turn !== pts[0].turn ? '–' + last.turn : '');
+        const head = pts[0].operation === 'create' ? '第 ' + turns + ' 轮' : '起于第 ' + pts[0].turn + ' 轮';
+        const rounds = last.roundsStarted != null ? ' · ' + last.roundsStarted + '/' + (last.maxGoalRounds ?? '?') : '';
+        band += '<text x="' + (pts[0].x + 8) + '" y="' + (gy - 9) + '" class="goal-label">' + head + ' · ' + last.operation + rounds + '</text>';
       }
       for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + '" r="1.8" class="goal-read"><title>读取目标 · 第 ' + m.turn + ' 轮</title></circle>'; }
       band += '</g>';
