@@ -107,7 +107,7 @@
       const worst = errors ? 'error' : timeouts ? 'timeout' : blocked ? 'blocked' : '';
       if (worst) part += '<circle cx="' + pos + '" cy="' + base + '" r="15.5" class="review-action-ring ' + worst + '"/>';
     // 目标事件画成状态环外侧的一圈:创建/完成/阻塞各有颜色,读取不画。
-    const goalMark = (reviewContextData.goal?.markers || []).find(m => m.turn === step.number && m.operation && m.operation !== 'read');
+    const goalMark = ((((typeof data !== 'undefined' && data && data.context) ? data.context : {}).goal || {}).markers || []).find(m => m.operation && m.operation !== 'read' && m.time >= step.start && m.time <= (step.end || Infinity));
     if (goalMark) part += '<circle cx="' + pos + '" cy="' + base + '" r="19.5" class="review-goal-ring ' + goalMark.operation + '"><title>目标' + (goalMark.operation === 'create' ? '创建' : goalMark.operation === 'complete' ? '完成' : '中止') + '</title></circle>';
       const badges = [];
       if (errors) badges.push(['error', '×', '报错 ' + errors + ' 次']);
