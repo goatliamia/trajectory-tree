@@ -88,13 +88,7 @@
     });
     return { html, bottom };
   }
-  reviewBranches = function(mapTime, base, visible, left, right, width) {
-    const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
-    const items = records.filter(result => !/^(create_goal|get_goal|update_goal)$/.test(String(result.name || result.tool || '')) && !/^(create_goal|get_goal|update_goal)$/.test(String(result.title || '').split(' ')[0])).map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
-    reviewBranchesNow = geistOutcomeBranches;
-    return result;
-  };
+  reviewBranches = function() { reviewBranchesNow = geistOutcomeBranches; return ''; };
   reviewOverviewSummary = () => session.turns.length + ' 轮执行记录';
   function geistOutcomeFocus() {
     const relevant = new Set(reviewFileSelection ? reviewFileOperations.filter(o => fileIdentity(o.path) === reviewFileSelection).map(o => o.seq) : []);
