@@ -31,7 +31,6 @@ branch = branch.replaceAll('tlRoundReadout(', 'reviewRoundReadout(');
 branch = branch.replace('bindOverviewViewport();tlBindScroll();', 'bindOverviewViewport();tlBindScroll();reviewBind();');
 branch = branch.replaceAll('请求重试', '自动再试').replaceAll('上下文压缩开始', '把较早的内容整理成摘要');
 branch = branch.replaceAll('中断与重试', '停顿与再试');
-branch = branch.replace("['interruptions','停顿与再试']]", "['interruptions','停顿与再试'],['context','上下文变化'],['files','文件']]");
 branch = branch.replaceAll('上下文压缩', '压缩上下文').replaceAll('结果未确认', '结果还不清楚');
 branch = branch.replace('>≋</text>', '>✂</text>');
 branch = branch.replace("'累计执行时间'", 'showTime?"总耗时 "+reviewDuration(active):"累计执行时间"');
