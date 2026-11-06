@@ -1,8 +1,8 @@
 // Trajectory Tree visual source of truth. Source colors match the final Geist
 // render layer of the existing path view, not its pre-theme model defaults.
 export const CONTEXT_SERIES = [
-  ['system','系统提示','#8053e3'],['tools','工具定义','#d49b00'],['user','用户消息','#44a56b'],
-  ['inject','补充内容','#c442a7'],['skill','技能内容','#e66d26'],['assistant','助手消息','#5b9fe8'],['tool','工具结果','#3ab4a4'],
+  ['system','系统提示','#8053e3'],['tools','工具定义','#d49b00'],['user','用户输入','#44a56b'],
+  ['inject','运行时注入','#c442a7'],['skill','技能内容','#e66d26'],['assistant','模型输出（含思考）','#5b9fe8'],['tool','工具输出','#3ab4a4'],
 ];
 export const VISUAL_TOKENS = {
   surface:'#ffffff',canvas:'#fafafa',ink:'#171717',muted:'#666666',line:'#e6e6e6',grid:'#ededed',soft:'#f5f5f5',

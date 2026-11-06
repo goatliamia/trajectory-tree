@@ -117,6 +117,8 @@ node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl
 
 Generation does not call a model. The command returns a standalone HTML file and a local preview URL; fonts are embedded for offline viewing.
 
+The interface automatically follows the host or browser language. Choose Auto / 中文 / English in the page, or pass `--lang en` or `--lang zh-CN`. Report prose follows the user's request; quoted logs, paths and arguments remain unchanged. See [host compatibility and language selection](docs/host-compatibility.md) for evidence boundaries and supported capabilities.
+
 ## One set of evidence tools
 
 | Tool | Purpose |

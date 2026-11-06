@@ -89,7 +89,7 @@
         const p = overviewProjection, visible = (a, b = a) => b >= p.visibleLeft - 90 && a <= p.visibleRight + 90;
         $('trace-context-layer').innerHTML = reviewContextLayer(p.layout, p.mainY, p.visibleLeft, p.visibleRight, visible);
         reviewContextBind();
-        if ($('review-context-scale-note')) $('review-context-scale-note').textContent = '柱高至 ±' + reviewTokens(reviewContextScale.limit) + ' · …收起更大量';
+        if ($('review-context-scale-note')) $('review-context-scale-note').textContent = ui('柱高至 ±') + reviewTokens(reviewContextScale.limit) + ui(' · …收起更大量');
         geistUpdateCounts.contextLayer++;
       } else if (graph && session.turns.length) {
         geistOutcomeLayoutCache.clear();

@@ -15,8 +15,8 @@
   const reviewSigned = value => (value > 0 ? '+' : value < 0 ? '−' : '') + reviewTokens(Math.abs(value));
   function reviewDuration(ms) {
     const seconds = Math.max(0, Math.round(ms / 1000));
-    if (seconds < 60) return seconds + '秒';
-    return Math.floor(seconds / 60) + '分' + (seconds % 60 ? seconds % 60 + '秒' : '');
+    if (seconds < 60) return seconds + ui('秒');
+    return Math.floor(seconds / 60) + ui('分') + (seconds % 60 ? seconds % 60 + ui('秒') : '');
   }
   function reviewTimeLayer(layout, visible, left, right, mainHeight, mapTime) {
     if (!overviewLayers.has('duration')) return '';
@@ -31,15 +31,15 @@
       if (!visible(group.start, group.end)) continue;
       const first = group.rows[0].turn.number, last = group.rows.at(-1).turn.number;
       const start = Math.max(left, group.start), end = Math.min(right, group.end), cx = (start + end) / 2;
-      const label = first === last ? '第 ' + first + ' 轮' : first + '–' + last + ' 轮 · 展开';
+      const label = first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮` + ui(' · 展开');
       const ongoing = group.rows.some(l => l.turn.end === null);
-      const duration = (first === last ? '' : '共 ') + (ongoing ? '≥' : '') + reviewDuration(group.duration);
+      const duration = (first === last ? '' : ui('共 ')) + (ongoing ? '≥' : '') + reviewDuration(group.duration);
       let body = '<rect x="' + start + '" y="28" width="' + Math.max(1, end - start - 3) + '" height="38" rx="4" class="review-duration-band"/>';
       body += '<path d="M' + (start + 4) + ' 62v4H' + Math.max(start + 4, end - 7) + 'v-4" class="review-interval-guide"/>';
       if (end - start >= Math.max(reviewMeasure(label), reviewMeasure(duration)) + 8)
         body += brText(cx, 42, label, 'review-turn-duration') + brText(cx, 57, duration, 'review-turn-duration review-duration-value');
       html += brGroup('data-review-duration-range="' + first + ':' + last + '" class="review-duration-hit"', body,
-        label + ' · ' + duration + '。点击查看每一轮耗时，没有按时长筛选。');
+        label + ' · ' + duration + ui('。点击查看每一轮耗时，没有按时长筛选。'));
     }
     const last = layout.at(-1);
     if (last && visible(last.end)) html += '<path d="M' + last.end + ' 96V' + (mainHeight - 38) + '" class="review-turn-divider"/>';
@@ -47,12 +47,12 @@
   }
   function reviewContextMissing(number) {
     const first = Math.min(...(reviewContextData.requests || []).map(row => row.turn));
-    return number < first && Number.isFinite(first) ? '本轮早于当前返回的历史范围；当前增量从第 ' + first + ' 轮开始' : '没有这轮的请求构成记录';
+    return number < first && Number.isFinite(first) ? ui('本轮早于当前返回的历史范围；当前增量从第 ') + first + ui(' 轮开始') : ui('没有这轮的请求构成记录');
   }
   function reviewContextNote(row, number) {
     if (!row) return reviewContextMissing(number);
-    if (row.isBaseline) return '首轮已有 ' + reviewTokens(row.total) + ' · 看开始时的构成';
-    return '第 ' + row.turn + ' 轮 · ' + (row.net >= 0 ? '净增 ' : '净减 ') + reviewTokens(Math.abs(row.net));
+    if (row.isBaseline) return ui('首轮已有 ') + reviewTokens(row.total) + ui(' · 看开始时的构成');
+    return ui('第 ') + row.turn + ui(' 轮 · ') + (row.net >= 0 ? ui('净增 ') : ui('净减 ')) + reviewTokens(Math.abs(row.net));
   }
   function reviewContextLayer(layout, base, left, right, visible) {
     if (!overviewLayers.has('context')) return '';
@@ -95,18 +95,18 @@
         }
       }
       const note = reviewContextNote(row, l.turn.number);
-      html += brGroup('class="review-context-turn" data-context-turn="' + l.turn.number + '"', body, note + (row && !row.isBaseline ? '；增加 ' + reviewTokens(row.increase) + '，减少 ' + reviewTokens(row.decrease) : '；显示末次请求已有构成，作为后续轮次的比较基线') + (positive.overflow || negative.overflow ? '；实际量超过本图 ' + reviewTokens(scale.limit) + ' 显示范围，柱高已收起，不表示模型上下文超限' : ''));
+      html += brGroup('class="review-context-turn" data-context-turn="' + l.turn.number + '"', body, note + (row && !row.isBaseline ? ui('；增加 ') + reviewTokens(row.increase) + ui('，减少 ') + reviewTokens(row.decrease) : ui('；显示末次请求已有构成，作为后续轮次的比较基线')) + (positive.overflow || negative.overflow ? ui('；实际量超过本图 ') + reviewTokens(scale.limit) + ui(' 显示范围，柱高已收起，不表示模型上下文超限') : ''));
     }
     for (const sign of [1, -1]) {
       const occupied = [];
       for (const item of overflowLabels.filter(i => i.sign === sign).sort((a, b) => Number(b.baseline) - Number(a.baseline) || Math.abs(b.value) - Math.abs(a.value))) {
-        const label = (item.baseline ? '首轮 ' + reviewTokens(item.value) : reviewSigned(item.value)) + ' · 收起', width = reviewMeasure(label);
+        const label = (item.baseline ? ui('首轮 ') + reviewTokens(item.value) : reviewSigned(item.value)) + ui(' · 收起'), width = reviewMeasure(label);
         const x = Math.max(left + width / 2, Math.min(right - width / 2, item.x));
         const y = sign > 0 ? top - 7 : bottom + 15;
         if (occupied.some(box => x - width / 2 < box.right + 10 && x + width / 2 > box.left - 10)) continue;
         if (reviewBranchesNow.some(p => x - width / 2 < p.right + 5 && x + width / 2 > p.left - 5 && y + 3 > base + p.top - 3 && y - 10 < base + p.bottom + 3)) continue;
         html += brGroup('class="review-context-overflow" data-context-turn="' + item.turn + '"',
-          brText(x, y, label, 'review-context-overflow-label'), '第 ' + item.turn + ' 轮 · 实际 ' + reviewTokens(item.value) + ' tokens；柱高已收起，点开看完整构成');
+          brText(x, y, label, 'review-context-overflow-label'), ui('第 ') + item.turn + ui(' 轮 · 实际 ') + reviewTokens(item.value) + ui(' tokens；柱高已收起，点开看完整构成'));
         occupied.push({ left: x - width / 2, right: x + width / 2 });
       }
     }
@@ -121,7 +121,7 @@
       const x = group[0].x;
       if (x < left || x > right) continue;
       const events = group.map(item => item.e);
-      const caption = events.length === 1 ? '压缩上下文 · 第 ' + events[0].turn + ' 轮' : events.length + ' 次压缩上下文';
+      const caption = events.length === 1 ? ui('压缩上下文 · 第 ') + events[0].turn + ui(' 轮') : events.length + ui(' 次压缩上下文');
       html += '<path d="M' + x + ' 96V' + (mainHeight - 38) + '" class="review-compaction-divider"/>';
       html += brGroup('class="review-compaction-marker" data-context-compaction="' + events.map(e => e.seq).join(',') + '"',
         '<rect x="' + (x - 12) + '" y="68" width="24" height="24" rx="5" class="review-compaction-hit"/>' +
@@ -133,56 +133,56 @@
   function reviewOpenCompaction(seqs) {
     const events = reviewContextData.boundaries.filter(e => seqs.includes(e.seq));
     const event = events[0], row = reviewContextMap.get(event.turn);
-    let html = '<p class="review-explain">系统把较早的一段对话整理成摘要，再带着摘要继续。黄色虚线标出摘要实际写入上下文的位置；原会话日志仍然保留。</p>';
-    if (row) html += '<p class="review-context-change-note">第 ' + row.turn + ' 轮净变化 ' + reviewSigned(row.net) + ' tokens。这个数还包含本轮新增内容，不等于这次压缩单独减少的量。</p>';
-    html += '<div class="review-list">' + events.map(e => '<button data-compaction-turn="' + e.turn + '">第 ' + e.turn + ' 轮 · 查看上下文来源变化<small>压缩记录 seq ' + e.seq + '</small></button>').join('') + '</div>';
-    html += '<div class="drawer-actions"><button class="action-button primary" id="review-compaction-path">查看本轮行动路径 ↗</button></div>';
-    openDrawer(events.length > 1 ? events.length + ' 次压缩上下文' : '压缩上下文', '较早的对话 → 摘要', html);
+    let html = ui('<p class="review-explain">系统把较早的一段对话整理成摘要，再带着摘要继续。黄色虚线标出摘要实际写入上下文的位置；原会话日志仍然保留。</p>');
+    if (row) html += ui('<p class="review-context-change-note">第 ') + row.turn + ui(' 轮净变化 ') + reviewSigned(row.net) + ui(' tokens。这个数还包含本轮新增内容，不等于这次压缩单独减少的量。</p>');
+    html += '<div class="review-list">' + events.map(e => '<button data-compaction-turn="' + e.turn + ui('">第 ') + e.turn + ui(' 轮 · 查看上下文来源变化<small>压缩记录 seq ') + e.seq + '</small></button>').join('') + '</div>';
+    html += ui('<div class="drawer-actions"><button class="action-button primary" id="review-compaction-path">查看本轮行动路径 ↗</button></div>');
+    openDrawer(events.length > 1 ? events.length + ui(' 次压缩上下文') : ui('压缩上下文'), ui('较早的对话 → 摘要'), html);
     document.querySelectorAll('[data-compaction-turn]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.compactionTurn)));
     $('review-compaction-path').onclick = () => reviewEnterPath(event.turn);
   }
   function reviewOpenContext(turnNumber) {
     const row = reviewContextMap.get(turnNumber);
     if (!row) {
-      openDrawer('上下文增量尚未包含本轮', '第 ' + turnNumber + ' 轮', '<p class="review-explain">' + reviewContextMissing(turnNumber) + '。缺失不表示零。</p>');
+      openDrawer(ui('上下文增量尚未包含本轮'), ui('第 ') + turnNumber + ui(' 轮'), '<p class="review-explain">' + reviewContextMissing(turnNumber) + ui('。缺失不表示零。</p>'));
       $('drawer').dataset.contextTurn = turnNumber;
       geistContextCoverage(); return;
     }
     reviewContextSelected = turnNumber;
     const first = reviewContextRequests.find(r => r.turn === row.turn);
     const max = Math.max(1, ...CONTEXT_CATEGORIES.map(c => Math.abs(row.parts[c.key][row.isBaseline ? 'after' : 'delta'])));
-    let html = '<div class="review-context-headline"><strong>' + (row.isBaseline ? reviewTokens(row.total) : reviewSigned(row.net)) + '</strong><span>' + (row.isBaseline ? '首轮末次请求 · 已有上下文' : 'tokens · 净变化') + '</span></div>';
-    if (row.isBaseline) html += '<p class="review-context-change-note">首次请求已经带着约 ' + reviewTokens(CONTEXT_CATEGORIES.reduce((n, c) => n + (first[c.key] || 0), 0)) + ' tokens，并不是空白。下面同时列出首次请求与本轮末次请求的构成。</p>';
+    let html = '<div class="review-context-headline"><strong>' + (row.isBaseline ? reviewTokens(row.total) : reviewSigned(row.net)) + '</strong><span>' + (row.isBaseline ? ui('首轮末次请求 · 已有上下文') : ui('tokens · 净变化')) + '</span></div>';
+    if (row.isBaseline) html += ui('<p class="review-context-change-note">首次请求已经带着约 ') + reviewTokens(CONTEXT_CATEGORIES.reduce((n, c) => n + (first[c.key] || 0), 0)) + ui(' tokens，并不是空白。下面同时列出首次请求与本轮末次请求的构成。</p>');
     if (!row.isBaseline && (row.increase || row.decrease)) html += '<div class="review-context-totals">' +
-      (row.increase ? '<span>增加 <b>' + reviewSigned(row.increase) + '</b></span>' : '') +
-      (row.decrease ? '<span>减少 <b>' + reviewSigned(-row.decrease) + '</b></span>' : '') + '</div>';
+      (row.increase ? ui('<span>增加 <b>') + reviewSigned(row.increase) + '</b></span>' : '') +
+      (row.decrease ? ui('<span>减少 <b>') + reviewSigned(-row.decrease) + '</b></span>' : '') + '</div>';
     html += '<div class="review-context-breakdown">';
     const changedCategories = CONTEXT_CATEGORIES.filter(c => row.isBaseline ? row.parts[c.key].after !== 0 : row.parts[c.key].delta !== 0);
-    if (!changedCategories.length) html += '<p class="review-quiet">本轮各来源没有净变化。</p>';
+    if (!changedCategories.length) html += ui('<p class="review-quiet">本轮各来源没有净变化。</p>');
     for (const c of changedCategories) {
       const p = row.parts[c.key], shareBase = p.delta >= 0 ? row.increase : row.decrease;
       const share = shareBase ? Math.abs(p.delta) / shareBase * 100 : 0;
       html += '<div class="review-context-category"><div><i style="background:' + c.color + '"></i><span>' + c.label + '</span><b>' + (row.isBaseline ? '≈' + reviewTokens(p.after) : reviewSigned(p.delta)) + '</b></div>';
       const amount = row.isBaseline ? p.after : Math.abs(p.delta);
       if (amount) html += '<div class="review-context-meter"><i style="width:' + amount / max * 100 + '%;background:' + c.color + ';opacity:' + (p.delta >= 0 ? .9 : .6) + '"></i></div>';
-      html += '<small>' + (row.isBaseline ? '开始时 ≈' + reviewTokens(first[c.key] || 0) + ' → 末次请求 ≈' + reviewTokens(p.after) : '≈' + reviewTokens(p.before) + ' → ≈' + reviewTokens(p.after) + (p.delta ? ' · 占本轮' + (p.delta > 0 ? '增加 ' : '减少 ') + share.toFixed(1) + '%' : ' · 未变')) + '</small></div>';
+      html += '<small>' + (row.isBaseline ? ui('开始时 ≈') + reviewTokens(first[c.key] || 0) + ui(' → 末次请求 ≈') + reviewTokens(p.after) : '≈' + reviewTokens(p.before) + ' → ≈' + reviewTokens(p.after) + (p.delta ? ui(' · 占本轮') + (p.delta > 0 ? ui('增加 ') : ui('减少 ')) + share.toFixed(1) + '%' : ui(' · 未变'))) + '</small></div>';
     }
     html += '</div>';
     const boundaries = row.baselineSeq === null ? [] : (reviewContextData.boundaries || []).filter(e => e.seq > row.baselineSeq && e.seq <= row.seq);
     const prunes = boundaries.filter(e => e.kind === 'prune'), compactions = boundaries.filter(e => e.kind === 'compaction');
-    if (compactions.length) html += '<p class="review-context-change-note">' + compactions.length + ' 次压缩：把较早的对话整理成摘要，黄色剪刀线标出实际发生的位置。</p>';
+    if (compactions.length) html += '<p class="review-context-change-note">' + compactions.length + ui(' 次压缩：把较早的对话整理成摘要，黄色剪刀线标出实际发生的位置。</p>');
     if (prunes.length) {
       const names = [...new Set(prunes.flatMap(e => e.tools || []))];
-      html += '<p class="review-context-change-note">' + prunes.length + ' 条过长的工具返回被裁短：保留开头和结尾，省去中间内容。' + (names.length ? '涉及 ' + names.map(esc).join('、') + '。' : '') + '按日志明确指定的被替换返回记录对应，计在裁短实际发生的这一轮；不挂在报错分叉上，也不会删除行动路径或原会话日志。</p>';
-      html += '<details class="ov-proof"><summary>裁短了哪些工具返回</summary>' + prunes.flatMap(e => (e.replaced || []).map(r =>
-        '<div class="source-row"><span>' + esc(r.tool || '工具') + (r.turn ? ' · 原第 ' + r.turn + ' 轮 / 第 ' + r.step + ' 步' : '') + '</span>原返回 seq ' + r.seq + ' → 裁短记录 seq ' + e.seq + '</div>')).join('') + '</details>';
+      html += '<p class="review-context-change-note">' + prunes.length + ui(' 条过长的工具返回被裁短：保留开头和结尾，省去中间内容。') + (names.length ? ui('涉及 ') + names.map(esc).join('、') + '。' : '') + ui('按日志明确指定的被替换返回记录对应，计在裁短实际发生的这一轮；不挂在报错分叉上，也不会删除行动路径或原会话日志。</p>');
+      html += ui('<details class="ov-proof"><summary>裁短了哪些工具返回</summary>') + prunes.flatMap(e => (e.replaced || []).map(r =>
+        '<div class="source-row"><span>' + esc(r.tool || ui('工具')) + (r.turn ? ui(' · 原第 ') + r.turn + ui(' 轮 / 第 ') + r.step + ui(' 步') : '') + ui('</span>原返回 seq ') + r.seq + ui(' → 裁短记录 seq ') + e.seq + '</div>')).join('') + '</details>';
     }
-    if (contextBarAmounts(row).increase > reviewContextScale.limit || row.decrease > reviewContextScale.limit) html += '<p class="review-quiet">图的柱高显示到 ' + reviewTokens(reviewContextScale.limit) + ' tokens，超过时用省略号收起柱高。这是显示范围，不是模型容量限制。这里显示完整数值。</p>';
-    html += '<p class="review-quiet">' + (row.isBaseline ? '首轮显示已有量，作为下一轮的比较基线；不能把它称作相对上一轮的增量。' : '比较第 ' + row.baselineTurn + ' 轮与第 ' + row.turn + ' 轮的末次请求，反映每类内容的净变化。') + '这些不是累计花费，也不包括末次请求之后才产生的回复。</p>';
+    if (contextBarAmounts(row).increase > reviewContextScale.limit || row.decrease > reviewContextScale.limit) html += ui('<p class="review-quiet">图的柱高显示到 ') + reviewTokens(reviewContextScale.limit) + ui(' tokens，超过时用省略号收起柱高。这是显示范围，不是模型容量限制。这里显示完整数值。</p>');
+    html += '<p class="review-quiet">' + (row.isBaseline ? ui('首轮显示已有量，作为下一轮的比较基线；不能把它称作相对上一轮的增量。') : ui('比较第 ') + row.baselineTurn + ui(' 轮与第 ') + row.turn + ui(' 轮的末次请求，反映每类内容的净变化。')) + ui('这些不是累计花费，也不包括末次请求之后才产生的回复。</p>');
     // 已经在行动路径里时,"查看本轮行动路径"是重复操作,只留定位与对话跳转。
     const inPath = view === 'path';
-    html += '<div class="drawer-actions">' + (inPath ? '' : '<button class="action-button primary" id="review-context-path">查看本轮行动路径 ↗</button>') + '<button class="action-button" id="review-context-focus">在全景中放大本轮</button></div>';
-    openDrawer('第 ' + turnNumber + ' 轮 · 上下文变化', row.steps + ' 次请求 · 各来源均为估算', html);
+    html += '<div class="drawer-actions">' + (inPath ? '' : ui('<button class="action-button primary" id="review-context-path">查看本轮行动路径 ↗</button>')) + ui('<button class="action-button" id="review-context-focus">在全景中放大本轮</button></div>');
+    openDrawer(ui('第 ') + turnNumber + ui(' 轮 · 上下文变化'), row.steps + ui(' 次请求 · 各来源均为估算'), html);
     if ($('review-context-path')) $('review-context-path').onclick = () => reviewEnterPath(turnNumber);
     $('review-context-focus').onclick = () => reviewFocusTurn(turnNumber);
   }
@@ -191,8 +191,8 @@
     if (view === 'overview') {
       if (!key) {
         key = document.createElement('div'); key.id = 'review-overlay-key'; key.className = 'review-overlay-key';
-        key.innerHTML = '<span class="review-overlay-caption">上下文 <b>首轮已有量 · 之后↑增 ↓减</b></span>' + CONTEXT_CATEGORIES.map(c => '<button class="review-overlay-source" data-context-category="' + c.key + '"><i style="background:' + c.color + '"></i>' + c.label + '</button>').join('') +
-          '<button id="review-context-readout" class="review-overlay-pick"></button><button id="review-context-scale-note" class="review-overlay-scale">柱高至 ±' + reviewTokens(reviewContextScale.limit) + ' · …收起更大量</button>';
+        key.innerHTML = ui('<span class="review-overlay-caption" data-context-caption>上下文 <b>首轮已有量 · 之后↑增 ↓减</b></span>') + CONTEXT_CATEGORIES.map(c => '<button class="review-overlay-source" data-context-category="' + c.key + '"><i style="background:' + c.color + '"></i>' + c.label + '</button>').join('') +
+          ui('<button id="review-context-readout" class="review-overlay-pick"></button><button id="review-context-scale-note" class="review-overlay-scale">柱高至 ±') + reviewTokens(reviewContextScale.limit) + ui(' · …收起更大量</button>');
         $('graph-caption').append(key);
       }
       key.setAttribute('aria-hidden', String(!overviewLayers.has('context')));
@@ -205,7 +205,7 @@
       el.onmouseenter = () => {
         reviewContextSelected = number;
         if ($('review-context-readout')) $('review-context-readout').textContent = reviewContextNote(row);
-        tlReadout(row && !row.isBaseline ? '第 ' + number + ' 轮：增加 ' + reviewTokens(row.increase) + '，减少 ' + reviewTokens(row.decrease) + '，净变化 ' + reviewSigned(row.net) + ' tokens。点击看来源。' : reviewContextNote(row));
+        tlReadout(row && !row.isBaseline ? ui('第 ') + number + ui(' 轮：增加 ') + reviewTokens(row.increase) + ui('，减少 ') + reviewTokens(row.decrease) + ui('，净变化 ') + reviewSigned(row.net) + ui(' tokens。点击看来源。') : reviewContextNote(row));
       };
       el.onclick = e => { e.stopPropagation(); reviewOpenContext(number); };
       el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reviewOpenContext(number); } };
@@ -213,7 +213,7 @@
     $('graph').querySelectorAll('[data-review-duration-range]').forEach(el => {
       const [first, last] = el.dataset.reviewDurationRange.split(':').map(Number);
       const open = () => reviewOpenDurations(first, last);
-      el.onmouseenter = () => tlReadout(first === last ? '第 ' + first + ' 轮：点击定位本轮，或查看上下文与行动。' : '第 ' + first + '–' + last + ' 轮：点击展开每一轮的耗时，短轮次也在其中。');
+      el.onmouseenter = () => tlReadout(first === last ? ui('第 ') + first + ui(' 轮：点击定位本轮，或查看上下文与行动。') : ui('第 ') + first + '–' + last + ui(' 轮：点击展开每一轮的耗时，短轮次也在其中。'));
       el.onclick = e => { e.stopPropagation(); open(); };
       el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     });
@@ -221,7 +221,7 @@
       const seqs = el.dataset.contextCompaction.split(',').map(Number);
       el.onclick = e => { e.stopPropagation(); reviewOpenCompaction(seqs); };
       el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reviewOpenCompaction(seqs); } };
-      el.onmouseenter = () => tlReadout('剪刀与黄色虚线：较早的对话在这里被整理成摘要。点击看详情。');
+      el.onmouseenter = () => tlReadout(ui('剪刀与黄色虚线：较早的对话在这里被整理成摘要。点击看详情。'));
     });
     $('canvas').querySelectorAll('[data-context-category]').forEach(el => {
       el.onclick = () => reviewOpenContextSources(el.dataset.contextCategory);
@@ -236,5 +236,5 @@
         el.setAttribute('aria-hidden', String(!overviewLayers.has('context')));
       }
     });
-    $('graph-caption').querySelector('[data-br-layer="context"]')?.setAttribute('title', '上下文来源变化，以及压缩与裁短记录；与停顿、再试独立');
+    $('graph-caption').querySelector('[data-br-layer="context"]')?.setAttribute('title', ui('上下文来源变化，以及压缩与裁短记录；与停顿、再试独立'));
   }

@@ -4,6 +4,19 @@ window.__ModuleLoader__.load({
   id: "dsh-analysis-view",
   factory: (require) => {
     const React = require("react");
+    const cmUi = (zh, en) => { let stored; try { stored = window.localStorage?.getItem("trajectory-language"); } catch {} const candidates = [stored, window.document?.documentElement?.lang, ...(window.navigator?.languages || []), window.navigator?.language]; const language = candidates.find(value => typeof value === "string" && /^(?:en|zh)(?:-|$)/i.test(value)) || "en"; return /^en(?:-|$)/i.test(language) ? en : zh; };
+    function useLocaleRefresh() {
+      const [, refresh] = React.useState(0);
+      React.useEffect(() => {
+        const root = window.document?.documentElement, Observer = window.MutationObserver;
+        const update = () => refresh(value => value + 1);
+        const observer = root && Observer ? new Observer(update) : null;
+        observer?.observe(root, { attributes: true, attributeFilter: ["lang"] });
+        const onStorage = event => { if (event.key === "trajectory-language" || event.key === null) update(); };
+        window.addEventListener?.("storage", onStorage);
+        return () => { observer?.disconnect(); window.removeEventListener?.("storage", onStorage); };
+      }, []);
+    }
 
     /* 样式 */
     const STYLE_ID = "dsh-analysis-view-style";
@@ -306,7 +319,7 @@ window.__ModuleLoader__.load({
     }
 
     function Skeleton() {
-      return h("div", { "aria-busy": "true", "aria-label": "正在读取会话" }, [
+      return h("div", { "aria-busy": "true", "aria-label": cmUi("正在读取会话", "Loading session") }, [
         h("div", { key: "k", className: "av-kpis" }, [0, 1, 2, 3].map((i) => h("div", { key: i, className: "av-skel", style: { height: 58 } }))),
         h("div", { key: "s", className: "av-section" }, [
           h("div", { key: "a", className: "av-skel line", style: { width: "28%" } }),
@@ -352,8 +365,8 @@ window.__ModuleLoader__.load({
       }, [many, turns.length, scrollToEnd]);
       if (turns.length === 0) {
         return h("div", { className: "av-section" }, [
-          h("div", { key: "h", className: "av-section-head" }, h("h3", { className: "av-section-title" }, "轮次")),
-          h("div", { key: "e", className: "av-empty" }, "这段会话还没有开始任何 turn"),
+          h("div", { key: "h", className: "av-section-head" }, h("h3", { className: "av-section-title" }, cmUi("轮次", "Turns"))),
+          h("div", { key: "e", className: "av-empty" }, cmUi("这段会话还没有开始任何 turn", "This session has not started any turns")),
         ]);
       }
       const weight = (turn) => {
@@ -370,8 +383,8 @@ window.__ModuleLoader__.load({
             : turn.firstErrorSeq !== null ? index.get(turn.firstErrorSeq) : undefined;
         const callable = known !== undefined;
         const clickable = callable && props.openView !== undefined;
-        const title = "第 " + turn.turn + " 轮 · " + turn.toolCalls + " 次调用" + (turn.errors > 0 ? " · " + turn.errors + " 次失败" : "") +
-          (turn.durationMs !== null ? " · " + ms(turn.durationMs) : "") + (clickable ? " · 点击跳到轨迹" : "");
+        const title = cmUi("第 ", "Turn ") + turn.turn + cmUi(" 轮 · ", " · ") + turn.toolCalls + cmUi(" 次调用", " calls") + (turn.errors > 0 ? " · " + turn.errors + cmUi(" 次失败", " failed") : "") +
+          (turn.durationMs !== null ? " · " + ms(turn.durationMs) : "") + (clickable ? cmUi(" · 点击跳到轨迹", " · click to jump to trace") : "");
         return h("button", {
           key: turn.turn,
           className: "av-seg " + tone + (clickable ? " clickable" : ""),
@@ -403,12 +416,12 @@ window.__ModuleLoader__.load({
       };
       return h("div", { className: "av-section" }, [
         h("div", { key: "h", className: "av-section-head" }, [
-          h("h3", { key: "t", className: "av-section-title" }, "轮次"),
+          h("h3", { key: "t", className: "av-section-title" }, cmUi("轮次", "Turns")),
           h("span", { key: "n", className: "av-hint" }, many
-            ? turns.length + " 轮 · 右边最新,可拖动;每格 14px 起,点一下就能选中"
-            : turns.length + " 个 turn · 宽度按时长,颜色按失败"),
+            ? turns.length + cmUi(" 轮 · 右边最新,可拖动;每格 14px 起,点一下就能选中", " turns · newest on the right, drag to scroll; cells are at least 14px, click to select")
+            : turns.length + cmUi(" 个 turn · 宽度按时长,颜色按失败", " turns · width reflects duration, color reflects failures")),
           many && !atEnd ? h("span", { key: "sp", className: "av-spacer" }) : null,
-          many && !atEnd ? h("button", { key: "end", className: "av-btn", onClick: scrollToEnd }, "回到最新") : null,
+          many && !atEnd ? h("button", { key: "end", className: "av-btn", onClick: scrollToEnd }, cmUi("回到最新", "Back to latest")) : null,
         ]),
         h("div", {
           key: "s",
@@ -421,9 +434,9 @@ window.__ModuleLoader__.load({
           onPointerLeave: many ? endDrag : undefined,
         }, segments),
         h("div", { key: "l", className: "av-legend" }, [
-          h("span", { key: "ok", className: "av-legend-item" }, [h("span", { key: "s", className: "av-swatch", style: { background: "var(--dsw-alias-state-success-primary)", opacity: 0.5 } }), "正常"]),
-          h("span", { key: "warn", className: "av-legend-item" }, [h("span", { key: "s", className: "av-swatch", style: { background: "var(--dsw-alias-state-warn-primary)" } }), "有失败"]),
-          h("span", { key: "bad", className: "av-legend-item" }, [h("span", { key: "s", className: "av-swatch", style: { background: "var(--dsw-alias-state-error-primary)" } }), "多次失败 / 异常收尾"]),
+          h("span", { key: "ok", className: "av-legend-item" }, [h("span", { key: "s", className: "av-swatch", style: { background: "var(--dsw-alias-state-success-primary)", opacity: 0.5 } }), cmUi("正常", "Normal")]),
+          h("span", { key: "warn", className: "av-legend-item" }, [h("span", { key: "s", className: "av-swatch", style: { background: "var(--dsw-alias-state-warn-primary)" } }), cmUi("有失败", "Has failures")]),
+          h("span", { key: "bad", className: "av-legend-item" }, [h("span", { key: "s", className: "av-swatch", style: { background: "var(--dsw-alias-state-error-primary)" } }), cmUi("多次失败 / 异常收尾", "Multiple failures / abnormal ending")]),
           h("span", { key: "hint", className: "av-legend-item" }, clickableHint(turns, index)),
         ]),
       ]);
@@ -433,7 +446,7 @@ window.__ModuleLoader__.load({
       const any = turns.some((turn) => (turn.firstErrorCallId !== undefined && turn.firstErrorCallId !== null) ||
         (turn.firstCallId !== undefined && turn.firstCallId !== null) ||
         (turn.firstErrorSeq !== null && index.get(turn.firstErrorSeq) !== undefined));
-      return any ? "点一轮跳到轨迹里对应的调用" : "这一轮没有可定位的调用";
+      return any ? cmUi("点一轮跳到轨迹里对应的调用", "Select a turn to jump to its call in the trace") : cmUi("这一轮没有可定位的调用", "No call can be located for this turn");
     }
 
     const COST_ROWS_MAX = 120;
@@ -460,8 +473,8 @@ window.__ModuleLoader__.load({
       }, [turns.length]);
       if (!cost || !cost.requestCount) {
         return h("div", { className: "av-section" }, [
-          h("div", { key: "h", className: "av-section-head" }, h("h3", { className: "av-section-title" }, "花费")),
-          h("div", { key: "e", className: "av-empty" }, "这段会话没有可用的 token 数据"),
+          h("div", { key: "h", className: "av-section-head" }, h("h3", { className: "av-section-title" }, cmUi("花费", "Cost"))),
+          h("div", { key: "e", className: "av-empty" }, cmUi("这段会话没有可用的 token 数据", "No token data available for this session")),
         ]);
       }
       const shown = turns.slice(-COST_ROWS_MAX);
@@ -474,11 +487,11 @@ window.__ModuleLoader__.load({
         const out = turn.output || 0;
         const rate = turn.cacheEfficiency;
         const first = position === 0;
-        const title = "第 " + turn.turn + " 轮 · 未命中 " + fmt(turn.input) + " · 命中 " + fmt(turn.cacheRead) + " · 输出 " + fmt(turn.output) + " · 命中率 " + pct(rate) + (first ? " · 首轮缓存是空的,命中率低属正常" : "");
+        const title = cmUi("第 ", "Turn ") + turn.turn + cmUi(" 轮 · 未命中 ", " · cache miss ") + fmt(turn.input) + cmUi(" · 命中 ", " · cache hit ") + fmt(turn.cacheRead) + cmUi(" · 输出 ", " · output ") + fmt(turn.output) + cmUi(" · 命中率 ", " · hit rate ") + pct(rate) + (first ? cmUi(" · 首轮缓存是空的,命中率低属正常", " · the first turn has an empty cache, so a low hit rate is normal") : "");
         return h("div", {
           key: String(turn.turn),
           className: "av-cost-row",
-          title: title + " · 点击跳到对话这一轮",
+          title: title + cmUi(" · 点击跳到对话这一轮", " · click to jump to this turn in conversation"),
           role: "button",
           tabIndex: 0,
           onClick: () => jumpTurn(turn),
@@ -503,46 +516,46 @@ window.__ModuleLoader__.load({
         .slice(0, 2);
       return h("div", { className: "av-section" }, [
         h("div", { key: "h", className: "av-section-head" }, [
-          h("h3", { key: "t", className: "av-section-title" }, "花费"),
-          h("span", { key: "n", className: "av-hint" }, cost.requestCount + " 次请求 · " + turns.length + " 轮" + (cost.unknownRequests > 0 ? " · " + cost.unknownRequests + " 次未上报" : "")),
+          h("h3", { key: "t", className: "av-section-title" }, cmUi("花费", "Cost")),
+          h("span", { key: "n", className: "av-hint" }, cost.requestCount + cmUi(" 次请求 · ", " requests · ") + turns.length + cmUi(" 轮", " turns") + (cost.unknownRequests > 0 ? " · " + cost.unknownRequests + cmUi(" 次未上报", " unreported") : "")),
         ]),
         h("div", { key: "sum", className: "av-cost-head" }, [
           h("div", { key: "in", className: "av-cost-cell" }, [
             h("div", { className: "av-cost-num av-bad" }, fmt(cost.input)),
-            h("div", { className: "av-cost-label av-bad" }, ["未命中", pricing === null ? null : h("span", { key: "m", className: "av-cost-money" }, " ¥" + money(pricing.cost.miss))]),
+            h("div", { className: "av-cost-label av-bad" }, [cmUi("未命中", "Cache miss"), pricing === null ? null : h("span", { key: "m", className: "av-cost-money" }, " ¥" + money(pricing.cost.miss))]),
           ]),
           h("div", { key: "cr", className: "av-cost-cell" }, [
             h("div", { className: "av-cost-num" }, fmt(cost.cacheRead)),
-            h("div", { className: "av-cost-label" }, ["命中", pricing === null ? null : h("span", { key: "m", className: "av-cost-money" }, " ¥" + money(pricing.cost.hit))]),
+            h("div", { className: "av-cost-label" }, [cmUi("命中", "Cache hit"), pricing === null ? null : h("span", { key: "m", className: "av-cost-money" }, " ¥" + money(pricing.cost.hit))]),
           ]),
           h("div", { key: "out", className: "av-cost-cell" }, [
             h("div", { className: "av-cost-num" }, fmt(cost.output)),
-            h("div", { className: "av-cost-label" }, ["输出", pricing === null ? null : h("span", { key: "m", className: "av-cost-money" }, " ¥" + money(pricing.cost.output))]),
+            h("div", { className: "av-cost-label" }, [cmUi("输出", "Output"), pricing === null ? null : h("span", { key: "m", className: "av-cost-money" }, " ¥" + money(pricing.cost.output))]),
           ]),
-          h("div", { key: "eff", className: "av-cost-cell" }, [h("div", { className: "av-cost-num" }, pct(cost.cacheEfficiency)), h("div", { className: "av-cost-label" }, "命中率")]),
+          h("div", { key: "eff", className: "av-cost-cell" }, [h("div", { className: "av-cost-num" }, pct(cost.cacheEfficiency)), h("div", { className: "av-cost-label" }, cmUi("命中率", "Hit rate"))]),
           pricing === null ? null : h("div", { key: "total", className: "av-cost-cell" }, [
             h("div", { className: "av-cost-num" }, "≈ ¥" + money(pricing.total)),
-            h("div", { className: "av-cost-label" }, "合计"),
+            h("div", { className: "av-cost-label" }, cmUi("合计", "Total")),
           ]),
         ]),
         cost.cacheEfficiency === null ? null : h("div", { key: "note", className: "av-hint", style: { marginBottom: 8 } },
-          "缓存承担了 " + pct(cost.cacheEfficiency) + " 的输入处理,实际新处理 " + fmt(cost.input)),
+          cmUi("缓存承担了 ", "Cache handled ") + pct(cost.cacheEfficiency) + cmUi(" 的输入处理,实际新处理 ", " of input processing; newly processed ") + fmt(cost.input)),
         rows.length > 0 ? h("div", { key: "rows", className: "av-cost-rows", ref: list }, rows) : null,
         worst.length > 0 && turns.length > 1
           ? h("div", { key: "worst", className: "av-hint", style: { marginTop: 6 } },
-            "未命中最多:" + worst.map((turn) => "T" + turn.turn + " " + fmt(turn.input)).join(" · "))
+            cmUi("未命中最多:", "Most cache misses: ") + worst.map((turn) => "T" + turn.turn + " " + fmt(turn.input)).join(" · "))
           : null,
         h("div", { key: "l", className: "av-legend" }, [
-          h("span", { key: "h", className: "av-legend-item" }, [h("span", { className: "av-swatch", style: { background: "var(--dsw-alias-state-success-primary)", opacity: 0.55 } }), "命中"]),
-          h("span", { key: "m", className: "av-legend-item" }, [h("span", { className: "av-swatch", style: { background: "var(--dsw-alias-state-error-primary)", opacity: 0.8 } }), "未命中"]),
-          h("span", { key: "o", className: "av-legend-item" }, [h("span", { className: "av-swatch", style: { background: "var(--av-accent)", opacity: 0.75 } }), "输出"]),
-          turns.length > COST_ROWS_MAX ? h("span", { key: "more", className: "av-legend-item" }, "只画最近 " + COST_ROWS_MAX + " 轮") : null,
+          h("span", { key: "h", className: "av-legend-item" }, [h("span", { className: "av-swatch", style: { background: "var(--dsw-alias-state-success-primary)", opacity: 0.55 } }), cmUi("命中", "Cache hit")]),
+          h("span", { key: "m", className: "av-legend-item" }, [h("span", { className: "av-swatch", style: { background: "var(--dsw-alias-state-error-primary)", opacity: 0.8 } }), cmUi("未命中", "Cache miss")]),
+          h("span", { key: "o", className: "av-legend-item" }, [h("span", { className: "av-swatch", style: { background: "var(--av-accent)", opacity: 0.75 } }), cmUi("输出", "Output")]),
+          turns.length > COST_ROWS_MAX ? h("span", { key: "more", className: "av-legend-item" }, cmUi("只画最近 ", "Showing only the latest ") + COST_ROWS_MAX + cmUi(" 轮", " turns")) : null,
         ]),
       ]);
     }
 
     // 类别由 host 按工具自己的声明判定(digest 里每个工具带 category),客户端只负责画。
-    const CATEGORY_LABELS = { file: "文件", run: "执行", web: "网络", context: "上下文", coop: "协作", plugin: "插件", other: "其他" };
+    const categoryLabels = () => ({ file: cmUi("文件", "Files"), run: cmUi("执行", "Execution"), web: cmUi("网络", "Web"), context: cmUi("上下文", "Context"), coop: cmUi("协作", "Collaboration"), plugin: cmUi("插件", "Plugins"), other: cmUi("其他", "Other") });
     // 类别色只用非红:红留给错误。取静态色板里的蓝、绿、橙、灰。
     const CATEGORY_COLORS = {
       file: "var(--av-accent)",
@@ -553,7 +566,7 @@ window.__ModuleLoader__.load({
       plugin: "var(--dsw-static-neutral-400)",
       other: "var(--dsw-static-neutral-300)",
     };
-    const categoryOf = (tool) => (tool.category !== undefined && CATEGORY_LABELS[tool.category] !== undefined ? tool.category : "other");
+    const categoryOf = (tool) => (tool.category !== undefined && Object.hasOwn(CATEGORY_COLORS, tool.category) ? tool.category : "other");
 
     function Tools(props) {
       const tools = (props.tools || []).filter((tool) => tool.calls > 0);
@@ -566,7 +579,7 @@ window.__ModuleLoader__.load({
       let totalMs = 0;
       for (const tool of tools) {
         const id = categoryOf(tool);
-        if (!buckets.has(id)) buckets.set(id, { id, label: CATEGORY_LABELS[id], color: CATEGORY_COLORS[id], calls: 0, errors: 0, ms: 0, tools: [] });
+        if (!buckets.has(id)) buckets.set(id, { id, label: categoryLabels()[id], color: CATEGORY_COLORS[id], calls: 0, errors: 0, ms: 0, tools: [] });
         const bucket = buckets.get(id);
         bucket.calls += tool.calls;
         bucket.errors += tool.errors;
@@ -622,26 +635,26 @@ window.__ModuleLoader__.load({
       }, [
         h("span", { key: "s", className: "av-swatch", style: { background: slice.color } }),
         h("span", { key: "n", className: "av-leg-name" }, slice.label),
-        h("span", { key: "c", className: "av-leg-num" }, slice.calls + " 次 · " + Math.round((slice.calls / totalCalls) * 100) + "%"),
+        h("span", { key: "c", className: "av-leg-num" }, slice.calls + cmUi(" 次 · ", " calls · ") + Math.round((slice.calls / totalCalls) * 100) + "%"),
         slice.errors > 0 ? h("span", { key: "e", className: "av-leg-err" }, "×" + slice.errors) : null,
       ]));
       return h("div", { className: "av-section" }, [
         h("div", { key: "h", className: "av-section-head" }, [
-          h("h3", { key: "t", className: "av-section-title" }, "工具"),
-          h("span", { key: "n", className: "av-hint" }, tools.length + " 种 · " + totalCalls + " 次 · " + ms(totalMs) + (totalErrors > 0 ? " · " + totalErrors + " 失败" : "")),
+          h("h3", { key: "t", className: "av-section-title" }, cmUi("工具", "Tools")),
+          h("span", { key: "n", className: "av-hint" }, tools.length + cmUi(" 种 · ", " types · ") + totalCalls + cmUi(" 次 · ", " calls · ") + ms(totalMs) + (totalErrors > 0 ? " · " + totalErrors + cmUi(" 失败", " failed") : "")),
         ]),
         h("div", { key: "flow", className: "av-tool-flow" }, [
           h("div", { key: "category", className: "av-flow-card" }, [
             h("div", { key: "h", className: "av-flow-head" }, [
-              h("span", { key: "t", className: "av-flow-title" }, "按类别"),
-              h("span", { key: "m", className: "av-flow-meta" }, slices.length + " 类"),
+              h("span", { key: "t", className: "av-flow-title" }, cmUi("按类别", "By category")),
+              h("span", { key: "m", className: "av-flow-meta" }, slices.length + cmUi(" 类", " categories")),
             ]),
             h("div", { key: "b", className: "av-flow-body" }, [
               h("div", { key: "d", className: "av-donut av-donut-sm" }, [
-                h("svg", { key: "s", viewBox: "0 0 100 100", width: "112", height: "112", role: "img", "aria-label": "各类别调用占比" }, ring(slices, totalCalls, (slice) => slice.calls, 40, 13, 1, (slice) => slice.color)),
+                h("svg", { key: "s", viewBox: "0 0 100 100", width: "112", height: "112", role: "img", "aria-label": cmUi("各类别调用占比", "Call share by category") }, ring(slices, totalCalls, (slice) => slice.calls, 40, 13, 1, (slice) => slice.color)),
                 h("div", { key: "c", className: "av-donut-center" }, [
                   h("span", { key: "n", className: "av-donut-num" }, String(totalCalls)),
-                  h("span", { key: "l" }, "次调用"),
+                  h("span", { key: "l" }, cmUi("次调用", "calls")),
                 ]),
               ]),
               h("div", { key: "l", className: "av-legend-col" }, legend),
@@ -649,15 +662,15 @@ window.__ModuleLoader__.load({
           ]),
           category === null ? null : h("div", { key: "tools", className: "av-flow-card" }, [
             h("div", { key: "h", className: "av-flow-head" }, [
-              h("span", { key: "t", className: "av-flow-title" }, category.label + "的工具"),
-              h("span", { key: "m", className: "av-flow-meta" }, category.calls + " 次 · " + ms(category.ms) + (category.errors > 0 ? " · " + category.errors + " 失败" : "")),
+              h("span", { key: "t", className: "av-flow-title" }, category.label + cmUi("的工具", " tools")),
+              h("span", { key: "m", className: "av-flow-meta" }, category.calls + cmUi(" 次 · ", " calls · ") + ms(category.ms) + (category.errors > 0 ? " · " + category.errors + cmUi(" 失败", " failed") : "")),
             ]),
             h("div", { key: "b", className: "av-flow-body" }, [
               h("div", { key: "d", className: "av-donut av-donut-sm" }, [
-                h("svg", { key: "s", viewBox: "0 0 100 100", width: "112", height: "112", role: "img", "aria-label": category.label + "内各工具占比" }, ring(toolSlices, category.calls, (item) => item.calls, 40, 13, 2, (item) => item.color)),
+                h("svg", { key: "s", viewBox: "0 0 100 100", width: "112", height: "112", role: "img", "aria-label": category.label + cmUi("内各工具占比", " tool share within category") }, ring(toolSlices, category.calls, (item) => item.calls, 40, 13, 2, (item) => item.color)),
                 h("div", { key: "c", className: "av-donut-center" }, [
                   h("span", { key: "n", className: "av-donut-num" }, String(categoryTools.length)),
-                  h("span", { key: "l" }, "种"),
+                  h("span", { key: "l" }, cmUi("种", "types")),
                 ]),
               ]),
               h("div", { key: "l", className: "av-legend-col" }, toolSlices.map((item) => h("button", {
@@ -665,38 +678,38 @@ window.__ModuleLoader__.load({
                 className: "av-leg",
                 "aria-pressed": tool !== null && tool.name === item.name,
                 onClick: () => setPickedTool((current) => (current === item.name ? null : item.name)),
-                title: item.name + " · 平均 " + ms(item.avgMs) + " · 最慢 " + ms(item.maxMs),
+                title: item.name + cmUi(" · 平均 ", " · average ") + ms(item.avgMs) + cmUi(" · 最慢 ", " · slowest ") + ms(item.maxMs),
               }, [
                 h("span", { key: "s", className: "av-swatch", style: { background: item.color } }),
                 h("span", { key: "n", className: "av-leg-name" }, item.name),
-                h("span", { key: "c", className: "av-leg-num" }, item.calls + " 次"),
+                h("span", { key: "c", className: "av-leg-num" }, item.calls + cmUi(" 次", " calls")),
                 item.errors > 0 ? h("span", { key: "e", className: "av-leg-err" }, "×" + item.errors) : null,
               ]))),
             ]),
           ]),
           tool === null ? null : h("div", { key: "tool", className: "av-flow-card" }, [
             h("div", { key: "h", className: "av-flow-head" }, [
-              h("span", { key: "t", className: "av-flow-title" }, tool.name + " 用在哪些轮"),
-              h("span", { key: "m", className: "av-flow-meta" }, tool.calls + " 次"),
+              h("span", { key: "t", className: "av-flow-title" }, tool.name + cmUi(" 用在哪些轮", " turns using this tool")),
+              h("span", { key: "m", className: "av-flow-meta" }, tool.calls + cmUi(" 次", " calls")),
             ]),
             h("div", { key: "b", className: "av-flow-body" }, [
               h("div", { key: "d", className: "av-donut av-donut-sm" }, [
-                h("svg", { key: "s", viewBox: "0 0 100 100", width: "112", height: "112", role: "img", "aria-label": tool.name + " 在各轮的调用占比" }, ring(turnSlices, tool.calls, (item) => item.calls, 40, 13, 1.5, (item) => item.color)),
+                h("svg", { key: "s", viewBox: "0 0 100 100", width: "112", height: "112", role: "img", "aria-label": tool.name + cmUi(" 在各轮的调用占比", " share of calls by turn") }, ring(turnSlices, tool.calls, (item) => item.calls, 40, 13, 1.5, (item) => item.color)),
                 h("div", { key: "c", className: "av-donut-center" }, [
                   h("span", { key: "n", className: "av-donut-num" }, String(tool.calls)),
-                  h("span", { key: "l" }, "次"),
+                  h("span", { key: "l" }, cmUi("次", "calls")),
                 ]),
               ]),
               h("div", { key: "l", className: "av-flow-side" }, [
-                h("div", { key: "legend", className: "av-legend-col" }, turnSlices.map((item) => h("div", { key: item.id, className: "av-leg av-leg-static", title: "第 " + item.turn + " 轮 · " + item.calls + " 次" }, [
+                h("div", { key: "legend", className: "av-legend-col" }, turnSlices.map((item) => h("div", { key: item.id, className: "av-leg av-leg-static", title: cmUi("第 ", "Turn ") + item.turn + cmUi(" 轮 · ", " · ") + item.calls + cmUi(" 次", " calls") }, [
                   h("span", { key: "s", className: "av-swatch", style: { background: item.color } }),
                   h("span", { key: "n", className: "av-leg-name" }, item.label),
-                  h("span", { key: "c", className: "av-leg-num" }, item.calls + " 次"),
+                  h("span", { key: "c", className: "av-leg-num" }, item.calls + cmUi(" 次", " calls")),
                 ]))),
                 h("div", { key: "stats", className: "av-stat-line" }, [
-                  h("span", { key: "e", className: tool.errors > 0 ? "av-bad" : "" }, "失败 " + (tool.errors > 0 ? tool.errors : "—")),
-                  h("span", { key: "a" }, "平均 " + ms(tool.avgMs)),
-                  h("span", { key: "x" }, "最慢 " + ms(tool.maxMs)),
+                  h("span", { key: "e", className: tool.errors > 0 ? "av-bad" : "" }, cmUi("失败 ", "Failed ") + (tool.errors > 0 ? tool.errors : "—")),
+                  h("span", { key: "a" }, cmUi("平均 ", "Average ") + ms(tool.avgMs)),
+                  h("span", { key: "x" }, cmUi("最慢 ", "Slowest ") + ms(tool.maxMs)),
                 ]),
               ]),
             ]),
@@ -708,10 +721,10 @@ window.__ModuleLoader__.load({
     function Reasons(props) {
       const rows = [
         ["Cause", props.cause],
-        ["Runtime 知道", props.runtimeKnew],
-        ["Model 收到", props.modelKnew],
-        ["Harness 反应", props.harness],
-        ["影响", props.impact],
+        [cmUi("Runtime 知道", "Runtime knew"), props.runtimeKnew],
+        [cmUi("Model 收到", "Model received"), props.modelKnew],
+        [cmUi("Harness 反应", "Harness response"), props.harness],
+        [cmUi("影响", "Impact"), props.impact],
       ];
       return h("div", { className: "av-why" }, rows.map(([key, value], position) => h("div", { key: String(position) }, [
         h("span", { key: "k", className: "av-why-key" }, key),
@@ -726,9 +739,9 @@ window.__ModuleLoader__.load({
         return h("div", { className: "av-section" }, [
           h("div", { key: "h", className: "av-section-head" }, [
             h("h3", { key: "t", className: "av-section-title" }, "Incident"),
-            h("span", { key: "n", className: "av-hint" }, "检查过:同参重复调用、调用失败、空转 turn"),
+            h("span", { key: "n", className: "av-hint" }, cmUi("检查过:同参重复调用、调用失败、空转 turn", "Checked: repeated calls with identical arguments, failed calls, idle turns")),
           ]),
-          h("div", { key: "e", className: "av-empty" }, "没有发现可归因的 incident"),
+          h("div", { key: "e", className: "av-empty" }, cmUi("没有发现可归因的 incident", "No attributable incidents found")),
         ]);
       }
       const shown = incidents.slice(0, 20);
@@ -738,7 +751,7 @@ window.__ModuleLoader__.load({
           h("span", { key: "bar", className: "av-bar" + (tone ? " " + tone : "") }),
           h("div", { key: "h", className: "av-incident-head" }, [
             h("span", { key: "t", className: "av-incident-title" }, incident.title),
-            h("span", { key: "b", className: "av-badge" }, "严重度 " + incident.severity),
+            h("span", { key: "b", className: "av-badge" }, cmUi("严重度 ", "Severity ") + incident.severity),
           ]),
           h("div", { key: "d", className: "av-detail" }, incident.detail),
           h(Reasons, { key: "why", cause: incident.cause, runtimeKnew: incident.runtimeKnew, modelKnew: incident.modelKnew, harness: incident.harness, impact: incident.impact }),
@@ -751,22 +764,22 @@ window.__ModuleLoader__.load({
                 key: String(seq),
                 className: "av-chip",
                 disabled: !jump,
-                title: jump ? "在轨迹里打开 seq " + seq : "seq " + seq + "(轨迹里没有对应调用)",
+                title: jump ? cmUi("在轨迹里打开 seq ", "Open in trace at seq ") + seq : "seq " + seq + cmUi("(轨迹里没有对应调用)", " (no matching call in trace)"),
                 onClick: jump ? () => props.openView("trajectory", callId) : undefined,
                 style: jump ? undefined : { cursor: "default" },
               }, String(seq));
             }),
-            incident.seqs.length > 10 ? [h("span", { key: "more", className: "av-hint" }, "还有 " + (incident.seqs.length - 10) + " 条")] : [],
+            incident.seqs.length > 10 ? [h("span", { key: "more", className: "av-hint" }, cmUi("还有 ", " plus ") + (incident.seqs.length - 10) + cmUi(" 条", " records"))] : [],
           )) : null,
         ]);
       });
       return h("div", { className: "av-section" }, [
         h("div", { key: "h", className: "av-section-head" }, [
           h("h3", { key: "t", className: "av-section-title" }, "Incident"),
-          h("span", { key: "n", className: "av-hint" }, incidents.length + " 条 · 按严重度排序 · seq 可点"),
+          h("span", { key: "n", className: "av-hint" }, incidents.length + cmUi(" 条 · 按严重度排序 · seq 可点", " records · sorted by severity · click seq to open")),
         ]),
         h("div", { key: "c", className: "av-incident-list" }, cards),
-        incidents.length > shown.length ? h("div", { key: "more", className: "av-hint", style: { marginTop: 6 } }, "还有 " + (incidents.length - shown.length) + " 条") : null,
+        incidents.length > shown.length ? h("div", { key: "more", className: "av-hint", style: { marginTop: 6 } }, cmUi("还有 ", " plus ") + (incidents.length - shown.length) + cmUi(" 条", " records")) : null,
       ]);
     }
 
@@ -786,26 +799,26 @@ window.__ModuleLoader__.load({
       };
       return h("div", { className: "av-section" }, [
         h("div", { key: "h", className: "av-section-head" }, [
-          h("h3", { key: "t", className: "av-section-title" }, "开放解读"),
-          h("span", { key: "n", className: "av-hint" }, "按需生成,会调用一次模型"),
+          h("h3", { key: "t", className: "av-section-title" }, cmUi("开放解读", "Open interpretation")),
+          h("span", { key: "n", className: "av-hint" }, cmUi("按需生成,会调用一次模型", "Generated on demand with one model call")),
           h("span", { key: "sp", className: "av-spacer" }),
-          h("button", { key: "b", className: "av-btn primary", onClick: run, disabled: state.status === "loading" || !sessionId }, state.status === "loading" ? "生成中" : state.text !== null ? "重新生成" : "生成解读"),
+          h("button", { key: "b", className: "av-btn primary", onClick: run, disabled: state.status === "loading" || !sessionId }, state.status === "loading" ? cmUi("生成中", "Generating") : state.text !== null ? cmUi("重新生成", "Regenerate") : cmUi("生成解读", "Generate interpretation")),
         ]),
-        state.status === "idle" ? h("div", { key: "i", className: "av-hint" }, "基于上面的确定性 incident 与证据片段生成,每条陈述引用 (session, seq@logId)") : null,
+        state.status === "idle" ? h("div", { key: "i", className: "av-hint" }, cmUi("基于上面的确定性 incident 与证据片段生成,每条陈述引用 (session, seq@logId)", "Generated from the deterministic incidents and evidence above; each claim cites (session, seq@logId)")) : null,
         state.status === "loading" ? h("div", { key: "l" }, [h("div", { className: "av-skel line", style: { width: "92%" } }), h("div", { className: "av-skel line", style: { width: "70%", marginBottom: 0 } })]) : null,
-        state.status === "error" ? h(Notice, { key: "e", text: "解读失败:" + state.error, action: { label: "重试", onClick: run } }) : null,
+        state.status === "error" ? h(Notice, { key: "e", text: cmUi("解读失败:", "Interpretation failed: ") + state.error, action: { label: cmUi("重试", "Retry"), onClick: run } }) : null,
         state.status === "ready" ? h("div", { key: "r", className: "av-interp" }, state.text) : null,
-        state.status === "ready" && state.truncated ? h("div", { key: "t", className: "av-hint" }, "输出触到 token 上限,已截断") : null,
+        state.status === "ready" && state.truncated ? h("div", { key: "t", className: "av-hint" }, cmUi("输出触到 token 上限,已截断", "Output reached the token limit and was truncated")) : null,
       ]);
     }
 
 
     /* ---------------- 上下文管理 ---------------- */
-    const CM_RANGES = [
-      { id: "today", label: "今天", ms: 24 * 3600 * 1000 },
-      { id: "7d", label: "近 7 天", ms: 7 * 24 * 3600 * 1000 },
-      { id: "30d", label: "近 30 天", ms: 30 * 24 * 3600 * 1000 },
-      { id: "all", label: "全部", ms: null },
+    const cmRanges = () => [
+      { id: "today", label: cmUi("今天", "Today"), ms: 24 * 3600 * 1000 },
+      { id: "7d", label: cmUi("近 7 天", "Last 7 days"), ms: 7 * 24 * 3600 * 1000 },
+      { id: "30d", label: cmUi("近 30 天", "Last 30 days"), ms: 30 * 24 * 3600 * 1000 },
+      { id: "all", label: cmUi("全部", "All"), ms: null },
     ];
 
     function cmTokens(value) {
@@ -818,11 +831,11 @@ window.__ModuleLoader__.load({
 
     function cmDuration(ms) {
       const seconds = Math.max(0, Math.round((ms || 0) / 1000));
-      if (seconds < 60) return seconds + " 秒";
+      if (seconds < 60) return seconds + cmUi(" 秒", " sec");
       const minutes = Math.round(seconds / 60);
-      if (minutes < 60) return minutes + " 分";
+      if (minutes < 60) return minutes + cmUi(" 分", " min");
       const hours = Math.floor(minutes / 60);
-      return hours + " 时 " + (minutes % 60) + " 分";
+      return hours + cmUi(" 时 ", " h ") + (minutes % 60) + cmUi(" 分", " min");
     }
 
     function CmDonut(props) {
@@ -867,11 +880,12 @@ window.__ModuleLoader__.load({
       const ratio = props.total > 0 ? Math.min(1, props.scanned / props.total) : 0;
       return h("div", { className: "cm-progress" }, [
         h("div", { key: "bar", className: "cm-progress-bar" }, h("i", { style: { width: Math.round(ratio * 100) + "%" } })),
-        h("span", { key: "text" }, props.total > 0 ? "正在读取会话 " + props.scanned + " / " + props.total : "正在列出会话…"),
+        h("span", { key: "text" }, props.total > 0 ? cmUi("正在读取会话 ", "Loading sessions ") + props.scanned + " / " + props.total : cmUi("正在列出会话…", "Listing sessions…")),
       ]);
     }
 
     function ContextManagerPanel() {
+      useLocaleRefresh();
       React.useEffect(() => ensureStyle(), []);
       const [range, setRange] = React.useState("30d");
       const [state, setState] = React.useState({ status: "loading" });
@@ -884,7 +898,7 @@ window.__ModuleLoader__.load({
             .then((data) => {
               if (!alive) return;
               if (!data || data.ok !== true) {
-                setState({ status: "error", error: (data && data.error) || "统计失败" });
+                setState({ status: "error", error: (data && data.error) || cmUi("统计失败", "Statistics failed") });
                 return;
               }
               setState({ status: "ready", data });
@@ -900,7 +914,8 @@ window.__ModuleLoader__.load({
 
       const body = [];
       const payload = state.status === "ready" ? state.data : null;
-      const preset = CM_RANGES.find((item) => item.id === range) || CM_RANGES[2];
+      const ranges = cmRanges();
+      const preset = ranges.find((item) => item.id === range) || ranges[2];
       const from = preset.ms === null ? 0 : Date.now() - preset.ms;
       const sessions = payload ? payload.sessions.filter((item) => (item.createdAt || 0) >= from) : [];
       const totals = { sessions: sessions.length, turns: 0, calls: 0, errors: 0, toolMs: 0, retryMs: 0, spanMs: 0, input: 0, cacheRead: 0, output: 0, byDay: {} };
@@ -925,11 +940,11 @@ window.__ModuleLoader__.load({
       }
 
       body.push(h("div", { key: "head", className: "cm-head" }, [
-        h("h2", { key: "t", className: "cm-title" }, "上下文管理"),
+        h("h2", { key: "t", className: "cm-title" }, cmUi("上下文管理", "Context management")),
         h("span", { key: "s", className: "cm-sub" }, payload
-          ? preset.label + " · " + totals.sessions + " 个会话" + (payload.status === "scanning" ? " · 回填中 " + (payload.total - (payload.missing || 0)) + "/" + payload.total : "") + (payload.failed ? " · " + payload.failed + " 个读取失败" : "")
-          : "统计中"),
-        h("div", { key: "r", className: "cm-ranges" }, CM_RANGES.map((item) =>
+          ? preset.label + " · " + totals.sessions + cmUi(" 个会话", " sessions") + (payload.status === "scanning" ? cmUi(" · 回填中 ", " · backfilling ") + (payload.total - (payload.missing || 0)) + "/" + payload.total : "") + (payload.failed ? " · " + payload.failed + cmUi(" 个读取失败", " reads failed") : "")
+          : cmUi("统计中", "Calculating")),
+        h("div", { key: "r", className: "cm-ranges" }, ranges.map((item) =>
           h("button", {
             key: item.id,
             type: "button",
@@ -939,11 +954,11 @@ window.__ModuleLoader__.load({
       ]));
 
       if (state.status === "error") {
-        body.push(h("div", { key: "err", className: "cm-bad" }, "读取失败:" + state.error));
+        body.push(h("div", { key: "err", className: "cm-bad" }, cmUi("读取失败:", "Read failed: ") + state.error));
         return h("div", { className: "cm-root" }, body);
       }
       if (payload === null) {
-        body.push(h("div", { key: "load", className: "cm-note" }, "正在准备…"));
+        body.push(h("div", { key: "load", className: "cm-note" }, cmUi("正在准备…", "Preparing…")));
         return h("div", { className: "cm-root" }, body);
       }
       if (payload.status === "scanning") body.push(h(CmProgress, { key: "p", scanned: payload.total - (payload.missing || 0), total: payload.total }));
@@ -953,36 +968,36 @@ window.__ModuleLoader__.load({
       const hitRate = contextTotal > 0 ? Math.round((totals.cacheRead / contextTotal) * 100) : 0;
 
       body.push(h("div", { key: "kpis", className: "cm-kpis" }, [
-        h("div", { key: "s", className: "cm-kpi" }, [h("div", { key: "n", className: "cm-kpi-num" }, String(totals.sessions)), h("div", { key: "l", className: "cm-kpi-label" }, "会话")]),
-        h("div", { key: "t", className: "cm-kpi" }, [h("div", { key: "n", className: "cm-kpi-num" }, cmTokens(tokens)), h("div", { key: "l", className: "cm-kpi-label" }, "token 总量")]),
-        h("div", { key: "h", className: "cm-kpi" }, [h("div", { key: "n", className: "cm-kpi-num" }, hitRate + "%"), h("div", { key: "l", className: "cm-kpi-label" }, "缓存命中率")]),
-        h("div", { key: "c", className: "cm-kpi" }, [h("div", { key: "n", className: "cm-kpi-num" }, String(totals.calls)), h("div", { key: "l", className: "cm-kpi-label" }, "工具调用")]),
+        h("div", { key: "s", className: "cm-kpi" }, [h("div", { key: "n", className: "cm-kpi-num" }, String(totals.sessions)), h("div", { key: "l", className: "cm-kpi-label" }, cmUi("会话", "Sessions"))]),
+        h("div", { key: "t", className: "cm-kpi" }, [h("div", { key: "n", className: "cm-kpi-num" }, cmTokens(tokens)), h("div", { key: "l", className: "cm-kpi-label" }, cmUi("token 总量", "Total tokens"))]),
+        h("div", { key: "h", className: "cm-kpi" }, [h("div", { key: "n", className: "cm-kpi-num" }, hitRate + "%"), h("div", { key: "l", className: "cm-kpi-label" }, cmUi("缓存命中率", "Cache hit rate"))]),
+        h("div", { key: "c", className: "cm-kpi" }, [h("div", { key: "n", className: "cm-kpi-num" }, String(totals.calls)), h("div", { key: "l", className: "cm-kpi-label" }, cmUi("工具调用", "Tool calls"))]),
       ]));
 
       const otherMs = Math.max(0, totals.spanMs - totals.toolMs - totals.retryMs);
       const timeTotal = Math.max(1, totals.toolMs + totals.retryMs + otherMs);
       body.push(h("div", { key: "charts", className: "cm-grid" }, [
         h("div", { key: "tok", className: "cm-card" }, [
-          h("h3", { key: "t", className: "cm-card-title" }, "token 构成"),
+          h("h3", { key: "t", className: "cm-card-title" }, cmUi("token 构成", "Token composition")),
           h(CmDonut, {
             key: "d",
             center: cmTokens(tokens),
             segments: [
-              { label: "未命中", value: totals.input, color: "#3b6ea5", text: cmTokens(totals.input), pct: tokens ? Math.round(totals.input / tokens * 100) + "%" : "" },
-              { label: "命中", value: totals.cacheRead, color: "#2f7d5f", text: cmTokens(totals.cacheRead), pct: tokens ? Math.round(totals.cacheRead / tokens * 100) + "%" : "" },
-              { label: "输出", value: totals.output, color: "#b06a2c", text: cmTokens(totals.output), pct: tokens ? Math.round(totals.output / tokens * 100) + "%" : "" },
+              { label: cmUi("未命中", "Cache miss"), value: totals.input, color: "#3b6ea5", text: cmTokens(totals.input), pct: tokens ? Math.round(totals.input / tokens * 100) + "%" : "" },
+              { label: cmUi("命中", "Cache hit"), value: totals.cacheRead, color: "#2f7d5f", text: cmTokens(totals.cacheRead), pct: tokens ? Math.round(totals.cacheRead / tokens * 100) + "%" : "" },
+              { label: cmUi("输出", "Output"), value: totals.output, color: "#b06a2c", text: cmTokens(totals.output), pct: tokens ? Math.round(totals.output / tokens * 100) + "%" : "" },
             ],
           }),
         ]),
         h("div", { key: "time", className: "cm-card" }, [
-          h("h3", { key: "t", className: "cm-card-title" }, "耗时构成"),
+          h("h3", { key: "t", className: "cm-card-title" }, cmUi("耗时构成", "Duration breakdown")),
           h(CmDonut, {
             key: "d",
             center: cmDuration(timeTotal),
             segments: [
-              { label: "工具执行", value: totals.toolMs, color: "#2f7d5f", text: cmDuration(totals.toolMs), pct: Math.round(totals.toolMs / timeTotal * 100) + "%" },
-              { label: "重试等待", value: totals.retryMs, color: "#8e2f28", text: cmDuration(totals.retryMs), pct: Math.round(totals.retryMs / timeTotal * 100) + "%" },
-              { label: "模型与其它", value: otherMs, color: "#6b4fa0", text: cmDuration(otherMs), pct: Math.round(otherMs / timeTotal * 100) + "%" },
+              { label: cmUi("工具执行", "Tool execution"), value: totals.toolMs, color: "#2f7d5f", text: cmDuration(totals.toolMs), pct: Math.round(totals.toolMs / timeTotal * 100) + "%" },
+              { label: cmUi("重试等待", "Retry wait"), value: totals.retryMs, color: "#8e2f28", text: cmDuration(totals.retryMs), pct: Math.round(totals.retryMs / timeTotal * 100) + "%" },
+              { label: cmUi("模型与其它", "Model and other"), value: otherMs, color: "#6b4fa0", text: cmDuration(otherMs), pct: Math.round(otherMs / timeTotal * 100) + "%" },
             ],
           }),
         ]),
@@ -992,8 +1007,8 @@ window.__ModuleLoader__.load({
       const dayTotals = days.map(([day, value]) => ({ day, total: (value.input || 0) + (value.cacheRead || 0) + (value.output || 0) }));
       const maxDay = Math.max(1, ...dayTotals.map((item) => item.total));
       body.push(h("div", { key: "days", className: "cm-card" }, [
-        h("h3", { key: "t", className: "cm-card-title" }, "按天用量"),
-        dayTotals.length === 0 ? h("div", { key: "e", className: "cm-note" }, "这个范围内没有记录") : h("div", { key: "b", className: "cm-bars" },
+        h("h3", { key: "t", className: "cm-card-title" }, cmUi("按天用量", "Daily usage")),
+        dayTotals.length === 0 ? h("div", { key: "e", className: "cm-note" }, cmUi("这个范围内没有记录", "No records in this range")) : h("div", { key: "b", className: "cm-bars" },
           dayTotals.map((item) => h("div", {
             key: item.day,
             className: "cm-bar" + (item.total ? "" : " empty"),
@@ -1106,6 +1121,7 @@ window.__ModuleLoader__.load({
     // connected layer; the view's placeholder supplies its bounds while visible.
     const traceFrame = { element: null, layer: null, session: null, ready: false, version: null, assets: null, active: false, expiry: null, postedDetail: null };
     function PathView(props) {
+      useLocaleRefresh();
       React.useEffect(() => ensureStyle(), []);
       const sessionId = props && props.sessionId;
       const useProjection = props && props.useProjection;
@@ -1154,7 +1170,7 @@ window.__ModuleLoader__.load({
           if (element) element.remove();
           element = document.createElement("iframe");
           element.className = "av-trace-frame";
-          element.title = "执行路径";
+          element.title = cmUi("执行路径", "Action path");
           element.src = "/analysis-view/trace?staged=1&session=" + encodeURIComponent(sessionId);
           traceFrame.element = element;
           traceFrame.session = sessionId;
@@ -1262,7 +1278,7 @@ window.__ModuleLoader__.load({
         window.addEventListener("message", onJump);
         return () => window.removeEventListener("message", onJump);
       }, [sessionId]);
-      if (!sessionId) return h("div", { className: "av-root" }, [h(Notice, { key: "n", text: "还没有选中会话" })]);
+      if (!sessionId) return h("div", { className: "av-root" }, [h(Notice, { key: "n", text: cmUi("还没有选中会话", "No session selected") })]);
       return h("div", { className: "av-root av-trace", ref: shell });
     }
 
@@ -1274,6 +1290,7 @@ window.__ModuleLoader__.load({
       const snapshot = useTrajectory ? useTrajectory((state) => state) : null;
       const { index, version } = React.useMemo(() => buildCallIndex(snapshot), [snapshot]);
       const digest = useDigest(sessionId, version);
+      useLocaleRefresh();
       const data = digest.data;
       const incidents = data && Array.isArray(data.incidents) ? data.incidents : [];
       const status = digest.status;
@@ -1289,34 +1306,34 @@ window.__ModuleLoader__.load({
         ? [{
           type: "error",
           severity: localErrors.length,
-          title: "调用失败",
-          detail: localErrors.length + " 个工具调用返回错误(host 分析不可用,计数来自轨迹投影)",
-          cause: "工具调用返回了错误结果",
-          runtimeKnew: "错误码/失败状态已在事件中",
-          modelKnew: "收到 tool result(可能已含错误)",
-          harness: "未检测到针对性处理(需 host 判定)",
-          impact: "该部分目标未达成",
+          title: cmUi("调用失败", "Call failed"),
+          detail: localErrors.length + cmUi(" 个工具调用返回错误(host 分析不可用,计数来自轨迹投影)", " tool calls returned errors (host analysis unavailable; count from trace projection)"),
+          cause: cmUi("工具调用返回了错误结果", "The tool call returned an error result"),
+          runtimeKnew: cmUi("错误码/失败状态已在事件中", "Error code / failure status is in the event"),
+          modelKnew: cmUi("收到 tool result(可能已含错误)", "Received tool result (may include an error)"),
+          harness: cmUi("未检测到针对性处理(需 host 判定)", "No targeted handling detected (requires host determination)"),
+          impact: cmUi("该部分目标未达成", "This part of the goal was not achieved"),
           seqs: localErrors,
         }]
         : [];
       const head = h("div", { key: "h", className: "av-head" }, [
-        h("span", { key: "d", className: "av-live " + (status === "ready" ? "" : status === "stale" ? "stale" : "dead"), title: status === "ready" ? "已读取" : status === "stale" ? "刷新失败,显示上一次结果" : "未连接" }),
-        h("h2", { key: "t", className: "av-title" }, "分析"),
+        h("span", { key: "d", className: "av-live " + (status === "ready" ? "" : status === "stale" ? "stale" : "dead"), title: status === "ready" ? cmUi("已读取", "Loaded") : status === "stale" ? cmUi("刷新失败,显示上一次结果", "Refresh failed; showing previous results") : cmUi("未连接", "Disconnected") }),
+        h("h2", { key: "t", className: "av-title" }, cmUi("分析", "Analysis")),
         data && data.log ? h("span", { key: "m", className: "av-meta" }, [
-          data.log.id + " · " + fmt(data.log.events) + " 事件 · seq " + data.log.minSeq + "–" + data.log.maxSeq,
+          data.log.id + " · " + fmt(data.log.events) + cmUi(" 事件 · seq ", " events · seq ") + data.log.minSeq + "–" + data.log.maxSeq,
         ]) : null,
         h("span", { key: "sp", className: "av-spacer" }),
-        h("button", { key: "r", className: "av-btn", onClick: digest.refresh, disabled: !sessionId || status === "loading" }, "刷新"),
+        h("button", { key: "r", className: "av-btn", onClick: digest.refresh, disabled: !sessionId || status === "loading" }, cmUi("刷新", "Refresh")),
       ]);
 
-      if (!sessionId) return h("div", { className: "av-root" }, [head, h(Notice, { key: "n", text: "还没有选中会话" })]);
+      if (!sessionId) return h("div", { className: "av-root" }, [head, h(Notice, { key: "n", text: cmUi("还没有选中会话", "No session selected") })]);
 
       if (status === "loading" || (status === "idle" && !data)) return h("div", { className: "av-root" }, [head, h(Skeleton, { key: "s" })]);
 
       if (status === "error" && !data) {
         return h("div", { className: "av-root" }, [
           head,
-          h(Notice, { key: "e", text: "读取会话失败:" + digest.error, action: { label: "重试", onClick: digest.refresh } }),
+          h(Notice, { key: "e", text: cmUi("读取会话失败:", "Failed to read session: ") + digest.error, action: { label: cmUi("重试", "Retry"), onClick: digest.refresh } }),
           degraded.length > 0 ? h(Incidents, { key: "inc", incidents: degraded, index, openView }) : null,
         ]);
       }
@@ -1327,13 +1344,13 @@ window.__ModuleLoader__.load({
 
       return h("div", { className: "av-root" }, [
         head,
-        status === "stale" ? h(Notice, { key: "st", text: "刷新失败,先显示上一次的结果:" + digest.error, action: { label: "重试", onClick: digest.refresh } }) : null,
+        status === "stale" ? h(Notice, { key: "st", text: cmUi("刷新失败,先显示上一次的结果:", "Refresh failed; showing previous results: ") + digest.error, action: { label: cmUi("重试", "Retry"), onClick: digest.refresh } }) : null,
         h("div", { key: "k", className: "av-kpis" }, [
-          h(Kpi, { key: "turns", label: "轮次", value: String(data ? data.turns : "—") }),
-          h(Kpi, { key: "calls", label: "工具调用", value: String(data ? data.toolCalls : "—") }),
-          h(Kpi, { key: "errors", label: "失败", value: String(data ? data.errors : "—"), tone: data && data.errors > 0 ? "bad" : "" }),
-          h(Kpi, { key: "cache", label: "缓存命中", value: pct(cost && cost.cacheEfficiency) }),
-          h(Kpi, { key: "events", label: "事件", value: fmt(data && data.eventCount) }),
+          h(Kpi, { key: "turns", label: cmUi("轮次", "Turns"), value: String(data ? data.turns : "—") }),
+          h(Kpi, { key: "calls", label: cmUi("工具调用", "Tool calls"), value: String(data ? data.toolCalls : "—") }),
+          h(Kpi, { key: "errors", label: cmUi("失败", "Failed"), value: String(data ? data.errors : "—"), tone: data && data.errors > 0 ? "bad" : "" }),
+          h(Kpi, { key: "cache", label: cmUi("缓存命中", "Cache hit"), value: pct(cost && cost.cacheEfficiency) }),
+          h(Kpi, { key: "events", label: cmUi("事件", "Events"), value: fmt(data && data.eventCount) }),
         ]),
         h(WorkPath, { key: "w", turns, index, openView }),
         h(Cost, { key: "c", cost, turnStats: turns, sessionId, openView }),
@@ -1341,9 +1358,9 @@ window.__ModuleLoader__.load({
         h(Incidents, { key: "inc", incidents, index, openView }),
         h(Interpret, { key: "i", sessionId }),
         h("div", { key: "f", className: "av-foot" }, [
-          h("span", { key: "v" }, "日志 " + (data && data.log ? data.log.id : "—")),
-          h("span", { key: "l" }, "读于 " + (digest.at ? new Date(digest.at).toLocaleTimeString() : "—")),
-          h("span", { key: "n" }, "轨迹 " + version + " 节点"),
+          h("span", { key: "v" }, cmUi("日志 ", "Log ") + (data && data.log ? data.log.id : "—")),
+          h("span", { key: "l" }, cmUi("读于 ", "Read at ") + (digest.at ? new Date(digest.at).toLocaleTimeString() : "—")),
+          h("span", { key: "n" }, cmUi("轨迹 ", "Trace ") + version + cmUi(" 节点", " nodes")),
         ]),
       ]);
     }
@@ -1362,8 +1379,8 @@ window.__ModuleLoader__.load({
         clientCtx = ctx;
         ctx.commandUi.register({
           name: "trajectory",
-          label: () => "轨迹树",
-          description: () => "打开当前会话的路径与上下文视图",
+          label: () => cmUi("轨迹树", "Trajectory Tree"),
+          description: () => cmUi("打开当前会话的路径与上下文视图", "Open the current session's action path and context view"),
           available: (session) => typeof session.sessionId === "string" && session.sessionId.length > 0,
           ui: {
             kind: "action",
@@ -1385,7 +1402,7 @@ window.__ModuleLoader__.load({
         ctx.uiConversation.views.register({ target: "analysis", create: () => new AnalysisSnapshotBuilder(), isActive: () => true });
         const slots = ctx.slots;
         if (!slots) return;
-        slots.register({ name: "sidebar.panellist", id: "context-manager", order: 30, label: () => "上下文管理" }, ContextManagerIcon);
+        slots.register({ name: "sidebar.panellist", id: "context-manager", order: 30, label: () => cmUi("上下文管理", "Context management") }, ContextManagerIcon);
         slots.register({ name: "main", key: "context-manager" }, ContextManagerPanel);
 
         ctx.uiConversation.views.register({ target: "path", create: () => new AnalysisSnapshotBuilder(), isActive: () => true });
@@ -1393,7 +1410,7 @@ window.__ModuleLoader__.load({
           name: "conversation.view",
           id: "path",
           order: 30,
-          label: () => "路径",
+          label: () => cmUi("路径", "Path"),
           children: {},
           inject: (sessionId) => ({ sessionId }),
         }, PathView));
@@ -1401,7 +1418,7 @@ window.__ModuleLoader__.load({
           name: "conversation.view",
           id: "analysis",
           order: 20,
-          label: () => "分析",
+          label: () => cmUi("分析", "Analysis"),
           children: {},
           inject: (sessionId) => {
             const target = ctx.uiConversation.binding(sessionId).target("trajectory");

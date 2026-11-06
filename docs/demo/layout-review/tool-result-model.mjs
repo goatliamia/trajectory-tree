@@ -1,3 +1,5 @@
+import { ui } from "../../../lib/i18n.mjs";
+import { presentCallFact } from './step-insight.mjs';
 // Transform recorded outcomes, not tool names alone, into a small branch vocabulary.
 export function collectToolResults(session, facts, fileOperations) {
   const covered = new Set();
@@ -27,7 +29,7 @@ export function collectToolResults(session, facts, fileOperations) {
       let group = groups.get(key);
       if (!group) { group = { id: t.number + ':' + step.number + ':' + key, kind, family: operation?.family, recorded: !!operation, turn: t.number, step: step.number, time: call.end ?? call.start, seqs: [], calls: [] }; groups.set(key, group); }
       group.seqs.push(call.seq);
-      group.calls.push({ ...call, file: file?.path ?? null, files: records, fact });
+      group.calls.push({ ...call, file: file?.path ?? null, files: records, fact: presentCallFact(call, fact) });
       group.time = Math.max(group.time, call.end ?? call.start);
     }
     results.push(...groups.values());
@@ -40,48 +42,48 @@ export function toolResultLabel(result) {
   const calls = result.calls, paths = [...new Set(calls.map(c => c.file).filter(Boolean))];
   if (result.recorded) {
     const call = calls[0], operation = call.fact?.operation;
-    if (result.kind === 'pending') return call.name + (calls.length > 1 ? ' ×' + calls.length : '') + ' · 待返回';
-    if (result.kind === 'error') return call.name + ' · 受阻';
+    if (result.kind === 'pending') return call.name + (calls.length > 1 ? ' ×' + calls.length : '') + ui(' · 待返回');
+    if (result.kind === 'error') return call.name + ui(' · 受阻');
     if (calls.length > 1) return call.name + ' ×' + calls.length;
-    if (call.name === 'grep') return 'grep · ' + (operation?.search?.total ?? operation?.search?.shown ?? '?') + ' 处匹配';
-    if (call.name === 'glob') return 'glob · 发现路径';
-    if (operation?.family === 'read') return 'read · ' + (operation.metrics.find(([key]) => key === '返回行数')?.[1] || '取回内容');
-    if (operation?.family === 'write') return call.name + ' · ' + (paths[0]?.split(/[\\/]/).at(-1) || '文件修改');
+    if (call.name === 'grep') return 'grep · ' + (operation?.search?.total ?? operation?.search?.shown ?? '?') + ui(' 处匹配');
+    if (call.name === 'glob') return ui('glob · 发现路径');
+    if (operation?.family === 'read') return 'read · ' + (operation.metrics.find(([key]) => key === '返回行数')?.[1] || ui('取回内容'));
+    if (operation?.family === 'write') return call.name + ' · ' + (paths[0]?.split(/[\\/]/).at(-1) || ui('文件修改'));
     if (operation?.family === 'command') {
       const program = operation.subject.match(/\b(?:node|python3?|lean|lake|git|rg|pnpm|npm|Get-Content|Select-String)\b/)?.[0];
-      return call.name + ' · ' + (program || '命令输出');
+      return call.name + ' · ' + (program || ui('命令输出'));
     }
-    return call.name + ' · ' + ({ process: '后台输出', web: '网页返回', coordination: '协作返回' }[operation?.family] || '工具返回');
+    return call.name + ' · ' + ({ process: ui('后台输出'), web: ui('网页返回'), coordination: ui('协作返回') }[operation?.family] || ui('工具返回'));
   }
-  if (result.kind === 'error') return calls.length > 1 ? calls.length + ' 次受阻' : '操作受阻';
+  if (result.kind === 'error') return calls.length > 1 ? calls.length + ui(' 次受阻') : ui('操作受阻');
   if (result.kind === 'read') {
     const range = calls.length === 1 && calls[0].fact?.outcome?.match(/返回第 (\d+)–(\d+) 行/);
-    return range ? '取回 ' + (Number(range[2]) - Number(range[1]) + 1) + ' 行' : paths.length === 1 ? '取回文件内容' : '取回 ' + paths.length + ' 个文件';
+    return range ? ui('取回 ') + (Number(range[2]) - Number(range[1]) + 1) + ui(' 行') : paths.length === 1 ? ui('取回文件内容') : ui('取回 ') + paths.length + ui(' 个文件');
   }
   if (result.kind === 'change') {
     const preview = calls.length === 1 && calls[0].fact?.preview;
-    if (preview && !preview.partial && preview.before === '' && (calls[0].nativeName === 'write' || calls[0].name === 'write')) return '写入 ' + preview.after.split(/\r?\n/).length + ' 行';
-    return preview && !preview.partial ? '替换 ' + preview.before.split(/\r?\n/).length + '→' + preview.after.split(/\r?\n/).length + ' 行' : paths.length > 1 ? '修改 ' + paths.length + ' 个文件' : '写入修改已返回';
+    if (preview && !preview.partial && preview.before === '' && (calls[0].nativeName === 'write' || calls[0].name === 'write')) return ui('写入 ') + preview.after.split(/\r?\n/).length + ui(' 行');
+    return preview && !preview.partial ? ui('替换 ') + preview.before.split(/\r?\n/).length + '→' + preview.after.split(/\r?\n/).length + ui(' 行') : paths.length > 1 ? ui('修改 ') + paths.length + ui(' 个文件') : ui('写入修改已返回');
   }
   if (result.kind === 'check') {
-    if (calls.some(c => /^命令输出报告：FAIL\b/i.test(c.fact?.outcome || '') || /^\s*FAIL\b/im.test(c.result?.text || ''))) return '检查报告未过';
-    if (calls.every(c => /^命令输出报告：PASS\b/i.test(c.fact?.outcome || ''))) return '检查有通过项';
-    return '取得检查输出';
+    if (calls.some(c => /^命令输出报告：FAIL\b/i.test(c.fact?.outcome || '') || /^\s*FAIL\b/im.test(c.result?.text || ''))) return ui('检查报告未过');
+    if (calls.every(c => /^命令输出报告：PASS\b/i.test(c.fact?.outcome || ''))) return ui('检查有通过项');
+    return ui('取得检查输出');
   }
   if (calls.length === 1) {
     const outcome = calls[0].fact?.outcome || '';
-    if (/^(?:返回|命中) 0 条/.test(outcome)) return '没有匹配结果';
-    return outcome.match(/(?:返回|命中) \d+ 条(?:事件记录|记录)?/)?.[0] || '取回查询结果';
+    if (/^(?:返回|命中) 0 条/.test(outcome)) return ui('没有匹配结果');
+    return outcome.match(/(?:返回|命中) \d+ 条(?:事件记录|记录)?/)?.[0] || ui('取回查询结果');
   }
-  return calls.length + ' 项查询结果';
+  return calls.length + ui(' 项查询结果');
 }
 
 export function compactToolLabel(call) {
   const operation = call.fact?.operation;
-  if (call.name === 'grep') return 'grep ' + (operation?.search?.total ?? operation?.search?.shown ?? '?') + '处';
-  if (operation?.family === 'read') return 'read ' + (operation.metrics.find(([key]) => key === '返回行数')?.[1] || '内容').replace(/\s+/g, '');
+  if (call.name === 'grep') return 'grep ' + (operation?.search?.total ?? operation?.search?.shown ?? '?') + ui('处');
+  if (operation?.family === 'read') return 'read ' + (operation.metrics.find(([key]) => key === '返回行数')?.[1] || ui('内容')).replace(/\s+/g, '');
   if (operation?.family === 'command') { const program = operation.subject.match(/\b(?:node|python3?|lean|lake|git|rg|pnpm|npm)\b/)?.[0]; return program ? call.name + '/' + program : call.name; }
-  return call.name === 'job_output' ? '后台输出' : call.name;
+  return call.name === 'job_output' ? ui('后台输出') : call.name;
 }
 
 export function toolResultEndpoint(members) {

@@ -51,7 +51,7 @@ writeFileSync(resolve(out, 'page.js'), GENERATED + boot);
 
 const MODELS = ['step-insight.mjs', 'tool-operation-model.mjs', 'tool-result-model.mjs', 'context-model.mjs', 'context-overview-model.mjs', 'actor-model.mjs', 'branch-layout.mjs', 'meaning.mjs', 'file-model.mjs', 'diff-model.mjs', 'navigation-model.mjs'];
 mkdirSync(resolve(out, 'models'), { recursive: true });
-for (const name of MODELS) writeFileSync(resolve(out, 'models', name), GENERATED + readFileSync(resolve(demo, name), 'utf8'));
+for (const name of MODELS) writeFileSync(resolve(out, 'models', name), GENERATED + readFileSync(resolve(demo, name), 'utf8').replace(/import \{ ui \} from [^\n]+/, 'import { ui } from "../shared/i18n.mjs";'));
 
 const FONTS = [['Geist-Variable.woff2'], ['GeistMono-Variable.woff2'], ['LICENSE.txt']];
 mkdirSync(resolve(out, 'fonts'), { recursive: true });

@@ -5,7 +5,7 @@
     const status = $('review-file-status');
     if (!status) return;
     status.classList.add('geist-file-selection-bar');
-    status.setAttribute('aria-label', '当前文件选择');
+    status.setAttribute('aria-label', ui('当前文件选择'));
     status.classList.toggle('is-selected', Boolean($('review-file-clear')));
     geistPlaceFileStatus();
   };
@@ -16,7 +16,7 @@
     if (selected) row.after(status);
     else row.insertBefore(status, $('geist-legend-toggle'));
     const fileButton = $('review-file-all');
-    if (fileButton) fileButton.title = '查看文件记录 · 上方读取，下方写入/修改';
+    if (fileButton) fileButton.title = ui('查看文件记录 · 上方读取，下方写入/修改');
   }
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape' || e.defaultPrevented || !reviewFileSelection || geistCanvasGesture) return;

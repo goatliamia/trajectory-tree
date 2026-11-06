@@ -83,7 +83,9 @@ export function inspectData(data, q) {
   const coverage = { usageUnit: data.host === 'pi' ? 'recorded assistant usage' : data.host === 'claude' ? 'recorded assistant message usage, deduplicated by message ID' : 'local response usage records; not all request attempts', callUnit: 'recorded native calls; inner Code Mode activity only when separately recorded', errorUnit: 'tool-result errors; turn failures and assistant stopReason remain separate', focusedUsage: q.focus ? 'whole owning turns, not attributed to the selected tool/file/skill' : 'selected turns', excludedDiagnosticCalls: allCalls.length - allCalls.filter(c => q.includeSelf || !self(toolName(c))).length, unknownTimingCalls: calls.length - measured.length, toolCoverage: 'union of recorded intervals clipped to owning turn bounds; native durations remain separate', crossTurnToolIntervals: measured.filter(c => { const t = nativeTurns.get(c.turn); return c.start < t.start || c.end > t.end; }).length, context: p.evidence.context, synthetic: data.synthetic };
   summary.failedTurns = turns.filter(t => t.reason?.kind === 'failed').length;
   summary.assistantErrorCycles = turns.flatMap(t => t.steps).filter(s => s.stopReason === 'error' || s.stopReason === 'aborted').length;
-  const turnRows = turns.map(t => {
+  // Share one materialization per query, and skip it for views that never use it.
+  let cachedTurnRows;
+  const turnRows = () => cachedTurnRows ??= turns.map(t => {
     const own = calls.filter(c => c.turn === t.number), ownUsage = usage.filter(u => data.host !== 'codex' ? u.turn === t.number : u.turnId === t.id);
     return { turn: t.number, title: compact(t.title || t.prompts[0]?.text), actions: t.steps.length, calls: own.length, errors: own.filter(c => c.status === 'error').length, wallMs: nativeSpan(t), usage: usageTotal(data.host, ownUsage), tools: [...new Set(own.map(toolName))], returnedTextCharacters: own.reduce((n, c) => n + (c.result?.text.length || 0) + (c.result?.omitted || 0), 0), read: read(t.prompts[0]?.seq ?? t.steps[0]?.seq ?? t.seq) };
   });
@@ -98,12 +100,12 @@ export function inspectData(data, q) {
   }
   let rows, extra = {};
   if (['overview', 'latency', 'cost'].includes(q.view)) {
-    rows = q.groupBy === 'tool' ? toolRows() : q.groupBy === 'file' ? fileRows() : turnRows;
+    rows = q.groupBy === 'tool' ? toolRows() : q.groupBy === 'file' ? fileRows() : q.groupBy === 'definition' ? [] : turnRows();
     if (!q.groupBy) {
-      const size = Math.max(1, Math.ceil(turnRows.length / 6));
+      const materialized = turnRows(), size = Math.max(1, Math.ceil(materialized.length / 6));
       rows = [];
-      for (let i = 0; i < turnRows.length; i += size) {
-        const group = turnRows.slice(i, i + size), selected = new Set(group.map(r => r.turn));
+      for (let i = 0; i < materialized.length; i += size) {
+        const group = materialized.slice(i, i + size), selected = new Set(group.map(r => r.turn));
         const selectedIds = new Set(turns.filter(t => selected.has(t.number)).map(t => t.id));
         const windowUsage = usage.filter(u => data.host !== 'codex' ? selected.has(u.turn) : selectedIds.has(u.turnId));
         const range = { from: group[0].turn, to: group.at(-1).turn };
@@ -116,7 +118,7 @@ export function inspectData(data, q) {
       if (q.groupBy === 'definition') rows = (context.scope?.tools || []).filter(t => !q.focus?.tool || t.name === q.focus.tool).map(t => ({ tool: t.name, active: t.active, exposure: t.exposure ?? null, reachesTools: t.reachesTools ?? null, origin: t.source ?? null, schemaTextEstimate: estimateVisibleTokens(JSON.stringify({ name: t.name, description: t.description, parameters: t.parameters })), directCallsInRange: calls.filter(c => toolName(c) === t.name).length, read: read(data.records.find(r => r.kind === 'definition' && r.name === t.name).seq) }));
       if (q.groupBy === 'definition' && !context.scope) rows = historical.filter(t => !q.focus?.tool || t.tool === q.focus.tool).map(t => ({ tool: t.tool, active: null, basis: 'historical declaration', schemaTextEstimate: estimateVisibleTokens(JSON.stringify(t.raw)), directCallsInRange: calls.some(c => toolName(c) === t.tool) || data.host === 'pi' ? calls.filter(c => toolName(c) === t.tool).length : null, read: read(t.seq) }));
     }
-  } else if (q.view === 'io') rows = q.groupBy === 'turn' ? turnRows : q.groupBy === 'file' ? fileRows() : toolRows();
+  } else if (q.view === 'io') rows = q.groupBy === 'turn' ? turnRows() : q.groupBy === 'file' ? fileRows() : toolRows();
   else if (q.view === 'repeats') {
     const groups = new Map();
     for (const c of calls) {
@@ -135,5 +137,15 @@ export function inspectData(data, q) {
   }
   const value = row => q.sort === 'input' ? row.usage?.input : q.sort === 'output' ? row.usage?.output : q.sort === 'returned' ? row.returnedTextCharacters : q.sort === 'count' ? row.count ?? row.calls : q.sort === 'wall' ? row.wallMs ?? row.nativeDurationMs : q.sort === 'change' ? row.selectedEstimate : null;
   if (q.sort && q.sort !== 'time') rows.sort((a, b) => (value(b) ?? -Infinity) - (value(a) ?? -Infinity));
+  // Samples are optional excerpts, not the counters or frozen-cut read pointers.
+  // Keep them out of both rows and summary windows when explicitly disabled.
+  if (q.samples === false) {
+    const withoutSamples = value => {
+      if (Array.isArray(value)) return value.map(withoutSamples);
+      if (!value || typeof value !== 'object') return value;
+      return Object.fromEntries(Object.entries(value).filter(([key]) => !['title', 'firstTask', 'lastTask', 'summary'].includes(key)).map(([key, item]) => [key, withoutSamples(item)]));
+    };
+    rows = withoutSamples(rows); extra = withoutSamples(extra);
+  }
   return { summary, coverage, range, focus: q.focus ?? null, ...extra, rows };
 }

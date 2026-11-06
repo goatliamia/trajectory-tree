@@ -4,7 +4,7 @@
     overviewViewportBound = true;
     const viewport = $('graph-scroll');
     viewport.tabIndex = 0;
-    viewport.setAttribute('aria-label', '执行路径画布，可左右拖动或用方向键平移');
+    viewport.setAttribute('aria-label', ui('执行路径画布，可左右拖动或用方向键平移'));
     let drag = null, suppressClickUntil = 0, wheelFrame = 0, pendingScale = 1, pendingX = 0;
     const blocked = () => $('canvas').classList.contains('drawer-open') || Boolean($('review-detail-overlay'));
     viewport.addEventListener('wheel', e => {

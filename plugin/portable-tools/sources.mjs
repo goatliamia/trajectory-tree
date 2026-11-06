@@ -37,7 +37,7 @@ export function datasetFromNative(host, native, options = {}) {
     const path = piSessionPath(native.entries, native.leafId), byId = new Map(path.map(e => [e.id, e]));
     const calls = new Map(), results = new Map();
     for (const entry of path) {
-      if (entry.message?.role === 'assistant') for (const call of entry.message.content.filter(c => c.type === 'toolCall')) calls.set(call.id, { call, entry });
+      if (entry.message?.role === 'assistant') for (const call of (Array.isArray(entry.message.content) ? entry.message.content : []).filter(c => c.type === 'toolCall')) calls.set(call.id, { call, entry });
       if (entry.message?.role === 'toolResult') results.set(entry.message.toolCallId, entry);
     }
     for (const event of payload.events) {

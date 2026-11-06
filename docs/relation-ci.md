@@ -12,6 +12,10 @@
 
 `Native regression` 独立运行合成事件下的实际轨迹阶段、目标阶段更新、来源隔离、读取失败、旧异步结果竞争、资源释放，以及 npm 实际打包文件的加载。它负责验证当前静态目标尚未表达的缓存版本一致性，不访问真实会话或模型服务。
 
+同一个普通 CI 任务还做基础检查：校验共享视图资源与各宿主 skill 的同步，运行 Pi / Codex / Claude 的合成适配、语言、页面和报告冒烟，检查便携工具及其传输入口，再构建三种宿主包并加载 CLI。只用一套 Ubuntu / Node 24，不加多平台矩阵、浏览器、性能基准或真实日志测试。依赖由 `plugin/portable-tools/package-lock.json` 固定安装；CI 不依赖本机 DSH 安装或私有分析引擎。
+
+Pi 源码版本核对与已生成页面核对属于可选本地检查，分别通过 `TRAJECTORY_PI_TEST_REPO`、`TRAJECTORY_PI_TEST_VIEW` 显式启用；日常测试不会因开发机上恰好存在另一个仓库或旧页面而改变行为。包含 DSH 官方统计依赖的完整报告集仍可在宿主开发环境运行，普通 CI 使用无宿主依赖的 `report/smoke-test.mjs`。
+
 ```sh
 node --test plugin/analysis-view/goal-events-test.mjs plugin/analysis-view/stages-test.mjs plugin/analysis-view/resources-test.mjs
 ```

@@ -1,49 +1,49 @@
   let reviewFocusedTurn = null, reviewPathEnteredAt = 0;
   function reviewOpenScaleNote() {
-    openDrawer('柱高为什么会收起', '这是图的显示范围，不是模型容量限制',
-      '<p class="review-explain">按本会话约九成五轮次的新增量选取，图先展示 ±' + reviewTokens(reviewContextScale.limit) + ' 的范围。这样几千 tokens 的变化也能看清。</p>' +
-      '<p class="review-explain">例如实际新增 132.7k，柱顶仍写 <b>+132.7k · 收起</b>，省略号表示柱高被收起。颜色仍按真实来源占比分配，点柱可查看全部数值。</p>' +
-      '<p class="review-quiet">范围按本会话新增量第 95 百分位向上取整。平移、放大不会改变纵向单位。首轮柱显示末次请求已有量，后续轮次显示相对上一轮的变化。</p>');
+    openDrawer(ui('柱高为什么会收起'), ui('这是图的显示范围，不是模型容量限制'),
+      ui('<p class="review-explain">按本会话约九成五轮次的新增量选取，图先展示 ±') + reviewTokens(reviewContextScale.limit) + ui(' 的范围。这样几千 tokens 的变化也能看清。</p>') +
+      ui('<p class="review-explain">例如实际新增 132.7k，柱顶仍写 <b>+132.7k · 收起</b>，省略号表示柱高被收起。颜色仍按真实来源占比分配，点柱可查看全部数值。</p>') +
+      ui('<p class="review-quiet">范围按本会话新增量第 95 百分位向上取整。平移、放大不会改变纵向单位。首轮柱显示末次请求已有量，后续轮次显示相对上一轮的变化。</p>'));
   }
   function reviewOpenContextSources(selected = 'inject') {
     const definitions = {
-      system: '模型的基础行为规则。单独计入系统提示，不计入下面的运行时注入。',
-      tools: '本次可调用工具的名称、用途与参数说明。它是工具清单，不是执行工具后得到的结果。',
-      user: '用户自己输入的文本（消息不带来源标记）。附件、宿主补的环境说明与通知另计，归入运行时注入。',
-      inject: '运行环境或插件自动补进来的文字，例如工作目录、项目说明、当前时间、后台任务通知，以及压缩后继续对话的说明。这里原来叫“注入内容”。',
-      skill: '技能目录、已加载技能的操作说明。它虽然也是自动提供的，但单独归类。',
-      assistant: '模型产生的回复、思考和工具调用内容。',
-      tool: '工具执行后的返回内容，例如文件正文、命令输出、搜索结果。过长返回被裁短时，这一类可能减少。',
+      system: ui('模型的基础行为规则。单独计入系统提示，不计入下面的运行时注入。'),
+      tools: ui('本次可调用工具的名称、用途与参数说明。它是工具清单，不是执行工具后得到的结果。'),
+      user: ui('用户自己输入的文本（消息不带来源标记）。附件、宿主补的环境说明与通知另计，归入运行时注入。'),
+      inject: ui('运行环境或插件自动补进来的文字，例如工作目录、项目说明、当前时间、后台任务通知，以及压缩后继续对话的说明。这里原来叫“注入内容”。'),
+      skill: ui('技能目录、已加载技能的操作说明。它虽然也是自动提供的，但单独归类。'),
+      assistant: ui('模型产生的回复、思考和工具调用内容。'),
+      tool: ui('工具执行后的返回内容，例如文件正文、命令输出、搜索结果。过长返回被裁短时，这一类可能减少。'),
     };
     const sourceNames = {
-      'agent-instructions': '项目与工作区说明', 'runtime-context': '运行环境',
-      'time-context': '时间信息', 'plugin:out-of-band': '运行中补充通知',
-      'tool-jobs': '后台任务通知', 'tool-registry': '工具清单变更说明',
-      'agent-message': '其他 Agent 的消息', 'subagent-settled': '子任务结束通知',
-      goal: '任务目标', 'compact-checkpoint': '压缩后继续对话的说明', 'user-approval': '审批结果',
-      'plugin:dsh-runtime-seam': '运行环境插件补充', 'plugin:dsh-trajectory-tools': '轨迹工具插件补充',
+      'agent-instructions': ui('项目与工作区说明'), 'runtime-context': ui('运行环境'),
+      'time-context': ui('时间信息'), 'plugin:out-of-band': ui('运行中补充通知'),
+      'tool-jobs': ui('后台任务通知'), 'tool-registry': ui('工具清单变更说明'),
+      'agent-message': ui('其他 Agent 的消息'), 'subagent-settled': ui('子任务结束通知'),
+      goal: ui('任务目标'), 'compact-checkpoint': ui('压缩后继续对话的说明'), 'user-approval': ui('审批结果'),
+      'plugin:dsh-runtime-seam': ui('运行环境插件补充'), 'plugin:dsh-trajectory-tools': ui('轨迹工具插件补充'),
     };
     const ordered = [...CONTEXT_CATEGORIES].sort((a, b) => (b.key === selected) - (a.key === selected));
     let html = ordered.map(c => '<div class="review-source-definition"><strong><i style="background:' + c.color + '"></i>' + c.label + '</strong><p>' + definitions[c.key] + '</p></div>').join('');
-    html += '<details class="ov-proof"><summary>这份会话记录了哪些补充来源</summary><p class="review-quiet">以下为写入记录的次数，不是当前仍保留的 tokens。</p>' +
-      (reviewContextData.supplementSources || []).map(s => '<div class="source-row"><span>' + esc(sourceNames[s.kind] || s.kind) + '</span>' + s.count + ' 条</div>').join('') + '</details>';
-    html += '<p class="review-quiet">按消息的角色与来源标记归类，不根据文字内容猜测。所有 token 构成是估算值。</p>';
-    openDrawer('上下文从哪里来', '七类来源，各自只计一次', html);
+    html += ui('<details class="ov-proof"><summary>这份会话记录了哪些补充来源</summary><p class="review-quiet">以下为写入记录的次数，不是当前仍保留的 tokens。</p>') +
+      (reviewContextData.supplementSources || []).map(s => '<div class="source-row"><span>' + esc(sourceNames[s.kind] || s.kind) + '</span>' + s.count + ui(' 条</div>')).join('') + '</details>';
+    html += ui('<p class="review-quiet">按消息的角色与来源标记归类，不根据文字内容猜测。所有 token 构成是估算值。</p>');
+    openDrawer(ui('上下文从哪里来'), ui('七类来源，各自只计一次'), html);
   }
   function reviewOpenDurations(first = null, last = null) {
     const subset = session.turns.filter(t => first === null || t.number >= first && t.number <= last);
-    const title = first === null ? '每轮耗时' : first === last ? '第 ' + first + ' 轮' : '第 ' + first + '–' + last + ' 轮';
-    const html = '<form id="review-round-search" class="review-round-search"><label for="review-round-number">定位轮次</label><input id="review-round-number" type="number" min="1" inputmode="numeric" placeholder="例如 59"><button class="action-button" type="submit">定位</button></form>' +
-      '<p class="review-quiet">每一轮都列在这里，不按时长筛选。点轮号定位原图，点“行动”直接看逐步操作。</p>' +
-      (first !== null ? '<button class="back-link" id="review-all-rounds">查看全部 ' + session.turns.length + ' 轮</button>' : '') +
+    const title = first === null ? ui('每轮耗时') : first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮`;
+    const html = ui('<form id="review-round-search" class="review-round-search"><label for="review-round-number">定位轮次</label><input id="review-round-number" type="number" min="1" inputmode="numeric" placeholder="例如 59"><button class="action-button" type="submit">定位</button></form>') +
+      ui('<p class="review-quiet">每一轮都列在这里，不按时长筛选。点轮号定位原图，点“行动”直接看逐步操作。</p>') +
+      (first !== null ? ui('<button class="back-link" id="review-all-rounds">查看全部 ') + session.turns.length + ui(' 轮</button>') : '') +
       '<div class="review-round-grid" id="review-round-grid"></div>';
-    openDrawer(title, '从本轮开始到结束 · 含轮内等待，不含轮间等待', html);
+    openDrawer(title, ui('从本轮开始到结束 · 含轮内等待，不含轮间等待'), html);
     const draw = () => {
       const query = $('review-round-number').value.trim();
       const rounds = query ? session.turns.filter(t => String(t.number) === query) : subset;
       $('review-round-grid').innerHTML = rounds.length ? rounds.map(t => '<div class="review-round-card">' +
-        '<button data-review-focus-turn="' + t.number + '" title="' + esc(shorten(t.title || '', 100)) + '"><strong>第 ' + t.number + ' 轮</strong><b>' + (t.end === null ? '≥' : '') + reviewDuration(endOf(t) - t.start) + '</b></button>' +
-        '<div><button data-review-round-context="' + t.number + '">上下文</button><button data-review-round-path="' + t.number + '">行动 ↗</button></div></div>').join('') : '<p class="review-quiet">没有这个轮号。</p>';
+        '<button data-review-focus-turn="' + t.number + '" title="' + esc(shorten(t.title || '', 100)) + '"><strong>' + ui`第 ${t.number} 轮` + '</strong><b>' + (t.end === null ? '≥' : '') + reviewDuration(endOf(t) - t.start) + '</b></button>' +
+        '<div><button data-review-round-context="' + t.number + ui('">上下文</button><button data-review-round-path="') + t.number + ui('">行动 ↗</button></div></div>')).join('') : ui('<p class="review-quiet">没有这个轮号。</p>');
       $('review-round-grid').querySelectorAll('[data-review-focus-turn]').forEach(el => el.onclick = () => reviewFocusTurn(Number(el.dataset.reviewFocusTurn)));
       $('review-round-grid').querySelectorAll('[data-review-round-context]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.reviewRoundContext)));
       $('review-round-grid').querySelectorAll('[data-review-round-path]').forEach(el => el.onclick = () => reviewEnterPath(Number(el.dataset.reviewRoundPath)));
@@ -63,7 +63,7 @@
     tlFocusRange(t, t.start, endOf(t));
     tlSelectionOutline(t);
     reviewSyncNavigation();
-    tlReadout('第 ' + number + ' 轮 · 总耗时 ' + reviewDuration(endOf(t) - t.start) + '。继续放大进入逐步行动，或点上方“行动路径”。');
+    tlReadout(ui('第 ') + number + ui(' 轮 · 总耗时 ') + reviewDuration(endOf(t) - t.start) + ui('。继续放大进入逐步行动，或点上方“行动路径”。'));
   }
   const reviewSetOverviewScaleBase = setOverviewScale;
   setOverviewScale = function(nextScale, viewportX) {
@@ -121,7 +121,7 @@
   function reviewBindActionControls() {
     if (view !== 'path') return;
     const box = document.createElement('div'); box.className = 'br-layers';
-    box.innerHTML = [['duration', '耗时'], ['context', '上下文变化'], ['files', '文件']].map(([key, label]) =>
+    box.innerHTML = [['duration', ui('耗时')], ['context', ui('上下文变化')], ['files', ui('文件')]].map(([key, label]) =>
       '<label class="br-layer"><input type="checkbox" data-action-layer="' + key + '"' + (overviewLayers.has(key) ? ' checked' : '') + '>' + label + '</label>').join('');
     $('graph-caption').prepend(box);
     box.querySelectorAll('input').forEach(el => el.onchange = () => {

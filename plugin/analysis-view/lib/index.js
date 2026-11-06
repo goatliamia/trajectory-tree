@@ -11,6 +11,8 @@ import { readContextTimeline, traceActors, traceContext } from "./trace-context.
 import { TraceCache, traceSource, observationSource } from "./trace-cache.js";
 import { TraceStages } from "./trace-stages.js";
 import { TraceResources, abortable, abortError } from "./trace-resources.js";
+import { i18nRuntime } from './trace/shared/i18n.mjs';
+import { hostCapabilities } from './trace/shared/host-capabilities.mjs';
 
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
@@ -39,11 +41,12 @@ function readTraceAssets() {
 
 /** 模板与渲染器按文件版本复用,仍支持改样式后直接刷新。 */
 export function renderTracePage(payload, assets = readTraceAssets()) {
+  payload = { ...payload, traceCapabilities: hostCapabilities(payload) };
   const json = JSON.stringify(payload).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
   // 一次性替换两个占位符:会话正文里可能出现同样的字符串,分批替换会把它替换进数据里。
   const template = payload.traceLoad ? assets.template.replace('<body class="geist-review', '<body class="geist-review trace-pending') : assets.template;
   return template.replace(/\/\*__TRACE_DATA__\*\/|\/\*__TRACE_RENDERER__\*\//g,
-    token => (token === "/*__TRACE_DATA__*/" ? json : assets.renderer));
+    token => (token === "/*__TRACE_DATA__*/" ? json : i18nRuntime(payload.locale) + assets.renderer));
 }
 
 /**

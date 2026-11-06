@@ -3,7 +3,7 @@ import { hash, recordText } from './sources.mjs';
 import { portableReportData } from './report-data.mjs';
 import { reportPage } from '../trajectory-tools/lib/report-data.js';
 
-const queryKeys = ['view', 'turns', 'focus', 'groupBy', 'sort', 'includeSelf', 'query', 'format'];
+const queryKeys = ['view', 'turns', 'focus', 'groupBy', 'sort', 'includeSelf', 'query', 'format', 'samples'];
 const pick = args => Object.fromEntries(queryKeys.filter(k => args[k] !== undefined).map(k => [k, args[k]]));
 const preview = text => String(text || '').slice(0, 320);
 function cursorEncode(value) { const text = JSON.stringify(value); return Buffer.from(text).toString('base64url') + '.' + hash(text).slice(0, 16); }
@@ -59,6 +59,7 @@ export class PortableService {
     const q = { ...(previous?.query || {}), ...pick(args) };
     if (name === 'trajectory_inspect' || name === 'trajectory_search') { q.view ||= name === 'trajectory_inspect' ? 'overview' : 'events'; q.sort ||= 'time'; q.includeSelf ??= false; }
     if (name === 'trajectory_inspect') { q.format ||= 'summary'; if (!['summary', 'data'].includes(q.format)) throw Error('format must be summary or data'); }
+    if (q.samples !== undefined && typeof q.samples !== 'boolean') throw Error('samples must be a boolean');
     if (q.turns) { if (!Number.isSafeInteger(q.turns.from) || !Number.isSafeInteger(q.turns.to) || q.turns.from < 1 || q.turns.to < q.turns.from) throw Error('turns requires an inclusive {from,to} range'); q.turns = { from: q.turns.from, to: q.turns.to }; }
     if (q.focus && (Object.keys(q.focus).length !== 1 || !Object.values(q.focus)[0])) throw Error('Select one exact tool, file, or skill in focus');
     if (previous && hash(q) !== hash(previous.query)) throw Error('Cursor does not match selection');

@@ -76,8 +76,8 @@ export function adaptPiSession(input) {
   const path = piSessionPath(input.entries, input.leafId), synthetic = input.synthetic === true, source = synthetic ? 'synthetic' : 'pi-session-v3';
   const capture = input.capture || [], starts = new Map(), ends = new Map();
   for (const row of capture) {
-    if (row.event.type === 'tool_execution_start') starts.set(row.event.toolCallId, row);
-    if (row.event.type === 'tool_execution_end') ends.set(row.event.toolCallId, row);
+    if (row.event?.type === 'tool_execution_start') starts.set(row.event.toolCallId, row);
+    if (row.event?.type === 'tool_execution_end') ends.set(row.event.toolCallId, row);
   }
   const callFacts = {}, fileOperations = [], requests = [], boundaries = [], skillEvents = [], events = [], turns = [], episodes = [], usage = [];
   const resultById = new Map(path.filter(e => e.type === 'message' && e.message.role === 'toolResult').map(e => [e.message.toolCallId, e]));
@@ -112,10 +112,13 @@ export function adaptPiSession(input) {
     const step = { number, seq: entrySeq, start: message.timestamp, end: responseEnd, endSeq: entrySeq, assistantSeq: entrySeq, assistantTime: responseEnd, reply: text(message.content) ? excerpt(text(message.content)) : null, calls: [], retries: [], markers: [], inTok: message.usage?.input ?? null, cacheTok: message.usage?.cacheRead ?? null, outTok: message.usage?.output ?? null, endObserved: message.durationMs != null, assistantDurationMs: message.durationMs ?? null, stopReason: message.stopReason ?? null, model: message.model ?? null, provider: message.provider ?? null, semanticUnit: 'pi-assistant-turn', errors: 0, synthetic };
     latestUsage = message.usage ?? latestUsage;
     if (message.usage) usage.push({ turn: currentTurn.number, step: number, seq: entrySeq, time: at, usage: message.usage, source, synthetic, semanticUnit: 'assistant-usage' });
-    for (const native of message.content.filter(c => c.type === 'toolCall')) {
-      const resultEntry = resultById.get(native.id), result = resultEntry?.message, begin = starts.get(native.id), finish = ends.get(native.id);
+    for (const native of (Array.isArray(message.content) ? message.content : []).filter(c => c.type === 'toolCall')) {
+      const resultEntry = resultById.get(native.id), result = resultEntry?.message;
+      const matches = row => row && (!row.event.toolName || row.event.toolName === native.name) && Number.isFinite(row.observedAt);
+      const rawBegin = starts.get(native.id), rawFinish = ends.get(native.id);
+      const begin = matches(rawBegin) ? rawBegin : null, finish = matches(rawFinish) ? rawFinish : null;
       const state = !result ? 'unknown' : result.isError ? 'error' : 'returned', callSeq = ++seq;
-      const completeTiming = begin && finish;
+      const completeTiming = begin && finish && begin.observedAt <= finish.observedAt;
       const observedEnd = finish?.observedAt ?? result?.timestamp ?? null;
       const start = completeTiming ? begin.observedAt : observedEnd ?? begin?.observedAt ?? responseEnd, end = observedEnd;
       const call = { id: native.id, seq: callSeq, name: native.name === 'bash' ? 'bash' : native.name, nativeName: native.name, signature: signature(native.name, native.arguments), target: native.arguments.path || null, args: excerpt(JSON.stringify(native.arguments)), start, end, observedStart: begin?.observedAt ?? null, observedEnd, resultSeq: result ? ++seq : null, status: state, error: result?.isError ? { code: 'PI_TOOL_ERROR', message: text(result.content).slice(0, 180) } : null, result: result ? excerpt(text(result.content)) : null, durationMs: finish?.event.durationMs ?? result?.durationMs ?? null, timingSource: completeTiming ? source + '-capture' : 'unrecorded-start', source, synthetic };

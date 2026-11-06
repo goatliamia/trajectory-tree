@@ -20,12 +20,12 @@
     if (members.length === 1) {
       // 单独显示一个文件时,先给它的身份:读 / 改 / 受阻,再给次数。
       const f = members[0].file;
-      const kind = f.changes.length ? '改' : f.reads.length ? '读' : f.failed.length ? '受阻' : '待确认';
+      const kind = f.changes.length ? ui('改') : f.reads.length ? ui('读') : f.failed.length ? ui('受阻') : ui('待确认');
       const count = f.changes.length || f.reads.length || f.failed.length;
       return '[' + kind + '] ' + f.label + (count ? ' · ' + count : '');
     }
     const first = [...members].sort((a, b) => b.file.operations.length - a.file.operations.length)[0].file;
-    return first.label.split('/').at(-1) + ' 等 ' + members.length + ' 个';
+    return first.label.split('/').at(-1) + ui(' 等 ') + members.length + ui(' 个');
   }
   function reviewFileIcon(x, y) {
     return '<path d="M' + x + ' ' + (y - 5) + 'h5l3 3v8h-8zM' + (x + 5) + ' ' + (y - 5) + 'v3h3" class="review-file-icon"/>';
@@ -59,7 +59,7 @@
         left: bounds.left + 4, right: bounds.right - 4, measure: reviewMeasure, label: reviewFileLabel,
         obstacles: obstacles[lane] || [],
       });
-      if (packed.some(p => !p.hidden)) html += brText(bounds.left - 9, y + 4, lane === 'read' ? '材料' : '修改', 'review-file-lane-label ' + lane, 'end');
+      if (packed.some(p => !p.hidden)) html += brText(bounds.left - 9, y + 4, lane === 'read' ? ui('材料') : ui('修改'), 'review-file-lane-label ' + lane, 'end');
       for (const p of packed) {
         if (p.hidden || p.right < left - 60 || p.left > right + 60) continue;
         const index = reviewFileGroups.length; reviewFileGroups.push({ ...p, y, lane });
@@ -68,7 +68,7 @@
         html += brGroup('class="review-file-object ' + lane + (selected ? ' selected' : '') + '" data-file-group="' + index + '" aria-pressed="' + selected + '"',
           '<rect x="' + p.left + '" y="' + (y - 10) + '" width="' + p.width + '" height="20" rx="4" class="review-file-body"/>' +
           reviewFileIcon(p.left + 8, y) + brText(p.left + 23, y + 3.5, label, 'review-file-name', 'start'),
-          p.members.length === 1 ? p.members[0].file.path + '；点击突出它的读写位置' : p.members.length + ' 个文件集中在这里；点击选择文件');
+          p.members.length === 1 ? p.members[0].file.path + ui('；点击突出它的读写位置') : p.members.length + ui(' 个文件集中在这里；点击选择文件'));
       }
     }
     html += '<g id="review-file-touch-layer">' + reviewFileTouchMarkup() + '</g></g>';
@@ -102,7 +102,7 @@
         (read ? '<circle cx="' + p.x + '" cy="' + y + '" r="3.5" class="review-file-touch-dot"/>' : '<rect x="' + (p.x - 3.5) + '" y="' + (y - 3.5) + '" width="7" height="7" rx="1.5" class="review-file-touch-dot"/>');
       const first = p.members[0].operation;
       html += brGroup('class="review-file-touch ' + tone + '" data-file-touch="' + index + '"', body + (p.members.length > 1 ? '<circle cx="' + p.x + '" cy="' + y + '" r="6" class="review-file-touch-ring"/>' : ''),
-        p.members.length > 1 ? p.members.length + ' 次相邻' + (read ? '读取' : '写入/修改') + '；点击展开' : '第 ' + first.turn + ' 轮 / 第 ' + first.step + ' 步 · ' + (read ? '读取' : '写入/修改') + (first.status === 'returned' ? '已返回' : '未成功或未确认'));
+        p.members.length > 1 ? p.members.length + ui(' 次相邻') + (read ? ui('读取') : ui('写入/修改')) + ui('；点击展开') : ui('第 ') + first.turn + ui(' 轮 / 第 ') + first.step + ui(' 步 · ') + (read ? ui('读取') : ui('写入/修改')) + (first.status === 'returned' ? ui('已返回') : ui('未成功或未确认')));
     }
     return html;
   }
@@ -130,8 +130,8 @@
       el.setAttribute('aria-pressed', String(chosen));
       const selectedFile = group.members.find(m => m.file.id === reviewFileSelection)?.file;
       el.querySelector('.review-file-name').textContent = reviewTrimFileLabel(selectedFile ? '✓ ' + selectedFile.label : group.label, group.width);
-      el.querySelector('title').textContent = selectedFile ? '已选：' + selectedFile.path + (group.members.length > 1 ? '；本组共 ' + group.members.length + ' 个文件，点击可换选' : '；点击查看读写位置') :
-        group.members.length === 1 ? group.members[0].file.path + '；点击突出它的读写位置' : group.members.length + ' 个文件集中在这里；点击选择文件';
+      el.querySelector('title').textContent = selectedFile ? ui('已选：') + selectedFile.path + (group.members.length > 1 ? ui('；本组共 ') + group.members.length + ui(' 个文件，点击可换选') : ui('；点击查看读写位置')) :
+        group.members.length === 1 ? group.members[0].file.path + ui('；点击突出它的读写位置') : group.members.length + ui(' 个文件集中在这里；点击选择文件');
     });
     $('graph').querySelectorAll('.review-action-step').forEach(el => el.classList.toggle('file-related', steps.has(turn().number + ':' + turn().steps[Number(el.dataset.step)]?.number)));
     $('graph').querySelectorAll('[data-review-branch]').forEach(el => {
@@ -180,21 +180,21 @@
     if (status.dataset.key === key) return;
     status.dataset.key = key;
     status.innerHTML = selected
-      ? '<strong title="' + esc(selected.path) + '">' + esc(selected.label) + '</strong><span>' + (view === 'path' ? '本轮 · ' : '全程 · ') + '读 ' + selected.reads.length + ' 次 · 写入/修改 ' + selected.changes.length + ' 次' + (selected.failed.length ? ' · ' + selected.failed.length + ' 次受阻' : '') + '</span><button id="review-file-history">全程记录 ↗</button><button id="review-file-clear" aria-label="取消文件选择" title="取消选择（Esc）">× 取消选择</button>'
-      : '<span>上方读取 · 下方写入/修改</span><button id="review-file-all">' + (view === 'overview' ? '全程 ' : '本轮 ') + reviewFilesInScope.length + ' 个文件 ↗</button><span class="review-file-source-note">按已记录的操作</span>';
+      ? '<strong title="' + esc(selected.path) + '">' + esc(selected.label) + '</strong><span>' + (view === 'path' ? ui('本轮 · ') : ui('全程 · ')) + ui('读 ') + selected.reads.length + ui(' 次 · 写入/修改 ') + selected.changes.length + ui(' 次') + (selected.failed.length ? ' · ' + selected.failed.length + ui(' 次受阻') : '') + ui('</span><button id="review-file-history">全程记录 ↗</button><button id="review-file-clear" aria-label="取消文件选择" title="取消选择（Esc）">× 取消选择</button>')
+      : ui('<span>上方读取 · 下方写入/修改</span><button id="review-file-all">') + (view === 'overview' ? ui('全程 ') : ui('本轮 ')) + reviewFilesInScope.length + ui(' 个文件 ↗</button><span class="review-file-source-note">按已记录的操作</span>');
     if ($('review-file-all')) $('review-file-all').onclick = () => reviewOpenFilePicker(reviewFilesInScope);
     if ($('review-file-clear')) $('review-file-clear').onclick = reviewClearFileSelection;
     if ($('review-file-history')) $('review-file-history').onclick = () => reviewOpenFileHistory(selected);
   }
   function reviewOpenFilePicker(files) {
-    reviewOpenDetail({ title: '这段执行涉及的文件', subtitle: '选择文件，查看它在整段会话中的修改过程',
-      html: '<div class="review-file-list">' + (files.length ? files.map((f, i) => '<button data-pick-file="' + i + '"><strong>' + esc(f.label) + '</strong><span>读取 ' + f.reads.length + ' 次 · 写入/修改 ' + f.changes.length + ' 次' + (f.failed.length ? ' · 受阻 ' + f.failed.length + ' 次' : '') + '</span><small>' + esc(f.path) + '</small></button>').join('') : '<p class="review-file-evidence-note">这段执行没有记录直接的文件读写操作。</p>') + '</div>',
+    reviewOpenDetail({ title: ui('这段执行涉及的文件'), subtitle: ui('选择文件，查看它在整段会话中的修改过程'),
+      html: '<div class="review-file-list">' + (files.length ? files.map((f, i) => '<button data-pick-file="' + i + '"><strong>' + esc(f.label) + ui('</strong><span>读取 ') + f.reads.length + ui(' 次 · 写入/修改 ') + f.changes.length + ui(' 次') + (f.failed.length ? ui(' · 受阻 ') + f.failed.length + ui(' 次') : '') + '</span><small>' + esc(f.path) + '</small></button>').join('') : ui('<p class="review-file-evidence-note">这段执行没有记录直接的文件读写操作。</p>')) + '</div>',
       bind: () => $('review-detail-body').querySelectorAll('[data-pick-file]').forEach(el => el.onclick = () => { const file = files[Number(el.dataset.pickFile)]; reviewCloseDetail(); reviewSelectFile(file.id); reviewOpenFileHistory(file); }) });
   }
   function reviewOpenFileHistory(file, operations = file.operations) {
-    reviewOpenDetail({ title: file.label, subtitle: '形成过程 · ' + operations.length + ' 条读写记录',
-      html: '<div class="review-file-history">' + operations.map(op => '<button data-file-step="' + op.seq + '"><span class="' + op.kind + '">' + (op.kind === 'read' ? '读取' : '写入/修改') + '</span><div><strong>第 ' + op.turn + ' 轮 · 第 ' + op.step + ' 步</strong><small>' + esc(reviewContextData.callFacts?.[op.seq]?.outcome || (op.status === 'returned' ? '工具已返回' : op.status === 'error' ? '操作受阻' : '结果未记录')) + '</small></div><span>查看这一步 ↗</span></button>').join('') + '</div>' +
-        '<p class="review-file-evidence-note">按文件工具的操作记录展示；本预览尚未接入最终文件差异。</p>',
+    reviewOpenDetail({ title: file.label, subtitle: ui('形成过程 · ') + operations.length + ui(' 条读写记录'),
+      html: '<div class="review-file-history">' + operations.map(op => '<button data-file-step="' + op.seq + '"><span class="' + op.kind + '">' + (op.kind === 'read' ? ui('读取') : ui('写入/修改')) + ui('</span><div><strong>第 ') + op.turn + ui(' 轮 · 第 ') + op.step + ui(' 步</strong><small>') + esc(reviewContextData.callFacts?.[op.seq]?.outcome || (op.status === 'returned' ? ui('工具已返回') : op.status === 'error' ? ui('操作受阻') : ui('结果未记录'))) + ui('</small></div><span>查看这一步 ↗</span></button>')).join('') + '</div>' +
+        ui('<p class="review-file-evidence-note">按文件工具的操作记录展示；本预览尚未接入最终文件差异。</p>'),
       bind: () => $('review-detail-body').querySelectorAll('[data-file-step]').forEach(el => el.onclick = () => {
         const op = file.operations.find(o => o.seq === Number(el.dataset.fileStep));
         reviewCloseDetail();

@@ -138,7 +138,8 @@ export function parseCodexRollout(text, { capturedAt, threadId, skillMaterials =
     let args = {}; try { args = JSON.parse(p.arguments); } catch {}
     let returned = {}; try { returned = JSON.parse(result?.payload.output || '{}'); } catch {}
     // Message bodies can be encrypted. Never copy ciphertext or infer content.
-    collaboration.push({ id: p.id || p.call_id, callId: p.call_id, tool: p.name, taskName: args.task_name ?? args.target ?? null, taskPath: returned.task_name ?? null, turnId: p.internal_chat_message_metadata_passthrough?.turn_id, start: Date.parse(row.timestamp), end: result ? Date.parse(result.timestamp) : null, source: 'local-rollout', receiverThreadIds: [], childHistoryAvailable: false });
+    const owningContext = rows.findLast(entry => entry.ordinal <= row.ordinal && entry.type === 'turn_context');
+    collaboration.push({ id: p.id || p.call_id, callId: p.call_id, tool: p.name, taskName: args.task_name ?? args.target ?? null, taskPath: returned.task_name ?? null, turnId: p.internal_chat_message_metadata_passthrough?.turn_id ?? owningContext?.payload?.turn_id, start: Date.parse(row.timestamp), end: result ? Date.parse(result.timestamp) : null, source: 'local-rollout', receiverThreadIds: [], childHistoryAvailable: false });
   }
   let state = empty(), turnId = null, skillCalls = new Set(), latestUsage = null, window = null;
   const save = row => compositions.push({ time: Date.parse(row.timestamp), ordinal: row.ordinal, turnId, ...state });
@@ -167,22 +168,22 @@ export function adaptCodexThread(snapshot, options = {}) {
   const { thread } = snapshot;
   if (!thread?.id || !Array.isArray(thread.turns)) throw new Error('Expected official Codex thread snapshot');
   const local = options.rollout ? parseCodexRollout(options.rollout, { capturedAt: snapshot.capturedAt, threadId: thread.id, skillMaterials: options.skillMaterials || [] }) : null;
-  const callFacts = {}, fileOperations = [], boundaries = [], events = [], skillEvents = [], episodes = [], requests = [];
+  const callFacts = {}, fileOperations = [], boundaries = [], events = [], skillEvents = [], episodes = [], requests = [], collaborationEvents = [];
   let seq = 0, timingMatched = 0;
-  const stamp = item => item.localTiming || local?.completed.get(item.id);
+  const stamp = item => item.localTiming || local?.completed.get(item.id) || local?.collaboration.find(event => event.id === item.id || event.callId === item.id);
   const turns = thread.turns.map((turn, index) => {
     const start = turn.startedAt != null ? turn.startedAt * 1000 : stamp(turn.items?.[0])?.start ?? thread.createdAt * 1000;
     const end = turn.completedAt != null ? turn.completedAt * 1000 : turn.durationMs != null ? start + turn.durationMs : null;
     const prompts = [], steps = [], markers = [], compactions = [];
     const output = { id: turn.id, number: index + 1, seq: ++seq, start, end, endSeq: null, reason: { kind: turn.status === 'inProgress' ? 'running' : turn.status }, prompts, steps, retries: [], markers, title: '', errors: 0 };
     let ordinalPosition = start;
-    const extra = (local?.collaboration || []).filter(e => e.turnId === turn.id).map(e => ({ type: 'collabAgentToolCall', id: e.id, tool: e.tool, taskName: e.taskName, taskPath: e.taskPath, status: e.end == null ? 'inProgress' : 'completed', receiverThreadIds: [], localTiming: { start: e.start, end: e.end }, evidenceSource: 'local-rollout' }));
+    const extra = (local?.collaboration || []).filter(e => e.turnId === turn.id && !(turn.items || []).some(item => item.id === e.id || item.id === e.callId)).map(e => ({ type: 'collabAgentToolCall', id: e.id, tool: e.tool, taskName: e.taskName, taskPath: e.taskPath, status: e.end == null ? 'inProgress' : 'completed', receiverThreadIds: [], localTiming: { start: e.start, end: e.end }, evidenceSource: 'local-rollout' }));
     // The API's native order is authoritative even when timestamps are absent.
     const items = [...(turn.items || [])];
     for (const item of extra) { const at = items.findIndex(native => stamp(native)?.start != null && stamp(native).start > item.localTiming.start); items.splice(at < 0 ? items.length : at, 0, item); }
     for (const item of items) {
       if (item.type === 'reasoning') continue;
-      const time = stamp(item), precise = time?.start != null && time?.end != null;
+      const time = stamp(item), precise = Number.isFinite(time?.start) && Number.isFinite(time?.end) && time.end >= time.start;
       if (precise) timingMatched++;
       const a = precise ? time.start : ordinalPosition, b = precise ? time.end : a;
       ordinalPosition = Math.max(ordinalPosition, b);
@@ -208,14 +209,22 @@ export function adaptCodexThread(snapshot, options = {}) {
       const result = item.type === 'commandExecution' ? item.aggregatedOutput : item.type === 'mcpToolCall' ? flat(item.result?.content) : item.type === 'dynamicToolCall' ? flat(item.contentItems) : item.type === 'fileChange' ? (item.changes || []).map(c => c.diff || '').join('\n') : JSON.stringify(item.results || item.states || item.agentsStates || '');
       const names = { read: 'read', write: 'apply_patch', run: 'pwsh', query: 'web_search', other: ['mcpToolCall', 'dynamicToolCall'].includes(item.type) ? [item.server || item.namespace, item.tool].filter(Boolean).join('/') : item.type };
       const target = item.changes?.[0]?.path || cls.reads?.[0]?.path || item.path || null;
-      const call = { id: item.id, seq: itemSeq, name: names[cls.kind], nativeName: ['mcpToolCall', 'dynamicToolCall'].includes(item.type) ? [item.server || item.namespace, item.tool].filter(Boolean).join('/') : item.type, classification: cls, signature: hash(JSON.stringify([item.type, args])), target, args: excerpt(JSON.stringify(args), 22000), start: a, end: state === 'unknown' ? null : b, resultSeq, status: state, error: state === 'error' ? { code: item.exitCode != null ? 'EXIT_' + item.exitCode : 'TOOL_ERROR', message: short(item.error || result, 180) } : null, result: excerpt(result, 18000), durationMs: item.durationMs ?? (precise ? b - a : null), timingSource: step.timingSource, source: cls.source };
+      const call = { id: item.id, seq: itemSeq, name: names[cls.kind], nativeName: ['mcpToolCall', 'dynamicToolCall'].includes(item.type) ? [item.server || item.namespace, item.tool].filter(Boolean).join('/') : item.type, classification: cls, signature: hash(JSON.stringify([item.type, args])), target, args: excerpt(JSON.stringify(args), 22000), start: a, end: state === 'unknown' ? null : b, resultSeq, status: state, error: state === 'error' ? { code: item.exitCode != null ? 'EXIT_' + item.exitCode : 'TOOL_ERROR', message: short(item.error || result, 180) } : null, result: excerpt(result, 18000), durationMs: Number.isFinite(item.durationMs) && item.durationMs >= 0 ? item.durationMs : precise ? b - a : null, timingSource: step.timingSource, source: cls.source };
       if (item.evidenceSource === 'local-rollout' && item.type === 'collabAgentToolCall') call.nativeName = 'collaboration.' + item.tool;
       step.calls.push(call); step.errors = state === 'error' ? 1 : 0; output.errors += step.errors;
       let outcome = state === 'error' ? '操作未成功' + (item.exitCode != null ? '，退出码 ' + item.exitCode : '') + '。' : state === 'unknown' ? '尚未记录完成结果。' : item.type === 'fileChange' ? 'Codex 记录文件改动已完成。' : item.type === 'commandExecution' ? '命令退出码 0' + (String(result || '').trim() ? '，已返回输出。' : '，没有文字输出。') : '已收到工具返回。';
       if (state === 'returned' && /\b(?:passed|PASS|self-test.*ok|tests?\s+ok)\b/i.test(result || '')) outcome += ' 输出包含检查通过标记。';
       if (cls.reads?.length && state === 'returned') outcome += ' 读取目标来自命令参数；未逐条证明每个脚本分支执行。';
       callFacts[itemSeq] = { seq: itemSeq, title: cls.title, outcome, detail: '来源：' + cls.evidence + (precise ? '；起止：本地 rollout 对应 item.id' : '；轮内起止未记录，仅保留动作顺序'), tone: state === 'error' ? 'bad' : state === 'unknown' ? 'unknown' : 'normal', target, preview: null, resultSeq, evidence: cls, source: item.evidenceSource || 'official-api', ...(item.type === 'fileChange' ? { diffChanges: item.changes.map(c => ({ path: c.path, kind: c.kind, diff: excerpt(c.diff, 40000) })) } : {}) };
-      if (item.type === 'collabAgentToolCall' && item.tool === 'spawn_agent') markers.push({ type: 'subagent/invocation', seq: itemSeq, step: step.number, time: a, taskName: item.taskName, taskPath: item.taskPath, source: item.evidenceSource || 'official-api', childHistoryAvailable: false });
+      if (item.type === 'collabAgentToolCall') {
+        const original = local?.collaboration.find(event => event.id === item.id || event.callId === item.id);
+        const tool = item.tool === 'spawnAgent' ? 'spawn_agent' : item.tool;
+        const event = { ...original, id: item.id, tool, taskName: item.taskName || original?.taskName || item.receiverThreadIds?.[0] || item.tool,
+          taskPath: item.taskPath || original?.taskPath, turnId: turn.id, turn: output.number, step: step.number, seq: itemSeq, time: a,
+          start: precise ? a : null, end: precise ? b : null, source: item.evidenceSource || 'official-api', receiverThreadIds: item.receiverThreadIds || [], childHistoryAvailable: false };
+        collaborationEvents.push(event);
+        if (tool === 'spawn_agent') markers.push({ type: 'subagent/invocation', seq: itemSeq, step: step.number, time: a, taskName: event.taskName, taskPath: event.taskPath, source: event.source, childHistoryAvailable: false });
+      }
       for (const read of cls.reads || []) {
         const path = absolute(read.path, item.cwd || thread.cwd);
         const source = read.basis === 'official-command-action' ? 'official-api' : 'estimate';
@@ -250,6 +259,6 @@ export function adaptCodexThread(snapshot, options = {}) {
   const session = { id: thread.id, title: thread.name || 'Codex 当前对话', parentSession: thread.parentThreadId, source: { host: 'codex', name: snapshot.source, file: thread.path, session: thread.id }, firstSeq: 0, lastSeq: seq, eventCount: events.length, diagnostics: { replacementEventsExcluded: 0, unmatchedResults: 0, duplicateResults: 0, unresolvedCalls: turns.flatMap(t => t.steps).flatMap(s => s.calls).filter(c => c.resultSeq == null).length }, turns, communications: [], totals, overview: { rulesVersion: 1, episodes, retries: [], representatives: episodes.map(e => e.id) } };
   const evidence = { api: { source: 'official-api', name: snapshot.source }, local: local?.evidence ?? null, timingMatched, visibleEvents: events.length, context: { estimate: true, semantics: 'visible text retained in local history, not full model input', incomplete: true, knownCategories: current ? keys.filter(k => current[k] > 0) : [], unknown: ['unrecorded request serialization', 'image tokens', 'hidden reasoning', 'unrecorded system/tool definitions'] }, model: 'Configured model is current thread metadata; per-turn model comes only from local turn_context.' };
   return { schema: 1, generatedAt: snapshot.capturedAt, mainSession: thread.id, sessions: [session], host: 'codex', events,
-    context: { session: thread.id, cutoffSeq: seq, eventCount: events.length, source: { name: 'Codex official history + optional local rollout; independent visible-text estimate' }, requests, boundaries, retries: [], retryStarted: [], callFacts, fileOperations, supplementSources: [], current, route: { model: local?.contexts.at(-1)?.model || thread.model, provider: thread.modelProvider, reasoningEffort: local?.contexts.at(-1)?.reasoningEffort || thread.reasoningEffort }, skillEvents: [...skillEvents, ...(local?.skills || [])], collaborationEvents: local?.collaboration || [], compactions: local?.compactions || [], declarations: local?.declarations || [], usage: local?.usage || [] },
+    context: { session: thread.id, cutoffSeq: seq, eventCount: events.length, source: { name: 'Codex official history + optional local rollout; independent visible-text estimate' }, requests, boundaries, retries: [], retryStarted: [], callFacts, fileOperations, supplementSources: [], current, route: { model: local?.contexts.at(-1)?.model || thread.model, provider: thread.modelProvider, reasoningEffort: local?.contexts.at(-1)?.reasoningEffort || thread.reasoningEffort }, skillEvents: [...skillEvents, ...(local?.skills || [])], collaborationEvents, compactions: local?.compactions || [], declarations: local?.declarations || [], usage: local?.usage || [] },
     officialStats: { session: thread.id, source: { name: 'Codex native usage telemetry (local rollout)' }, snapshot: { turns: [], steps: [], stepCount: 0 }, context: { pressure: { pressureTokens: local?.latestUsage?.input_tokens ?? null, contextWindow: local?.modelContextWindow ?? null }, breakdown: null, source: 'local-rollout token_count; last completed request input, not projected current occupancy' } }, evidence };
 }

@@ -28,20 +28,20 @@
     if($('tl-readout'))$('tl-readout').textContent=text;
   }
   function tlRoundReadout(t){
-    tlReadout(`第 ${t.number} 轮 · 执行 ${dur(endOf(t)-t.start)} · ${t.steps.length} 步 · ${t.calls} 次调用${t.errors?' · '+t.errors+' 次工具报错':''}`,()=>openOverviewRound(t.number,'duration'));
+    tlReadout(ui`第 ${t.number} 轮 · 执行 ${dur(endOf(t)-t.start)} · ${t.steps.length} 步 · ${t.calls} 次调用${t.errors?' · '+t.errors+ui(' 次工具报错'):''}`,()=>openOverviewRound(t.number,'duration'));
   }
   function tlStepReadout(t,s){
-    tlReadout(`第 ${t.number} 轮 / 第 ${s.number} 步 · ${preciseTime(s.end-s.start)} · ${s.calls.length} 次工具调用${s.errors?' · '+s.errors+' 次报错':''}`,()=>tlOpenStep(t,s));
+    tlReadout(ui`第 ${t.number} 轮 / 第 ${s.number} 步 · ${preciseTime(recordDuration(s))} · ${s.calls.length} 次工具调用${s.errors?' · '+s.errors+ui(' 次报错'):''}`,()=>tlOpenStep(t,s));
   }
   function tlOpenStep(t,s){
-    let html=`<p class="drawer-note">${clock(s.start)} → ${clock(s.end)} · 模型响应 ${preciseTime((s.assistantTime??s.end)-s.start)} · ${s.calls.length} 次工具调用</p>`;
-    html+=s.calls.map(callEntry).join('');if(s.reply)html+='<h3>助手原文</h3>'+block(s.reply);
-    openDrawer(`第 ${t.number} 轮 · 第 ${s.number} 步`,'本图中的实际步骤与工具记录',html);
+    let html=ui`<p class="drawer-note">${clock(s.start)} → ${clock(s.end)} · 模型响应 ${preciseTime((s.assistantTime??s.end)-s.start)} · ${s.calls.length} 次工具调用</p>`;
+    html+=s.calls.map(callEntry).join('');if(s.reply)html+=ui('<h3>助手原文</h3>')+block(s.reply);
+    openDrawer(ui`第 ${t.number} 轮 · 第 ${s.number} 步`,ui('本图中的实际步骤与工具记录'),html);
   }
   function tlOpenBatch(b){
     const recovered=b.status==='error'&&b.calls.every(c=>tlModel(session).matched.has(c.seq));
-    const html=`<div class="ov-evidence-summary"><div><span>调用数量</span><strong>${b.calls.length} 次</strong></div><div><span>实际工具区间</span><strong>${b.end===null?'待确认':preciseTime(b.end-b.start)}</strong></div></div><p class="drawer-note">${recovered?'这批原调用在同轮中随后均返回成功。':''}${view==='overview'?'枝条上的实心短条表示实际工具区间，名称按附近空位排布。失败截口表示本次调用失败；错误结果仍会返回调用方。':'节点宽度用于容纳工具名，节点下方的短线表示实际起止时间。'}</p>`+b.calls.map(callEntry).join('');
-    openDrawer(`${b.name}${b.calls.length>1?' ×'+b.calls.length:''}`,`第 ${b.turn.number} 轮 · 第 ${b.step.number} 步`,html);
+    const html=ui`<div class="ov-evidence-summary"><div><span>调用数量</span><strong>${b.calls.length} 次</strong></div><div><span>实际工具区间</span><strong>${b.end===null?ui('待确认'):preciseTime(b.end-b.start)}</strong></div></div><p class="drawer-note">${recovered?ui('这批原调用在同轮中随后均返回成功。'):''}${view==='overview'?ui('枝条上的实心短条表示实际工具区间，名称按附近空位排布。失败截口表示本次调用失败；错误结果仍会返回调用方。'):ui('节点宽度用于容纳工具名，节点下方的短线表示实际起止时间。')}</p>`+b.calls.map(callEntry).join('');
+    openDrawer(`${b.name}${b.calls.length>1?' ×'+b.calls.length:''}`,ui`第 ${b.turn.number} 轮 · 第 ${b.step.number} 步`,html);
   }
   function tlFocusRange(t,start,end){
     const viewport=$('graph-scroll'),p=overviewProjection,duration=Math.max(600,end-start),padding=duration*.09;

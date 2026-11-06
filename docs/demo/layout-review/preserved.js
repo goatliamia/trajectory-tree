@@ -18,7 +18,7 @@
   }
   function reviewOverviewSummary() {
     const events = session.overview.episodes, recovered = events.filter(e => e.complete).length;
-    return events.length + ' 处受阻 · ' + recovered + ' 处后来成功 · ' + (events.length - recovered) + ' 处结果待确认';
+    return events.length + ui(' 处受阻 · ') + recovered + ui(' 处后来成功 · ') + (events.length - recovered) + ui(' 处结果待确认');
   }
   function reviewTargetLabels(paths) {
     const leaves = paths.map(p => p.split(/[\\/]/).at(-1));
@@ -31,7 +31,7 @@
   function reviewBranchLabel(members) {
     if (members.length > 1) {
       const pending = members.filter(m => !m.e.complete).length;
-      return pending ? members.length + ' 处 · ' + pending + ' 待确认' : members.length + ' 处已恢复';
+      return pending ? members.length + ui(' 处 · ') + pending + ui(' 待确认') : members.length + ui(' 处已恢复');
     }
     const e = members[0].e;
     return String(e.turn).padStart(2, '0') + ' · ' + episodeMeaning(e).short;
@@ -60,9 +60,9 @@
     return { html, bottom };
   }
   function reviewBranchSentence(events) {
-    if (events.length === 1) { const e = events[0], meaning = episodeMeaning(e); return '第 ' + e.turn + ' 轮：' + meaning.why + meaning.outcome; }
+    if (events.length === 1) { const e = events[0], meaning = episodeMeaning(e); return ui('第 ') + e.turn + ui(' 轮：') + meaning.why + meaning.outcome; }
     const done = events.filter(e => e.complete).length;
-    return '这里有 ' + events.length + ' 处受阻；' + done + ' 处找到了后续成功。点击逐条查看。';
+    return ui('这里有 ') + events.length + ui(' 处受阻；') + done + ui(' 处找到了后续成功。点击逐条查看。');
   }
   function reviewRetries(mapTime, base, visible) {
     const groups = aggregateInScreen(reviewRetryEvents.map(r => ({
@@ -94,7 +94,7 @@
         if (reviewBranchesNow.some(p => p.dy > 0 && p.x > cx - width / 2 - 8 && p.x < cx + width / 2 + 8)) continue;
         html += brGroup('class="review-activity" data-review-turn-activity="' + l.turn.number + '"',
           '<rect class="br-hit" x="' + start + '" y="' + (base + 3) + '" width="' + (end - start) + '" height="25"/>' + brText(cx, base + 21, label, 'review-activity-label'),
-          '第 ' + l.turn.number + ' 轮 · ' + label);
+          ui('第 ') + l.turn.number + ui(' 轮 · ') + label);
       }
       return html;
     }
@@ -118,43 +118,43 @@
     reviewMarkBranchFiles(events);
     if (events.length === 1) {
       const e = events[0], m = episodeMeaning(e), t = brRound(e.turn);
-      let html = '<p class="review-explain">' + esc(m.why) + '</p><div class="review-step"><strong>后来怎么样了</strong>' + esc(m.outcome) + '</div>';
-      if (e.readConfirmed) html += '<div class="review-step"><strong>中间做了什么</strong>补看了 ' + (e.targets?.length || 0) + ' 个目标文件，然后重新执行了先前的修改。</div>';
-      html += '<p class="review-quiet">' + e.failedCount + ' 次操作没成功。' + (e.complete ? '之后原操作全部返回成功；这不等于整项任务已经完成。' : '其他做法是否完成了任务，需要结合后续记录判断。') + '</p>';
-      if (e.synthetic) html += '<p class="review-quiet">这是一条用于密集布局的合成记录。</p>';
+      let html = '<p class="review-explain">' + esc(m.why) + ui('</p><div class="review-step"><strong>后来怎么样了</strong>') + esc(m.outcome) + '</div>';
+      if (e.readConfirmed) html += ui('<div class="review-step"><strong>中间做了什么</strong>补看了 ') + (e.targets?.length || 0) + ui(' 个目标文件，然后重新执行了先前的修改。</div>');
+      html += '<p class="review-quiet">' + e.failedCount + ui(' 次操作没成功。') + (e.complete ? ui('之后原操作全部返回成功；这不等于整项任务已经完成。') : ui('其他做法是否完成了任务，需要结合后续记录判断。')) + '</p>';
+      if (e.synthetic) html += ui('<p class="review-quiet">这是一条用于密集布局的合成记录。</p>');
       else {
-        html += '<div class="drawer-actions"><button class="action-button primary" id="review-path-jump">查看本轮行动路径 ↗</button><button class="action-button" id="review-focus">在全景中放大</button></div><button class="back-link" id="review-evidence">查看原始记录</button>';
-        html += '<details class="ov-proof"><summary>这条判断依据什么</summary><p class="review-quiet">依据明确的错误结果，以及同一轮中工具与完整参数一致的后续成功。没有把相邻事件直接当作因果。</p><p class="review-targets">失败记录 ' + e.failureSeqs.join(', ') + '</p></details>';
+        html += ui('<div class="drawer-actions"><button class="action-button primary" id="review-path-jump">查看本轮行动路径 ↗</button><button class="action-button" id="review-focus">在全景中放大</button></div><button class="back-link" id="review-evidence">查看原始记录</button>');
+        html += ui('<details class="ov-proof"><summary>这条判断依据什么</summary><p class="review-quiet">依据明确的错误结果，以及同一轮中工具与完整参数一致的后续成功。没有把相邻事件直接当作因果。</p><p class="review-targets">失败记录 ') + e.failureSeqs.join(', ') + '</p></details>';
       }
-      openDrawer(m.short, '第 ' + e.turn + ' 轮 · ' + e.failedCount + ' 次操作', html);
+      openDrawer(m.short, ui('第 ') + e.turn + ui(' 轮 · ') + e.failedCount + ui(' 次操作'), html);
       if ($('review-evidence')) $('review-evidence').onclick = () => openOverviewEpisode(e.id);
       if ($('review-focus')) $('review-focus').onclick = () => { closeDrawer(); brFocusEpisode(e); };
       if ($('review-path-jump')) $('review-path-jump').onclick = () => reviewEnterPath(e.turn, e.steps?.[0]);
       return;
     }
-    let html = '<p class="review-explain">' + esc(reviewBranchSentence(events)) + '</p><button class="action-button primary" id="review-expand-group">放大这段，展开分叉</button><div class="review-list">';
-    html += events.map((e, i) => '<button data-review-item="' + i + '">第 ' + e.turn + ' 轮 · ' + esc(episodeMeaning(e).short) + '<small>' + esc(episodeMeaning(e).outcome) + '</small></button>').join('');
-    openDrawer(events.length + ' 处受阻', '位置很近，合在一条细分叉上；每条记录仍然保留。', html + '</div>');
+    let html = '<p class="review-explain">' + esc(reviewBranchSentence(events)) + ui('</p><button class="action-button primary" id="review-expand-group">放大这段，展开分叉</button><div class="review-list">');
+    html += events.map((e, i) => '<button data-review-item="' + i + ui('">第 ') + e.turn + ui(' 轮 · ') + esc(episodeMeaning(e).short) + '<small>' + esc(episodeMeaning(e).outcome) + '</small></button>').join('');
+    openDrawer(events.length + ui(' 处受阻'), ui('位置很近，合在一条细分叉上；每条记录仍然保留。'), html + '</div>');
     $('drawer-body').querySelectorAll('[data-review-item]').forEach(b => b.onclick = () => reviewOpenBranch([events[Number(b.dataset.reviewItem)]]));
     $('review-expand-group').onclick = () => reviewExpandEvents(events);
   }
   function reviewOpenRetry(group) {
     const m = retryMeaning(group.entries, group.entries.every(r => r.responded));
-    const html = '<p class="review-explain">' + esc(m.why) + '</p><div class="review-step"><strong>接下来</strong>' + esc(m.outcome) + '</div><p class="review-quiet">再次尝试前，系统共等了 ' + preciseTime(m.delayMs) + '。这是记录中的等待间隔，不代表整个问题造成的总延迟。</p><details class="ov-proof"><summary>查看记录</summary>' +
-      group.entries.map(r => '<div class="source-row"><span>第 ' + r.turn + ' 轮 / 第 ' + r.step + ' 步 · ' + clock(r.time) + ' · seq ' + r.seq + '</span>' + esc(r.failure?.code || '回应未成功') + ' · 等待 ' + preciseTime(r.delayMs || 0) + '</div>').join('') + '</details><div class="review-list">' +
-      group.turns.map(number => '<button data-review-retry-path="' + number + '">查看第 ' + number + ' 轮行动路径 ↗</button>').join('') + '</div>';
-    openDrawer('自动再试', group.entries.length + ' 次 · ' + group.turns.length + ' 轮', html);
+    const html = '<p class="review-explain">' + esc(m.why) + ui('</p><div class="review-step"><strong>接下来</strong>') + esc(m.outcome) + ui('</div><p class="review-quiet">再次尝试前，系统共等了 ') + preciseTime(m.delayMs) + ui('。这是记录中的等待间隔，不代表整个问题造成的总延迟。</p><details class="ov-proof"><summary>查看记录</summary>') +
+      group.entries.map(r => ui('<div class="source-row"><span>第 ') + r.turn + ui(' 轮 / 第 ') + r.step + ui(' 步 · ') + clock(r.time) + ' · seq ' + r.seq + '</span>' + esc(r.failure?.code || ui('回应未成功')) + ui(' · 等待 ') + preciseTime(r.delayMs || 0) + '</div>').join('') + '</details><div class="review-list">' +
+      group.turns.map(number => '<button data-review-retry-path="' + number + ui('">查看第 ') + number + ui(' 轮行动路径 ↗</button>')).join('') + '</div>';
+    openDrawer(ui('自动再试'), group.entries.length + ui(' 次 · ') + group.turns.length + ui(' 轮'), html);
     $('drawer-body').querySelectorAll('[data-review-retry-path]').forEach(b => b.onclick = () => reviewEnterPath(Number(b.dataset.reviewRetryPath)));
   }
   function reviewOpenStep(t, s) {
     const m = stepMeaning(s), index = t.steps.indexOf(s), next = t.steps[index + 1], prior = t.steps[index - 1];
-    let html = '<p class="review-explain">' + esc(m.short) + (m.count ? '，发起了 ' + m.count + ' 次操作。' : '。') + '</p>';
-    html += '<div class="review-step"><strong>这一步拿到了什么</strong>' + (prior?.calls?.length ? '前一步的 ' + prior.calls.filter(c => c.resultSeq !== null).length + ' 条操作结果已返回；不能据此断言模型采用了它们。' : '这一轮从你的输入继续。') + '</div>';
-    html += '<div class="review-step"><strong>结果</strong>' + esc(m.outcome) + '</div>';
+    let html = '<p class="review-explain">' + esc(m.short) + (m.count ? ui('，发起了 ') + m.count + ui(' 次操作。') : '。') + '</p>';
+    html += ui('<div class="review-step"><strong>这一步拿到了什么</strong>') + (prior?.calls?.length ? ui('前一步的 ') + prior.calls.filter(c => c.resultSeq !== null).length + ui(' 条操作结果已返回；不能据此断言模型采用了它们。') : ui('这一轮从你的输入继续。')) + '</div>';
+    html += ui('<div class="review-step"><strong>结果</strong>') + esc(m.outcome) + '</div>';
     if (m.targets.length) html += '<p class="review-targets">' + reviewTargetLabels(m.targets).map(esc).join('<br>') + '</p>';
-    if (next) html += '<div class="review-step"><strong>随后</strong>' + esc(stepMeaning(next).short) + '</div>';
-    html += '<p class="review-quiet">这一步经过 ' + preciseTime(s.end - s.start) + '。</p><div class="drawer-actions"><button class="action-button primary" id="review-step-path">查看本轮行动路径 ↗</button><button class="action-button" id="review-step-evidence">查看原始记录</button></div>';
-    openDrawer(m.short, '第 ' + t.number + ' 轮', html);
+    if (next) html += ui('<div class="review-step"><strong>随后</strong>') + esc(stepMeaning(next).short) + '</div>';
+    html += ui('<p class="review-quiet">这一步经过 ') + preciseTime(recordDuration(s)) + ui('。</p><div class="drawer-actions"><button class="action-button primary" id="review-step-path">查看本轮行动路径 ↗</button><button class="action-button" id="review-step-evidence">查看原始记录</button></div>');
+    openDrawer(m.short, ui('第 ') + t.number + ui(' 轮'), html);
     $('review-step-evidence').onclick = () => tlOpenStep(t, s);
     $('review-step-path').onclick = () => reviewEnterPath(t.number, s.number);
   }
@@ -162,17 +162,17 @@
     const episodes = session.overview.episodes.filter(e => e.turn === t.number);
     const kinds = [...new Set(t.steps.map(s => stepMeaning(s).short))];
     const done = episodes.filter(e => e.complete).length;
-    tlReadout('第 ' + t.number + ' 轮：' + kinds.slice(0, 3).join('、') + '。' +
-      (episodes.length ? episodes.length + ' 处受阻，其中 ' + done + ' 处找到了后续成功。' : '没有记录到明确的操作错误。') + '点击放大。');
+    tlReadout(ui('第 ') + t.number + ui(' 轮：') + kinds.slice(0, 3).join('、') + '。' +
+      (episodes.length ? episodes.length + ui(' 处受阻，其中 ') + done + ui(' 处找到了后续成功。') : ui('没有记录到明确的操作错误。')) + ui('点击放大。'));
   }
   function reviewOpenTurn(t) {
     const m = turnMeaning(t), episodes = session.overview.episodes.filter(e => e.turn === t.number);
     let html = '<p class="review-explain">' + esc(m.short) + '。</p>';
-    if (t.prompts[0]) html += '<div class="review-step"><strong>这一轮你说</strong>' + esc(shorten(t.prompts[0].text, 160)) + '</div>';
-    if (m.files.length) html += '<div class="review-step"><strong>修改操作已返回的文件</strong><div class="review-targets">' + reviewTargetLabels(m.files).map(esc).join('<br>') + '</div></div>';
-    html += '<div class="review-step"><strong>执行情况</strong>' + (episodes.length ? episodes.length + ' 处受阻，' + episodes.filter(e => e.complete).length + ' 处有对应操作的后续成功。' : '没有记录到明确的操作错误。') + '</div>';
-    html += '<p class="review-quiet">这是执行记录能确认的动作；完成任务、满足要求，还需要结合实际产物和检查结果判断。</p><button class="action-button primary" id="review-turn-path">查看本轮行动路径 ↗</button>';
-    openDrawer(m.short, '第 ' + t.number + ' 轮', html);
+    if (t.prompts[0]) html += ui('<div class="review-step"><strong>这一轮你说</strong>') + esc(shorten(t.prompts[0].text, 160)) + '</div>';
+    if (m.files.length) html += ui('<div class="review-step"><strong>修改操作已返回的文件</strong><div class="review-targets">') + reviewTargetLabels(m.files).map(esc).join('<br>') + '</div></div>';
+    html += ui('<div class="review-step"><strong>执行情况</strong>') + (episodes.length ? episodes.length + ui(' 处受阻，') + episodes.filter(e => e.complete).length + ui(' 处有对应操作的后续成功。') : ui('没有记录到明确的操作错误。')) + '</div>';
+    html += ui('<p class="review-quiet">这是执行记录能确认的动作；完成任务、满足要求，还需要结合实际产物和检查结果判断。</p><button class="action-button primary" id="review-turn-path">查看本轮行动路径 ↗</button>');
+    openDrawer(m.short, ui('第 ') + t.number + ui(' 轮'), html);
     $('review-turn-path').onclick = () => reviewEnterPath(t.number);
   }
   function reviewBind() {
@@ -189,10 +189,10 @@
       el => { const [n, k] = el.dataset.reviewStep.split(':').map(Number), t = brRound(n); reviewOpenStep(t, t.steps.find(s => s.number === k)); });
     bind('[data-review-turn-activity]', el => reviewRoundReadout(brRound(Number(el.dataset.reviewTurnActivity))),
       el => reviewOpenTurn(brRound(Number(el.dataset.reviewTurnActivity))));
-    $('review-fit').textContent = overviewScale === 1 ? '全览' : Math.round(overviewScale) + '×';
+    $('review-fit').textContent = overviewScale === 1 ? ui('全览') : Math.round(overviewScale) + '×';
     const allRetries = $('review-all-retries');
     if (allRetries) {
-      $('review-retry-total').textContent = '自动再试 ' + reviewRetryEvents.length + ' 次';
+      $('review-retry-total').textContent = ui('自动再试 ') + reviewRetryEvents.length + ui(' 次');
       allRetries.onclick = () => reviewOpenRetry({ entries: reviewRetryEvents, turns: [...new Set(reviewRetryEvents.map(r => r.turn))] });
     }
     reviewContextBind();
@@ -233,13 +233,13 @@
     const returnButton = $('review-return'); if (returnButton) returnButton.hidden = !path;
     $('review-overview-controls').hidden = false;
     $('review-in').disabled = path;
-    $('review-fit').textContent = path ? '全览' : overviewScale === 1 ? '全览' : Math.round(overviewScale) + '×';
-    $('review-out').title = path ? '缩小，返回刚才的总览位置' : '缩小';
+    $('review-fit').textContent = path ? ui('全览') : overviewScale === 1 ? ui('全览') : Math.round(overviewScale) + '×';
+    $('review-out').title = path ? ui('缩小，返回刚才的总览位置') : ui('缩小');
     $('review-stress').hidden = path;
     $('review-path').hidden = path;
-    if (path) $('review-state').textContent = '第 ' + turn().number + ' 轮 › 逐步行动 · 缩小返回';
-    else $('review-state').textContent = reviewStress ? '160 处合成受阻 · 仅测试密集布局' : reviewFocusedTurn && overviewScale > 1 ? '总览 › 第 ' + reviewFocusedTurn + ' 轮 · 继续放大看行动' : session.turns.length + ' 轮 · 放大逐层查看';
-    if ($('review-rounds')) $('review-rounds').textContent = overviewLayers.has('duration') ? '每轮耗时' : '定位轮次';
+    if (path) $('review-state').textContent = ui('第 ') + turn().number + ui(' 轮 › 逐步行动 · 缩小返回');
+    else $('review-state').textContent = reviewStress ? ui('160 处合成受阻 · 仅测试密集布局') : reviewFocusedTurn && overviewScale > 1 ? ui('总览 › 第 ') + reviewFocusedTurn + ui(' 轮 · 继续放大看行动') : session.turns.length + ui(' 轮 · 放大逐层查看');
+    if ($('review-rounds')) $('review-rounds').textContent = overviewLayers.has('duration') ? ui('每轮耗时') : ui('定位轮次');
   }
   const reviewSelectTurnBase = selectTurn;
   selectTurn = function(index) {
@@ -255,6 +255,6 @@
       return { ...reviewRealEpisodes[i % reviewRealEpisodes.length], id: 'synthetic-' + i, turn: t.number, firstError: time, synthetic: true };
     }) : reviewRealEpisodes;
     $('review-stress').setAttribute('aria-pressed', reviewStress);
-    $('review-state').textContent = reviewStress ? '160 处合成受阻 · 仅测试密集布局' : session.turns.length + ' 轮真实记录';
+    $('review-state').textContent = reviewStress ? ui('160 处合成受阻 · 仅测试密集布局') : session.turns.length + ui(' 轮真实记录');
     overviewScale = 1; $('graph-scroll').scrollLeft = 0; closeDrawer(); renderOverview();
   }

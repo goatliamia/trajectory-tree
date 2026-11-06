@@ -21,6 +21,7 @@ const hookFrames = [];
 function currentFrame() {
   return hookFrames[hookFrames.length - 1];
 }
+let captureLocaleEffect = false, localeEffect = null, refreshCount = 0;
 const ReactShim = {
   createElement(type, props, ...children) {
     const merged = Object.assign({}, props || {});
@@ -45,9 +46,9 @@ const ReactShim = {
     const index = frame === null ? 0 : frame.index++;
     const seeded = frame !== null && frame.seeds !== null && Object.prototype.hasOwnProperty.call(frame.seeds, index);
     const value = seeded ? frame.seeds[index] : typeof initial === "function" ? initial() : initial;
-    return [value, () => {}];
+    return [value, () => { if (captureLocaleEffect) refreshCount++; }];
   },
-  useEffect() {},
+  useEffect(effect) { if (captureLocaleEffect && String(effect).includes('MutationObserver')) localeEffect = effect; },
   useLayoutEffect() {},
   useMemo(factory) {
     return factory();
@@ -62,7 +63,7 @@ const ReactShim = {
 
 let moduleDef = null;
 const sandbox = {
-  window: { __ModuleLoader__: { load(definition) { moduleDef = definition; } } },
+  window: { document: { documentElement: { lang: 'zh' } }, __ModuleLoader__: { load(definition) { moduleDef = definition; } } },
   console,
   Date,
   Math,
@@ -95,7 +96,7 @@ const mod = moduleDef.factory((name) => {
 });
 check("client: 只依赖 react", required.length > 0 && required.every((name) => name === "react"), required);
 
-let Panel = null;
+let Panel = null, ContextPanel = null;
 const ctx = {
   commandUi: { register(command) { check("client: /trajectory is a direct UI action", command.name === "trajectory" && command.ui.kind === "action"); } },
   uiConversation: { views: { register() {} }, binding() { return { target() { return { getSnapshot() { return null; }, subscribe() { return () => {}; } }; } }; } },
@@ -103,6 +104,7 @@ const ctx = {
     inject(name, register) { register(); },
     register(definition, component) {
       if (definition && definition.id === "analysis") Panel = component;
+      if (definition && definition.name === "main" && definition.key === "context-manager") ContextPanel = component;
       return () => {};
     },
   },
@@ -234,6 +236,34 @@ check("render: 失败态仍列投影里的事实", errorText.includes("调用失
 const emptyTree = render(Panel, { sessionId: "session-fixture", openView() {}, useTrajectory: () => null }, { 0: { status: "ready", data: Object.assign({}, digest, { turns: 0, toolCalls: 0, errors: 0, incidentCount: 0, incidents: [], turnStats: [], toolStats: [], eventCount: 0 }), error: null, at: Date.now() } });
 const emptyText = textOf(emptyTree).join(" ");
 check("render: 空会话不画假图表", emptyText.includes("这段会话还没有开始任何 turn") && emptyText.includes("没有发现可归因的 incident"), emptyText.slice(0, 200));
+
+// Exercise the locale effect and rerender with the same recorded data.
+let mutationCallback, storageCallback, disconnected = false;
+sandbox.window.MutationObserver = class { constructor(callback) { mutationCallback = callback; } observe() {} disconnect() { disconnected = true; } };
+sandbox.window.addEventListener = (name, callback) => { if (name === 'storage') storageCallback = callback; };
+sandbox.window.removeEventListener = () => {};
+captureLocaleEffect = true;
+render(Panel, props, { 0: readyState });
+const cleanupLocale = localeEffect();
+sandbox.window.document.documentElement.lang = 'en';
+mutationCallback();
+const englishText = textOf(render(Panel, props, { 0: readyState })).join(' ');
+check('locale: lang change requests render and translates categories without altering records', refreshCount === 1 && englishText.includes('Analysis') && englishText.includes('Files') && englishText.includes('调用失败') && englishText.includes('abcdef123456'));
+const rangeText = textOf(render(ContextPanel, {}, { 1: '30d', 2: { status: 'loading' } })).join(' ');
+check('locale: context ranges follow language on render', rangeText.includes('Last 30 days') && rangeText.includes('Today'));
+sandbox.window.localStorage = { getItem: () => 'zh' };
+storageCallback({ key: 'trajectory-language' });
+const preferredText = textOf(render(Panel, props, { 0: readyState })).join(' ');
+cleanupLocale();
+check('locale: stored preference wins and storage change requests render', refreshCount === 2 && preferredText.includes('分析') && preferredText.includes('文件') && disconnected);
+sandbox.window.localStorage = { getItem: () => null };
+sandbox.window.document.documentElement.lang = 'fr';
+sandbox.window.navigator = { languages: ['fr', 'zh-CN', 'en'] };
+const fallbackText = textOf(render(Panel, props, { 0: readyState })).join(' ');
+sandbox.window.navigator.languages = ['fr'];
+const defaultText = textOf(render(Panel, props, { 0: readyState })).join(' ');
+check('locale: first supported navigator language or English fallback', fallbackText.includes('分析') && defaultText.includes('Analysis'));
+captureLocaleEffect = false;
 
 for (const line of results) console.log(line);
 console.log(failed === 0 ? "\nALL PASS (" + results.length + " checks)" : "\n" + failed + " FAILED");

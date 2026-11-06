@@ -34,13 +34,13 @@
       const switches = caption.querySelector('.br-layers');
       if (switches) {
         const row = document.createElement('div'); row.className = 'geist-observe-row';
-        const label = document.createElement('span'); label.className = 'geist-section-label'; label.textContent = '观察';
+        const label = document.createElement('span'); label.className = 'geist-section-label'; label.textContent = ui('观察');
         row.append(label, switches); caption.prepend(row);
       }
       legend = document.createElement('div'); legend.id = 'geist-legend'; legend.className = 'geist-legend';
       caption.append(legend);
       const toggle = document.createElement('button'); toggle.id = 'geist-legend-toggle'; toggle.className = 'geist-text-action quiet';
-      toggle.textContent = '符号说明'; toggle.setAttribute('aria-controls', legend.id);
+      toggle.textContent = ui('符号说明'); toggle.setAttribute('aria-controls', legend.id);
       toggle.onclick = () => { geistLegendOpen = !geistLegendOpen; geistSyncLegend(); };
       caption.querySelector('.geist-observe-row')?.append(toggle);
       // Controls belong to the canvas; the inspector follows without another card.
@@ -56,7 +56,7 @@
     geistSyncLegend();
   }
   const geistOverviewBase = renderOverview;
-  renderOverview = function(...args) { window.__geistView = 'overview'; geistSyncMeasureFont(); const value = geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); return value; };
+  renderOverview = function(...args) { geistSyncMeasureFont(); const value = geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); return value; };
   // 目标入口放在观察行:caption 每次重排都会重建子节点,所以放在重排之后补。
   function geistGoalChip() {
     const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
@@ -64,7 +64,7 @@
     const caption = $('graph-caption');
     const layers = caption && caption.querySelector('.br-layers');
     if (layers && !layers.querySelector('[data-br-layer="goal"]')) {
-      layers.insertAdjacentHTML('beforeend', '<label class="br-layer"><input type="checkbox" data-br-layer="goal"' + (overviewLayers.has('goal') ? ' checked' : '') + '>目标</label>');
+      layers.insertAdjacentHTML('beforeend', '<label class="br-layer"><input type="checkbox" data-br-layer="goal"' + (overviewLayers.has('goal') ? ' checked' : '') + ui('>目标</label>'));
       layers.querySelector('[data-br-layer="goal"]').onchange = event => {
         event.target.checked ? overviewLayers.add('goal') : overviewLayers.delete('goal');
         renderOverview();
@@ -72,7 +72,7 @@
     }
   }
   const geistActionBase = renderActionPath;
-  renderActionPath = function(...args) { window.__geistView = 'path'; geistSyncMeasureFont(); const value = geistActionBase(...args); geistArrangeCaption(); return value; };
+  renderActionPath = function(...args) { geistSyncMeasureFont(); const value = geistActionBase(...args); geistArrangeCaption(); return value; };
   // Re-measure labels once the self-hosted font is ready; preserve the viewport.
   document.fonts.ready.then(() => {
     geistMeasureWidths.clear();

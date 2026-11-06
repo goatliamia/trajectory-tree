@@ -85,3 +85,7 @@ node analyzers/codex-adapter-test.mjs
 Pi 的 assistant cycle、Codex 的可见动作、响应计量分别统计。文本构成和定义体积是估算；没有记录的请求内容、工具清单、隐藏内容和时间保持未知。工具体积、近期低频不能单独作为删减能力或改写工具语义的依据。
 
 更多来源、性能与验证说明见 [跨宿主适配](../../docs/portable-analysis.md)；模型使用入口见 [短 skill](../../.agents/skills/trace-analysis/SKILL.md)。
+
+## Language and compact inspection
+
+Standalone views and reports support `--lang auto|en|zh-CN`. Auto follows the host/browser language; the in-page selector can override or restore it. Source evidence is preserved verbatim. `trajectory_inspect` summary queries accept `samples: false` to omit short excerpts while retaining counters and read pointers; cursor continuation keeps this preference. See [host compatibility](../../docs/host-compatibility.md).

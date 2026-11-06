@@ -5,7 +5,8 @@ import {renderTracePage} from './lib/index.js';
 
 const read=path=>readFileSync(new URL(path,import.meta.url),'utf8');
 const html=renderTracePage({traceLoad:{sessionId:'presentation-check'}});
-assert.match(html,/<body class="geist-review trace-pending context-trend-study">/);
+assert.match(html,/<body class="geist-review trace-pending">/);
+assert.ok(!html.includes('geist-review trace-pending context-trend-study'), 'Native viewport does not inherit fixed-height study layout');
 assert.equal((html.match(/let studyShowTotal = false/g)||[]).length,1,'Native DSH receives the shared overlay once, default off');
 assert.ok(html.includes('study-source-actions')&&html.includes('study-total-toggle'));
 assert.ok(html.includes('compactTrendPolyline'));

@@ -15,9 +15,9 @@
     figure.onfocusin=event=>{const mark=find(event);if(mark)readout.textContent=preview(mark);};
     figure.onclick=event=>{const mark=find(event);if(mark)select(mark);};
     figure.onkeydown=event=>{if(!['Enter',' '].includes(event.key)||event.target.tagName==='BUTTON')return;const mark=find(event);if(mark){event.preventDefault();select(mark);}};
-    const panel=document.createElement('details');panel.className='report-record';panel.hidden=true;panel.innerHTML='<summary>所选记录 · 数据与来源</summary><p>这里保存导出时的记录与取证参数；重新读取原文时需核对日志版本。</p><pre></pre>';figure.append(panel);
+    const panel=document.createElement('details');panel.className='report-record';panel.hidden=true;panel.innerHTML=ui('<summary>所选记录 · 数据与来源</summary><p>这里保存导出时的记录与取证参数；重新读取原文时需核对日志版本。</p><pre></pre>');figure.append(panel);
     if(spec.type==='assembly')mountAssembly(figure.querySelector('[data-context-assembly]'),data,spec,{onSelect(selection){
-      readout.textContent=assemblyFrameLabel(selection.frame)+' · 选中 '+selection.blocks.length+' 个片段';panel.hidden=false;
+      readout.textContent=assemblyFrameLabel(selection.frame)+ui(' · 选中 ')+selection.blocks.length+ui(' 个片段');panel.hidden=false;
       panel.querySelector('pre').textContent=JSON.stringify({source:data.source,position:selection.frame.id,blocks:selection.blocks,evidence:selection.evidence.map(ref=>ref.read||{tool:'trajectory_read',args:{session:ref.session,snapshot:data.source.snapshot,seq:ref.seq,format:'linked'}})},null,2);
     }});
     const rerender=()=>{const template=document.createElement('template');template.innerHTML=renderFigure(spec,datasets);const replacement=template.content.firstElementChild;figure.replaceWith(replacement);bind(replacement);};
@@ -25,5 +25,9 @@
     for(const button of figure.querySelectorAll('[data-report-layer]'))button.onclick=()=>{const keys=new Set(spec.layers||['total']);const key=button.dataset.reportLayer;keys.has(key)?keys.delete(key):keys.add(key);spec.layers=[...keys];rerender();};
     for(const button of figure.querySelectorAll('[data-report-mode]'))button.onclick=()=>{spec.mode=button.dataset.reportMode;rerender();};
   };
-  document.querySelectorAll('[data-figure]').forEach(bind);
+  document.querySelectorAll('[data-figure]').forEach(figure => {
+    const spec = specs.get(figure.dataset.figure), template = document.createElement('template');
+    template.innerHTML = renderFigure(spec, datasets);
+    const replacement = template.content.firstElementChild; figure.replaceWith(replacement); bind(replacement);
+  });
 })();

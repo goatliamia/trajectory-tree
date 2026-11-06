@@ -39,7 +39,7 @@ branch = branch.replace("const mode=detail?","const mode=overviewScale>1?'放大
 branch = branch.replace("'全览 · 事件折叠'", 'reviewOverviewSummary()');
 branch = branch.replace(/<span class="br-key-item">(?:(?!<\/span>)[\s\S])*?<\/svg>自动再试<\/span>/, '<button class="review-retry-summary" id="review-all-retries"><i></i><span id="review-retry-total">自动再试</span></button>');
 branch = branch.replace('所有轮次按执行时间排列。点击错误枝条，展开失败、补充动作与再次尝试。', '细分叉标出受阻与后续结果；放大主线可以看到当时在做什么。');
-const pure = ['branch-layout.mjs', 'meaning.mjs', 'context-model.mjs', 'navigation-model.mjs', 'step-insight.mjs', 'diff-model.mjs', 'file-model.mjs'].map(f => read(demo, f).replaceAll('export function ', 'function ').replaceAll('export const ', 'const ')).join('\n');
+const pure = ['branch-layout.mjs', 'meaning.mjs', 'context-model.mjs', 'navigation-model.mjs', 'step-insight.mjs', 'diff-model.mjs', 'file-model.mjs'].map(f => read(demo, f).replace(/^import \{ ui \} from [^\n]+\n/gm, '').replaceAll('export function ', 'function ').replaceAll('export const ', 'const ')).join('\n');
 let graph = read(source, 'graph.js');
 const actionStart = graph.indexOf('  function renderActionPath() {');
 const actionEnd = graph.indexOf('  function renderPath(){', actionStart);

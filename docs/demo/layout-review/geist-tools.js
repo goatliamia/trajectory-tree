@@ -12,7 +12,7 @@
   reviewActionStepLabel = function(step) {
     if (!step.calls.some(call => reviewContextData.callFacts?.[call.seq]?.operation)) return geistOperationStepLabelBase(step);
     const names = [...new Set(step.calls.map(call => call.name))];
-    return names.slice(0, 2).join(' / ') + (names.length > 2 ? ' 等' : '');
+    return names.slice(0, 2).join(' / ') + (names.length > 2 ? ui(' 等') : '');
   };
   function geistOutcomeText(members) {
     if (members.length === 1) {
@@ -26,13 +26,13 @@
       const calls = members.flatMap(m => m.result.calls), counts = new Map();
       for (const call of calls) counts.set(call.name, (counts.get(call.name) || 0) + 1);
       const labels = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name, n]) => n === 1 ? compactToolLabel(calls.find(c => c.name === name)) : name + ' ×' + n);
-      if (errors) labels.push(errors + (recovered === errors ? ' 处已恢复' : ' 处受阻'));
-      if (members.some(m => m.result.kind === 'pending')) labels.push('有待返回');
+      if (errors) labels.push(errors + (recovered === errors ? ui(' 处已恢复') : ui(' 处受阻')));
+      if (members.some(m => m.result.kind === 'pending')) labels.push(ui('有待返回'));
       return labels.join(' · ');
     }
-    const names = { read: '取回内容', change: '文件改动', check: '检查输出', query: '查询结果' };
+    const names = { read: ui('取回内容'), change: ui('文件改动'), check: ui('检查输出'), query: ui('查询结果') };
     const kinds = ['check', 'change', 'read', 'query'].filter(kind => members.some(m => m.result.kind === kind)).slice(0, errors ? 1 : 2);
-    return kinds.map(kind => names[kind]).join(' · ') + (errors ? (kinds.length ? ' · ' : '') + errors + (recovered === errors ? ' 处已恢复' : ' 处受阻') : '');
+    return kinds.map(kind => names[kind]).join(' · ') + (errors ? (kinds.length ? ' · ' : '') + errors + (recovered === errors ? ui(' 处已恢复') : ui(' 处受阻')) : '');
   }
   function geistOutcomeGlyph(result, x, y) {
     if (result.kind === 'incident') {
@@ -84,19 +84,18 @@
       bottom = Math.max(bottom, y + 25);
       if (!visible(p.left, p.right)) return;
       const body = geistResultBranchBody(p, base);
-      html += brGroup('class="br-incident geist-result-branch" data-tool-result="' + index + '"', body, p.label + '；点击查看执行结果及关联对象');
+      html += brGroup('class="br-incident geist-result-branch" data-tool-result="' + index + '"', body, p.label + ui('；点击查看执行结果及关联对象'));
     });
     return { html, bottom };
   }
   reviewBranches = function(mapTime, base, visible, left, right, width) {
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
     const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    // 行动路径不画结果支线:由渲染入口设置的视图标记决定,不动概览。
-    const result = geistDrawResultBranches(window.__geistView === 'path' ? [] : items, base, 20, width - 20, visible);
+    const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
     reviewBranchesNow = geistOutcomeBranches;
     return result;
   };
-  reviewOverviewSummary = () => session.turns.length + ' 轮执行记录';
+  reviewOverviewSummary = () => session.turns.length + ui(' 轮执行记录');
   function geistOutcomeFocus() {
     const relevant = new Set(reviewFileSelection ? reviewFileOperations.filter(o => fileIdentity(o.path) === reviewFileSelection).map(o => o.seq) : []);
     $('graph').querySelectorAll('[data-tool-result]').forEach(el => {
@@ -117,18 +116,18 @@
       el.classList.toggle('branch-related', group.members.some(m => m.file.operations.some(op => seqs.has(op.seq))));
     });
     if (result.kind === 'incident') { reviewOpenBranch([result.incident]); return; }
-    const names = { read: '取回文件内容', change: '文件修改', query: '查询结果', check: '检查输出', error: '操作受阻', command: '命令输出', process: '后台任务', web: '网页返回', coordination: '协作返回', pending: '等待工具返回', other: '工具返回' };
+    const names = { read: ui('取回文件内容'), change: ui('文件修改'), query: ui('查询结果'), check: ui('检查输出'), error: ui('操作受阻'), command: ui('命令输出'), process: ui('后台任务'), web: ui('网页返回'), coordination: ui('协作返回'), pending: ui('等待工具返回'), other: ui('工具返回') };
     const paths = [...new Set(result.calls.flatMap(c => c.files?.length ? c.files.map(file => file.path) : [c.file]).filter(Boolean))];
-    let html = result.calls.map(call => '<div class="geist-outcome-record"><strong>' + esc(call.fact?.title || call.name) + '</strong><p>' + esc(call.fact?.outcome || '工具结果已记录') + '</p>' +
-      (call.fact?.preview ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? '查看原计划' : '查看改动片段') + ' ↗</button>' : '') +
-      (result.recorded ? '<p class="review-quiet">' + (call.inner ? '内部工具 · ' : '') + 'seq ' + call.seq + (call.rootSeq != null ? ' · 外层调用 #' + call.rootSeq : '') + '</p>' + callEntry(call) : '') + '</div>').join('');
-    if (paths.length) html += '<div class="geist-outcome-files">' + paths.map((path, i) => '<button class="geist-text-action" data-result-file="' + i + '">' + esc(path.split(/[\\/]/).at(-1)) + ' · 全程记录 ↗</button>').join('') + '</div>';
-    const embedded = window.parent !== window;
-    html += '<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button>' +
-      (embedded ? '<button class="action-button" id="geist-result-chat">跳到第 ' + result.turn + ' 轮对话 ↗</button>' : '') + '</div>';
-    if (result.kind === 'check') html += '<p class="review-quiet">按检查命令实际输出展示，不代表整个任务已经完成。</p>';
-    if (result.calls.some(call => call.name === 'grep')) html += '<p class="review-quiet">搜索记录关联实际返回的匹配片段，不表示读入了整份文件。</p>';
-    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], '第 ' + result.turn + ' 轮 · 第 ' + result.step + ' 步 · ' + result.calls.length + ' 项操作', html);
+    let html = result.calls.map(call => '<div class="geist-outcome-record"><strong>' + esc(call.fact?.title || call.name) + '</strong><p>' + esc(call.fact?.outcome || ui('工具结果已记录')) + '</p>' +
+      (call.fact?.preview ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : ui('查看改动片段')) + ' ↗</button>' : '') +
+      (result.recorded ? '<p class="review-quiet">' + (call.inner ? ui('内部工具 · ') : '') + 'seq ' + call.seq + (call.rootSeq != null ? ui(' · 外层调用 #') + call.rootSeq : '') + '</p>' + callEntry(call) : '') + '</div>').join('');
+    if (paths.length) html += '<div class="geist-outcome-files">' + paths.map((path, i) => '<button class="geist-text-action" data-result-file="' + i + '">' + esc(path.split(/[\\/]/).at(-1)) + ui(' · 全程记录 ↗</button>')).join('') + '</div>';
+    const embedded = window.parent !== window && data.traceCapabilities?.chatJump === true;
+    html += ui('<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button>') +
+      (embedded ? ui('<button class="action-button" id="geist-result-chat">跳到第 ') + result.turn + ui(' 轮对话 ↗</button>') : '') + '</div>';
+    if (result.kind === 'check') html += ui('<p class="review-quiet">按检查命令实际输出展示，不代表整个任务已经完成。</p>');
+    if (result.calls.some(call => call.name === 'grep')) html += ui('<p class="review-quiet">搜索记录关联实际返回的匹配片段，不表示读入了整份文件。</p>');
+    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], ui`第 ${result.turn} 轮 · 第 ${result.step} 步` + ' · ' + result.calls.length + ui(' 项操作'), html);
     $('geist-result-step').onclick = () => { closeDrawer(); reviewEnterPath(result.turn, result.step); };
     $('geist-result-context').onclick = () => reviewOpenContext(result.turn);
     // 跳到对话由宿主视图完成(切到对话并滚到该轮),页面只把轮次交出去。
@@ -144,7 +143,7 @@
   }
   function geistOpenResultGroup(members) {
     if (members.length === 1) { geistOpenResult(members[0].result); return; }
-    openDrawer('这段执行的工具结果', members.length + ' 项结果 · 同一主干上的不同返回', '<div class="review-list">' + members.map((m, i) => '<button data-result-item="' + i + '">' + esc(m.result.kind === 'incident' ? episodeMeaning(m.result.incident).short : toolResultLabel(m.result)) + '<small>第 ' + m.result.turn + ' 轮 · 第 ' + m.result.step + ' 步</small></button>').join('') + '</div>');
+    openDrawer(ui('这段执行的工具结果'), members.length + ui(' 项结果 · 同一主干上的不同返回'), '<div class="review-list">' + members.map((m, i) => '<button data-result-item="' + i + '">' + esc(m.result.kind === 'incident' ? episodeMeaning(m.result.incident).short : toolResultLabel(m.result)) + ui('<small>第 ') + m.result.turn + ui(' 轮 · 第 ') + m.result.step + ui(' 步</small></button>')).join('') + '</div>');
     $('drawer-body').querySelectorAll('[data-result-item]').forEach(el => el.onclick = () => geistOpenResult(members[Number(el.dataset.resultItem)].result));
   }
   function geistBindResults() {
@@ -171,7 +170,7 @@
     }
     const a = mapTime(step.start), b = mapTime(step.end);
     if (interactive) body += '<rect x="' + a + '" y="' + (base + 1) + '" width="' + Math.max(1, b - a) + '" height="6" fill="transparent"/>';
-    return brGroup('class="geist-tool-timing"' + (interactive ? ' data-tool-timing="' + t.number + ':' + step.number + '"' : ' style="pointer-events:none" tabindex="-1"'), body, '工具执行覆盖 ' + preciseTime(timing.coverage) + '；各调用累计 ' + preciseTime(timing.cumulative) + (timing.partial ? '；图中只展示已列出的调用区间' : ''));
+    return brGroup('class="geist-tool-timing"' + (interactive ? ' data-tool-timing="' + t.number + ':' + step.number + '"' : ' style="pointer-events:none" tabindex="-1"'), body, ui('工具执行覆盖 ') + preciseTime(timing.coverage) + ui('；各调用累计 ') + preciseTime(timing.cumulative) + (timing.partial ? ui('；图中只展示已列出的调用区间') : ''));
   }
   function geistOpenTiming(number, stepNumber) {
     const t = brRound(number), step = t.steps.find(s => s.number === stepNumber);
@@ -181,14 +180,14 @@
     const ttft = Number.isFinite(stats.ttft) ? stats.ttft : null;
     const decode = Number.isFinite(stats.decode) ? stats.decode : null;
     const model = ttft !== null && decode !== null ? Math.min(total, ttft + decode) : null;
-    const rest = model !== null && tool !== null ? Math.max(0, total - model - tool) : tool !== null ? Math.max(0, total - tool) : null;
-    const rows = [['首字', ttft, 'wait'], ['解码', decode, 'model'], ['工具', tool, 'tool'], ['其它', rest, 'rest']]
+    const rest = model !== null && tool !== null ? Math.max(0, total - model - tool) : null;
+    const rows = [[ui('首字'), ttft, 'wait'], [ui('解码'), decode, 'model'], [ui('工具'), tool, 'tool'], [ui('其它'), rest, 'rest']]
       .filter(([, value]) => value !== null && value >= 0)
       .map(([name, value, kind]) => '<div class="geist-timing-row ' + kind + '"><dt><i></i>' + name + '</dt><dd>' + preciseTime(value) + '</dd></div>');
-    let html = '<dl class="geist-timing-facts"><div class="geist-timing-row total"><dt>这一步</dt><dd>' + preciseTime(total) + '</dd></div>' + rows.join('') + '</dl>';
-    html += '<p class="review-quiet">覆盖时间把重叠执行的区间只算一次' + (timing.cumulative != null && timing.coverage != null && Math.abs(timing.cumulative - timing.coverage) > 1 ? '；累计时间把每次调用分别相加,重叠部分会重复计入' : '；本步调用之间没有重叠,累计与覆盖相同') + '。全部直接读取官方统计结果。</p>';
-    html += '<div class="drawer-actions"><button class="action-button" id="geist-timing-path">查看这一步 ↗</button></div>';
-    openDrawer('工具执行时间', '第 ' + number + ' 轮 · ' + stepNumber + ' 步', html);
+    let html = ui('<dl class="geist-timing-facts"><div class="geist-timing-row total"><dt>这一步</dt><dd>') + preciseTime(total) + '</dd></div>' + rows.join('') + '</dl>';
+    html += ui('<p class="review-quiet">覆盖时间把重叠执行的区间只算一次') + (timing.cumulative != null && timing.coverage != null && Math.abs(timing.cumulative - timing.coverage) > 1 ? ui('；累计时间把每次调用分别相加,重叠部分会重复计入') : ui('；本步调用之间没有重叠,累计与覆盖相同')) + ui('。全部直接读取官方统计结果。</p>');
+    html += ui('<div class="drawer-actions"><button class="action-button" id="geist-timing-path">查看这一步 ↗</button></div>');
+    openDrawer(ui('工具执行时间'), ui('第 ') + number + ui(' 轮 · ') + stepNumber + ui(' 步'), html);
     $('geist-timing-path').onclick = () => { closeDrawer(); reviewEnterPath(number, stepNumber); };
   }
   function geistBindTiming() {
@@ -209,21 +208,15 @@
   };
   const geistActionResultsBase = renderActionPath;
   renderActionPath = function(...args) {
+    // 概览的结果布局不能留给行动路径充当障碍物;步骤结果由节点与详情承载。
+    geistOutcomeBranches = [];
+    reviewBranchesNow = [];
     const value = geistActionResultsBase(...args), frame = reviewActionFileFrame;
     if (!frame) return value;
     const { t, x, base } = frame, halfGap = t.steps.length > 1 ? (x(1) - x(0)) / 2 : 56;
-    if (overviewLayers.has('failures')) {
-      const records = geistOutcomes.filter(r => r.turn === t.number);
-      const indices = new Map(t.steps.map((s, i) => [s.number, i]));
-      const items = records.map(result => ({ id: result.id, at: result.time, x: x(indices.get(result.step) ?? 0) + Math.min(36, halfGap - 18), result }))
-        // 步骤已原子化,普通工具结果的支线与柱、图标、下方面板重复;只保留子代理这类协作支线。
-        .filter(item => /subagent|子代理|协作/i.test(geistOutcomeText([item])));
+    {
       const contextLabels = [...$('graph').querySelectorAll('.review-context-overflow-label')];
-      const obstacles = contextLabels.map(el => { const b = el.getBBox(); return { left: b.x - 1, right: b.x + b.width + 1, top: b.y - base - 1, bottom: b.y + b.height - base + 1 }; });
-      const result = geistDrawResultBranches(items, base, frame.gutter, x(t.steps.length - 1) + halfGap, () => true, { slots: [-42, -64, -86, -104], aggregateSpan: 25, obstacles });
-      $('graph').insertAdjacentHTML('beforeend', '<g class="geist-action-results">' + result.html + '</g>'); geistBindResults();
-      // Numeric annotations keep their value and size; shift beside their own bar
-      // when a result label needs the same space, rather than dropping the number.
+      // 数值仍避让独立的子代理线路,不依赖概览的工具结果开关。
       const occupiedNumbers = [];
       const childLines = typeof geistPlanAgentForks === 'function' ? geistPlanAgentForks() : [];
       for (const el of contextLabels) {
@@ -233,10 +226,9 @@
         for (const [nx, ny, align] of choices) {
           el.setAttribute('x', nx); el.setAttribute('y', ny); el.setAttribute('text-anchor', align);
           const b = el.getBBox();
-          const hitsBranch = geistOutcomeBranches.some(p => b.x < p.right + 3 && b.x + b.width > p.left - 3 && b.y < base + p.bottom + 3 && b.y + b.height > base + p.top - 3);
           const hitsNumber = occupiedNumbers.some(q => b.x < q.x + q.width + 4 && b.x + b.width > q.x - 4 && b.y < q.y + q.height + 3 && b.y + b.height > q.y - 3);
           const hitsChildLine = childLines.some(p => b.x < p.end + 3 && b.x + b.width > p.x - 3 && b.y < base + p.dy + 6 && b.y + b.height > base + p.dy - 6);
-          if (!hitsBranch && !hitsNumber && !hitsChildLine && b.x >= 2 && b.y >= 95) { occupiedNumbers.push(b); fit = true; break; }
+          if (!hitsNumber && !hitsChildLine && b.x >= 2 && b.y >= 95) { occupiedNumbers.push(b); fit = true; break; }
         }
         if (!fit) { el.setAttribute('x', ox); el.setAttribute('y', oy); el.setAttribute('text-anchor', anchor); occupiedNumbers.push(el.getBBox()); }
       }
@@ -262,11 +254,11 @@
       const ttft = Number.isFinite(stats.ttft) ? stats.ttft : null;
       const decode = Number.isFinite(stats.decode) ? stats.decode : null;
       const model = ttft !== null && decode !== null ? Math.min(total, ttft + decode) : null;
-      const rest = model !== null && tool !== null ? Math.max(0, total - model - tool) : tool !== null ? Math.max(0, total - tool) : null;
-      const parts = [['首字', ttft, 'wait'], ['解码', decode, 'model'], ['工具', tool, 'tool'], ['其它', rest, 'rest']].filter(([, value]) => value !== null && value >= 0);
+      const rest = model !== null && tool !== null ? Math.max(0, total - model - tool) : null;
+      const parts = [[ui('首字'), ttft, 'wait'], [ui('解码'), decode, 'model'], [ui('工具'), tool, 'tool'], [ui('其它'), rest, 'rest']].filter(([, value]) => value !== null && value >= 0);
       button.innerHTML = parts.length
         ? parts.map(([name, value, kind]) => '<span class="geist-time-part ' + kind + '"><i></i>' + name + ' ' + preciseTime(value) + '</span>').join('')
-        : '耗时未记录';
+        : ui('耗时未记录');
       button.onclick = () => geistOpenTiming(t.number, step.number); meta.append(button);
     }
   }
@@ -275,21 +267,15 @@
     geistCaptionResultsBase();
     const caption = $('graph-caption'), layers = caption.querySelector('.br-layers');
     const existing = layers?.querySelector('[data-br-layer="failures"],[data-action-layer="failures"]');
-    if (existing) existing.parentElement.lastChild.textContent = '工具结果';
-    else if (layers && view === 'path') {
-      const label = document.createElement('label'); label.className = 'br-layer';
-      label.innerHTML = '<input type="checkbox" data-action-layer="failures"' + (overviewLayers.has('failures') ? ' checked' : '') + '>工具结果';
-      const input = label.querySelector('input'); input.onchange = () => { input.checked ? overviewLayers.add('failures') : overviewLayers.delete('failures'); renderActionPath(); };
-      layers.prepend(label);
-    }
+    if (existing) existing.parentElement.lastChild.textContent = ui('工具结果');
     const key = caption.querySelector('.br-key');
     key?.querySelectorAll('.br-key-item').forEach(item => {
-      if (item.querySelector('.br-check') || /结果还不清楚|结果未确认/.test(item.textContent)) item.remove();
+      if (item.querySelector('.br-check') || [ui('结果还不清楚'), ui('结果未确认')].some(label => item.textContent.includes(label))) item.remove();
     });
     if (key && !key.querySelector('.geist-result-key')) {
-      key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + STEP_ICON.read + '</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">' + STEP_ICON.write + '</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">' + geistReportIcon + '</svg>检查输出</span>');
+      key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + STEP_ICON.read + ui('</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">') + STEP_ICON.write + ui('</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">') + geistReportIcon + ui('</svg>检查输出</span>'));
     }
     if (key && overviewLayers.has('duration') && view !== 'path' && !key.querySelector('.geist-tool-time-key')) {
-      key.insertAdjacentHTML('beforeend', '<span class="geist-tool-time-key" title="官方记录中工具从调用到返回的时间区间；点击本步工具时间查看覆盖与累计口径"><i></i>' + (view === 'path' ? '步内工具时段' : '工具执行区间') + '</span>');
+      key.insertAdjacentHTML('beforeend', ui('<span class="geist-tool-time-key" title="官方记录中工具从调用到返回的时间区间；点击本步工具时间查看覆盖与累计口径"><i></i>') + (view === 'path' ? ui('步内工具时段') : ui('工具执行区间')) + '</span>');
     }
   };

@@ -47,5 +47,6 @@ try {
   const failed = await readClaudeTranscript(file), errorData = finalizeClaudeDataset(datasetFromNative('pi', projectClaudeTranscript(failed)), failed);
   const episode = errorData.payload.sessions[0].overview.episodes[0];
   assert.equal(episode.condition, 'CLAUDE_TOOL_ERROR'); assert.equal(episode.source, 'claude-transcript'); assert.match(episode.id, /^claude-/);
+  assert.deepEqual(episode.targets, ['a.txt']);
   console.log('Claude transcript adapter checks passed');
 } finally { await rm(dir, { recursive: true, force: true }); }

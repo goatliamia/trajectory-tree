@@ -92,7 +92,8 @@ export function finalizeClaudeDataset(data, native, projected = projectClaudeTra
       call.semanticKind = ({ Read: 'read', Write: 'write', Edit: 'write', Bash: 'run' })[call.nativeName] || 'other';
       if (path && ['Read', 'Write', 'Edit'].includes(call.nativeName)) {
         call.target = path;
-        const cwd = projected.header.cwd, impl = /^[A-Za-z]:[\\/]/.test(path) || cwd.includes('\\') ? win32 : posix;
+        for (const episode of session.overview.episodes) if (episode.failureSeqs.includes(call.seq)) episode.targets = [path];
+        const cwd = projected.header.cwd, impl = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(path) || cwd.includes('\\') ? win32 : posix;
         data.payload.context.fileOperations.push({ seq: call.seq, turn: turn.number, step: step.number, path: impl.resolve(cwd, path), kind: call.nativeName === 'Read' ? 'read' : 'change', status: call.status, time: call.start, end: call.end, source: 'claude-transcript', nativeKind: call.nativeName });
       }
     }

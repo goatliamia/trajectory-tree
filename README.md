@@ -119,6 +119,8 @@ node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl
 
 生成过程不调用模型。命令返回独立 HTML 文件和本地预览地址；页面包含字体，可离线保存。
 
+界面默认自动跟随宿主或浏览器语言，可在“自动 / 中文 / English”中选择，也可加 `--lang en` 或 `--lang zh-CN` 固定语言。报告正文跟随用户的沟通语言，日志原文、路径和参数保持原样。各宿主的功能与证据边界见[兼容与语言说明](docs/host-compatibility.md)。
+
 ## 同一组取证工具
 
 | 工具 | 用途 |

@@ -10,6 +10,9 @@ import { PortableService } from './service.mjs';
 import { executeTool } from './tools.mjs';
 
 const input = createPiSample({ version: '1.4.0', revision: 'fixture' });
+const missingAssistantContent = structuredClone(input);
+missingAssistantContent.entries.find(e => e.type === 'message' && e.message.role === 'assistant').message.content = null;
+assert.doesNotThrow(() => datasetFromNative('pi', missingAssistantContent));
 input.scope = { source: 'pi-sdk-test', observedAt: '2026-10-30T00:00:00Z', systemPrompt: 'system', contextWindow: 200000, tools: [{ name: 'unused_capability', active: true, exposure: 'inline', description: '保持完整能力。'.repeat(5000), parameters: { type: 'object', properties: { path: { type: 'string' } } } }] };
 const rawCall = input.entries.flatMap(e => e.message?.role === 'assistant' ? e.message.content : []).find(c => c.type === 'toolCall');
 rawCall.arguments.longArgument = '精确参数'.repeat(10000);
@@ -20,6 +23,13 @@ try {
   assert.equal(first.summary.unit, 'assistant-cycle'); assert.equal(first.summary.usage.input, 111300);
   assert.equal(first.summary.usage.cachedInput, 31800); assert.equal(first.synthetic, true);
   assert.equal(first.summary.measuredToolIntervals, 12); assert.ok(first.summary.toolCoveredMs <= first.summary.observedTurnSpanMs);
+  const terse = await executeTool(service, 'trajectory_inspect', { snapshot: first.snapshot, samples: false, limit: 2 });
+  assert.deepEqual(terse.summary, first.summary, 'Suppressing excerpts preserves the statistics');
+  assert.equal(terse.rows[0].firstTask, undefined); assert.equal(terse.rows[0].lastTask, undefined);
+  assert.deepEqual(terse.rows[0].read, first.rows[0].read, 'Terse rows retain exact frozen-cut evidence pointers');
+  const terseNext = await executeTool(service, 'trajectory_inspect', { cursor: terse.cursor, limit: 2 });
+  assert.equal(terseNext.rows[0].firstTask, undefined, 'The sample preference survives cursor continuation');
+  await assert.rejects(executeTool(service, 'trajectory_inspect', { cursor: terse.cursor, samples: true }), /Cursor/);
   const page = await executeTool(service, 'trajectory_inspect', { cursor: first.cursor, snapshot: first.snapshot, limit: 2 });
   assert.equal(page.rows[0].turn, 3); assert.ok(!('method' in page)&&!('methodRef' in page)&&!('reportRule' in page));
   for (const view of ['overview', 'latency', 'cost', 'repeats', 'io', 'context']) {

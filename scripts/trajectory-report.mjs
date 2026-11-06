@@ -48,7 +48,7 @@ try{
     if(journal&&markdown.length<=1024*1024)record.input=write(join(dirname(journal),'inputs','render-'+Date.now()+'-'+process.pid+'.md'),markdown);
     if(bundle.schema!=='trajectory-report-bundle/1')throw Error('Unsupported report bundle');
     const figures=Array.isArray(bundle.figures)?Object.fromEntries(bundle.figures.map(f=>[f.id,f])):bundle.figures;
-    const result=renderReport({markdown,datasets:bundle.datasets,figures,template:option('--template')||'article',title:option('--title')||markdown.split('\n')[0].replace(/^#\s*/,'')});
+    const result=renderReport({markdown,datasets:bundle.datasets,figures,template:option('--template')||'article',title:option('--title')||markdown.split('\n')[0].replace(/^#\s*/,''),locale:option('--lang')});
     record.template=result.template;
     const warnings=!result.figures.length&&markdown.includes('report-figure')?['存在 report-figure 文本但未装配图表；请检查代码围栏，或确认它只是文字示例。']:[];
     output={ok:true,output:write(option('--output'),result.html),figures:result.figures.map(f=>({id:f.id,type:f.type,data:f.data})),bytes:Buffer.byteLength(result.html),...(warnings.length?{warnings}:{})};record.figures=output.figures;record.warnings=warnings;record.markdown=resolve(option('--markdown'));record.markdownCharacters=markdown.length;
