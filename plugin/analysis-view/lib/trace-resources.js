@@ -88,8 +88,9 @@ export class TraceResources {
   }
   retain(entry, evict) {
     this.entries.delete(entry.resourceKey);
+    this.trim();
     this.entries.set(entry.resourceKey, { entry, evict, at: this.now(), bytes: traceBytes(entry) });
-    this.trim(); this.arm();
+    this.arm();
   }
   update(entry) {
     const row = this.entries.get(entry.resourceKey);
