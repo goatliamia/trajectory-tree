@@ -1,15 +1,20 @@
 // 目标的创建/结束由宿主记录成 goal/change 事件,而 observeSession 返回的
-// 事件流里没有它们。这里直接从持久化句柄读一次原始日志,按 revision 缓存,
-// 同一 revision 的重复请求不再重读——这是"不重复读取"的唯一入口。
+// 事件流里没有它们。缓存复用 trace-cache 的源身份与 revision；
+// 未知版本不复用,已知旧版本也不能作为读取失败时的替代数据。
+import { persistenceSource, observationSource, sameSource } from './trace-cache.js';
+
 const cache = new Map();
 const LIMIT = 4;
 
-export async function readGoalChanges(ctx, sessionId) {
+export async function readGoalChanges(ctx, sessionId, toSeq, expectedSource) {
   const persistence = ctx.get('sessionPersistence');
   if (!persistence || typeof persistence.open !== 'function') return [];
   const key = sessionId;
+  const source = await persistenceSource(ctx, sessionId);
+  const withinCut = events => Number.isSafeInteger(toSeq) ? events.filter(event => event.seq <= toSeq) : events;
+  const matchesCut = captured => !expectedSource || Number.isSafeInteger(toSeq) || sameSource(expectedSource, captured);
   const hit = cache.get(key);
-  if (hit && hit.fresh) return hit.events;
+  if (hit && sameSource(hit.source, source)) return matchesCut(hit.source) ? withinCut(hit.events) : [];
   let handle;
   try {
     handle = await persistence.open(sessionId, 'read');
@@ -26,11 +31,17 @@ export async function readGoalChanges(ctx, sessionId) {
         maxGoalRounds: Number.isFinite(e.data.goal.maxGoalRounds) ? e.data.goal.maxGoalRounds : null,
         createdAt: e.data.createdAt ?? null,
       }));
-    cache.set(key, { fresh: true, events });
-    while (cache.size > LIMIT) cache.delete(cache.keys().next().value);
-    return events;
+    const after = await persistenceSource(ctx, sessionId);
+    const captured = observationSource(ctx, result || {}, null)
+      || (sameSource(source, after) ? source : null);
+    // A slow older read cannot replace a result installed in the meantime.
+    if (captured && cache.get(key) === hit) {
+      cache.set(key, { source: captured, events });
+      while (cache.size > LIMIT) cache.delete(cache.keys().next().value);
+    }
+    return matchesCut(captured) ? withinCut(events) : [];
   } catch {
-    return hit ? hit.events : [];
+    return [];
   } finally {
     try { if (handle && typeof handle.close === 'function') await handle.close(); } catch { /* ignore */ }
   }

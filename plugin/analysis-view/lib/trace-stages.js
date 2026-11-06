@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { traceSource, observationSource, sameSource } from './trace-cache.js';
 import { TraceResources, abortable, abortError } from './trace-resources.js';
 import { buildTracePayload } from './trace-build.js';
-import { traceContext, traceActors, readContextTimeline } from './trace-context.js';
+import { traceContext, traceActors, readContextTimeline, applyGoalEvents } from './trace-context.js';
+import { readGoalChanges } from './goal-events.js';
 
 const hash = value => createHash('sha1').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 const preview = value => value && ({ text: value.text.slice(0, 96), omitted: (value.omitted || 0) + Math.max(0, value.text.length - 96) });
@@ -83,6 +84,7 @@ export class TraceStages {
       signal.throwIfAborted();
       const loaded = Date.now(), payload = buildTracePayload(events, sessionId, { cwd: observation.header?.cwd ?? observation.session?.cwd });
       const cut = observationSource(this.ctx, observation, source), token = hash([sessionId, cut?.revision, assets, ++this.serial]);
+      const toSeq = observation.source === 'live' && Number.isSafeInteger(observation.cursor) ? observation.cursor : undefined;
       const entry = { sessionId, source: cut, assets, token, resourceKey: 'staged:' + token,
         children: new Map(), retryAt: Infinity, bodies: new Map(), encodedBytes: 0, viewers: new Map(), controller,
         version: hash([cut?.revision, assets, []]), payload, actorData: null,
@@ -104,7 +106,7 @@ export class TraceStages {
         const rows = await ensureEvents(), at = Date.now();
         payload.context = structuredClone(traceContext(rows, payload, readContextTimeline(this.ctx, sessionId)));
         // 目标事件不在 observeSession 的流里:单独读一次原始日志(按会话缓存,同 revision 不重读)。
-        try { applyGoalEvents(payload, await readGoalChanges(this.ctx, sessionId)); } catch { /* 目标事件缺失不影响其余数据 */ }
+        try { applyGoalEvents(payload, await readGoalChanges(this.ctx, sessionId, toSeq, cut)); } catch { /* 目标事件缺失不影响其余数据 */ }
         entry.timing.details = Date.now() - at;
         this.resources.update(entry); return payload;
       }, controller.signal, 1);

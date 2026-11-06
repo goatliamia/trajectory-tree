@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "goals": [
+    {
+      "id": "retain-before-budget-trim",
+      "kind": "diagnostic",
+      "file": "plugin/analysis-view/lib/trace-resources.js",
+      "function": "retain",
+      "operation": {"label": "this.trim"},
+      "required_before": {"call": {"label": "this.entries.set"}},
+      "assert": "covered"
+    },
+    {
+      "id": "release-viewer-before-resource",
+      "kind": "diagnostic",
+      "file": "plugin/analysis-view/lib/trace-stages.js",
+      "function": "release",
+      "operation": {"label": "this.resources.remove"},
+      "required_before": {"call": {"label": "entry.viewers.delete"}},
+      "assert": "covered"
+    },
+    {
+      "id": "validate-selection-before-preparation",
+      "kind": "diagnostic",
+      "file": "plugin/trajectory-tools/lib/inspect-service.js",
+      "function": "query",
+      "operation": {"label": "this.prepare"},
+      "required_before": {"call": {"label": "selection"}},
+      "assert": "covered"
+    },
+    {
+      "id": "open-before-goal-reader-close",
+      "kind": "diagnostic",
+      "file": "plugin/analysis-view/lib/goal-events.js",
+      "function": "readGoalChanges",
+      "operation": {"label": "handle.close"},
+      "required_before": {"call": {"label": "persistence.open"}},
+      "assert": "covered"
+    },
+    {
+      "id": "load-before-inspection-build",
+      "kind": "diagnostic",
+      "file": "plugin/trajectory-tools/lib/inspect-service.js",
+      "function": {"operation_caller": true},
+      "operation": {"label": "buildInspection"},
+      "required_before": {"call": {"label": "this.load"}},
+      "assert": "covered"
+    },
+    {
+      "id": "goal-reader-binding",
+      "kind": "diagnostic",
+      "diagnostic": "lexical-binding",
+      "file": "plugin/analysis-view/lib/trace-stages.js",
+      "function": {"operation_caller": true},
+      "operation": {"label": "readGoalChanges"}
+    },
+    {
+      "id": "goal-application-binding",
+      "kind": "diagnostic",
+      "diagnostic": "lexical-binding",
+      "file": "plugin/analysis-view/lib/trace-stages.js",
+      "function": {"operation_caller": true},
+      "operation": {"label": "applyGoalEvents"}
+    }
+  ]
+}
