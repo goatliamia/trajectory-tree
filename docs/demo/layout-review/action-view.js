@@ -159,7 +159,14 @@
     graph.style.width = width + 'px'; graph.innerHTML = html;
     // 步骤分组整体是选中;柱段单独接管:点它看这一轮的上下文变化明细。
     graph.querySelectorAll('[data-step] [data-context-segment]').forEach(el => {
-      el.onclick = e => { e.stopPropagation(); reviewOpenContext(t.number); };
+      el.onclick = e => {
+        e.stopPropagation();
+        const group = el.closest('[data-step]');
+        // data-step 存的是步的下标,不是步号。
+        const index = group ? Number(group.dataset.step) : NaN;
+        const step = Number.isInteger(index) && t.steps[index] ? t.steps[index].number : undefined;
+        reviewOpenContext(t.number, step);
+      };
     });
     graph.querySelectorAll('[data-step]').forEach(el => {
       el.onclick = () => selectStep(Number(el.dataset.step));

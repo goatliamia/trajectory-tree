@@ -92,7 +92,7 @@ HTML 与阶段数据共用最多四项、估算 64 MiB、空闲两分钟的缓�
 
 ### 独立趋势试作
 
-`docs/demo/layout-review/context-observation.js` 用于 3089 的趋势试作和 Pi / Codex 独立视图，尚未装入 DSH 的生产路径页。构成筛选只替换 `trace-context-layer`，保留主干、结果枝条、文件与子代理的 DOM；仅切换总趋势显示等几何变化才重新布局。趋势累计值与时间映射分别使用单项缓存，来源或坐标变化时重建。
+`docs/demo/layout-review/context-observation.js` 用于 3089 的趋势试作和 Pi / Codex 独立视图，按设计不装入 DSH 生产的路径页；路径页只展示每轮增量。构成筛选只替换 `trace-context-layer`，保留主干、结果枝条、文件与子代理的 DOM；仅切换总趋势显示等几何变化才重新布局。趋势累计值与时间映射分别使用单项缓存，来源或坐标变化时重建。
 
 `context-trend-model.mjs` 在原有 SVG 两位小数精度下合并重复点与同向共线点；不会抽样、改变曲线、删除峰值或压缩跳变。完整请求与详情不变。`context-trend-test.mjs` 验证密集平台、拐点、同时间跳变、往返与数值精度，以及移除点仍位于同一线段。
 

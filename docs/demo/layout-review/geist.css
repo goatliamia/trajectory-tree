@@ -46,8 +46,8 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-review .geist-context-sources button{display:flex;align-items:center;gap:7px;min-width:0;padding:0;border:0;background:none;font:13px/21px var(--sans);color:var(--ink);text-align:left;cursor:pointer}
 .geist-context-sources button:hover>span{text-decoration:underline;text-underline-offset:3px}
 .geist-context-sources i{width:8px;height:8px;border-radius:2px;flex:none}
-.geist-context-sources button>span{white-space:nowrap;flex-shrink:0}
-.geist-context-sources b{font:12px/21px var(--mono);font-weight:400;color:var(--muted);margin-left:auto;min-width:0;white-space:normal;text-align:right}
+.geist-context-sources button>span{white-space:nowrap;flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.geist-context-sources b{font:12px/21px var(--mono);font-weight:400;color:var(--muted);margin-left:auto;min-width:0;white-space:nowrap;flex:none;text-align:right}
 .geist-context-share{white-space:nowrap}
 .geist-context-footnote{display:flex;justify-content:space-between;gap:12px;font:10px/18px var(--sans);color:var(--muted);margin-top:8px}
 .geist-review .geist-legend .review-overlay-key{display:none}
@@ -489,8 +489,9 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .geist-review .geist-time-part.tool i { background: #39a29b; }
 .geist-review .geist-time-part.rest i { background: #dfe3e6; }
 
-/* 耗时构成:条形、底部栏圆点、抽屉三处共用同一套颜色。 */
-.geist-review { --time-wait: var(--muted); --time-model: var(--path); --time-tool: var(--tool); --time-rest: var(--line); }
+/* 耗时构成:条形、底部栏圆点、抽屉三处共用同一套颜色。取视觉令牌里的分类色,
+   深色值由令牌的深色块提供,不在这里另设一套。 */
+.geist-review { --time-wait: var(--tt-muted, #666666); --time-model: var(--tt-context-assistant, #5b9fe8); --time-tool: var(--tt-context-tool, #3ab4a4); --time-rest: var(--tt-line, #e6e6e6); }
 .review-time-tool { fill: var(--time-tool); }
 .review-time-model { fill: var(--time-model); }
 .review-time-rest { fill: var(--time-rest); }
@@ -525,7 +526,6 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 
 /* 深色模式:语义色提亮,中性色已走变量。 */
 @media (prefers-color-scheme: dark) {
-  .geist-review { --time-wait: #93a3b5; --time-model: #7aa6e6; --time-tool: #4fbfae; --time-rest: #3a443d; }
   .goal-dot.complete { fill: #5fbf86; }
   .goal-dot.blocked { fill: #e0705c; }
   .goal-dot.create { fill: #7aa6e6; }

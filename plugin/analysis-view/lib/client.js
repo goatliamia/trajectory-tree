@@ -1248,6 +1248,9 @@ window.__ModuleLoader__.load({
           traceFrame.ready = event.data.version !== undefined && event.data.version !== null;
           traceFrame.version = event.data.version ?? null;
           traceFrame.assets = event.data.assets ?? traceFrame.assets;
+          // A ready announcement comes from a document; that document has not received
+          // this detail yet, so the requests are not deduplicated against the previous one.
+          traceFrame.postedDetail = null;
           if (!traceFrame.active) frame.contentWindow?.postMessage({ type: "analysis-trace-visibility", sessionId, visible: false }, location.origin);
           post();
         };

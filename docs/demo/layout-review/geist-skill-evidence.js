@@ -20,9 +20,13 @@
     geistSkillScopeCache.set(name, result); return result;
   }
   function geistSkillScopeControls() {
-    if (!geistSkillAnalysis || !$('geist-context-overview')) return;
+    const caption = $('graph-caption'), layers = caption && caption.querySelector('.br-layers');
+    if (!geistSkillAnalysis || !caption) return;
     let choices = $('skill-trace-choices');
-    if (!choices) { choices = document.createElement('div'); choices.id = 'skill-trace-choices'; choices.className = 'skill-trace-choices'; $('geist-context-overview').append(choices); }
+    if (!choices) { choices = document.createElement('div'); choices.id = 'skill-trace-choices'; choices.className = 'skill-trace-choices'; }
+    // 追踪 Skill 是会话级筛选器,跟着管它的 Skill 开关走:开关在底部图层行,控件就贴着它。
+    if (layers) { if (choices.previousElementSibling !== layers) layers.after(choices); }
+    else if (choices.parentElement !== caption) caption.append(choices);
     choices.hidden = !geistActorLayers.skills;
     const names = [...new Set(geistSkillAnalysis.records.map(r => r.name))];
     const key = names.join('|') + ':' + geistSkillSelected;
@@ -32,7 +36,7 @@
       choices.querySelectorAll('[data-real-skill]').forEach(el => el.onclick = () => geistSkillChoose(geistSkillSelected === el.dataset.realSkill ? null : el.dataset.realSkill));
     }
     const scope = geistSkillScope(), selection = $('actor-selection');
-    if (selection && choices.nextElementSibling !== selection) selection.before(choices);
+    if (selection && choices.nextElementSibling !== selection) choices.after(selection);
     if (scope && selection && geistActorLayers.skills && selection.dataset.scopeKey !== geistSkillSelected) {
       selection.dataset.scopeKey = geistSkillSelected;
       selection.innerHTML = ui('<span>观察第 ') + scope.firstTurn + '–' + scope.lastTurn + ui(' 轮 · ') + scope.calls.length + ui(' 次工具调用 · ') + scope.changes.size + ui(' 个文件有改动</span><button id="actor-skill-evidence">范围与工具线索 ↗</button><button id="actor-skill-clear" aria-label="取消 Skill 选择">× 取消</button>');

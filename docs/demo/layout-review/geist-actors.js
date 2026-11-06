@@ -75,7 +75,7 @@
     }
     let selection = $('actor-selection');
     if (!selection) { selection = document.createElement('div'); selection.id = 'actor-selection'; }
-    const top = $('geist-context-overview'); if (top && selection.parentElement !== top) top.append(selection);
+    const top = $('graph-caption'); if (top && selection.parentElement !== top) top.append(selection);
     const skill = geistSkills.find(s => s.id === geistSkillSelected);
     selection.hidden = !skill || !geistActorLayers.skills;
     if (skill && !(typeof geistSkillScope === 'function' && geistSkillScope(skill.id))) {

@@ -61,3 +61,22 @@ npm test --prefix plugin/trajectory-tools
 ```
 
 Rebuild shared assets and all three portable packages after changing presentation code. `dist/` is generated and ignored by Git. Updating the installed DSH plugin remains a separate installation step.
+
+## DSH version
+
+Checked against the installed runtime `0.2.2-alpha.2` and the published `0.2.2-rc.1` (2026-11-04, the first candidate of the 0.2.2 line). This is a static comparison of the release artifacts, not a run against a booted `0.2.2-rc.1`.
+
+| Package | `0.2.2-alpha.2` → `0.2.2-rc.1` |
+| --- | --- |
+| `dsh-tools` | package.json only; `defineTool` and `ctx.tools.register` unchanged |
+| `dsh-session` | package.json only |
+| `dsh-session-projection` | adds the `onEventChanged` event feed; deprecates `cachedSnapshot`; `snapshot()` computes only the requested units; `restore()` keeps its signature and synchronous return |
+| `dsh-session-projection-cache` | identical, including `cachedSnapshot(header, keys)` |
+| `dsh-token-meter` | `summary: false` added to the `contextBreakdown` and `contextPressure` projections; the `estimate` entry point is unchanged |
+| `dsh-client-ui-slots` | identical |
+| `dsh-client-ui-conversation` | slot-contract comments only |
+| `dsh-client-ui-commands` | drops the `builtinCommandName` and `resolveCommand` client exports; `register(contribution)` is unchanged |
+
+The update also raises the minimum Node.js version to 24.9.
+
+One behaviour to verify after upgrading: `contextBreakdown` and `contextPressure` are no longer part of a Session's summary key set. The panel reads them through `useProjection("contextBreakdown")` and `useProjection("contextPressure")`, so it should still receive them; a reader that took them from the summary instead would stop seeing them.

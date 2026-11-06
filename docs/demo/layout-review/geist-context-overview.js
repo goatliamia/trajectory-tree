@@ -13,10 +13,25 @@
     };
     openDrawer(category.label, ui('最新记录的上下文构成'), '<div class="review-context-headline"><strong>≈' + geistContextNumber(item?.value) + ui('</strong><span>tokens · 约占构成 ') + (item?.share < .1 ? ui('不足 0.1') : item?.share.toFixed(1)) + '%</span></div><p class="review-explain">' + explanations[key] + ui('</p><p class="review-quiet">上方显示当前保留量；路径中的柱形显示每轮或每步的增减，使用相同颜色。</p><p class="review-quiet">总占用直接读取官方 contextPressure；来源是估算构成，不与总占用直接相加。') + (summary.detailed ? ui('细分沿用已安装 Context 插件的现有投影；未提供细分时展示官方的系统、工具、消息三类。') : ui('当前为官方 contextBreakdown 的三类构成。')) + '</p>');
   }
+  // 增量只属于行动路径:总览看构成,不掺增减。路径页读当前打开的那一轮。
+  function geistRenderTurnDelta() {
+    const region = $('geist-context-overview');
+    if (!region) return;
+    const open = view === 'path' ? turn() : null;
+    const row = open ? reviewContextMap.get(open.number) : null;
+    region.querySelectorAll('[data-current-source]').forEach(button => {
+      const slot = button.querySelector('.geist-context-delta');
+      if (!slot) return;
+      const part = row && !row.isBaseline && row.parts ? row.parts[button.dataset.currentSource] : null;
+      const delta = part ? part.delta : 0;
+      slot.textContent = !delta ? '' : (delta > 0 ? '↑' + reviewTokens(delta) : '↓' + reviewTokens(-delta));
+      slot.hidden = !slot.textContent;
+    });
+  }
   function geistRenderContextOverview() {
     let region = $('geist-context-overview');
     if (!region) { region = document.createElement('section'); region.id = 'geist-context-overview'; region.className = 'geist-context-overview'; region.setAttribute('aria-label', ui('当前上下文总览')); $('graph-scroll').before(region); }
-    if (region.dataset.ready) return;
+    if (region.dataset.ready) { geistRenderTurnDelta(); return; }
     region.dataset.ready = 'true';
     const summary = contextOverview(geistContextSnapshot?.pressure, geistContextSnapshot?.breakdown, reviewContextData.current);
     const route = reviewContextData.route;
@@ -27,6 +42,7 @@
       '<div class="geist-context-total"><div><strong>' + geistContextNumber(summary.used) + '</strong><span>' + (summary.capacity ? ' / ' + geistContextNumber(summary.capacity) + ' tokens' : ui(' tokens · 容量未记录')) + '</span></div><span>' + (summary.percent == null ? ui('占用未记录') : '<b>' + summary.percent.toFixed(1) + ui('%</b> 已用')) + '</span></div>' +
       '<div class="geist-context-meter" role="img" aria-label="' + esc(summary.percent == null ? ui('上下文占用未记录') : ui('上下文已用 ') + summary.used + ' / ' + summary.capacity + ui(' tokens，分段按估算来源比例展示')) + '">' +
       '<div class="geist-context-occupied" style="width:' + (summary.fill ?? 0) + '%">' + summary.categories.map(item => '<span style="width:' + item.share + '%;background:' + geistContextCategory(item.key).color + '" title="' + esc(name(item) + ' ≈' + geistContextNumber(item.value) + ' tokens') + '"></span>').join('') + '</div></div>' +
-      ui('<div class="geist-context-sources" aria-label="估算来源构成，与路径颜色一致">') + summary.categories.map(item => '<button data-current-source="' + item.key + '" title="' + esc(name(item) + ui('，约占构成 ') + share(item.share) + ui('；点击查看说明')) + '"><i style="background:' + geistContextCategory(item.key).color + '"></i><span>' + name(item) + '</span><b>≈' + geistContextNumber(item.value) + ' <span class="geist-context-share">' + esc(share(item.share)) + '</span></b></button>').join('') + '</div>';
+      ui('<div class="geist-context-sources" aria-label="估算来源构成，与路径颜色一致">') + summary.categories.map(item => '<button data-current-source="' + item.key + '" title="' + esc(name(item) + ui('，约占构成 ') + share(item.share) + ui('；点击查看说明')) + '"><i style="background:' + geistContextCategory(item.key).color + '"></i><span>' + name(item) + '</span><b>≈' + geistContextNumber(item.value) + ' <span class="geist-context-share">' + esc(share(item.share)) + '</span><span class="geist-context-delta" hidden></span></b></button>').join('') + '</div>';
     region.querySelectorAll('[data-current-source]').forEach(el => el.onclick = () => geistShowCurrentSource(el.dataset.currentSource, summary));
+    geistRenderTurnDelta();
   }

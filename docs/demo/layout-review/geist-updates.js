@@ -30,7 +30,15 @@
       }
       geistDirty.add('session'); geistHeaderDirty = true;
     }
-    const rest = { ...patch }; delete rest.sessions; geistMerge(data, rest);
+    const rest = { ...patch }; delete rest.sessions;
+    // 空列表不是「没有上下文」:阶段刷新若读不到时间线,会带一个空数组回来,
+    // 不能让它盖掉已经到达的累计量(客户端补丁与历史分页各自补的是同一份数据)。
+    if (rest.context) {
+      rest.context = { ...rest.context };
+      if (Array.isArray(rest.context.requests) && !rest.context.requests.length) delete rest.context.requests;
+      if (Array.isArray(rest.context.historyRequests) && !rest.context.historyRequests.length) delete rest.context.historyRequests;
+    }
+    geistMerge(data, rest);
     if (options.stage && options.stage !== 'turn' && data.traceStage) data.traceStage[options.stage] = 'ready';
     Object.assign(reviewContextData, data.context || {});
     if (reviewContextData.requests !== before.requests || reviewContextData.historyRequests !== before.history) geistDirty.add('context');
@@ -60,6 +68,7 @@
         reviewContextScale = contextDisplayScale(reviewContextRows);
         reviewContextSelected ??= reviewContextRows.at(-1)?.turn ?? null;
         geistUpdateCounts.context++;
+        geistRenderTurnDelta();
       }
       if (changed('files')) reviewFileOperations = reviewContextData.fileOperations || [];
       if (sessionChanged || changed('facts') || changed('files')) {
@@ -117,7 +126,7 @@
       }
       geistProgressStatus(); geistContextCoverage();
       const selected = Number($('drawer').dataset.contextTurn);
-      if (changed('context') && selected && $('canvas').classList.contains('drawer-open')) reviewOpenContext(selected);
+      if (changed('context') && reviewContextDrawer && $('canvas').classList.contains('drawer-open')) reviewOpenContext(reviewContextDrawer.turn, reviewContextDrawer.step);
     });
   };
   const geistCoverageArrange = geistArrangeCaption;

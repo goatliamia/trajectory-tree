@@ -141,7 +141,12 @@
     document.querySelectorAll('[data-compaction-turn]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.compactionTurn)));
     $('review-compaction-path').onclick = () => reviewEnterPath(event.turn);
   }
-  function reviewOpenContext(turnNumber) {
+  // 抽屉的当前目标:上下文数据晚到时按它重开,不把步级视图退回轮级。
+  let reviewContextDrawer = null;
+  function reviewOpenContext(turnNumber, stepNumber) {
+    const target = stepNumber == null ? null : session.turns.find(t => t.number === turnNumber);
+    if (target && target.steps.some(step => step.number === stepNumber)) return reviewOpenStepContext(target, stepNumber);
+    reviewContextDrawer = { turn: turnNumber, step: null };
     const row = reviewContextMap.get(turnNumber);
     if (!row) {
       openDrawer(ui('上下文增量尚未包含本轮'), ui('第 ') + turnNumber + ui(' 轮'), '<p class="review-explain">' + reviewContextMissing(turnNumber) + ui('。缺失不表示零。</p>'));
@@ -185,6 +190,66 @@
     openDrawer(ui('第 ') + turnNumber + ui(' 轮 · 上下文变化'), row.steps + ui(' 次请求 · 各来源均为估算'), html);
     if ($('review-context-path')) $('review-context-path').onclick = () => reviewEnterPath(turnNumber);
     $('review-context-focus').onclick = () => reviewFocusTurn(turnNumber);
+  }
+  // 步级视图:行动路径以步为单位,点哪根柱就答哪一步。轮级读数在页面顶部,这里不重复摊开。
+  function reviewOpenStepContext(t, stepNumber) {
+    const step = t.steps.find(row => row.number === stepNumber);
+    if (!step) return;
+    reviewContextDrawer = { turn: t.number, step: stepNumber };
+    const title = ui('第 ') + t.number + ui(' 轮 · 第 ') + stepNumber + ui(' 步 · 上下文变化');
+    const index = reviewContextStepIndex.get(t.number + ':' + stepNumber);
+    const info = index === undefined ? null : reviewStepContext(t, step);
+    if (!info) {
+      let carry = null;
+      for (const row of reviewContextRequests) {
+        if (row.turn < t.number || (row.turn === t.number && row.step <= stepNumber)) carry = row;
+        else break;
+      }
+      if (!carry) {
+        openDrawer(title, ui('本步没有发起新的请求'),
+          ui('<p class="review-quiet">这一步没有模型请求,也没有更早的请求可以沿用,因此没有可比较的上下文构成。缺失不表示零。</p>'));
+        return;
+      }
+      const total = CONTEXT_CATEGORIES.reduce((sum, c) => sum + (carry[c.key] || 0), 0);
+      const origin = carry.turn === t.number ? ui('第 ') + carry.step + ui(' 步') : ui('上一轮第 ') + carry.step + ui(' 步');
+      let html = '<div class="review-context-headline"><strong>≈' + reviewTokens(total) + '</strong><span>' + ui('tokens · 沿用 ') + origin + ui(' 的请求') + '</span></div>';
+      html += ui('<p class="review-explain">这一步没有重新请求模型,模型看到的内容与上一次请求相同;下面的构成取自那次请求,不是本步的新增。</p>');
+      html += '<div class="review-context-breakdown">' + CONTEXT_CATEGORIES.filter(c => (carry[c.key] || 0) > 0).map(c =>
+        '<div class="review-context-category"><div><i style="background:' + c.color + '"></i><span>' + c.label + '</span><b>≈' + reviewTokens(carry[c.key]) + '</b></div></div>').join('') + '</div>';
+      html += '<div class="drawer-actions">' + ui('<button class="action-button" id="review-step-turn">查看本轮上下文 ↗</button>') + '</div>';
+      openDrawer(title, ui('沿用最近一次请求'), html);
+      if ($('review-step-turn')) $('review-step-turn').onclick = () => reviewOpenContext(t.number);
+      return;
+    }
+    const increase = CONTEXT_CATEGORIES.reduce((n, c) => n + Math.max(0, info.parts[c.key]), 0);
+    const decrease = CONTEXT_CATEGORIES.reduce((n, c) => n + Math.max(0, -info.parts[c.key]), 0);
+    const max = Math.max(1, ...CONTEXT_CATEGORIES.map(c => Math.abs(info.parts[c.key])));
+    const prior = index > 0 ? reviewContextRequests[index - 1] : null;
+    const priorLabel = !prior ? '' : prior.turn === t.number ? ui('第 ') + prior.step + ui(' 步') : ui('上一轮第 ') + prior.step + ui(' 步');
+    let html = info.initial
+      ? '<div class="review-context-headline"><strong>≈' + reviewTokens(info.total) + '</strong><span>' + ui('tokens · 首次请求已有量') + '</span></div>'
+      : '<div class="review-context-headline"><strong>' + reviewSigned(info.amount) + '</strong><span>' + ui('tokens · 本步净变化') + '</span></div>';
+    if (!info.initial && (increase || decrease)) html += '<div class="review-context-totals">' +
+      (increase ? ui('<span>增加 <b>') + reviewSigned(increase) + '</b></span>' : '') +
+      (decrease ? ui('<span>减少 <b>') + reviewSigned(-decrease) + '</b></span>' : '') + '</div>';
+    const changed = CONTEXT_CATEGORIES.filter(c => info.parts[c.key] !== 0);
+    if (!changed.length) html += ui('<p class="review-quiet">这一步各来源没有净变化。</p>');
+    else {
+      html += '<div class="review-context-breakdown">';
+      for (const c of changed) {
+        const delta = info.parts[c.key], after = info.current[c.key] || 0, before = after - delta;
+        const shareBase = delta >= 0 ? increase : decrease, share = shareBase ? Math.abs(delta) / shareBase * 100 : 0;
+        html += '<div class="review-context-category"><div><i style="background:' + c.color + '"></i><span>' + c.label + '</span><b>' + (info.initial ? '≈' + reviewTokens(after) : reviewSigned(delta)) + '</b></div>';
+        if (delta) html += '<div class="review-context-meter"><i style="width:' + Math.abs(delta) / max * 100 + '%;background:' + c.color + ';opacity:' + (delta >= 0 ? .9 : .6) + '"></i></div>';
+        html += '<small>≈' + reviewTokens(before) + ' → ≈' + reviewTokens(after) + (share ? ui(' · 占本步') + (delta > 0 ? ui('增加 ') : ui('减少 ')) + share.toFixed(1) + '%' : ui(' · 未变')) + '</small></div>';
+      }
+      html += '</div>';
+    }
+    const turnRow = reviewContextMap.get(t.number);
+    if (turnRow && !turnRow.isBaseline) html += ui('<p class="review-quiet">本轮合计（轮末相对上一轮末）') + reviewSigned(turnRow.net) + ui(' tokens。步级增量相加不等于轮级增量:没有重新请求的步不计入,跨轮边界也不按步切。</p>');
+    html += '<div class="drawer-actions">' + ui('<button class="action-button" id="review-step-turn">查看本轮上下文 ↗</button>') + '</div>';
+    openDrawer(title, prior ? ui('比较 ') + priorLabel + ui(' → 第 ') + stepNumber + ui(' 步') : ui('首次请求 · 已有上下文'), html);
+    if ($('review-step-turn')) $('review-step-turn').onclick = () => reviewOpenContext(t.number);
   }
   function reviewContextBind() {
     let key = $('review-overlay-key');

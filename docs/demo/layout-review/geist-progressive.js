@@ -76,6 +76,7 @@
   const geistProgressSummary = reviewRenderStepSummary;
   reviewRenderStepSummary = function(t, step) {
     const value = geistProgressSummary(t, step);
+    geistRenderTurnDelta();
     if (window.__traceEnsureTurn && !window.__traceTurnReady(t.number)) window.__traceEnsureTurn(t.number).catch(() => {});
     return value;
   };

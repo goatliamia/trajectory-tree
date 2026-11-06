@@ -419,8 +419,8 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-review .geist-context-sources button{display:flex;align-items:center;gap:7px;min-width:0;padding:0;border:0;background:none;font:13px/21px var(--sans);color:var(--ink);text-align:left;cursor:pointer}
 .geist-context-sources button:hover>span{text-decoration:underline;text-underline-offset:3px}
 .geist-context-sources i{width:8px;height:8px;border-radius:2px;flex:none}
-.geist-context-sources button>span{white-space:nowrap;flex-shrink:0}
-.geist-context-sources b{font:12px/21px var(--mono);font-weight:400;color:var(--muted);margin-left:auto;min-width:0;white-space:normal;text-align:right}
+.geist-context-sources button>span{white-space:nowrap;flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.geist-context-sources b{font:12px/21px var(--mono);font-weight:400;color:var(--muted);margin-left:auto;min-width:0;white-space:nowrap;flex:none;text-align:right}
 .geist-context-share{white-space:nowrap}
 .geist-context-footnote{display:flex;justify-content:space-between;gap:12px;font:10px/18px var(--sans);color:var(--muted);margin-top:8px}
 .geist-review .geist-legend .review-overlay-key{display:none}
@@ -862,8 +862,9 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .geist-review .geist-time-part.tool i { background: #39a29b; }
 .geist-review .geist-time-part.rest i { background: #dfe3e6; }
 
-/* 耗时构成:条形、底部栏圆点、抽屉三处共用同一套颜色。 */
-.geist-review { --time-wait: var(--muted); --time-model: var(--path); --time-tool: var(--tool); --time-rest: var(--line); }
+/* 耗时构成:条形、底部栏圆点、抽屉三处共用同一套颜色。取视觉令牌里的分类色,
+   深色值由令牌的深色块提供,不在这里另设一套。 */
+.geist-review { --time-wait: var(--tt-muted, #666666); --time-model: var(--tt-context-assistant, #5b9fe8); --time-tool: var(--tt-context-tool, #3ab4a4); --time-rest: var(--tt-line, #e6e6e6); }
 .review-time-tool { fill: var(--time-tool); }
 .review-time-model { fill: var(--time-model); }
 .review-time-rest { fill: var(--time-rest); }
@@ -898,7 +899,6 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 
 /* 深色模式:语义色提亮,中性色已走变量。 */
 @media (prefers-color-scheme: dark) {
-  .geist-review { --time-wait: #93a3b5; --time-model: #7aa6e6; --time-tool: #4fbfae; --time-rest: #3a443d; }
   .goal-dot.complete { fill: #5fbf86; }
   .goal-dot.blocked { fill: #e0705c; }
   .goal-dot.create { fill: #7aa6e6; }
@@ -983,6 +983,14 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .skill-trace-choices button{border:0;background:none;padding:1px 0;font:12px/22px var(--sans);color:var(--ink);cursor:pointer}
 .skill-trace-choices button[aria-pressed=true]{color:var(--chart-skill);text-decoration:underline;text-underline-offset:5px}
 .real-skill-range{fill:var(--chart-skill);opacity:.14;pointer-events:none}
+/* 追踪 Skill 是会话级筛选:跟着管它的开关落到页面底部图层行,不再占统计区。 */
+.geist-review .graph-caption .skill-trace-choices{padding:0;gap:2px 12px;font:11px/20px var(--sans);color:var(--muted)}
+.geist-review .graph-caption .skill-trace-choices button{font:11px/18px var(--sans)}
+.geist-review .graph-caption #actor-selection{padding:0;gap:12px;font:11px/20px var(--sans)}
+.geist-review .graph-caption #actor-selection button{font:11px/18px var(--sans)}
+/* 顶部:每个来源格子里的小字,是这个来源在当前这一轮的增减;不撑高、不另起一行。 */
+.geist-review .geist-context-delta{margin-left:6px;font:10px/18px var(--mono);color:var(--muted);white-space:nowrap}
+.geist-review .geist-context-delta[hidden]{display:none}
 .skill-scope-outside{opacity:.3}.skill-scope-intro strong{font-size:14px;font-weight:500}.skill-scope-intro p{font:13px/22px var(--sans)}
 .skill-scope-tools{display:flex;flex-wrap:wrap;gap:8px 18px;font:12px/22px var(--mono);margin-bottom:20px}.skill-scope-tools b{font-weight:400;color:var(--muted)}
 .skill-scope-source{padding:12px 0;border-bottom:1px solid var(--line);font:12px/21px var(--sans)}.skill-scope-source p{margin:5px 0;overflow-wrap:anywhere;white-space:pre-wrap}.skill-scope-source strong{font-weight:500}.skill-scope-source summary{cursor:pointer}
@@ -999,7 +1007,7 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 @media(prefers-reduced-motion:reduce){.trace-progress:before,.trace-detail-loading:before,.trace-stage-enter{animation:none}}
 @media(max-width:850px){.trace-progress{max-width:190px;overflow:hidden;text-overflow:ellipsis}}
 </style><style>:root{--tt-surface:#ffffff;--tt-canvas:#fafafa;--tt-ink:#171717;--tt-muted:#666666;--tt-line:#e6e6e6;--tt-grid:#ededed;--tt-soft:#f5f5f5;--tt-action:#0068d6;--tt-metric:#3485ed;--tt-success:#087b58;--tt-error:#c72b31;--tt-warning:#b87800;--tt-retry:#8745d9;--tt-change-pulse:#c72b31;--tt-context-system:#8053e3;--tt-context-tools:#d49b00;--tt-context-user:#44a56b;--tt-context-inject:#c442a7;--tt-context-skill:#e66d26;--tt-context-assistant:#5b9fe8;--tt-context-tool:#3ab4a4;--tt-request-uncachedInputTokens:#f59a36;--tt-request-cacheReadTokens:#3485ed;--tt-request-cacheWriteTokens:#9561dd;--tt-request-outputTokens:#1aaa91;--tt-font-sans:Geist,'Segoe UI','Microsoft YaHei',sans-serif;--tt-font-mono:GeistMono,'Geist Mono',Consolas,'Microsoft YaHei',monospace;--tt-type-body:14px;--tt-type-label:12px;--tt-type-meta:11px;--tt-type-section:18px;--tt-type-title:28px;--tt-type-metric:28px;--tt-space-4:4px;--tt-space-8:8px;--tt-space-12:12px;--tt-space-16:16px;--tt-space-24:24px;--tt-space-32:32px;--tt-space-40:40px;--tt-radius-control:6px;--tt-radius-popover:12px;--tt-opacity-source:1;--tt-opacity-area:0.22;--tt-opacity-inactive:0.18;--tt-motion-feedback:140ms;--tt-motion-mark:550ms;--tt-motion-fracture:650ms;--tt-motion-insert:850ms;--tt-motion-hold:1000ms;--chart-system:#8053e3;--chart-tools:#d49b00;--chart-user:#44a56b;--chart-inject:#c442a7;--chart-skill:#e66d26;--chart-assistant:#5b9fe8;--chart-tool:#3ab4a4;--surface:var(--tt-surface);--ink:var(--tt-ink);--muted:var(--tt-muted);--line:var(--tt-line);--grid:var(--tt-grid);--soft:var(--tt-soft);--accent:var(--tt-action);--sans:var(--tt-font-sans);--mono:var(--tt-font-mono)}
-@media (prefers-color-scheme: dark){:root{--tt-surface:#0a0a0a;--tt-canvas:#151515;--tt-ink:#ededed;--tt-muted:#a1a1a1;--tt-line:#303030;--tt-grid:#292929;--tt-soft:#222222}}
+@media (prefers-color-scheme: dark){:root{--tt-surface:#0a0a0a;--tt-canvas:#151515;--tt-ink:#ededed;--tt-muted:#a1a1a1;--tt-line:#303030;--tt-grid:#292929;--tt-soft:#222222;--tt-context-system:#a78bfa;--tt-context-tools:#eab308;--tt-context-user:#4fc77a;--tt-context-inject:#e879c6;--tt-context-skill:#fb923c;--tt-context-assistant:#4c9fff;--tt-context-tool:#21c4ad;--chart-system:#a78bfa;--chart-tools:#eab308;--chart-user:#4fc77a;--chart-inject:#e879c6;--chart-skill:#fb923c;--chart-assistant:#4c9fff;--chart-tool:#21c4ad}}
 </style></head>
 <body class="geist-review">
 <div class="review-toolbar"><strong>执行路径</strong><span class="geist-edition">02</span><small id="review-state">105 轮真实记录</small><span class="review-spacer"></span><button id="review-rounds">每轮耗时</button><button id="review-path">行动路径 ↗</button><button id="review-stress" aria-pressed="false">密集样本</button><div class="review-controls" id="review-overview-controls"><button id="review-out" aria-label="缩小">−</button><button id="review-fit">全览</button><button id="review-in" aria-label="放大">＋</button></div></div><div class="app">
