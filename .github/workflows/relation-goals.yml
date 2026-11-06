@@ -1,0 +1,74 @@
+name: Relation diagnostics
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relation-diagnostics-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    name: Compare declared source guarantees
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      # Only the trusted base is checked out. Candidate source is read as Git
+      # blobs by the pinned engine; no PR scripts or dependencies run here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out the pinned analysis engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: goatliamia/code-relations
+          ref: 23fa1ec0ef9b730ad32c1a55f24a62f713d8750f
+          path: engine
+          ssh-key: ${{ secrets.RELATIONS_ENGINE_READ_KEY }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install the pinned compiler
+        working-directory: engine
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Compare the actual integration source
+        id: goals
+        env:
+          PYTHONUTF8: '1'
+        run: python engine/tools/project_ci.py --repo source --event "$GITHUB_EVENT_PATH" --adopt-policy --out output/pr-goals.json --summary "$GITHUB_STEP_SUMMARY"
+      - name: Attach the result to the candidate commit
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECK_OUTCOME: ${{ steps.goals.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          state=failure
+          if [ "$CHECK_OUTCOME" = success ]; then state=success; fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$SOURCE_SHA" -f state="$state" -f context='relations/diagnostics' -f description='Declared source guarantees and observation coverage' -f target_url="$RUN_URL"
+      - name: Retain goal responses
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: relation-diagnostics
+          path: output/pr-goals.json
+          if-no-files-found: warn
+          retention-days: 14

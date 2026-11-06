@@ -12,6 +12,8 @@
 
 <p align="center"><code>DSH</code> &nbsp; <code>Pi</code> &nbsp; <code>Codex</code> &nbsp; <code>Claude Code</code></p>
 
+开发与审查：[PR 关系诊断与原生回归](docs/relation-ci.md)。
+
 ![执行路径：轮次主干、工具分支、文件变化与上下文增量](docs/media/trajectory-overview.jpg)
 
 从全程主线进入某一轮，查看工具参数、返回、文件变化和反馈。长对话先显示实际主线，再逐步补齐详情。

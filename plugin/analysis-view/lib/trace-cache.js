@@ -4,6 +4,19 @@
 // service, not that proxy, or every otherwise-valid cache entry misses.
 const ownerOf = service => service?.[Symbol.for("cordis.original")] ?? service;
 
+function storedSource(persistence, stored) {
+  if (stored === undefined) return { owner: ownerOf(persistence), revision: "missing" };
+  return typeof stored.revision === "string" ? { owner: ownerOf(persistence), revision: stored.revision } : null;
+}
+
+// Raw persisted records have their own source, even while a live view exists.
+export async function persistenceSource(ctx, sessionId, signal) {
+  const persistence = ctx.get("sessionPersistence");
+  if (typeof persistence?.stat !== "function") return null;
+  try { return storedSource(persistence, await persistence.stat(sessionId, signal ? { signal } : undefined)); }
+  catch (error) { if (signal?.aborted) throw error; return null; }
+}
+
 export async function traceSource(ctx, sessionId, signal) {
   const sessions = ctx.get("sessions");
   const live = sessions?.get?.(sessionId);
@@ -14,8 +27,7 @@ export async function traceSource(ctx, sessionId, signal) {
     const stored = await persistence.stat(sessionId, signal ? { signal } : undefined);
     const attached = sessions?.get?.(sessionId);
     if (typeof attached?.seq === "number") return { owner: ownerOf(sessions), revision: "live:" + attached.seq };
-    if (stored === undefined) return { owner: ownerOf(persistence), revision: "missing" };
-    return typeof stored.revision === "string" ? { owner: ownerOf(persistence), revision: stored.revision } : null;
+    return storedSource(persistence, stored);
   } catch (error) {
     if (signal?.aborted) throw error;
     return null;

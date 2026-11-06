@@ -17,6 +17,7 @@
     "lib/incident-shape.js",
     "lib/trace-build.js",
     "lib/trace-cache.js",
+    "lib/goal-events.js",
     "lib/trace-stages.js",
     "lib/trace-resources.js",
     "lib/trace-context.js",
