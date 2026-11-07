@@ -73,7 +73,12 @@
     const key = [view, view === 'path' ? turn().number : overviewScale, right, overviewLayers.has('context'), reviewStress, document.fonts.status, options.reservedKey || '', Math.round(boxHeight), Math.round(base)].join(':');
     let packed = geistOutcomeLayoutCache.get(key);
     if (!packed) {
-      const reserved = options.reserved || [], obstacles = [...reserved, ...(options.obstacles || [])];
+      const reserved = options.reserved || [];
+      // 读取/修改泳道是后画的,枝条标签不许落在它们身上,否则文字会被文件块盖住。
+      const lanes = [62, 116].map(v => v - base);
+      const obstacles = [...reserved, ...(options.obstacles || []),
+        { left: left - 8, right: right + 8, top: lanes[0], bottom: lanes[1] },
+        { left: left - 8, right: right + 8, top: limit + 18 - base, bottom: limit + 74 - base }];
       try { packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles, labelSide: geistErrorBranchSide }); }
       catch (error) {
         if (!options.obstacles?.length) throw error;

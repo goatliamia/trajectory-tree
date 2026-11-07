@@ -35,7 +35,7 @@
     const pixels = Math.round(76 * scale);
     reviewContextScale.pixels = pixels;
     reviewContextScale.trendScale = scale;
-    const below = Math.round(150 * scale), reserve = 72, topInset = 120;
+    const below = Math.round(150 * scale), reserve = 72, topInset = 162;
     const slack = height - pixels - topInset - below - reserve;
     const base = Math.round(pixels + topInset + Math.max(0, slack) * 0.45);
     return { height, base };
