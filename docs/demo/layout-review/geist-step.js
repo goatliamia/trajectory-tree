@@ -23,9 +23,9 @@
       return direction > 0 ? (insight.following ? ui('下一步 · ') + insight.following.text : ui('下一步')) : ui('上一步');
     };
     const callOf = fact => step.calls.find(call => call.seq === fact.seq) || null;
-    // 展开用文字状态表达:收起时写「展开」,打开后写「收起」,不画箭头。
-    const disclosure = (label, body) => '<details class="geist-result"><summary>' + label +
-      '<span class="geist-result-state" data-closed="' + esc(ui('展开')) + '" data-open="' + esc(ui('收起')) + '"></span></summary>' + body + '</details>';
+    // 展开沿用 Geist 的 Show code 行:16px chevron 收起时指右、打开后指下,文字只留标签。
+    const chevron = '<span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span>';
+    const disclosure = (label, body) => '<details class="geist-result"><summary>' + chevron + label + '</summary>' + body + '</details>';
     const excerpt = value => value && typeof value.text === 'string' && value.text.trim()
       ? { text: value.text.replace(/\r\n/g, '\n'), omitted: Number(value.omitted) || 0 } : null;
     // 原始记录的内容并进面板:调用参数、返回原文、错误类型和 seq 都在这一步里看全。

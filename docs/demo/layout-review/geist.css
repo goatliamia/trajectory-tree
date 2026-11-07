@@ -151,8 +151,8 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-legend{flex:1 0 100%;padding-bottom:8px}
 .geist-legend[hidden]{display:none}
 .geist-review #geist-legend-toggle{margin-left:auto;white-space:nowrap;font-size:11px}
-.geist-review #geist-legend-toggle:after{content:attr(data-closed);display:inline-block;margin-left:6px;color:var(--muted)}
-.geist-review #geist-legend-toggle[aria-expanded=true]:after{content:attr(data-open)}
+.geist-review #geist-legend-toggle{display:inline-flex;align-items:center;gap:4px}
+.geist-review #geist-legend-toggle .geist-chevron{margin-top:0}
 .geist-section-label{font-size:12px;color:var(--muted);flex:none}
 .geist-review .br-layers{gap:18px;margin:0;opacity:1;font-size:12px;flex-wrap:wrap;row-gap:10px}
 .geist-review .br-layer{gap:7px;line-height:24px;color:var(--ink)}
@@ -211,12 +211,11 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-review .geist-step-context>span{flex:none;color:var(--ink)}
 .geist-review .geist-step-context .geist-step-context-text{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--muted)}
 .geist-step-reply{margin:0;font:13px/22px var(--sans);color:var(--ink);overflow-wrap:anywhere}
-.geist-result summary{display:inline-flex;align-items:baseline;gap:6px;list-style:none;cursor:pointer;font:12px/20px var(--sans);color:var(--review-action)}
+.geist-result summary{display:flex;align-items:center;gap:6px;width:100%;min-height:32px;padding:2px 0;list-style:none;cursor:pointer;font:12px/20px var(--sans);color:var(--review-action)}
 .geist-result summary::-webkit-details-marker{display:none}
-.geist-result-state{font:11px/18px var(--sans);color:var(--muted)}
-.geist-result-state::before{content:'·';margin-right:4px}
-.geist-result-state::after{content:attr(data-closed)}
-.geist-result[open] .geist-result-state::after{content:attr(data-open)}
+.geist-chevron{display:inline-flex;flex:none;color:var(--muted);transform:rotate(-90deg);transition:transform .12s}
+.geist-chevron svg{display:block}
+.geist-result[open]>summary .geist-chevron,.geist-history-round[open]>summary .geist-chevron,.entry[open]>summary .geist-chevron,[aria-expanded=true] .geist-chevron{transform:rotate(0)}
 .geist-result-text{margin:4px 0 0;padding:10px 12px;max-height:200px;overflow:auto;border-radius:6px;background:var(--soft);font:11px/18px var(--mono);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
 .geist-review .geist-basis>summary{color:var(--muted)}
 .geist-review .geist-diff-action{flex:none;display:flex;align-items:center;gap:14px;padding:7px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:500 12px/20px var(--sans);box-shadow:0 1px 2px #00000005}
