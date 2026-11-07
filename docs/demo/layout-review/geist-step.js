@@ -25,6 +25,8 @@
     const callOf = fact => step.calls.find(call => call.seq === fact.seq) || null;
     // 展开沿用 Geist 的 Show code 行:16px chevron 收起时指右、打开后指下,文字只留标签。
     const chevron = '<span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span>';
+    // 跳转箭头用图标,不用 ↗ 字符:字符随字体变形,这是 Geist 图标的同一套几何。
+    const arrow = '<svg class="geist-arrow" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M5.5 10.5 10.5 5.5M6.5 5.5h4v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     const disclosure = (label, body) => '<details class="geist-result"><summary>' + label + chevron + '</summary>' + body + '</details>';
     const excerpt = value => value && typeof value.text === 'string' && value.text.trim()
       ? { text: value.text.replace(/\r\n/g, '\n'), omitted: Number(value.omitted) || 0 } : null;
@@ -50,12 +52,12 @@
     const operation = fact => {
       const meta = [fact.detail, callMeta(fact)].filter(Boolean).join(' · ');
       const raw = rawEntry(fact);
-      const diff = fact.preview ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + ' ↗</button>' : '';
+      const diff = fact.preview ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + arrow + '</button>' : '';
       return '<article class="geist-operation" data-tone="' + fact.tone + '">' +
         '<h3>' + esc(fact.title) + '</h3>' +
-        '<p>' + esc(fact.outcome) + '</p>' +
+        '<p>' + esc(fact.outcome) + (diff ? ' ' + diff : '') + '</p>' +
         (meta ? '<span class="geist-operation-size">' + esc(meta) + '</span>' : '') +
-        (raw || diff ? '<div class="geist-operation-actions">' + raw + diff + '</div>' : '') +
+        (raw ? '<div class="geist-operation-actions">' + raw + '</div>' : '') +
         '</article>';
     };
     panel.innerHTML = '<header class="geist-step-meta"><span><b>' + ui`第 ${step.number} 步` + '</b>' +
@@ -70,8 +72,8 @@
           ? disclosure(ui('回复原文'), '<pre class="geist-result-text">' + esc(step.reply.text) + '</pre>') : '') +
         (!insight.calls.length && !insight.reply ? ui('<p class="review-quiet">没有记录到本步的文字回复或工具操作。</p>') : '') +
       '</div>' +
-      (insight.links.length ? '<p class="geist-step-next"><span>' + ui('后续记录') + '</span>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('') + '</p>' : '') +
-      (insight.following ? '<p class="geist-step-next"><span>' + ui('接下来') + '</span><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + ' ↗</button></p>' : '');
+      (insight.links.length ? '<p class="geist-step-next"><span>' + ui('后续记录') + '</span>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + arrow + '</button>').join('') + '</p>' : '') +
+      (insight.following ? '<p class="geist-step-next"><span>' + ui('接下来') + '</span><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + arrow + '</button></p>' : '');
     panel.querySelectorAll('[data-insight-change]').forEach(el => el.onclick = () => reviewOpenChange(t, step, insight.calls.find(f => f.seq === Number(el.dataset.insightChange))));
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
     panel.querySelectorAll('[data-inspector-nav]').forEach(el => el.onclick = () => {
