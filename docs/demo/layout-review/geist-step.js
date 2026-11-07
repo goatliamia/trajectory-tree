@@ -23,6 +23,9 @@
       return direction > 0 ? (insight.following ? ui('下一步 · ') + insight.following.text : ui('下一步')) : ui('上一步');
     };
     const callOf = fact => step.calls.find(call => call.seq === fact.seq) || null;
+    // 展开用文字状态表达:收起时写「展开」,打开后写「收起」,不画箭头。
+    const disclosure = (label, body) => '<details class="geist-result"><summary>' + label +
+      '<span class="geist-result-state" data-closed="' + esc(ui('展开')) + '" data-open="' + esc(ui('收起')) + '"></span></summary>' + body + '</details>';
     const excerpt = value => value && typeof value.text === 'string' && value.text.trim()
       ? { text: value.text.replace(/\r\n/g, '\n'), omitted: Number(value.omitted) || 0 } : null;
     // 原始记录的内容并进面板:调用参数、返回原文、错误类型和 seq 都在这一步里看全。
@@ -34,9 +37,9 @@
       if (!args && !result && !error) return '';
       const block = (label, value) => '<span class="geist-result-label">' + label + '</span><pre class="geist-result-text">' + esc(value.text) + '</pre>' +
         (value.omitted ? '<span class="geist-result-note">' + ui('节选 · 另有 ') + value.omitted + ui(' 个字符未载入') + '</span>' : '');
-      return '<details class="geist-result"><summary>' + ui('调用参数与原文') + '</summary>' +
+      return disclosure(ui('调用参数与原文'),
         (error ? '<span class="geist-result-label">' + ui('错误类型') + '</span><pre class="geist-result-text">' + esc(error) + '</pre>' : '') +
-        (args ? block(ui('调用参数'), args) : '') + (result ? block(ui('返回原文'), result) : '') + '</details>';
+        (args ? block(ui('调用参数'), args) : '') + (result ? block(ui('返回原文'), result) : ''));
     };
     const callMeta = fact => {
       const call = callOf(fact), bits = [];
@@ -63,7 +66,7 @@
         insight.calls.map(operation).join('') +
         (insight.reply ? '<p class="geist-step-reply">' + esc(insight.reply) + '</p>' : '') +
         (step.reply && step.reply.text && step.reply.text.length > (insight.reply || '').length
-          ? '<details class="geist-result"><summary>' + ui('回复原文') + '</summary><pre class="geist-result-text">' + esc(step.reply.text) + '</pre></details>' : '') +
+          ? disclosure(ui('回复原文'), '<pre class="geist-result-text">' + esc(step.reply.text) + '</pre>') : '') +
         (!insight.calls.length && !insight.reply ? ui('<p class="review-quiet">没有记录到本步的文字回复或工具操作。</p>') : '') +
       '</div>' +
       (insight.links.length ? '<p class="geist-step-next"><span>' + ui('后续记录') + '</span>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('') + '</p>' : '') +

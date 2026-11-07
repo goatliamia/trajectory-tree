@@ -40,7 +40,7 @@
       legend = document.createElement('div'); legend.id = 'geist-legend'; legend.className = 'geist-legend';
       caption.append(legend);
       const toggle = document.createElement('button'); toggle.id = 'geist-legend-toggle'; toggle.className = 'geist-text-action quiet';
-      toggle.textContent = ui('符号说明'); toggle.setAttribute('aria-controls', legend.id);
+      toggle.textContent = ui('符号说明'); toggle.dataset.closed = ui('展开'); toggle.dataset.open = ui('收起'); toggle.setAttribute('aria-controls', legend.id);
       toggle.onclick = () => { geistLegendOpen = !geistLegendOpen; geistSyncLegend(); };
       caption.querySelector('.geist-observe-row')?.append(toggle);
       // Controls belong to the canvas; the inspector follows without another card.

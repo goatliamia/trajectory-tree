@@ -2509,7 +2509,7 @@ function fileChangeHistory(operations, path) {
   function closeDrawer() { $('canvas').classList.remove('drawer-open');activeGroup=null;$('graph').querySelectorAll('.active').forEach(g=>g.classList.remove('active')); }
   function block(value) { return value?`<pre class="excerpt">${esc(value.text)}</pre>${value.omitted?ui`<span class="truncated">节选 · 另有 ${value.omitted.toLocaleString()} 个字符未载入此 demo</span>`:''}`:ui('<span class="muted">未记录文本</span>'); }
   function callEntry(c) {
-    return ui`<details class="entry" ${c.status==='error'?'open':''}><summary><div class="entry-top"><span class="entry-name">${esc(c.name)}</span><span class="entry-status ${c.status==='error'?'bad':''}">${c.status==='error'?ui('工具报错'):c.status==='returned'?ui('已返回'):ui('尚无结果记录')}</span><span class="spacer"></span><span class="mono muted" style="font-size:10px">${c.end===null?'—':dur(c.end-c.start)}</span></div><div class="entry-time">${clock(c.start)}${c.end===null?'':` → ${clock(c.end)}`} · seq ${c.seq}${c.resultSeq===null?'':` → ${c.resultSeq}`}</div></summary>${c.error?ui`<span class="code-label">错误类型</span><div class="mono" style="font-size:11px;color:var(--error)">${esc(c.error.code||c.error.name||'')}</div>`:''}<span class="code-label">调用参数</span>${block(c.args)}<span class="code-label">返回原文</span>${block(c.result)}</details>`;
+    return ui`<details class="entry" ${c.status==='error'?'open':''}><summary data-closed="${ui('展开原文')}" data-open="${ui('收起原文')}"><div class="entry-top"><span class="entry-name">${esc(c.name)}</span><span class="entry-status ${c.status==='error'?'bad':''}">${c.status==='error'?ui('工具报错'):c.status==='returned'?ui('已返回'):ui('尚无结果记录')}</span><span class="spacer"></span><span class="mono muted" style="font-size:10px">${c.end===null?'—':dur(c.end-c.start)}</span></div><div class="entry-time">${clock(c.start)}${c.end===null?'':` → ${clock(c.end)}`} · seq ${c.seq}${c.resultSeq===null?'':` → ${c.resultSeq}`}</div></summary>${c.error?ui`<span class="code-label">错误类型</span><div class="mono" style="font-size:11px;color:var(--error)">${esc(c.error.code||c.error.name||'')}</div>`:''}<span class="code-label">调用参数</span>${block(c.args)}<span class="code-label">返回原文</span>${block(c.result)}</details>`;
   }
   function showGroup(index) {
     try {
@@ -2820,6 +2820,9 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       return direction > 0 ? (insight.following ? ui('下一步 · ') + insight.following.text : ui('下一步')) : ui('上一步');
     };
     const callOf = fact => step.calls.find(call => call.seq === fact.seq) || null;
+    // 展开用文字状态表达:收起时写「展开」,打开后写「收起」,不画箭头。
+    const disclosure = (label, body) => '<details class="geist-result"><summary>' + label +
+      '<span class="geist-result-state" data-closed="' + esc(ui('展开')) + '" data-open="' + esc(ui('收起')) + '"></span></summary>' + body + '</details>';
     const excerpt = value => value && typeof value.text === 'string' && value.text.trim()
       ? { text: value.text.replace(/\r\n/g, '\n'), omitted: Number(value.omitted) || 0 } : null;
     // 原始记录的内容并进面板:调用参数、返回原文、错误类型和 seq 都在这一步里看全。
@@ -2831,9 +2834,9 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       if (!args && !result && !error) return '';
       const block = (label, value) => '<span class="geist-result-label">' + label + '</span><pre class="geist-result-text">' + esc(value.text) + '</pre>' +
         (value.omitted ? '<span class="geist-result-note">' + ui('节选 · 另有 ') + value.omitted + ui(' 个字符未载入') + '</span>' : '');
-      return '<details class="geist-result"><summary>' + ui('调用参数与原文') + '</summary>' +
+      return disclosure(ui('调用参数与原文'),
         (error ? '<span class="geist-result-label">' + ui('错误类型') + '</span><pre class="geist-result-text">' + esc(error) + '</pre>' : '') +
-        (args ? block(ui('调用参数'), args) : '') + (result ? block(ui('返回原文'), result) : '') + '</details>';
+        (args ? block(ui('调用参数'), args) : '') + (result ? block(ui('返回原文'), result) : ''));
     };
     const callMeta = fact => {
       const call = callOf(fact), bits = [];
@@ -2860,7 +2863,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
         insight.calls.map(operation).join('') +
         (insight.reply ? '<p class="geist-step-reply">' + esc(insight.reply) + '</p>' : '') +
         (step.reply && step.reply.text && step.reply.text.length > (insight.reply || '').length
-          ? '<details class="geist-result"><summary>' + ui('回复原文') + '</summary><pre class="geist-result-text">' + esc(step.reply.text) + '</pre></details>' : '') +
+          ? disclosure(ui('回复原文'), '<pre class="geist-result-text">' + esc(step.reply.text) + '</pre>') : '') +
         (!insight.calls.length && !insight.reply ? ui('<p class="review-quiet">没有记录到本步的文字回复或工具操作。</p>') : '') +
       '</div>' +
       (insight.links.length ? '<p class="geist-step-next"><span>' + ui('后续记录') + '</span>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('') + '</p>' : '') +
@@ -2946,7 +2949,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       return '<div class="geist-history-overview"><p><strong>' + (hasChanges ? history.changeRounds.length + ui(' 轮涉及写入/修改') : history.rounds.length + ui(' 轮有文件记录')) + '</strong><span>' + (history.changes.length ? ui('修改已返回 ') + history.changes.length + ui(' 次 · ') : '') + ui('直接读取 ') + (history.reads.length - matches) + ui(' 次') + (matches ? ui(' · 搜索片段 ') + matches + ui(' 次') : '') + (history.failed.length ? ui(' · 受阻 ') + history.failed.length + ui(' 次') : '') + '</span></p>' + line +
         ui('<div class="geist-history-controls"><span>全程文件工具记录 · 按轮次顺序</span>') + (originTurn && rounds.some(r => r.turn === originTurn) ? '<button class="geist-text-action" data-history-jump="' + originTurn + ui('">定位第 ') + originTurn + ui(' 轮</button>') : '') +
         '<button id="review-history-reads" class="geist-text-action"' + (!hasChanges ? ' disabled' : '') + ' aria-pressed="' + state.reads + '">' + (state.reads ? ui('✓ 包含读取') : ui('包含读取')) + '</button></div></div>' +
-        '<div class="geist-history-rounds">' + rounds.map(round => '<details class="geist-history-round" data-history-tone="' + (operationsOf(round).some(op => op.status === 'error') ? 'failed' : round.changes ? 'change' : 'read') + '" data-history-round="' + round.turn + '"' + (state.open.has(round.turn) ? ' open' : '') + ui('><summary><strong>第 ') + round.turn + ui(' 轮</strong><span>') + counts(round) + '</span>' + (round.turn === originTurn ? ui('<em>图中位置</em>') : '') + '</summary><div class="geist-history-round-content">' + operationsOf(round).map(renderOperation).join('') + '</div></details>').join('') + '</div>' +
+        '<div class="geist-history-rounds">' + rounds.map(round => '<details class="geist-history-round" data-history-tone="' + (operationsOf(round).some(op => op.status === 'error') ? 'failed' : round.changes ? 'change' : 'read') + '" data-history-round="' + round.turn + '"' + (state.open.has(round.turn) ? ' open' : '') + ui('><summary data-closed="') + esc(ui('展开')) + '" data-open="' + esc(ui('收起')) + ui('"><strong>第 ') + round.turn + ui(' 轮</strong><span>') + counts(round) + '</span>' + (round.turn === originTurn ? ui('<em>图中位置</em>') : '') + '</summary><div class="geist-history-round-content">' + operationsOf(round).map(renderOperation).join('') + '</div></details>').join('') + '</div>' +
         ui('<p class="review-file-evidence-note">按本会话中同一路径的文件工具记录串联。差异入口展示各次替换片段；整文件首尾对比仍需要历史文件快照。</p>');
     };
     function jump(number) {
@@ -3113,7 +3116,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       legend = document.createElement('div'); legend.id = 'geist-legend'; legend.className = 'geist-legend';
       caption.append(legend);
       const toggle = document.createElement('button'); toggle.id = 'geist-legend-toggle'; toggle.className = 'geist-text-action quiet';
-      toggle.textContent = ui('符号说明'); toggle.setAttribute('aria-controls', legend.id);
+      toggle.textContent = ui('符号说明'); toggle.dataset.closed = ui('展开'); toggle.dataset.open = ui('收起'); toggle.setAttribute('aria-controls', legend.id);
       toggle.onclick = () => { geistLegendOpen = !geistLegendOpen; geistSyncLegend(); };
       caption.querySelector('.geist-observe-row')?.append(toggle);
       // Controls belong to the canvas; the inspector follows without another card.
