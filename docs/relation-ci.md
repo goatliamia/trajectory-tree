@@ -40,7 +40,7 @@ node --test plugin/analysis-view/goal-events-test.mjs plugin/analysis-view/stage
 
 ```powershell
 $relationsEngine = 'D:\projects\code-relations'
-& "$relationsEngine\.venv\Scripts\python.exe" -B -X utf8 "$relationsEngine\tools\project_ci.py" --repo . --base origin/main --head HEAD --out .dsh/relations/pr-goals.json
+& "$relationsEngine\.venv\Scripts\python.exe" -B -X utf8 -m code_relations pr-check . --base origin/main --head HEAD --typescript "$relationsEngine\node_modules\typescript\lib\typescript.js" --out .dsh/relations/pr-goals.json
 ```
 
-首次接入时，基线没有 `relations-ci.json` 才加 `--adopt-policy`。结果记录实际使用的本地引擎版本。
+首次接入时，基线没有 `relations-ci.json` 才加 `--adopt-policy`。

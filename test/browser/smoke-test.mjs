@@ -139,7 +139,8 @@ async function checkDsh(page) {
 async function checkCodex(page) {
   await page.goto(origin + '/host-codex');
   const trace = page.frameLocator('iframe');
-  await trace.locator('#graph [data-tool-result]').first().press('Enter');
+  // The branch group also spans empty SVG space. Use its actual pointer target.
+  await trace.locator('#graph [data-tool-result] .br-hit').first().click();
   await trace.locator('[data-result-diff]').click();
   assert.equal(await trace.locator('#review-detail-body pre.excerpt').textContent(), nativeDiff);
   assert.equal(await trace.locator('[data-chat-jump]').count(), 0);
