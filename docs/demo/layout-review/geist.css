@@ -211,17 +211,12 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-review .geist-step-context>span{flex:none;color:var(--ink)}
 .geist-review .geist-step-context .geist-step-context-text{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--muted)}
 .geist-step-reply{margin:0;font:13px/22px var(--sans);color:var(--ink);overflow-wrap:anywhere}
-.geist-result summary,.geist-basis summary{display:inline-flex;align-items:center;gap:6px;list-style:none;cursor:pointer;font:12px/20px var(--sans);color:var(--review-action)}
-.geist-result summary::-webkit-details-marker,.geist-basis summary::-webkit-details-marker{display:none}
-.geist-result summary:after,.geist-basis summary:after{content:'⌄';font-size:14px;line-height:16px;transition:transform .1s}
-.geist-result[open] summary:after,.geist-basis[open] summary:after{transform:rotate(180deg)}
+.geist-result summary{display:inline-flex;align-items:center;gap:6px;list-style:none;cursor:pointer;font:12px/20px var(--sans);color:var(--review-action)}
+.geist-result summary::-webkit-details-marker{display:none}
+.geist-result summary:after{content:'⌄';font-size:14px;line-height:16px;transition:transform .1s}
+.geist-result[open] summary:after{transform:rotate(180deg)}
 .geist-result-text{margin:4px 0 0;padding:10px 12px;max-height:200px;overflow:auto;border-radius:6px;background:var(--soft);font:11px/18px var(--mono);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
-.geist-basis{border-top:1px solid var(--line);padding-top:10px}
 .geist-review .geist-basis>summary{color:var(--muted)}
-.geist-basis-body{display:flex;flex-direction:column;gap:10px;padding-top:8px}
-.geist-basis-body section{display:flex;flex-direction:column;gap:2px}
-.geist-basis-body h4{margin:0;font:11px/18px var(--sans);font-weight:500;color:var(--muted)}
-.geist-basis-body p{margin:0;font:12px/21px var(--sans);color:var(--ink);overflow-wrap:anywhere}
 .geist-review .geist-diff-action{flex:none;display:flex;align-items:center;gap:14px;padding:7px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:500 12px/20px var(--sans);box-shadow:0 1px 2px #00000005}
 .geist-review .geist-diff-action:hover{background:var(--soft);border-color:var(--muted)}
 .geist-step-navigation{display:flex;gap:4px}
@@ -601,3 +596,4 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 /* 目标图标所在的分组里,底圆不再填白,避免一圈白边。 */
 /* 目标图标的步不画选中/柔光底,右侧那圈白边就是它露出来的。 */
 #graph g:has(> .review-goal-icon) > .review-action-halo { display: none; }
+.geist-step-record{margin:2px 0 0;padding-top:8px;border-top:1px solid var(--line)}

@@ -2801,7 +2801,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const identity = [session.id, t.number, step.number, overviewLayers.has('duration'), overviewLayers.has('context'), 'inspector'].join(':');
     if (panel.dataset.detailKey === identity) return;
     panel.dataset.detailKey = identity;
-    const info = reviewStepContext(t, step), insight = stepInsight(t, step, session.overview.episodes, reviewContextData.callFacts);
+    const insight = stepInsight(t, step, session.overview.episodes, reviewContextData.callFacts);
     const index = t.steps.indexOf(step);
     panel.className = 'step-panel on geist-step'; panel.style.display = '';
     panel.setAttribute('aria-label', ui('所选步骤详情'));
@@ -2846,13 +2846,9 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
         (insight.reply ? '<p class="geist-step-reply">' + esc(insight.reply) + '</p>' : '') +
         (!insight.calls.length && !insight.reply ? ui('<p class="review-quiet">没有记录到本步的文字回复或工具操作。</p>') : '') +
       '</div>' +
-      '<details class="geist-basis"><summary>' + ui('依据与原文') + '</summary><div class="geist-basis-body">' +
-        '<section><h4>' + esc(insight.input.label) + '</h4><p>' + esc(insight.input.text) + '</p></section>' +
-        (insight.links.length ? '<section><h4>' + ui('后续记录') + '</h4>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('') + '</section>' : '') +
-        (insight.following ? '<section><h4>' + ui('接下来') + '</h4><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + ' ↗</button></section>' : '') +
-        (info ? '<section><h4>' + ui('本步请求上下文') + '</h4><p>' + ui('已有 ≈') + reviewTokens(info.total) + ui(' tokens；') + (info.initial ? ui('首次载入 ') : ui('相比上次请求 ')) + reviewSigned(info.amount) + ui('。') + '</p><p class="review-quiet">' + ui('请求发出前的估算构成，不含本次回复。') + '</p></section>' : '') +
-        '<button class="geist-text-action" id="geist-step-record">' + ui('查看原始记录 ↗') + '</button>' +
-      '</div></details>';
+      (insight.links.length ? '<p class="geist-step-next"><span>' + ui('后续记录') + '</span>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('') + '</p>' : '') +
+      (insight.following ? '<p class="geist-step-next"><span>' + ui('接下来') + '</span><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + ' ↗</button></p>' : '') +
+      '<p class="geist-step-record"><button class="geist-text-action quiet" id="geist-step-record">' + ui('查看原始记录 ↗') + '</button></p>';
     panel.querySelectorAll('[data-insight-change]').forEach(el => el.onclick = () => reviewOpenChange(t, step, insight.calls.find(f => f.seq === Number(el.dataset.insightChange))));
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
     const record = $('geist-step-record');
