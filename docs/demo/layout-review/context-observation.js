@@ -28,7 +28,10 @@
     reviewContextScale.pixels = 76;
     // 不开总趋势时也用开着那套比例:上方不再挤在顶部,基线下移,留出柱子的高度。
     const context = overviewLayers.has('context');
-    return { height: context ? 430 : 350, base: context ? 282 : 208 };
+    // 高度跟随图区盒子:固定 430/350 会在高窗口留一截白、矮窗口把底部顶出画布。
+    const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
+    const height = Math.round(Math.max(240, box > 120 ? box : (context ? 430 : 350)));
+    return { height, base: context ? 282 : 208 };
   };
   function studySyncSources() {
     const region = $('geist-context-overview'); if (!region) return;

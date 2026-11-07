@@ -22,12 +22,15 @@
       cancelAnimationFrame(geistLayoutFrame);
       geistLayoutFrame = requestAnimationFrame(() => {
         if (view !== 'overview') return;
-        const signature = [$('canvas').clientWidth, $('canvas').clientHeight, $('geist-context-overview').getBoundingClientRect().height, $('graph-caption').getBoundingClientRect().height].map(n => Math.round(n)).join(':');
+        const signature = [$('canvas').clientWidth, $('canvas').clientHeight, $('geist-context-overview').getBoundingClientRect().height, $('graph-caption').getBoundingClientRect().height, $('graph-scroll') ? $('graph-scroll').clientHeight : 0, $('graph-scroll') ? $('graph-scroll').clientWidth : 0].map(n => Math.round(n)).join(':');
         if (signature === geistLayoutMeasure) return;
         geistLayoutMeasure = signature;
         const geometry = geistOverviewGeometry();
-        if (Math.abs((overviewProjection?.mainY || 0) - geometry.base) > 1) renderOverview({ plotOnly: true });
+        const baseMoved = Math.abs((overviewProjection?.mainY || 0) - geometry.base) > 1;
+        const heightMoved = Math.abs((geistOverviewFrame?.height || 0) - geometry.height) > 1;
+        // 高度变化必须整页重画:只重画 plot 不会改 SVG 的 height,底部会留一条空白。
+        if (baseMoved || heightMoved) renderOverview({ plotOnly: !heightMoved });
       });
     });
-    for (const el of [$('canvas'), $('geist-context-overview'), $('graph-caption')]) if (el) geistLayoutObserver.observe(el);
+    for (const el of [$('canvas'), $('geist-context-overview'), $('graph-caption'), $('graph-scroll')]) if (el) geistLayoutObserver.observe(el);
   }
