@@ -34,10 +34,18 @@
       const label = first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮` + ui(' · 展开');
       const ongoing = group.rows.some(l => l.turn.end === null);
       const duration = (first === last ? '' : ui('共 ')) + (ongoing ? '≥' : '') + reviewDuration(group.duration);
+      // 宽度不够时退到短标签,再不够就只留时长;都放不下就整条不画,避免只剩一个空框。
+      const span = end - start - 8;
+      const shortLabel = first === last ? ui('第 ') + first + ui(' 轮') : first + '–' + last;
+      const full = span >= Math.max(reviewMeasure(label), reviewMeasure(duration));
+      const single = !full && span >= reviewMeasure(shortLabel) ? shortLabel
+        : !full && duration && span >= reviewMeasure(duration) ? duration : '';
+      if (!full && !single) continue;
       let body = '<rect x="' + start + '" y="28" width="' + Math.max(1, end - start - 3) + '" height="38" rx="4" class="review-duration-band"/>';
       body += '<path d="M' + (start + 4) + ' 62v4H' + Math.max(start + 4, end - 7) + 'v-4" class="review-interval-guide"/>';
-      if (end - start >= Math.max(reviewMeasure(label), reviewMeasure(duration)) + 8)
-        body += brText(cx, 42, label, 'review-turn-duration') + brText(cx, 57, duration, 'review-turn-duration review-duration-value');
+      body += full
+        ? brText(cx, 42, label, 'review-turn-duration') + brText(cx, 57, duration, 'review-turn-duration review-duration-value')
+        : brText(cx, 49, single, 'review-turn-duration' + (single === duration ? ' review-duration-value' : ''));
       html += brGroup('data-review-duration-range="' + first + ':' + last + '" class="review-duration-hit"', body,
         label + ' · ' + duration + ui('。点击查看每一轮耗时，没有按时长筛选。'));
     }
