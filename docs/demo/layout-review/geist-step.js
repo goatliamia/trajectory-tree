@@ -60,6 +60,8 @@
         (raw ? '<div class="geist-operation-actions">' + raw + '</div>' : '') +
         '</article>';
     };
+    // 展开原文时不改变面板外框高度:锁住当前高度,内容在面板内滚动,图区不会被挤压。
+    panel.style.height = '';
     panel.innerHTML = '<header class="geist-step-meta"><span><b>' + ui`第 ${step.number} 步` + '</b>' +
       (overviewLayers.has('duration') ? '<span>' + preciseTime(recordDuration(step)) + '</span>' : '') +
       (insight.calls.length > 1 ? '<span>' + insight.calls.length + ui(' 项操作</span>') : '') + '</span>' +
@@ -76,6 +78,17 @@
       (insight.following ? '<p class="geist-step-next"><span>' + ui('接下来') + '</span><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + arrow + '</button></p>' : '');
     panel.querySelectorAll('[data-insight-change]').forEach(el => el.onclick = () => reviewOpenChange(t, step, insight.calls.find(f => f.seq === Number(el.dataset.insightChange))));
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
+    // 展开前把面板高度钉住:内容在里面滚,画布和图区保持原样。
+    const panelDetails = () => [...panel.querySelectorAll('details.geist-result')];
+    panelDetails().forEach(details => {
+      details.querySelector('summary').addEventListener('click', () => {
+        if (details.open) return;
+        panel.style.height = panel.getBoundingClientRect().height + 'px';
+      });
+      details.addEventListener('toggle', () => {
+        if (!details.open && !panelDetails().some(row => row.open)) panel.style.height = '';
+      });
+    });
     panel.querySelectorAll('[data-inspector-nav]').forEach(el => el.onclick = () => {
       const direction = Number(el.dataset.inspectorNav), target = stepNeighbour(direction);
       if (!target) return;
