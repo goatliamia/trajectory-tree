@@ -791,7 +791,6 @@ function aggregateInScreen(items, maxSpan = 30) {
 }
 
 function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48, 77, -94, 122], gap = 10, aggregateSpan = 30, obstacles = [], labelSide = 'right' }) {
-  const side = labelSide === 'left' ? -1 : 1;
   let groups = aggregateInScreen(items, aggregateSpan);
   const intersects = (a, b) => a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + 5 && a.bottom + 5 > b.top;
   const stemHits = (anchor, dy, box) => anchor > box.left - 4 && anchor < box.right + 4 && Math.max(0, dy) > box.top - 4 && Math.min(0, dy) < box.bottom + 4;
@@ -800,12 +799,13 @@ function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48
     let failed = -1;
     for (let i = 0; i < groups.length; i++) {
       const members = groups[i], x = members[Math.floor((members.length - 1) / 2)].x;
+      const side = (typeof labelSide === 'function' ? labelSide(members) : labelSide) === 'left' ? -1 : 1;
       const label = labelOf(members), width = measure(label) + 6;
       const cx = Math.max(left + width / 2, Math.min(right - width / 2, side > 0 ? x + 20 : x - 24 - width / 2));
       const occupiedLeft = side > 0 ? Math.min(cx - width / 2, x + 9) : Math.min(cx - width / 2, x - 44);
       const occupiedRight = side > 0 ? Math.max(cx + width / 2, x + 44) : Math.max(cx + width / 2, x - 9);
       const candidate = slots.map(dy => ({
-        x, cx, dy, label, members,
+        x, cx, dy, label, members, side,
         left: occupiedLeft, right: occupiedRight,
         top: dy > 0 ? dy - 9 : dy - 28, bottom: dy > 0 ? dy + 25 : dy + 9,
       })).find(p => placed.every(q => !intersects(p, q) && !stemHits(p.x, p.dy, q) && !stemHits(q.x, q.dy, p)) && obstacles.every(q => !intersects(p, q)));
@@ -3298,27 +3298,30 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   }
   function geistResultBranchBody(p, base) {
     const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;
-    // 枝条朝左伸:连接线落到锚点左侧,端点和标签都排在左边。
-    const twig = 'M' + p.x + ' ' + (base + sign * 2) + 'V' + (y - sign * 10) + 'Q' + p.x + ' ' + y + ' ' + (p.x - 10) + ' ' + y + 'H' + (p.x - 14);
+    // 只有报错类枝条朝左;普通结果枝条仍朝右,标签位置由布局按 side 给出。
+    const dir = p.side < 0 ? -1 : 1;
+    const twig = 'M' + p.x + ' ' + (base + sign * 2) + 'V' + (y - sign * 10) + 'Q' + p.x + ' ' + y + ' ' + (p.x + dir * 10) + ' ' + y + 'H' + (p.x + dir * 14);
     const endpoint = toolResultEndpoint(p.members);
-    const glyph = '<g class="geist-branch-tip" data-endpoint-kind="' + endpoint.kind + '" aria-hidden="true">' + geistOutcomeGlyph(endpoint, p.x - 20, y) + '</g>';
+    const glyph = '<g class="geist-branch-tip" data-endpoint-kind="' + endpoint.kind + '" aria-hidden="true">' + geistOutcomeGlyph(endpoint, p.x + dir * 20, y) + '</g>';
     const body = '<rect class="br-hit" x="' + (p.left - 4) + '" y="' + (base + p.top - 3) + '" width="' + (p.right - p.left + 8) + '" height="' + (p.bottom - p.top + 6) + '"/>' +
       '<path d="' + twig + '" class="br-connector"/>' + glyph + brText(p.cx, p.dy > 0 ? y + 21 : y - 14, p.label, 'br-label');
     return body;
   }
+  // 报错类枝条(含合并后仍带着报错成员的)朝左,其他结果枝条保持朝右。
+  const geistErrorBranchSide = members => members.some(m => m.result.kind === 'incident' || m.result.kind === 'error') ? 'left' : 'right';
   function geistDrawResultBranches(items, base, left, right, visible, options = {}) {
     if (!items.length) { geistOutcomeBranches = []; return { html: '', bottom: base + 42 }; }
     const key = [view, view === 'path' ? turn().number : overviewScale, right, overviewLayers.has('context'), reviewStress, document.fonts.status, options.reservedKey || ''].join(':');
     let packed = geistOutcomeLayoutCache.get(key);
     if (!packed) {
       const reserved = options.reserved || [], obstacles = [...reserved, ...(options.obstacles || [])];
-      try { packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles, labelSide: 'left' }); }
+      try { packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles, labelSide: geistErrorBranchSide }); }
       catch (error) {
         if (!options.obstacles?.length) throw error;
-        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: 'left' });
+        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
       }
       if (view === 'path' && options.obstacles?.length && packed.some(p => new Set(p.members.map(m => m.result.step)).size > 1)) {
-        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: 'left' });
+        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
       }
       if (geistOutcomeLayoutCache.size > 20) geistOutcomeLayoutCache.clear();
       geistOutcomeLayoutCache.set(key, packed);

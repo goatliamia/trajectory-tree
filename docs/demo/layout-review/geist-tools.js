@@ -53,27 +53,30 @@
   }
   function geistResultBranchBody(p, base) {
     const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;
-    // 枝条朝左伸:连接线落到锚点左侧,端点和标签都排在左边。
-    const twig = 'M' + p.x + ' ' + (base + sign * 2) + 'V' + (y - sign * 10) + 'Q' + p.x + ' ' + y + ' ' + (p.x - 10) + ' ' + y + 'H' + (p.x - 14);
+    // 只有报错类枝条朝左;普通结果枝条仍朝右,标签位置由布局按 side 给出。
+    const dir = p.side < 0 ? -1 : 1;
+    const twig = 'M' + p.x + ' ' + (base + sign * 2) + 'V' + (y - sign * 10) + 'Q' + p.x + ' ' + y + ' ' + (p.x + dir * 10) + ' ' + y + 'H' + (p.x + dir * 14);
     const endpoint = toolResultEndpoint(p.members);
-    const glyph = '<g class="geist-branch-tip" data-endpoint-kind="' + endpoint.kind + '" aria-hidden="true">' + geistOutcomeGlyph(endpoint, p.x - 20, y) + '</g>';
+    const glyph = '<g class="geist-branch-tip" data-endpoint-kind="' + endpoint.kind + '" aria-hidden="true">' + geistOutcomeGlyph(endpoint, p.x + dir * 20, y) + '</g>';
     const body = '<rect class="br-hit" x="' + (p.left - 4) + '" y="' + (base + p.top - 3) + '" width="' + (p.right - p.left + 8) + '" height="' + (p.bottom - p.top + 6) + '"/>' +
       '<path d="' + twig + '" class="br-connector"/>' + glyph + brText(p.cx, p.dy > 0 ? y + 21 : y - 14, p.label, 'br-label');
     return body;
   }
+  // 报错类枝条(含合并后仍带着报错成员的)朝左,其他结果枝条保持朝右。
+  const geistErrorBranchSide = members => members.some(m => m.result.kind === 'incident' || m.result.kind === 'error') ? 'left' : 'right';
   function geistDrawResultBranches(items, base, left, right, visible, options = {}) {
     if (!items.length) { geistOutcomeBranches = []; return { html: '', bottom: base + 42 }; }
     const key = [view, view === 'path' ? turn().number : overviewScale, right, overviewLayers.has('context'), reviewStress, document.fonts.status, options.reservedKey || ''].join(':');
     let packed = geistOutcomeLayoutCache.get(key);
     if (!packed) {
       const reserved = options.reserved || [], obstacles = [...reserved, ...(options.obstacles || [])];
-      try { packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles, labelSide: 'left' }); }
+      try { packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles, labelSide: geistErrorBranchSide }); }
       catch (error) {
         if (!options.obstacles?.length) throw error;
-        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: 'left' });
+        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
       }
       if (view === 'path' && options.obstacles?.length && packed.some(p => new Set(p.members.map(m => m.result.step)).size > 1)) {
-        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: 'left' });
+        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
       }
       if (geistOutcomeLayoutCache.size > 20) geistOutcomeLayoutCache.clear();
       geistOutcomeLayoutCache.set(key, packed);
