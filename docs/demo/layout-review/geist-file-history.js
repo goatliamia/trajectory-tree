@@ -25,7 +25,7 @@
       const outcome = fact?.outcome || (op.status === 'returned' ? ui('工具已返回') : op.status === 'error' ? ui('操作受阻') : ui('结果未记录'));
       return '<div class="geist-history-operation" data-history-operation="' + op.seq + '"><div class="geist-history-operation-title"><strong class="' + (op.kind === 'read' ? 'read' : op.status === 'error' ? 'failed' : 'change') + '">' + (op.access === 'match' ? ui('匹配片段') : op.kind === 'read' ? ui('读取') : changeName(op)) + ui('</strong><span>第 ') + op.step + ui(' 步</span>') + (op.status === 'error' ? ui('<span class="failed">受阻</span>') : '') + '</div><p>' + esc(outcome) + '</p>' +
         (!planned ? excerpt(fact) : '') + '<div class="geist-history-operation-links">' +
-        (fact?.preview ? '<button class="geist-text-action" data-history-diff="' + op.seq + '">' + (planned ? ui('查看原计划') : ui('查看改动片段')) + ' ↗</button>' : '') +
+        (reviewHasChange(fact) ? '<button class="geist-text-action" data-history-diff="' + op.seq + '">' + (planned ? ui('查看原计划') : fact.preview ? ui('查看改动片段') : ui('查看文件差异')) + ' ↗</button>' : '') +
         '<button class="geist-text-action quiet" data-history-step="' + op.seq + ui('">定位到这一步 ↗</button></div></div>');
     };
     const render = () => {

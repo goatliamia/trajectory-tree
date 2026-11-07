@@ -1,6 +1,6 @@
 # Codex host adapter
 
-`/codex` uses the current shared event graph, file objects, result branches, selection and navigation. Composition supports multiple selected sources; delta and total trends have independent switches and share the original graph. There is no dependency on a previously generated `/geist` page. Codex-specific explanations and measurement semantics live in `codex-host.js`; no DSH plugin installation is involved.
+`/codex` uses the shared event graph, file objects, result branches, selection and navigation. The result drawer, step panel and file history can open a recorded Codex diff. [The Codex adapter](../../../view/assets/codex-host.js) adds the source explanations and measurement semantics.
 
 ```powershell
 node scripts/export-codex-thread.mjs --thread <thread-id>

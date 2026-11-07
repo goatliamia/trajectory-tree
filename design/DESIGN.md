@@ -60,7 +60,7 @@
 | [primitives.css](primitives.css) | 文字、指标、分隔、按钮、来源点选、证据链接和浮层基础类 |
 | [icons.svg](icons.svg) | 本地绘制的完成、错误、重试、替换与证据符号 |
 | [index.html](index.html) | 可直接打开对照的颜色、字体、材料与交互样张 |
-| [Geist 字体目录](../plugin/analysis-view/lib/trace/fonts/) | 已有的本地 woff2；许可证见 [OFL](../docs/demo/layout-review/fonts/LICENSE.txt) |
+| [Geist 字体目录](../plugin/analysis-view/lib/trace/fonts/) | 本地 woff2 与 [OFL 许可证](../plugin/analysis-view/lib/trace/fonts/LICENSE.txt) |
 
 报告和拼装组件直接消费共享令牌。原生路径、独立趋势及 Pi/Codex 页面构建器已接入同一浅色覆盖；现有运行中的 DSH 未因本次整理重新安装。旧图的暗色主题继续沿原实现，尚未作为这份浅色资产的完整迁移结果。
 

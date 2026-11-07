@@ -24,10 +24,12 @@ function copy(path){
  }
 }
 for(const entry of ['scripts/trajectory-view.mjs','scripts/trajectory-query.mjs','scripts/trajectory-report.mjs',...(host==='pi'?['plugin/portable-tools/pi.mjs']:[])])copy(entry);
-for(const file of ['report/base.css','report/style.css','report/layout.css','report/assembly.css','report/runtime.js','report/AUTHORING.md','report/WRITING.md','design/primitives.css','design/DESIGN.md','design/icons.svg',
- 'plugin/analysis-view/lib/trace/page.html','plugin/analysis-view/lib/trace/page.js','plugin/analysis-view/lib/trace/fonts/Geist-Variable.woff2','plugin/analysis-view/lib/trace/fonts/GeistMono-Variable.woff2',
- 'docs/demo/layout-review/fonts/LICENSE.txt','LICENSE'])copy(file);
-for(const name of ['geist.css','context-observation.css','context-observation.js','pi-host.js','codex-host.js','claude-host.js'])copy('view/assets/'+name);
+for(const file of ['report/base.css','report/style.css','report/layout.css','report/assembly.css','report/runtime.js','report/AUTHORING.md','report/WRITING.md','design/primitives.css','design/DESIGN.md','design/icons.svg','LICENSE'])copy(file);
+for (const name of ['page.html', 'page.js', 'shared/visual-tokens.css', 'shared/context-observation.css', 'shared/context-observation.js',
+  'shared/context-trend-geometry.js', 'fonts/Geist-Variable.woff2', 'fonts/GeistMono-Variable.woff2', 'fonts/LICENSE.txt']) {
+  copy('plugin/analysis-view/lib/trace/' + name);
+}
+for(const name of ['pi-host.js','codex-host.js','claude-host.js'])copy('view/assets/'+name);
 if(host==='codex'||host==='claude')for(const name of [...DIAGNOSIS_SKILLS.map(s=>s.name),'trajectory-view']){
  const sourceRoot=join(root,'plugin',host,'skills',name);
  for(const sourceFile of files(sourceRoot)){

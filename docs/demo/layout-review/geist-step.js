@@ -52,7 +52,7 @@
     const operation = fact => {
       const meta = [fact.detail, callMeta(fact)].filter(Boolean).join(' · ');
       const raw = rawEntry(fact);
-      const diff = fact.preview ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + arrow + '</button>' : '';
+      const diff = reviewHasChange(fact) ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + arrow + '</button>' : '';
       return '<article class="geist-operation" data-tone="' + fact.tone + '">' +
         '<h3>' + esc(fact.title) + '</h3>' +
         '<p>' + esc(fact.outcome) + (diff ? ' ' + diff : '') + '</p>' +

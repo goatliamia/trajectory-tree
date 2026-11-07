@@ -65,10 +65,10 @@
     geistSyncMeasureFont();
     const value = geistOverviewBase(...args);
     geistArrangeCaption(); geistGoalChip();
-    // 首帧时图注/表头高度可能还没稳定,几何算出的高度和真实盒子会差一截;差超过 14px 就按盒子高度再画一次。
+    // Fit again if arranging the caption changed the available box. The SVG
+    // itself can legitimately be taller when the goal or branch lanes overflow.
     const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
-    const svgHeight = parseFloat((graph || {}).getAttribute ? $('graph').getAttribute('height') : '0') || 0;
-    if (!geistFitPass && box > 120 && Math.abs(svgHeight - box) > 14) {
+    if (!geistFitPass && box > 120 && Math.abs((geistOverviewFrame?.height || 0) - Math.max(240, box)) > 14) {
       geistFitPass = true;
       try { geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); } finally { geistFitPass = false; }
     }

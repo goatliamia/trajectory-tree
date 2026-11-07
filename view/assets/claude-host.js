@@ -20,6 +20,7 @@
   geistRenderContextOverview = function() {
     let region = $('geist-context-overview');
     if (!region) { region = document.createElement('section'); region.id = 'geist-context-overview'; region.className = 'geist-context-overview'; region.setAttribute('aria-label', claudeUi('当前上下文总览', 'Current context overview')); $('graph-scroll').before(region); }
+    region.setAttribute('aria-label', claudeUi('当前上下文总览', 'Current context overview'));
     const latest = (reviewContextData.usage || []).at(-1)?.usage;
     region.innerHTML = '<header><h2>' + claudeUi('请求上下文', 'Request context') + ' <small>' + claudeUi('组成未记录', 'Composition not recorded') + '</small></h2></header><p class="review-quiet">' + claudeUi('Claude transcript 未提供完整请求组成或模型窗口，无法显示来源比例。', 'The Claude transcript does not provide the complete request composition or model window, so source proportions cannot be shown.') + '</p>' + (latest ? '<p class="review-quiet">' + claudeUi('最近一条已记录用量：输入 ', 'Latest recorded usage: input ') + claudeValue(latest.input) + claudeUi(' · 缓存读取 ', ' · cache read ') + claudeValue(latest.cacheRead) + claudeUi(' · 缓存创建 ', ' · cache creation ') + claudeValue(latest.cacheWrite) + claudeUi(' · 输出 ', ' · output ') + claudeValue(latest.output) + ' tokens.</p>' : '<p class="review-quiet">' + claudeUi('用量未记录。', 'Usage not recorded.') + '</p>');
   };
@@ -38,7 +39,9 @@
     claudeCaption();
     $('review-all-retries')?.remove();
     $('graph-caption')?.querySelectorAll('[data-context-caption]').forEach(el => el.remove());
-    if (!$('claude-source-link')) { const button = document.createElement('button'); button.id = 'claude-source-link'; button.className = 'geist-text-action quiet'; button.textContent = claudeUi('Claude 数据依据 ↗', 'Claude data sources ↗'); button.onclick = showSource; $('geist-legend')?.append(button); }
+    let button = $('claude-source-link');
+    if (!button) { button = document.createElement('button'); button.id = 'claude-source-link'; button.className = 'geist-text-action quiet'; button.onclick = showSource; $('geist-legend')?.append(button); }
+    button.textContent = claudeUi('Claude 数据依据 ↗', 'Claude data sources ↗');
   };
   const claudeStyle = document.createElement('style');
   claudeStyle.textContent = '#geist-context-overview .study-source-actions{display:none}'; document.head.append(claudeStyle);

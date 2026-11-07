@@ -1,6 +1,6 @@
 # Shared views, host capabilities and language
 
-The four hosts use the same shipped trajectory renderer and report components. Geometry, navigation, files, context trends and report bindings are shared. A host adapter supplies native evidence and overrides explanations when the meaning of a step or a measurement differs.
+The four hosts use the same trajectory document, renderer and report components. Geometry, navigation, files, goal markers, context trends and report bindings use shared evidence. [Page assembly](../plugin/analysis-view/lib/trace/presentation.mjs) inserts the host adapter at one extension point. DSH supplies its [live data bridge](../plugin/analysis-view/lib/trace/dsh-bridge.js) and [conversation actions](../plugin/analysis-view/lib/trace/dsh-presentation.js). Portable hosts boot directly from a snapshot and add explanations for their own native records.
 
 | Capability | DSH | Pi | Codex | Claude Code |
 | --- | --- | --- | --- | --- |
@@ -18,7 +18,7 @@ Portable pages retain the shared light/dark theme rules and responsive viewport 
 
 ## Automatic language selection
 
-The selector offers **Auto / 中文 / English**. Selection order:
+The trajectory page chooses its language automatically. Pass `?lang=en` or `?lang=zh-CN` in the URL, or set `--lang` when exporting a portable page. Selection order:
 
 1. Explicit `?lang=en|zh-CN` or CLI `--lang en|zh-CN`.
 2. A saved manual interface preference.
@@ -26,7 +26,7 @@ The selector offers **Auto / 中文 / English**. Selection order:
 4. The first supported entry in the browser's language preferences.
 5. English.
 
-`?lang=auto` returns to automatic selection, bypassing a fixed export language and a saved manual preference. Choosing Auto in the selector also removes that saved preference. Automatic detection is not cached as a manual choice. Chinese variants currently use Simplified Chinese; English variants use English.
+`?lang=auto` returns to automatic selection, bypassing a fixed export language and a saved manual preference. Chinese variants use Simplified Chinese and English variants use English.
 
 DSH's locale service synchronizes `document.documentElement.lang`. Its panel observes that attribute and preference changes; its trajectory frame observes the same-origin host language. Independent HTML files need no host API or model call. When the host/browser language changes in automatic mode, a trajectory page reloads in the new language.
 

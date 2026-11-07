@@ -28,6 +28,14 @@ assert.ok(collectToolResults(session, graph.context.callFacts, graph.context.fil
 assert.ok(contextByTurn(graph.context.requests).some(r => r.decrease > 0), 'compaction produces a source-estimate reduction');
 const noCapture = adaptPiSession({ ...input, capture: [] });
 assert.ok(noCapture.sessions[0].turns.flatMap(t => t.steps).flatMap(s => s.calls).every(c => c.timingSource === 'unrecorded-start'));
+const latestMissingUsage = structuredClone(input);
+const lastMessage = latestMissingUsage.entries.findLast(e => e.type === 'message' && e.message.role === 'assistant').message;
+delete lastMessage.usage;
+assert.equal(adaptPiSession(latestMissingUsage).officialStats.context.pressure.pressureTokens, null, 'missing latest usage does not reuse an earlier request');
+const latestAssistantModel = structuredClone(input);
+const assistantAfterChange = latestAssistantModel.entries.findLast(e => e.type === 'message' && e.message.role === 'assistant').message;
+assistantAfterChange.model = 'later-model'; assistantAfterChange.provider = 'later-provider';
+assert.deepEqual(adaptPiSession(latestAssistantModel).context.route, { model: 'later-model', provider: 'later-provider' }, 'a later assistant updates the native model route');
 const missingContent = structuredClone(input);
 missingContent.entries.find(e => e.type === 'message' && e.message.role === 'assistant').message.content = null;
 assert.doesNotThrow(() => adaptPiSession(missingContent), 'native Pi tolerates assistant messages with missing content');

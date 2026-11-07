@@ -184,21 +184,17 @@
         '<p>' + esc(call.fact?.outcome || ui('工具结果已记录')) + '</p>' +
         (subject ? '<p class="geist-outcome-meta">' + esc(subject) + '</p>' : '') +
         (recovery ? '<button class="geist-text-action recovery" data-result-recovery="' + call.seq + '">' + ui('第 ') + recovery.step + ui(' 步恢复 ↗') + '</button>' : '') +
-        (call.fact?.preview ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : ui('查看改动片段')) + ' ↗</button>' : '') +
+        (reviewHasChange(call.fact) ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : call.fact.preview ? ui('查看改动片段') : ui('查看文件差异')) + ' ↗</button>' : '') +
         (result.recorded ? '<p class="review-quiet">' + (call.inner ? ui('内部工具 · ') : '') + 'seq ' + call.seq + (call.rootSeq != null ? ui(' · 外层调用 #') + call.rootSeq : '') + '</p>' + callEntry(call) : '') + '</div>';
     }).join('');
     if (paths.length) html += '<div class="geist-outcome-files">' + paths.map((path, i) => '<button class="geist-text-action" data-result-file="' + i + '">' + esc(path.split(/[\\/]/).at(-1)) + ui(' · 全程记录 ↗</button>')).join('') + '</div>';
-    const embedded = window.parent !== window && data.traceCapabilities?.chatJump === true;
-    html += ui('<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button>') +
-      (embedded ? ui('<button class="action-button" id="geist-result-chat">跳到第 ') + result.turn + ui(' 轮对话 ↗</button>') : '') + '</div>';
+    html += ui('<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button></div>');
     if (result.kind === 'check') html += ui('<p class="review-quiet">按检查命令实际输出展示，不代表整个任务已经完成。</p>');
     if (result.calls.some(call => call.name === 'grep')) html += ui('<p class="review-quiet">搜索记录关联实际返回的匹配片段，不表示读入了整份文件。</p>');
     const counts = [result.calls.length + ui(' 项操作'), blocked ? blocked + ui(' 处受阻') : '', recovered ? recovered + ui(' 处已恢复') : ''].filter(Boolean).join(' · ');
-    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], ui`第 ${result.turn} 轮 · 第 ${result.step} 步` + ' · ' + counts, html, back);
+    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], ui`第 ${result.turn} 轮 · 第 ${result.step} 步` + ' · ' + counts, html, back, result.turn);
     $('geist-result-step').onclick = () => { closeDrawer(); reviewEnterPath(result.turn, result.step); };
     $('geist-result-context').onclick = () => reviewOpenContext(result.turn);
-    // 跳到对话由宿主视图完成(切到对话并滚到该轮),页面只把轮次交出去。
-    $('geist-result-chat')?.addEventListener('click', () => window.parent.postMessage({ type: 'analysis-trace-jump', turn: result.turn }, location.origin));
     $('drawer-body').querySelectorAll('[data-result-file]').forEach(el => el.onclick = () => {
       const file = fileObjects(reviewFileOperations).find(f => f.id === fileIdentity(paths[Number(el.dataset.resultFile)]));
       if (file) { reviewSelectFile(file.id); closeDrawer(); reviewOpenFileHistory(file); }

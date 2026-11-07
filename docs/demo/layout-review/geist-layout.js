@@ -28,8 +28,8 @@
         const geometry = geistOverviewGeometry();
         const baseMoved = Math.abs((overviewProjection?.mainY || 0) - geometry.base) > 1;
         const heightMoved = Math.abs((geistOverviewFrame?.height || 0) - geometry.height) > 1;
-        // 高度变化必须整页重画:只重画 plot 不会改 SVG 的 height,底部会留一条空白。
-        if (baseMoved || heightMoved) renderOverview({ plotOnly: !heightMoved });
+        const widthMoved = Math.abs((overviewProjection?.viewportWidth || 0) - Math.max(300, $('graph-scroll').clientWidth)) > 1;
+        if (baseMoved || heightMoved || widthMoved) renderOverview({ plotOnly: true });
       });
     });
     for (const el of [$('canvas'), $('geist-context-overview'), $('graph-caption'), $('graph-scroll')]) if (el) geistLayoutObserver.observe(el);

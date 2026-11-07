@@ -45,7 +45,7 @@ const actionStart = graph.indexOf('  function renderActionPath() {');
 const actionEnd = graph.indexOf('  function renderPath(){', actionStart);
 if (actionStart < 0 || actionEnd < 0) throw new Error('Action view seam changed');
 graph = graph.slice(0, actionStart) + read(demo, 'action-view.js') + '\n' + graph.slice(actionEnd);
-const scripts = [graph, read(source, 'panorama.js'), read(source, 'scene.js'), pure, read(demo, 'preserved.js'), read(demo, 'context-layer.js'), read(demo, 'review-navigation.js'), read(demo, 'step-detail.js'), read(demo, 'file-layer.js'), branch].join('\n');
+const scripts = [graph, read(source, 'panorama.js'), read(source, 'scene.js'), pure, read(demo, 'preserved.js'), read(demo, 'context-layer.js'), read(demo, 'goal-layer.js'), read(demo, 'review-navigation.js'), read(demo, 'step-detail.js'), read(demo, 'file-layer.js'), branch].join('\n');
 let page = read(source, 'template.html');
 page = page.replace('/*__TRACE_RENDERER__*/', () => scripts).replace('/*__TRACE_DATA__*/', () => encodedData);
 page = page.replace('</style>', () => read(source, 'branches.css') + '\n' + read(demo, 'preserved.css') + '\n' + read(demo, 'context-layer.css') + '\n' + read(demo, 'visual-unity.css') + '\n' + read(demo, 'step-detail.css') + '\n' + read(demo, 'file-layer.css') + '\n</style>');

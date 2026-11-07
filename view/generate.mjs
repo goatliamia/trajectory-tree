@@ -1,4 +1,3 @@
-import {readFile,stat} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
@@ -10,10 +9,11 @@ import {readClaudeTranscript} from '../analyzers/claude-reader.mjs';
 import {projectClaudeTranscript,finalizeClaudeDataset} from '../analyzers/claude-adapter.mjs';
 import {writeHostTracePage} from './render.mjs';
 import {normalizeLocale} from '../lib/i18n.mjs';
+import {readBoundedFile} from '../lib/bounded-file.mjs';
 
 const readBounded=async(file,signal)=>{
- if((await stat(file)).size>128*1024*1024)throw Error('View source exceeds 128 MiB');
- const bytes=await readFile(file,{signal});if(bytes.length>128*1024*1024)throw Error('View source exceeds 128 MiB');return bytes.toString('utf8');
+ const bytes=await readBoundedFile(file,{maxBytes:128*1024*1024,signal,overflow:'View source exceeds 128 MiB'});
+ return bytes.toString('utf8');
 };
 // Deterministic view generation only. No model call or diagnostic prose.
 export async function generateTraceView(spec,{signal}={}){

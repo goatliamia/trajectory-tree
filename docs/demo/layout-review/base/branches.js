@@ -49,22 +49,10 @@
     const mapTime=time=>{const l=findRow(time);if(time>=l.turn.start)return l.x+Math.min(endOf(l.turn)-l.turn.start,Math.max(0,time-l.turn.start))*factor;const prev=layout[l.index-1];return prev?prev.end+Math.max(0,time-endOf(prev.turn))/Math.max(1,l.turn.start-endOf(prev.turn))*(l.x-prev.end):l.x;};
     const visible=(a,b=a)=>b>=left-90&&a<=right+90;
     const detail=false,showErrors=overviewLayers.has('failures'),showTime=overviewLayers.has('duration'),showInterrupt=overviewLayers.has('interruptions');
-    overviewProjection={layout,factor,baseFactor,gutter,mapTime,mainY:base,mainBottom:base+8,visibleLeft:left,visibleRight:right};
+    overviewProjection={layout,factor,baseFactor,gutter,mapTime,mainY:base,mainBottom:base+8,visibleLeft:left,visibleRight:right,viewportWidth:vw};
     if(!plotOnly){
       $('turn-heading').innerHTML=ui`<div class="overview-heading"><div class="overview-heading-main"><strong>执行全景</strong><span>${turns.length} 轮</span></div><div class="overview-heading-meta"><span>${clock(turns[0].start).slice(0,5)} — ${clock(endOf(turns.at(-1))).slice(0,5)}</span><i></i><span>执行 ${dur(active)}</span></div></div><div class="ov-controls"><div class="ov-layer-checks">${Object.entries(focusNames).map(([id,name])=>`<label class="ov-layer-check"><input type="checkbox" data-br-layer="${id}" ${overviewLayers.has(id)?'checked':''}><span>${name}</span></label>`).join('')}</div><span class="spacer"></span><button class="ov-focus-rule" id="br-rules">图例与规则 ↗</button><div class="ov-zoom"><button id="ov-zoom-out" aria-label="缩小时间轴" ${overviewScale<=1?'disabled':''}>−</button><button id="ov-fit">${overviewScale===1?ui('全览'):overviewScale.toFixed(overviewScale<10?1:0)+'×'}</button><button id="ov-zoom-in" aria-label="放大时间轴" ${overviewScale>=1024?'disabled':''}>＋</button></div></div><div class="br-key"><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 11 C7 11 5 3 11 3 H19 C24 3 23 11 28 11" class="br-connector"/></svg>行动</span><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 12 Q6 12 9 3 H27 M1 12 Q7 12 11 8 H23" class="br-connector"/></svg>并行 / 委派</span><span class="br-key-error">⊣ 拦截　◷ 超时　× 报错</span><span class="br-key-return">↻✓ 原操作后续成功</span><span>? 后续未确认</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="1.5" y="6" width="9" height="4" class="br-glyph" opacity=".45"/></svg>上下文总趋势</span><span class="br-key-note">${detail?ui('枝条按实际时间展开'):ui('事件标记 · 点击展开')}</span></div>`;
       $('br-rules').onclick=spShowSource;
-      const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
-      if (goal) {
-        const label = ui('目标 ') + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
-        // 目标放到底部观察行,作为可选入口,不占标题。
-        $('graph-caption').insertAdjacentHTML('afterbegin', '<button class="geist-text-action quiet" id="br-goal">' + label + ' ↗</button>');
-        $('br-goal').onclick = () => {
-          const rows = [[ui('目标'), goal.objective || ui('未记录')], [ui('阶段'), goal.phase || ui('未记录')],
-            [ui('轮次'), goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : ui('未记录')],
-            [ui('变更'), (goal.markers || []).map(m => (m.operation || '') + '@' + m.seq).join(' · ') || ui('未记录')]];
-          openDrawer(ui('会话目标'), label, '<dl class="geist-timing-facts">' + rows.map(([k, v]) => '<div><dt>' + k + '</dt><dd>' + String(v).replace(/</g, '&lt;') + '</dd></div>').join('') + '</dl>');
-        };
-      }
       $('turn-heading').querySelectorAll('[data-br-layer]').forEach(el=>el.onchange=()=>{el.checked?overviewLayers.add(el.dataset.brLayer):overviewLayers.delete(el.dataset.brLayer);renderOverview();});
       $('ov-zoom-in').onclick=()=>setOverviewScale(overviewScale*1.8);$('ov-zoom-out').onclick=()=>setOverviewScale(overviewScale/1.8);$('ov-fit').onclick=()=>setOverviewScale(1);
     $('graph-caption').innerHTML=ui('<div class="tl-readout" id="tl-readout"></div><div class="br-key"><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><g class="br-cap"><path d="M3 3 L9 9 M9 3 L3 9"/></g></svg>报错</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><g class="br-cap"><circle cx="6" cy="6" r="4"/><path d="M6 3.4 V6 L7.8 7.5"/></g></svg>超时</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M2.4 6.4 L4.9 8.9 L9.7 3.1" class="br-check"/></svg>随后成功</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><text x="6" y="9" text-anchor="middle" class="br-note" font-size="10" fill="var(--branch-muted)">?</text></svg>结果未确认</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M3.2 4.2 A3.2 3.2 0 1 0 3.6 8.2" class="br-glyph"/><path d="M3.6 2 L3.3 4.4 L5.7 4.2" class="br-glyph"/></svg>请求重试</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M4.4 2.5 V9.5 M7.6 2.5 V9.5" class="br-glyph"/></svg>中断</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><text x="6" y="9" text-anchor="middle" font-size="11" fill="var(--branch-ink)">≋</text></svg>上下文压缩</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M3 8.5 L4.4 3.5 M5.2 8.5 L6.6 3.5" class="br-glyph"/></svg>等待已折叠</span></div>');
@@ -182,63 +170,10 @@
     const visibleTurns=layout.filter(l=>l.end>=left&&l.x<=right).map(l=>l.turn.number);
     const mode=detail?ui`第 ${visibleTurns.join('、')} 轮 · 动作展开`:ui('全览 · 事件折叠');
     html=ui`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,ui('累计执行时间'),'br-note','end')}</g>`;
-    const goalData = goalInfo;
-    if (goalData && goalMarkers.length) {
-      const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
-      const reads = goalData.markers.filter(m => m.operation === 'read');
-      const gy = h - 70;
-      const goalState = { create: ui('创建'), resume: ui('恢复'), pause: ui('暂停'), edit: ui('编辑'), complete: ui('完成'), blocked: ui('受阻') };
-      // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
-      const byGoalAll = new Map();
-      for (const m of goalData.markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
-      const byGoalLife = new Map();
-      for (const m of life) { const key = m.goalId || 'goal'; if (!byGoalLife.has(key)) byGoalLife.set(key, []); byGoalLife.get(key).push({ ...m, x: mapTime(m.time) }); }
-      // 先把每条目标摊成一段,再按范围重叠错行;行长一致的区间才不会互相压。
-      const goals = [];
-      for (const [id, list] of byGoalLife) {
-        const pts = list.filter(m => Number.isFinite(m.x));
-        if (!pts.length) continue;
-        const all = (byGoalAll.get(id) || []).map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
-        goals.push({ id, pts, x0: all.length ? all[0].x : pts[0].x, x1: pts[pts.length - 1].x });
-      }
-      const goalLanes = [];
-      // 标签按实际字宽截断,并按"线 + 标签"的宽度占行,避免两段目标文字叠在一起。
-      const goalCompact = goal => {
-        const own = (goalData.goals || []).find(x => x.id === goal.id) || null;
-        const objective = String(own?.objective || goalData.objective || ui('目标')).replace(/\s+/g, ' ');
-        const limit = Math.max(24, Math.max(18, goal.x1 - goal.x0) - 28);
-        let compact = objective;
-        if (tlMeasure(compact) > limit) {
-          let lo = 1, hi = compact.length;
-          while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (tlMeasure(compact.slice(0, mid) + '…') <= limit) lo = mid; else hi = mid - 1; }
-          compact = compact.slice(0, lo) + '…';
-        }
-        return compact;
-      };
-      for (const goal of goals) {
-        goal.compact = goalCompact(goal);
-        goal.labelW = tlMeasure(goal.compact);
-        const lane = goalLanes.findIndex(right => right < goal.x0 - 12);
-        const laneIndex = lane < 0 ? goalLanes.length : lane;
-        goalLanes[laneIndex] = Math.max(goal.x1, goal.x0 + goal.labelW + 10);
-        goal.lane = Math.min(laneIndex, 2);
-      }
-      let band = '<g class="goal-band" data-goal-band="1" style="cursor:pointer;pointer-events:all">';
-      for (const goal of goals) {
-        const { id, pts, x0, x1, compact } = goal, w = Math.max(18, x1 - x0), laneY = gy - goal.lane * 22;
-        const last = pts[pts.length - 1];
-        // 不用胶囊:一条实线加两端刻度就够,事件点是线上的刻度。
-        band += '<path d="M' + x0 + ' ' + laneY + 'H' + x1 + '" class="goal-line"/>';
-        band += '<path d="M' + x0 + ' ' + (laneY - 5) + 'v10M' + x1 + ' ' + (laneY - 5) + 'v10" class="goal-cap"/>';
-        for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + laneY + '" r="3.2" class="goal-dot ' + (m.operation || '') + '"><title>' + (goalState[m.operation] || m.operation || '') + ui(' · 第 ') + m.turn + ui(' 轮 · seq ') + m.seq + '</title></circle>';
-        band += '<text x="' + x0 + '" y="' + (laneY - 7) + '" class="goal-label"><tspan class="goal-text">' + compact + '</tspan><tspan class="goal-state ' + (last.operation || 'active') + '" dx="6">' + (goalState[last.operation] || last.operation || '') + '</tspan></text>';
-      }
-      for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + ui('" r="1.6" class="goal-read"><title>读取目标 · 第 ') + m.turn + ui(' 轮</title></circle>'); }
-      band += '</g>';
-      if (goals.length) html += band;
-    }
+    if (goalMarkers.length) html += reviewGoalBand(goalInfo, goalMarkers, mapTime, h - 70);
     $('graph').setAttribute('viewBox',`0 0 ${w} ${h}`);$('graph').setAttribute('height',h);$('graph').style.width=w+'px';$('graph').innerHTML=html;
     const bind=(selector,enter,click,dbl)=>$('graph').querySelectorAll(selector).forEach(el=>{el.onmouseenter=()=>enter?.(el);el.onclick=ev=>{ev.stopPropagation();click?.(el);};el.ondblclick=ev=>{ev.preventDefault();ev.stopPropagation();(dbl||click)?.(el);};el.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();click?.(el);}};});
+    bind('[data-goal-band]', null, () => reviewOpenGoalSummary(goalInfo));
     bind('[data-br-round]',el=>tlRoundReadout(brRound(Number(el.dataset.brRound))),el=>{const t=brRound(Number(el.dataset.brRound));turnIndex=turns.indexOf(t);header();tlFocusRange(t,t.start,endOf(t));tlRoundReadout(t);});
     bind('[data-br-step]',el=>{const [n,k]=el.dataset.brStep.split(':').map(Number),t=brRound(n);tlStepReadout(t,t.steps.find(s=>s.number===k));},el=>{const [n,k]=el.dataset.brStep.split(':').map(Number),t=brRound(n);tlOpenStep(t,t.steps.find(s=>s.number===k));});
     bind('[data-br-episode]',el=>{const e=episodes.find(e=>e.id===el.dataset.brEpisode);tlReadout(ui`第 ${e.turn} 轮 · ${e.reason} · ${e.failedCount} 次失败 · ${e.summary}，点击展开`,()=>openOverviewEpisode(e.id));},el=>openOverviewEpisode(el.dataset.brEpisode));

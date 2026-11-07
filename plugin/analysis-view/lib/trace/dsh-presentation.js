@@ -3,14 +3,13 @@
   (function () {
     if (window.parent === window || data.traceCapabilities?.chatJump !== true) return;
     const base = openDrawer;
-    openDrawer = function (title, description, html, back) {
+    openDrawer = function (title, description, html, back, turnNumber) {
       base(title, description, html, back);
       const body = $('drawer-body');
-      if (!body || body.querySelector('[data-chat-jump]') || body.querySelector('#geist-result-chat')) return;
+      if (!body || body.querySelector('[data-chat-jump]')) return;
       const text = String(title || '') + ' ' + String(description || '');
       const match = text.match(/第\s*(\d+)\s*轮|Turn\s+(\d+)|(\d+)\s+turns?/i);
-      if (!match) return;
-      const turn = Number(match[1] || match[2] || match[3]);
+      const turn = turnNumber ?? Number(match?.[1] || match?.[2] || match?.[3]);
       if (!Number.isInteger(turn) || turn < 1) return;
       const row = document.createElement('div');
       row.className = 'drawer-actions';

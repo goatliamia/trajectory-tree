@@ -50,7 +50,16 @@
   reviewOpenContextSources = function(key = 'system') { const summary = contextOverview(geistContextSnapshot?.pressure, null, reviewContextData.current); geistShowCurrentSource(key, summary); };
   reviewOpenCompaction = function(seqs) {
     const entries = reviewContextData.boundaries.filter(e => seqs.includes(e.seq));
-    openDrawer(ui('Codex 上下文压缩'), 'official-api + local-rollout', ui('<p class="review-explain">黄色虚线标出 Codex 记录的压缩完成位置。本机 replacement_history 可用于重建可见保留文本；加密摘要无法读取，不计入文本估算，也不当作零 token。</p>') + entries.map(e => ui('<div class="source-row"><span>第 ') + e.turn + ui(' 轮 · seq ') + e.seq + ui('</span>此轮保留文本估算净变化 ') + reviewSigned(reviewContextMap.get(e.turn)?.net || 0) + ui('；包含轮内新增内容，并非此次压缩单独减少的实际 tokens。<br><button class="geist-text-action" data-codex-compaction-turn="') + e.turn + ui('">查看本轮来源估算 ↗</button></div>')).join(''));
+    const explanation = ui('压缩标记对应 Codex 记录的完成时间。本机 replacement_history 可用于重建可见保留文本；加密摘要无法读取，不计入文本估算。');
+    const rows = entries.map(entry => {
+      const net = reviewContextMap.get(entry.turn)?.net;
+      const change = Number.isFinite(net)
+        ? ui('此轮保留文本估算净变化 ') + reviewSigned(net) + ui('；包含轮内新增内容，并非此次压缩单独减少的实际 tokens。')
+        : ui('未记录该轮的可见文本构成。');
+      return ui('<div class="source-row"><span>第 ') + entry.turn + ui(' 轮 · seq ') + entry.seq + '</span>' + change +
+        '<br><button class="geist-text-action" data-codex-compaction-turn="' + entry.turn + ui('">查看本轮来源估算 ↗</button></div>');
+    });
+    openDrawer(ui('Codex 上下文压缩'), 'official-api + local-rollout', '<p class="review-explain">' + esc(explanation) + '</p>' + rows.join(''));
     $('drawer-body').querySelectorAll('[data-codex-compaction-turn]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.codexCompactionTurn)));
   };
   const codexStepDetailBase = reviewOpenStepDetail;
@@ -72,13 +81,6 @@
     codexStepBase(t, step);
     const meta = $('step-panel').querySelector('.geist-step-meta>span>b'); if (meta) meta.textContent = ui('动作 ') + step.number;
     if (!step.endObserved) { const time = $('step-panel').querySelector('.geist-step-meta>span>span'); if (time) time.textContent = ui('轮内起止未记录'); }
-    for (const call of step.calls) {
-      const fact = reviewContextData.callFacts[call.seq];
-      if (!fact?.diffChanges || $('step-panel').querySelector('[data-codex-diff="' + call.seq + '"]')) continue;
-      const button = document.createElement('button'); button.className = 'geist-text-action'; button.dataset.codexDiff = call.seq; button.textContent = ui('查看文件差异 ↗');
-      button.onclick = () => openDrawer(ui('Codex 文件差异'), ui('official-api · fileChange.changes · 原始 diff'), fact.diffChanges.map(change => '<h3>' + esc(change.path) + '</h3><p>' + esc(change.kind?.type || 'change') + '</p>' + block(change.diff)).join(''));
-      $('step-panel').querySelector('.geist-operations').append(button);
-    }
   };
   geistOpenTiming = function(number, stepNumber) {
     const step = brRound(number).steps.find(s => s.number === stepNumber);

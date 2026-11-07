@@ -1890,6 +1890,72 @@ function fileChangeHistory(operations, path) {
     $('graph-caption').querySelector('[data-br-layer="context"]')?.setAttribute('title', ui('上下文来源变化，以及压缩与裁短记录；与停顿、再试独立'));
   }
 
+  function reviewGoalBand(goalData, markers, mapTime, gy) {
+    const life = markers.filter(m => m.operation && m.operation !== 'read');
+    const reads = markers.filter(m => m.operation === 'read');
+    const goalState = { create: ui('创建'), resume: ui('恢复'), pause: ui('暂停'), edit: ui('编辑'), complete: ui('完成'), blocked: ui('受阻') };
+    const goalClass = operation => Object.hasOwn(goalState, operation) ? operation : '';
+    const goalLabel = operation => Object.hasOwn(goalState, operation) ? goalState[operation] : operation;
+    // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
+    const byGoalAll = new Map();
+    for (const m of markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
+    const byGoalLife = new Map();
+    for (const m of life) { const key = m.goalId || 'goal'; if (!byGoalLife.has(key)) byGoalLife.set(key, []); byGoalLife.get(key).push({ ...m, x: mapTime(m.time) }); }
+    // 先把每条目标摊成一段,再按范围重叠错行;行长一致的区间才不会互相压。
+    const goals = [];
+    for (const [id, list] of byGoalLife) {
+      const pts = list.filter(m => Number.isFinite(m.x));
+      if (!pts.length) continue;
+      const all = (byGoalAll.get(id) || []).map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
+      goals.push({ id, pts, x0: all.length ? all[0].x : pts[0].x, x1: pts[pts.length - 1].x });
+    }
+    const goalLanes = [];
+    // 标签按实际字宽截断,并按"线 + 标签"的宽度占行,避免两段目标文字叠在一起。
+    const goalCompact = goal => {
+      const own = (goalData.goals || []).find(x => x.id === goal.id) || null;
+      const objective = String(own?.objective || goalData.objective || ui('目标')).replace(/\s+/g, ' ');
+      const limit = Math.max(24, Math.max(18, goal.x1 - goal.x0) - 28);
+      let compact = objective;
+      if (tlMeasure(compact) > limit) {
+        let lo = 1, hi = compact.length;
+        while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (tlMeasure(compact.slice(0, mid) + '…') <= limit) lo = mid; else hi = mid - 1; }
+        compact = compact.slice(0, lo) + '…';
+      }
+      return compact;
+    };
+    for (const goal of goals) {
+      goal.compact = goalCompact(goal);
+      goal.labelW = tlMeasure(goal.compact);
+      const lane = goalLanes.findIndex(right => right < goal.x0 - 12);
+      const laneIndex = lane < 0 ? goalLanes.length : lane;
+      goalLanes[laneIndex] = Math.max(goal.x1, goal.x0 + goal.labelW + 10);
+      goal.lane = Math.min(laneIndex, 2);
+    }
+    let band = '<g class="goal-band" data-goal-band="1" role="button" tabindex="0" aria-label="' + esc(ui('会话目标')) + '" style="cursor:pointer;pointer-events:all">';
+    for (const goal of goals) {
+      const { pts, x0, x1, compact } = goal, laneY = gy - goal.lane * 22;
+      const last = pts[pts.length - 1];
+      // 不用胶囊:一条实线加两端刻度就够,事件点是线上的刻度。
+      band += '<path d="M' + x0 + ' ' + laneY + 'H' + x1 + '" class="goal-line"/>';
+      band += '<path d="M' + x0 + ' ' + (laneY - 5) + 'v10M' + x1 + ' ' + (laneY - 5) + 'v10" class="goal-cap"/>';
+      for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + laneY + '" r="3.2" class="goal-dot ' + goalClass(m.operation) + '"><title>' + esc(goalLabel(m.operation)) + ui(' · 第 ') + esc(m.turn) + ui(' 轮 · seq ') + esc(m.seq) + '</title></circle>';
+      band += '<text x="' + x0 + '" y="' + (laneY - 7) + '" class="goal-label"><tspan class="goal-text">' + esc(compact) + '</tspan><tspan class="goal-state ' + goalClass(last.operation) + '" dx="6">' + esc(goalLabel(last.operation)) + '</tspan></text>';
+    }
+    const readDots = reads.map(m => {
+      const x = mapTime(m.time);
+      return Number.isFinite(x) ? '<circle cx="' + x + '" cy="' + gy + ui('" r="1.6" class="goal-read"><title>读取目标 · 第 ') + esc(m.turn) + ui(' 轮</title></circle>') : '';
+    }).join('');
+    return goals.length || readDots ? band + readDots + '</g>' : '';
+  }
+
+  function reviewOpenGoalSummary(goal) {
+    const label = ui('目标 ') + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
+    const rows = [[ui('目标'), goal.objective || ui('未记录')], [ui('阶段'), goal.phase || ui('未记录')],
+      [ui('轮次'), goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : ui('未记录')],
+      [ui('变更'), (goal.markers || []).map(marker => (marker.operation || '') + '@' + marker.seq).join(' · ') || ui('未记录')]];
+    openDrawer(ui('会话目标'), label, '<dl class="geist-timing-facts">' + rows.map(([key, value]) => '<div><dt>' + esc(key) + '</dt><dd>' + esc(value) + '</dd></div>').join('') + '</dl>');
+  }
+
   let reviewFocusedTurn = null, reviewPathEnteredAt = 0;
   function reviewOpenScaleNote() {
     openDrawer(ui('柱高为什么会收起'), ui('这是图的显示范围，不是模型容量限制'),
@@ -2063,15 +2129,25 @@ function fileChangeHistory(operations, path) {
     $('review-detail-body').scrollTop = detail.scroll || 0;
     $('review-detail-close').focus({ preventScroll: true });
   }
+  function reviewHasChange(fact) {
+    return Boolean(fact?.preview || fact?.diffChanges?.length);
+  }
   function reviewOpenChange(t, step, fact, nested = false) {
+    if (!reviewHasChange(fact)) return;
     const preview = fact.preview;
-    if (!preview) return;
+    const planned = fact.tone === 'bad' || fact.tone === 'unknown';
+    const title = planned ? ui('原计划改动') : ui('改动对比');
+    const subtitle = (fact.target || fact.title) + ui(' · 第 ') + t.number + ui(' 轮 / 第 ') + step.number + ui(' 步');
+    if (!preview) {
+      const html = fact.diffChanges.map(change => '<div class="review-detail-section"><h3>' + esc(change.path) + '</h3><p>' +
+        esc(change.kind?.type || '') + '</p>' + block(change.diff) + '</div>').join('');
+      reviewOpenDetail({ title, subtitle, html }, nested);
+      return;
+    }
     const rows = changedLines(preview.before, preview.after), removed = rows.filter(r => r.kind === 'remove').length, added = rows.filter(r => r.kind === 'add').length;
     const folded = compactDiff(rows), hasFolds = folded.some(row => row.kind === 'fold');
-    const planned = fact.tone === 'bad' || fact.tone === 'unknown';
     const detail = {
-      title: planned ? ui('原计划改动') : ui('改动对比'),
-      subtitle: (fact.target || fact.title) + ui(' · 第 ') + t.number + ui(' 轮 / 第 ') + step.number + ui(' 步'),
+      title, subtitle,
       html: '<div class="review-change-status" data-tone="' + fact.tone + '">' + esc(fact.outcome) + '</div>' +
         '<div class="review-diff-toolbar"><span><b class="removed">− ' + removed + ui(' 行</b><b class="added">+ ') + added + ui(' 行</b></span>') +
         (hasFolds ? ui('<button id="review-diff-toggle">显示全部片段</button>') : '<span class="review-diff-complete">' + (preview.partial ? ui('截取片段') : ui('完整替换片段')) + '</span>') + '</div>' +
@@ -2097,7 +2173,7 @@ function fileChangeHistory(operations, path) {
     const html = '<div class="review-detail-section"><h3>' + insight.input.label + '</h3><p>' + esc(insight.input.text) + '</p></div>' +
       insight.calls.map(fact => '<div class="review-detail-section"><h3>' + esc(fact.title) + '</h3><p data-tone="' + fact.tone + '">' + esc(fact.outcome) + '</p>' +
         (fact.detail ? '<p class="review-detail-muted">' + esc(fact.detail) + '</p>' : '') +
-        (fact.preview ? '<button class="review-detail-link" data-detail-change="' + fact.seq + '">' + (fact.tone === 'bad' ? ui('查看原计划改动') : ui('查看改动对比')) + ' ↗</button>' : '') + '</div>').join('') +
+        (reviewHasChange(fact) ? '<button class="review-detail-link" data-detail-change="' + fact.seq + '">' + (fact.tone === 'bad' ? ui('查看原计划改动') : ui('查看改动对比')) + ' ↗</button>' : '') + '</div>').join('') +
       (insight.reply ? ui('<div class="review-detail-section"><h3>回复摘录</h3><p>') + esc(insight.reply) + '</p></div>' : '') +
       (insight.links.length ? ui('<div class="review-detail-section"><h3>后续记录</h3>') + insight.links.map(l => '<button class="review-detail-link" data-detail-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('<br>') + ui('<p class="review-detail-muted">依据同一轮中工具与完整参数一致的失败、成功记录。</p></div>') : '') +
       (insight.following ? ui('<div class="review-detail-section"><h3>接下来</h3><button class="review-detail-link" data-detail-step="') + insight.following.step + ui('">第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + ' ↗</button></div>' : '') +
@@ -2427,22 +2503,10 @@ function fileChangeHistory(operations, path) {
     const mapTime=time=>{const l=findRow(time);if(time>=l.turn.start)return l.x+Math.min(endOf(l.turn)-l.turn.start,Math.max(0,time-l.turn.start))*factor;const prev=layout[l.index-1];return prev?prev.end+Math.max(0,time-endOf(prev.turn))/Math.max(1,l.turn.start-endOf(prev.turn))*(l.x-prev.end):l.x;};
     const visible=(a,b=a)=>b>=left-90&&a<=right+90;
     const detail=false,showErrors=overviewLayers.has('failures'),showTime=overviewLayers.has('duration'),showInterrupt=overviewLayers.has('interruptions');
-    overviewProjection={layout,factor,baseFactor,gutter,mapTime,mainY:base,mainBottom:base+8,visibleLeft:left,visibleRight:right};
+    overviewProjection={layout,factor,baseFactor,gutter,mapTime,mainY:base,mainBottom:base+8,visibleLeft:left,visibleRight:right,viewportWidth:vw};
     if(!plotOnly){
       $('turn-heading').innerHTML=ui`<div class="overview-heading"><div class="overview-heading-main"><strong>执行全景</strong><span>${turns.length} 轮</span></div><div class="overview-heading-meta"><span>${clock(turns[0].start).slice(0,5)} — ${clock(endOf(turns.at(-1))).slice(0,5)}</span><i></i><span>执行 ${dur(active)}</span></div></div><div class="ov-controls"><div class="ov-layer-checks">${Object.entries(focusNames).map(([id,name])=>`<label class="ov-layer-check"><input type="checkbox" data-br-layer="${id}" ${overviewLayers.has(id)?'checked':''}><span>${name}</span></label>`).join('')}</div><span class="spacer"></span><button class="ov-focus-rule" id="br-rules">图例与规则 ↗</button><div class="ov-zoom"><button id="ov-zoom-out" aria-label="缩小时间轴" ${overviewScale<=1?'disabled':''}>−</button><button id="ov-fit">${overviewScale===1?ui('全览'):overviewScale.toFixed(overviewScale<10?1:0)+'×'}</button><button id="ov-zoom-in" aria-label="放大时间轴" ${overviewScale>=1024?'disabled':''}>＋</button></div></div><div class="br-key"><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 11 C7 11 5 3 11 3 H19 C24 3 23 11 28 11" class="br-connector"/></svg>行动</span><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 12 Q6 12 9 3 H27 M1 12 Q7 12 11 8 H23" class="br-connector"/></svg>并行 / 委派</span><span class="br-key-error">⊣ 拦截　◷ 超时　× 报错</span><span class="br-key-return">↻✓ 原操作后续成功</span><span>? 后续未确认</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="1.5" y="6" width="9" height="4" class="br-glyph" opacity=".45"/></svg>上下文总趋势</span><span class="br-key-note">${detail?ui('枝条按实际时间展开'):ui('事件标记 · 点击展开')}</span></div>`;
       $('br-rules').onclick=spShowSource;
-      const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
-      if (goal) {
-        const label = ui('目标 ') + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
-        // 目标放到底部观察行,作为可选入口,不占标题。
-        $('graph-caption').insertAdjacentHTML('afterbegin', '<button class="geist-text-action quiet" id="br-goal">' + label + ' ↗</button>');
-        $('br-goal').onclick = () => {
-          const rows = [[ui('目标'), goal.objective || ui('未记录')], [ui('阶段'), goal.phase || ui('未记录')],
-            [ui('轮次'), goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : ui('未记录')],
-            [ui('变更'), (goal.markers || []).map(m => (m.operation || '') + '@' + m.seq).join(' · ') || ui('未记录')]];
-          openDrawer(ui('会话目标'), label, '<dl class="geist-timing-facts">' + rows.map(([k, v]) => '<div><dt>' + k + '</dt><dd>' + String(v).replace(/</g, '&lt;') + '</dd></div>').join('') + '</dl>');
-        };
-      }
       $('turn-heading').querySelectorAll('[data-br-layer]').forEach(el=>el.onchange=()=>{el.checked?overviewLayers.add(el.dataset.brLayer):overviewLayers.delete(el.dataset.brLayer);renderOverview();});
       $('ov-zoom-in').onclick=()=>setOverviewScale(overviewScale*1.8);$('ov-zoom-out').onclick=()=>setOverviewScale(overviewScale/1.8);$('ov-fit').onclick=()=>setOverviewScale(1);
     $('graph-caption').innerHTML=ui('<div class="tl-readout" id="tl-readout"></div><div class="br-key"><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><g class="br-cap"><path d="M3 3 L9 9 M9 3 L3 9"/></g></svg>报错</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><g class="br-cap"><circle cx="6" cy="6" r="4"/><path d="M6 3.4 V6 L7.8 7.5"/></g></svg>超时</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M2.4 6.4 L4.9 8.9 L9.7 3.1" class="br-check"/></svg>随后成功</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><text x="6" y="9" text-anchor="middle" class="br-note" font-size="10" fill="var(--branch-muted)">?</text></svg>结果还不清楚</span><button class="review-retry-summary" id="review-all-retries"><i></i><span id="review-retry-total">自动再试</span></button><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M4.4 2.5 V9.5 M7.6 2.5 V9.5" class="br-glyph"/></svg>中断</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><text x="6" y="9" text-anchor="middle" font-size="11" fill="var(--branch-ink)">✂</text></svg>压缩上下文</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M3 8.5 L4.4 3.5 M5.2 8.5 L6.6 3.5" class="br-glyph"/></svg>等待已折叠</span></div>');
@@ -2538,63 +2602,10 @@ function fileChangeHistory(operations, path) {
     const visibleTurns=layout.filter(l=>l.end>=left&&l.x<=right).map(l=>l.turn.number);
     const mode=overviewScale>1?'放大查看 · 点选细节':detail?ui`第 ${visibleTurns.join('、')} 轮 · 动作展开`:ui(reviewOverviewSummary());
     html=ui`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,ui(showTime?"总耗时 "+reviewDuration(active):"累计执行时间"),'br-note','end')}</g>`;
-    const goalData = goalInfo;
-    if (goalData && goalMarkers.length) {
-      const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
-      const reads = goalData.markers.filter(m => m.operation === 'read');
-      const gy = h - 70;
-      const goalState = { create: ui('创建'), resume: ui('恢复'), pause: ui('暂停'), edit: ui('编辑'), complete: ui('完成'), blocked: ui('受阻') };
-      // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
-      const byGoalAll = new Map();
-      for (const m of goalData.markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
-      const byGoalLife = new Map();
-      for (const m of life) { const key = m.goalId || 'goal'; if (!byGoalLife.has(key)) byGoalLife.set(key, []); byGoalLife.get(key).push({ ...m, x: mapTime(m.time) }); }
-      // 先把每条目标摊成一段,再按范围重叠错行;行长一致的区间才不会互相压。
-      const goals = [];
-      for (const [id, list] of byGoalLife) {
-        const pts = list.filter(m => Number.isFinite(m.x));
-        if (!pts.length) continue;
-        const all = (byGoalAll.get(id) || []).map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
-        goals.push({ id, pts, x0: all.length ? all[0].x : pts[0].x, x1: pts[pts.length - 1].x });
-      }
-      const goalLanes = [];
-      // 标签按实际字宽截断,并按"线 + 标签"的宽度占行,避免两段目标文字叠在一起。
-      const goalCompact = goal => {
-        const own = (goalData.goals || []).find(x => x.id === goal.id) || null;
-        const objective = String(own?.objective || goalData.objective || ui('目标')).replace(/\s+/g, ' ');
-        const limit = Math.max(24, Math.max(18, goal.x1 - goal.x0) - 28);
-        let compact = objective;
-        if (tlMeasure(compact) > limit) {
-          let lo = 1, hi = compact.length;
-          while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (tlMeasure(compact.slice(0, mid) + '…') <= limit) lo = mid; else hi = mid - 1; }
-          compact = compact.slice(0, lo) + '…';
-        }
-        return compact;
-      };
-      for (const goal of goals) {
-        goal.compact = goalCompact(goal);
-        goal.labelW = tlMeasure(goal.compact);
-        const lane = goalLanes.findIndex(right => right < goal.x0 - 12);
-        const laneIndex = lane < 0 ? goalLanes.length : lane;
-        goalLanes[laneIndex] = Math.max(goal.x1, goal.x0 + goal.labelW + 10);
-        goal.lane = Math.min(laneIndex, 2);
-      }
-      let band = '<g class="goal-band" data-goal-band="1" style="cursor:pointer;pointer-events:all">';
-      for (const goal of goals) {
-        const { id, pts, x0, x1, compact } = goal, w = Math.max(18, x1 - x0), laneY = gy - goal.lane * 22;
-        const last = pts[pts.length - 1];
-        // 不用胶囊:一条实线加两端刻度就够,事件点是线上的刻度。
-        band += '<path d="M' + x0 + ' ' + laneY + 'H' + x1 + '" class="goal-line"/>';
-        band += '<path d="M' + x0 + ' ' + (laneY - 5) + 'v10M' + x1 + ' ' + (laneY - 5) + 'v10" class="goal-cap"/>';
-        for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + laneY + '" r="3.2" class="goal-dot ' + (m.operation || '') + '"><title>' + (goalState[m.operation] || m.operation || '') + ui(' · 第 ') + m.turn + ui(' 轮 · seq ') + m.seq + '</title></circle>';
-        band += '<text x="' + x0 + '" y="' + (laneY - 7) + '" class="goal-label"><tspan class="goal-text">' + compact + '</tspan><tspan class="goal-state ' + (last.operation || 'active') + '" dx="6">' + (goalState[last.operation] || last.operation || '') + '</tspan></text>';
-      }
-      for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + ui('" r="1.6" class="goal-read"><title>读取目标 · 第 ') + m.turn + ui(' 轮</title></circle>'); }
-      band += '</g>';
-      if (goals.length) html += band;
-    }
+    if (goalMarkers.length) html += reviewGoalBand(goalInfo, goalMarkers, mapTime, h - 70);
     $('graph').setAttribute('viewBox',`0 0 ${w} ${h}`);$('graph').setAttribute('height',h);$('graph').style.width=w+'px';$('graph').innerHTML=html;
     const bind=(selector,enter,click,dbl)=>$('graph').querySelectorAll(selector).forEach(el=>{el.onmouseenter=()=>enter?.(el);el.onclick=ev=>{ev.stopPropagation();click?.(el);};el.ondblclick=ev=>{ev.preventDefault();ev.stopPropagation();(dbl||click)?.(el);};el.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();click?.(el);}};});
+    bind('[data-goal-band]', null, () => reviewOpenGoalSummary(goalInfo));
     bind('[data-br-round]',el=>reviewRoundReadout(brRound(Number(el.dataset.brRound))),el=>{const t=brRound(Number(el.dataset.brRound));turnIndex=turns.indexOf(t);header();tlFocusRange(t,t.start,endOf(t));reviewRoundReadout(t);});
     bind('[data-br-step]',el=>{const [n,k]=el.dataset.brStep.split(':').map(Number),t=brRound(n);tlStepReadout(t,t.steps.find(s=>s.number===k));},el=>{const [n,k]=el.dataset.brStep.split(':').map(Number),t=brRound(n);tlOpenStep(t,t.steps.find(s=>s.number===k));});
     bind('[data-br-episode]',el=>{const e=episodes.find(e=>e.id===el.dataset.brEpisode);tlReadout(ui`第 ${e.turn} 轮 · ${e.reason} · ${e.failedCount} 次失败 · ${e.summary}，点击展开`,()=>openOverviewEpisode(e.id));},el=>openOverviewEpisode(el.dataset.brEpisode));
@@ -2950,7 +2961,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const operation = fact => {
       const meta = [fact.detail, callMeta(fact)].filter(Boolean).join(' · ');
       const raw = rawEntry(fact);
-      const diff = fact.preview ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + arrow + '</button>' : '';
+      const diff = reviewHasChange(fact) ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + arrow + '</button>' : '';
       return '<article class="geist-operation" data-tone="' + fact.tone + '">' +
         '<h3>' + esc(fact.title) + '</h3>' +
         '<p>' + esc(fact.outcome) + (diff ? ' ' + diff : '') + '</p>' +
@@ -3054,7 +3065,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const outcome = fact?.outcome || (op.status === 'returned' ? ui('工具已返回') : op.status === 'error' ? ui('操作受阻') : ui('结果未记录'));
       return '<div class="geist-history-operation" data-history-operation="' + op.seq + '"><div class="geist-history-operation-title"><strong class="' + (op.kind === 'read' ? 'read' : op.status === 'error' ? 'failed' : 'change') + '">' + (op.access === 'match' ? ui('匹配片段') : op.kind === 'read' ? ui('读取') : changeName(op)) + ui('</strong><span>第 ') + op.step + ui(' 步</span>') + (op.status === 'error' ? ui('<span class="failed">受阻</span>') : '') + '</div><p>' + esc(outcome) + '</p>' +
         (!planned ? excerpt(fact) : '') + '<div class="geist-history-operation-links">' +
-        (fact?.preview ? '<button class="geist-text-action" data-history-diff="' + op.seq + '">' + (planned ? ui('查看原计划') : ui('查看改动片段')) + ' ↗</button>' : '') +
+        (reviewHasChange(fact) ? '<button class="geist-text-action" data-history-diff="' + op.seq + '">' + (planned ? ui('查看原计划') : fact.preview ? ui('查看改动片段') : ui('查看文件差异')) + ' ↗</button>' : '') +
         '<button class="geist-text-action quiet" data-history-step="' + op.seq + ui('">定位到这一步 ↗</button></div></div>');
     };
     const render = () => {
@@ -3190,8 +3201,8 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
         const geometry = geistOverviewGeometry();
         const baseMoved = Math.abs((overviewProjection?.mainY || 0) - geometry.base) > 1;
         const heightMoved = Math.abs((geistOverviewFrame?.height || 0) - geometry.height) > 1;
-        // 高度变化必须整页重画:只重画 plot 不会改 SVG 的 height,底部会留一条空白。
-        if (baseMoved || heightMoved) renderOverview({ plotOnly: !heightMoved });
+        const widthMoved = Math.abs((overviewProjection?.viewportWidth || 0) - Math.max(300, $('graph-scroll').clientWidth)) > 1;
+        if (baseMoved || heightMoved || widthMoved) renderOverview({ plotOnly: true });
       });
     });
     for (const el of [$('canvas'), $('geist-context-overview'), $('graph-caption'), $('graph-scroll')]) if (el) geistLayoutObserver.observe(el);
@@ -3264,10 +3275,10 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     geistSyncMeasureFont();
     const value = geistOverviewBase(...args);
     geistArrangeCaption(); geistGoalChip();
-    // 首帧时图注/表头高度可能还没稳定,几何算出的高度和真实盒子会差一截;差超过 14px 就按盒子高度再画一次。
+    // Fit again if arranging the caption changed the available box. The SVG
+    // itself can legitimately be taller when the goal or branch lanes overflow.
     const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
-    const svgHeight = parseFloat((graph || {}).getAttribute ? $('graph').getAttribute('height') : '0') || 0;
-    if (!geistFitPass && box > 120 && Math.abs(svgHeight - box) > 14) {
+    if (!geistFitPass && box > 120 && Math.abs((geistOverviewFrame?.height || 0) - Math.max(240, box)) > 14) {
       geistFitPass = true;
       try { geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); } finally { geistFitPass = false; }
     }
@@ -3484,21 +3495,17 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
         '<p>' + esc(call.fact?.outcome || ui('工具结果已记录')) + '</p>' +
         (subject ? '<p class="geist-outcome-meta">' + esc(subject) + '</p>' : '') +
         (recovery ? '<button class="geist-text-action recovery" data-result-recovery="' + call.seq + '">' + ui('第 ') + recovery.step + ui(' 步恢复 ↗') + '</button>' : '') +
-        (call.fact?.preview ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : ui('查看改动片段')) + ' ↗</button>' : '') +
+        (reviewHasChange(call.fact) ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : call.fact.preview ? ui('查看改动片段') : ui('查看文件差异')) + ' ↗</button>' : '') +
         (result.recorded ? '<p class="review-quiet">' + (call.inner ? ui('内部工具 · ') : '') + 'seq ' + call.seq + (call.rootSeq != null ? ui(' · 外层调用 #') + call.rootSeq : '') + '</p>' + callEntry(call) : '') + '</div>';
     }).join('');
     if (paths.length) html += '<div class="geist-outcome-files">' + paths.map((path, i) => '<button class="geist-text-action" data-result-file="' + i + '">' + esc(path.split(/[\\/]/).at(-1)) + ui(' · 全程记录 ↗</button>')).join('') + '</div>';
-    const embedded = window.parent !== window && data.traceCapabilities?.chatJump === true;
-    html += ui('<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button>') +
-      (embedded ? ui('<button class="action-button" id="geist-result-chat">跳到第 ') + result.turn + ui(' 轮对话 ↗</button>') : '') + '</div>';
+    html += ui('<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button></div>');
     if (result.kind === 'check') html += ui('<p class="review-quiet">按检查命令实际输出展示，不代表整个任务已经完成。</p>');
     if (result.calls.some(call => call.name === 'grep')) html += ui('<p class="review-quiet">搜索记录关联实际返回的匹配片段，不表示读入了整份文件。</p>');
     const counts = [result.calls.length + ui(' 项操作'), blocked ? blocked + ui(' 处受阻') : '', recovered ? recovered + ui(' 处已恢复') : ''].filter(Boolean).join(' · ');
-    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], ui`第 ${result.turn} 轮 · 第 ${result.step} 步` + ' · ' + counts, html, back);
+    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], ui`第 ${result.turn} 轮 · 第 ${result.step} 步` + ' · ' + counts, html, back, result.turn);
     $('geist-result-step').onclick = () => { closeDrawer(); reviewEnterPath(result.turn, result.step); };
     $('geist-result-context').onclick = () => reviewOpenContext(result.turn);
-    // 跳到对话由宿主视图完成(切到对话并滚到该轮),页面只把轮次交出去。
-    $('geist-result-chat')?.addEventListener('click', () => window.parent.postMessage({ type: 'analysis-trace-jump', turn: result.turn }, location.origin));
     $('drawer-body').querySelectorAll('[data-result-file]').forEach(el => el.onclick = () => {
       const file = fileObjects(reviewFileOperations).find(f => f.id === fileIdentity(paths[Number(el.dataset.resultFile)]));
       if (file) { reviewSelectFile(file.id); closeDrawer(); reviewOpenFileHistory(file); }
@@ -4073,33 +4080,6 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     }, true);
   })();
 
-  // 左边抽屉里凡是能"查看本轮行动路径"的地方,都配一个"跳到该轮对话"。
-  // 统一在 openDrawer 出口补一个按钮,不在每个调用点重复写。
-  (function () {
-    if (window.parent === window || data.traceCapabilities?.chatJump !== true) return;
-    const base = openDrawer;
-    openDrawer = function (title, description, html, back) {
-      base(title, description, html, back);
-      const body = $('drawer-body');
-      if (!body || body.querySelector('[data-chat-jump]') || body.querySelector('#geist-result-chat')) return;
-      const text = String(title || '') + ' ' + String(description || '');
-      const match = text.match(/第\s*(\d+)\s*轮|Turn\s+(\d+)|(\d+)\s+turns?/i);
-      if (!match) return;
-      const turn = Number(match[1] || match[2] || match[3]);
-      if (!Number.isInteger(turn) || turn < 1) return;
-      const row = document.createElement('div');
-      row.className = 'drawer-actions';
-      const button = document.createElement('button');
-      button.className = 'action-button';
-      button.dataset.chatJump = String(turn);
-      button.textContent = ui('跳到第 ') + turn + ui(' 轮对话 ↗');
-      button.onclick = () => window.parent.postMessage({ type: 'analysis-trace-jump', turn }, location.origin);
-      // 并到已有动作行里,不要另起一列。
-      const existing = body.querySelector('.drawer-actions');
-      if (existing) existing.append(button); else { row.append(button); body.append(row); }
-    };
-  })();
-
   // Keep one renderer and one set of interaction state while data arrives.
   // The demo and legacy standalone page still start with complete data.
   let geistUpdateFrame = 0, geistDetailIntent = 0, geistHeaderDirty = false;
@@ -4344,6 +4324,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   const geistCoverageArrange = geistArrangeCaption;
   geistArrangeCaption = function(...args) { const value = geistCoverageArrange(...args); geistContextCoverage(); return value; };
 
+/*__TRACE_EXTENSIONS__*/
   $('review-return').onclick=reviewReturnOverview;$('review-path').onclick=()=>reviewEnterPath(turn().number);$('review-rounds').onclick=()=>reviewOpenDurations();$('review-stress').onclick=reviewToggleStress;$('review-fit').onclick=reviewFitAll;$('review-in').onclick=()=>setOverviewScale(overviewScale*2);$('review-out').onclick=reviewZoomOut;reviewBindPathZoom();
   render();$('turn-list').querySelector('[aria-current=true]')?.scrollIntoView({block:'nearest'});
 };

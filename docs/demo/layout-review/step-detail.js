@@ -39,15 +39,25 @@
     $('review-detail-body').scrollTop = detail.scroll || 0;
     $('review-detail-close').focus({ preventScroll: true });
   }
+  function reviewHasChange(fact) {
+    return Boolean(fact?.preview || fact?.diffChanges?.length);
+  }
   function reviewOpenChange(t, step, fact, nested = false) {
+    if (!reviewHasChange(fact)) return;
     const preview = fact.preview;
-    if (!preview) return;
+    const planned = fact.tone === 'bad' || fact.tone === 'unknown';
+    const title = planned ? ui('原计划改动') : ui('改动对比');
+    const subtitle = (fact.target || fact.title) + ui(' · 第 ') + t.number + ui(' 轮 / 第 ') + step.number + ui(' 步');
+    if (!preview) {
+      const html = fact.diffChanges.map(change => '<div class="review-detail-section"><h3>' + esc(change.path) + '</h3><p>' +
+        esc(change.kind?.type || '') + '</p>' + block(change.diff) + '</div>').join('');
+      reviewOpenDetail({ title, subtitle, html }, nested);
+      return;
+    }
     const rows = changedLines(preview.before, preview.after), removed = rows.filter(r => r.kind === 'remove').length, added = rows.filter(r => r.kind === 'add').length;
     const folded = compactDiff(rows), hasFolds = folded.some(row => row.kind === 'fold');
-    const planned = fact.tone === 'bad' || fact.tone === 'unknown';
     const detail = {
-      title: planned ? ui('原计划改动') : ui('改动对比'),
-      subtitle: (fact.target || fact.title) + ui(' · 第 ') + t.number + ui(' 轮 / 第 ') + step.number + ui(' 步'),
+      title, subtitle,
       html: '<div class="review-change-status" data-tone="' + fact.tone + '">' + esc(fact.outcome) + '</div>' +
         '<div class="review-diff-toolbar"><span><b class="removed">− ' + removed + ui(' 行</b><b class="added">+ ') + added + ui(' 行</b></span>') +
         (hasFolds ? ui('<button id="review-diff-toggle">显示全部片段</button>') : '<span class="review-diff-complete">' + (preview.partial ? ui('截取片段') : ui('完整替换片段')) + '</span>') + '</div>' +
@@ -73,7 +83,7 @@
     const html = '<div class="review-detail-section"><h3>' + insight.input.label + '</h3><p>' + esc(insight.input.text) + '</p></div>' +
       insight.calls.map(fact => '<div class="review-detail-section"><h3>' + esc(fact.title) + '</h3><p data-tone="' + fact.tone + '">' + esc(fact.outcome) + '</p>' +
         (fact.detail ? '<p class="review-detail-muted">' + esc(fact.detail) + '</p>' : '') +
-        (fact.preview ? '<button class="review-detail-link" data-detail-change="' + fact.seq + '">' + (fact.tone === 'bad' ? ui('查看原计划改动') : ui('查看改动对比')) + ' ↗</button>' : '') + '</div>').join('') +
+        (reviewHasChange(fact) ? '<button class="review-detail-link" data-detail-change="' + fact.seq + '">' + (fact.tone === 'bad' ? ui('查看原计划改动') : ui('查看改动对比')) + ' ↗</button>' : '') + '</div>').join('') +
       (insight.reply ? ui('<div class="review-detail-section"><h3>回复摘录</h3><p>') + esc(insight.reply) + '</p></div>' : '') +
       (insight.links.length ? ui('<div class="review-detail-section"><h3>后续记录</h3>') + insight.links.map(l => '<button class="review-detail-link" data-detail-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('<br>') + ui('<p class="review-detail-muted">依据同一轮中工具与完整参数一致的失败、成功记录。</p></div>') : '') +
       (insight.following ? ui('<div class="review-detail-section"><h3>接下来</h3><button class="review-detail-link" data-detail-step="') + insight.following.step + ui('">第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + ' ↗</button></div>' : '') +

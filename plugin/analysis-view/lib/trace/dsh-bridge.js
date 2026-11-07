@@ -1,3 +1,4 @@
+// DSH serves the live stages and supplies official client observations.
 (() => {
   const ui = window.__trajectoryUi || (text => text);
   const element = document.getElementById('trace-data'), payload = JSON.parse(element.textContent);

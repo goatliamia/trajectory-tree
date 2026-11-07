@@ -6,13 +6,21 @@
 
 配置来自基线，候选不能在同一次检查中删除自己的要求。只有首次接入才显式采用候选配置。已答关系与源码覆盖分别报告；两侧同样未知仍不能通过。源码绕过路径是诊断候选，不能直接表述成已执行的错误；绑定存在也不等于外部实现或动态分派已被证明。
 
-## 两项互相补充的检查
+## 检查范围
 
 `Relation diagnostics` 复用关系引擎的已有诊断、观察运输与目标比较。每侧共享一次源码提取，不执行项目函数。完整 JSON 保留两侧响应、操作位置、检查点、绕过路径和缺失观察；Actions summary 给出简洁结论。`relations/diagnostics` 状态附在候选提交上。
 
 `Native regression` 独立运行合成事件下的实际轨迹阶段、目标阶段更新、来源隔离、读取失败、旧异步结果竞争、资源释放，以及 npm 实际打包文件的加载。它负责验证当前静态目标尚未表达的缓存版本一致性，不访问真实会话或模型服务。
 
-同一个普通 CI 任务还做基础检查：校验共享视图资源与各宿主 skill 的同步，运行 Pi / Codex / Claude 的合成适配、语言、页面和报告冒烟，检查便携工具及其传输入口，再构建三种宿主包并加载 CLI。只用一套 Ubuntu / Node 24，不加多平台矩阵、浏览器、性能基准或真实日志测试。依赖由 `plugin/portable-tools/package-lock.json` 固定安装；CI 不依赖本机 DSH 安装或私有分析引擎。
+普通 CI 还校验共享资源和各宿主 skill 的同步，运行合成适配、语言、页面和报告冒烟，检查便携工具和传输入口，并构建三种宿主包。依赖由 `plugin/portable-tools/package-lock.json` 固定安装。
+
+`Browser compatibility` 在同一个 Ubuntu 作业中启动 Chromium、Firefox 和 WebKit。它用合成会话检查 DSH 路径页的目标、文件、滚轮缩放、拖动和对话跳转，以及 Pi、Codex、Claude 的快照页面和能力边界。
+
+```sh
+npm ci --prefix test/browser --ignore-scripts --no-audit --no-fund
+npm exec --prefix test/browser -- playwright install chromium firefox webkit
+npm test --prefix test/browser
+```
 
 Pi 源码版本核对与已生成页面核对属于可选本地检查，分别通过 `TRAJECTORY_PI_TEST_REPO`、`TRAJECTORY_PI_TEST_VIEW` 显式启用；日常测试不会因开发机上恰好存在另一个仓库或旧页面而改变行为。包含 DSH 官方统计依赖的完整报告集仍可在宿主开发环境运行，普通 CI 使用无宿主依赖的 `report/smoke-test.mjs`。
 
@@ -27,3 +35,12 @@ node --test plugin/analysis-view/goal-events-test.mjs plugin/analysis-view/stage
 凭据作业使用 GitHub 的 [pull_request_target](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request_target) 执行可信基线工作流。它只检出可信基线和固定引擎；候选通过 Git blob 导出为封闭源码快照，不执行 PR 脚本、不安装 PR 依赖、不上传引擎文件。合并引用的第二父节点必须对应当前事件的 head，过期事件保留待补。普通 PR 的原生测试另用无私有凭据的作业。
 
 维护者轮换凭据时，在引擎仓库创建只读 deploy key，并替换本仓库同名 secret；不要开启写权限或改变引擎的可见性。升级引擎时显式更新 SHA，并审查目标响应及其覆盖变化。
+
+本地可以用现有引擎直接比较 Git 版本。先按引擎 README 安装其 Python 环境和锁定的 TypeScript 编译器，然后在本仓库运行：
+
+```powershell
+$relationsEngine = 'D:\projects\code-relations'
+& "$relationsEngine\.venv\Scripts\python.exe" -B -X utf8 "$relationsEngine\tools\project_ci.py" --repo . --base origin/main --head HEAD --out .dsh/relations/pr-goals.json
+```
+
+首次接入时，基线没有 `relations-ci.json` 才加 `--adopt-policy`。结果记录实际使用的本地引擎版本。
