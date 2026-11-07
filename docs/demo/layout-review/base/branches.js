@@ -202,20 +202,31 @@
         goals.push({ id, pts, x0: all.length ? all[0].x : pts[0].x, x1: pts[pts.length - 1].x });
       }
       const goalLanes = [];
+      // 标签按实际字宽截断,并按"线 + 标签"的宽度占行,避免两段目标文字叠在一起。
+      const goalCompact = goal => {
+        const own = (goalData.goals || []).find(x => x.id === goal.id) || null;
+        const objective = String(own?.objective || goalData.objective || ui('目标')).replace(/\s+/g, ' ');
+        const limit = Math.max(24, Math.max(18, goal.x1 - goal.x0) - 28);
+        let compact = objective;
+        if (tlMeasure(compact) > limit) {
+          let lo = 1, hi = compact.length;
+          while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (tlMeasure(compact.slice(0, mid) + '…') <= limit) lo = mid; else hi = mid - 1; }
+          compact = compact.slice(0, lo) + '…';
+        }
+        return compact;
+      };
       for (const goal of goals) {
-        const lane = goalLanes.findIndex(right => right < goal.x0 - 10);
+        goal.compact = goalCompact(goal);
+        goal.labelW = tlMeasure(goal.compact);
+        const lane = goalLanes.findIndex(right => right < goal.x0 - 12);
         const laneIndex = lane < 0 ? goalLanes.length : lane;
-        goalLanes[laneIndex] = goal.x1;
+        goalLanes[laneIndex] = Math.max(goal.x1, goal.x0 + goal.labelW + 10);
         goal.lane = Math.min(laneIndex, 2);
       }
       let band = '<g class="goal-band" data-goal-band="1" style="cursor:pointer;pointer-events:all">';
       for (const goal of goals) {
-        const { id, pts, x0, x1 } = goal, w = Math.max(18, x1 - x0), laneY = gy - goal.lane * 22;
+        const { id, pts, x0, x1, compact } = goal, w = Math.max(18, x1 - x0), laneY = gy - goal.lane * 22;
         const last = pts[pts.length - 1];
-        const own = (goalData.goals || []).find(x => x.id === id) || null;
-        const objective = String(own?.objective || goalData.objective || ui('目标')).replace(/\s+/g, ' ');
-        const maxChars = Math.max(3, Math.floor((w - 24) / 7));
-        const compact = objective.length > maxChars ? objective.slice(0, maxChars) + '…' : objective;
         // 不用胶囊:一条实线加两端刻度就够,事件点是线上的刻度。
         band += '<path d="M' + x0 + ' ' + laneY + 'H' + x1 + '" class="goal-line"/>';
         band += '<path d="M' + x0 + ' ' + (laneY - 5) + 'v10M' + x1 + ' ' + (laneY - 5) + 'v10" class="goal-cap"/>';
