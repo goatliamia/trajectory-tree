@@ -105,6 +105,34 @@
   }
   const geistFileFocusBase = reviewApplyFileFocus;
   reviewApplyFileFocus = function() { geistFileFocusBase(); geistOutcomeFocus(); };
+  // 失败与恢复的配对来自会话里的 episode:抽屉里把"哪一步补上的"落到具体一步。
+  function geistRecovery(seq) {
+    for (const episode of session.overview.episodes || []) for (const pair of episode.pairs || []) {
+      if (pair.failedSeq !== seq || pair.successSeq == null) continue;
+      for (const t of session.turns) for (const step of t.steps) if (step.calls.some(call => call.seq === pair.successSeq)) return { turn: t.number, step: step.number };
+    }
+    return null;
+  }
+  // 参数摘要:工具名 + 目标或关键参数,一行等宽。路径只留末两段,纯工具名不单独占一行。
+  function geistCallSubject(call) {
+    let args = call.args;
+    if (typeof args === 'string') { try { args = JSON.parse(args); } catch { args = null; } }
+    const hint = args && typeof args === 'object'
+      ? [args.file_path, args.path, args.command, args.query, args.pattern, args.url, args.description].find(value => typeof value === 'string' && value.trim())
+      : '';
+    let subject = String(call.target || hint || (call.files?.length ? call.files[0].path : '') || '').replace(/\s+/g, ' ').trim();
+    if (!subject) return '';
+    if (/[\\/]/.test(subject)) subject = subject.split(/[\\/]/).filter(Boolean).slice(-2).join('/');
+    if (subject.length > 64) subject = subject.slice(0, 64) + '…';
+    return [call.name, subject].filter(Boolean).join(' · ');
+  }
+  // 组抽屉与单条抽屉共用同一套状态词:只在异常时出现,正常项不加标记。
+  function geistResultState(result) {
+    if (result.kind === 'incident') return result.incident?.complete ? [ui('已恢复'), 'good'] : [ui('受阻'), 'bad'];
+    if (result.kind === 'pending') return [ui('等待返回'), 'warn'];
+    if (result.kind === 'error') return [ui('受阻'), 'bad'];
+    return ['', 'quiet'];
+  }
   function geistOpenResult(result) {
     if (view === 'path' && turn().number === result.turn) {
       const index = turn().steps.findIndex(step => step.number === result.step);
@@ -118,16 +146,29 @@
     if (result.kind === 'incident') { reviewOpenBranch([result.incident]); return; }
     const names = { read: ui('取回文件内容'), change: ui('文件修改'), query: ui('查询结果'), check: ui('检查输出'), error: ui('操作受阻'), command: ui('命令输出'), process: ui('后台任务'), web: ui('网页返回'), coordination: ui('协作返回'), pending: ui('等待工具返回'), other: ui('工具返回') };
     const paths = [...new Set(result.calls.flatMap(c => c.files?.length ? c.files.map(file => file.path) : [c.file]).filter(Boolean))];
-    let html = result.calls.map(call => '<div class="geist-outcome-record"><strong>' + esc(call.fact?.title || call.name) + '</strong><p>' + esc(call.fact?.outcome || ui('工具结果已记录')) + '</p>' +
-      (call.fact?.preview ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : ui('查看改动片段')) + ' ↗</button>' : '') +
-      (result.recorded ? '<p class="review-quiet">' + (call.inner ? ui('内部工具 · ') : '') + 'seq ' + call.seq + (call.rootSeq != null ? ui(' · 外层调用 #') + call.rootSeq : '') + '</p>' + callEntry(call) : '') + '</div>').join('');
+    const blocked = result.calls.filter(call => call.fact?.tone === 'bad').length;
+    const recovered = result.calls.filter(call => call.fact?.tone === 'bad' && geistRecovery(call.seq)).length;
+    let html = result.calls.map(call => {
+      const tone = call.fact?.tone === 'bad' ? 'bad' : call.fact?.tone === 'unknown' ? 'warn' : 'quiet';
+      const state = tone === 'bad' ? ui('受阻 · ') : tone === 'warn' ? ui('未确认 · ') : '';
+      const recovery = tone === 'bad' ? geistRecovery(call.seq) : null, subject = geistCallSubject(call);
+      return '<div class="geist-outcome-record" data-tone="' + tone + '"><div class="geist-outcome-head">' +
+        (state ? '<span class="geist-outcome-state">' + esc(state) + '</span>' : '') +
+        '<strong>' + esc(call.fact?.title || call.name) + '</strong></div>' +
+        '<p>' + esc(call.fact?.outcome || ui('工具结果已记录')) + '</p>' +
+        (subject ? '<p class="geist-outcome-meta">' + esc(subject) + '</p>' : '') +
+        (recovery ? '<button class="geist-text-action recovery" data-result-recovery="' + call.seq + '">' + ui('第 ') + recovery.step + ui(' 步恢复 ↗') + '</button>' : '') +
+        (call.fact?.preview ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : ui('查看改动片段')) + ' ↗</button>' : '') +
+        (result.recorded ? '<p class="review-quiet">' + (call.inner ? ui('内部工具 · ') : '') + 'seq ' + call.seq + (call.rootSeq != null ? ui(' · 外层调用 #') + call.rootSeq : '') + '</p>' + callEntry(call) : '') + '</div>';
+    }).join('');
     if (paths.length) html += '<div class="geist-outcome-files">' + paths.map((path, i) => '<button class="geist-text-action" data-result-file="' + i + '">' + esc(path.split(/[\\/]/).at(-1)) + ui(' · 全程记录 ↗</button>')).join('') + '</div>';
     const embedded = window.parent !== window && data.traceCapabilities?.chatJump === true;
     html += ui('<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button>') +
       (embedded ? ui('<button class="action-button" id="geist-result-chat">跳到第 ') + result.turn + ui(' 轮对话 ↗</button>') : '') + '</div>';
     if (result.kind === 'check') html += ui('<p class="review-quiet">按检查命令实际输出展示，不代表整个任务已经完成。</p>');
     if (result.calls.some(call => call.name === 'grep')) html += ui('<p class="review-quiet">搜索记录关联实际返回的匹配片段，不表示读入了整份文件。</p>');
-    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], ui`第 ${result.turn} 轮 · 第 ${result.step} 步` + ' · ' + result.calls.length + ui(' 项操作'), html);
+    const counts = [result.calls.length + ui(' 项操作'), blocked ? blocked + ui(' 处受阻') : '', recovered ? recovered + ui(' 处已恢复') : ''].filter(Boolean).join(' · ');
+    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], ui`第 ${result.turn} 轮 · 第 ${result.step} 步` + ' · ' + counts, html);
     $('geist-result-step').onclick = () => { closeDrawer(); reviewEnterPath(result.turn, result.step); };
     $('geist-result-context').onclick = () => reviewOpenContext(result.turn);
     // 跳到对话由宿主视图完成(切到对话并滚到该轮),页面只把轮次交出去。
@@ -140,10 +181,37 @@
       const call = result.calls.find(c => c.seq === Number(el.dataset.resultDiff)), t = brRound(result.turn), step = t.steps.find(s => s.number === result.step);
       reviewOpenChange(t, step, call.fact);
     });
+    $('drawer-body').querySelectorAll('[data-result-recovery]').forEach(el => el.onclick = () => {
+      const recovery = geistRecovery(Number(el.dataset.resultRecovery));
+      if (!recovery) return;
+      closeDrawer(); reviewEnterPath(recovery.turn, recovery.step);
+    });
+  }
+  // 出错条目没有 calls:工具名从它所在那一步的调用里取,列表里就能看见是哪个工具。
+  function geistMemberTools(member) {
+    const names = (member.result.calls || []).map(call => call.name).filter(Boolean);
+    if (!names.length) {
+      const turn = session.turns.find(row => row.number === member.result.turn);
+      const step = turn && turn.steps.find(row => row.number === member.result.step);
+      if (step) names.push(...step.calls.map(call => call.name));
+    }
+    return [...new Set(names)].slice(0, 2).join(' / ');
   }
   function geistOpenResultGroup(members) {
     if (members.length === 1) { geistOpenResult(members[0].result); return; }
-    openDrawer(ui('这段执行的工具结果'), members.length + ui(' 项结果 · 同一主干上的不同返回'), '<div class="review-list">' + members.map((m, i) => '<button data-result-item="' + i + '">' + esc(m.result.kind === 'incident' ? episodeMeaning(m.result.incident).short : toolResultLabel(m.result)) + ui('<small>第 ') + m.result.turn + ui(' 轮 · 第 ') + m.result.step + ui(' 步</small></button>')).join('') + '</div>');
+    const states = members.map(member => geistResultState(member.result));
+    const blocked = states.filter(state => state[1] === 'bad').length;
+    const recovered = states.filter(state => state[1] === 'good').length;
+    const counts = [members.length + ui(' 项结果'), blocked ? blocked + ui(' 处受阻') : '', recovered ? recovered + ui(' 处已恢复') : ''].filter(Boolean).join(' · ');
+    openDrawer(ui('这段执行的工具结果'), counts + ui(' · 同一主干上的不同返回'), '<div class="review-list">' + members.map((member, i) => {
+      const state = states[i];
+      const label = member.result.kind === 'incident' ? episodeMeaning(member.result.incident).short : toolResultLabel(member.result);
+      const tools = geistMemberTools(member);
+      return '<button data-result-item="' + i + '" data-tone="' + state[1] + '">' +
+        (state[0] ? '<span class="geist-outcome-state">' + esc(state[0]) + ' · </span>' : '') +
+        esc(label) +
+        '<small>' + ui('第 ') + member.result.turn + ui(' 轮 · 第 ') + member.result.step + ui(' 步') + (tools ? ' · ' + esc(tools) : '') + '</small></button>';
+    }).join('') + '</div>');
     $('drawer-body').querySelectorAll('[data-result-item]').forEach(el => el.onclick = () => geistOpenResult(members[Number(el.dataset.resultItem)].result));
   }
   function geistBindResults() {

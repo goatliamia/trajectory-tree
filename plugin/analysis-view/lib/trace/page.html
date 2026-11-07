@@ -488,6 +488,21 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-outcome-record{padding:13px 0;border-bottom:1px solid var(--line)}
 .geist-outcome-record>strong{font:500 13px/22px var(--sans);color:var(--ink);overflow-wrap:anywhere}
 .geist-outcome-record>p{font:13px/23px var(--sans);margin:5px 0;color:var(--ink)}
+/* 抽屉里的记录:状态只作行首一个词,区分靠字号、颜色和一行参数摘要,不加框。 */
+.geist-outcome-head{display:flex;align-items:baseline;gap:6px;margin-bottom:2px}
+.geist-outcome-head strong{font:500 13px/22px var(--sans);color:var(--ink);overflow-wrap:anywhere}
+.geist-outcome-state{flex:none;font:13px/22px var(--sans);color:var(--muted)}
+.geist-outcome-record[data-tone=bad] .geist-outcome-state{color:var(--branch-bad)}
+.geist-outcome-record[data-tone=warn] .geist-outcome-state{color:var(--review-unknown)}
+.geist-outcome-meta{margin:2px 0 0;font:11px/18px var(--mono);color:var(--muted);overflow-wrap:anywhere}
+/* 组抽屉:一行一条,状态词只在异常时出现,位置与工具名靠右次级排。 */
+#drawer-body [data-result-item]{display:flex;align-items:baseline;gap:8px;width:100%;padding:7px 0;border:0;border-bottom:1px solid var(--line);background:none;font:13px/22px var(--sans);color:var(--ink);text-align:left;cursor:pointer}
+#drawer-body [data-result-item]:hover{color:var(--review-action)}
+#drawer-body [data-result-item]>small{margin-left:auto;flex:none;font:11px/18px var(--mono);color:var(--muted);white-space:nowrap}
+#drawer-body [data-result-item] .geist-outcome-state{flex:none}
+#drawer-body [data-result-item][data-tone=bad] .geist-outcome-state{color:var(--branch-bad)}
+#drawer-body [data-result-item][data-tone=good] .geist-outcome-state{color:var(--branch-good)}
+#drawer-body [data-result-item][data-tone=warn] .geist-outcome-state{color:var(--review-unknown)}
 .geist-outcome-files{display:flex;flex-direction:column;gap:10px;padding:15px 0 20px}
 .geist-tool-time{stroke:#c38a30;stroke-width:2.2;fill:none;stroke-linecap:butt}
 .geist-tool-time-key{display:inline-flex;align-items:center;gap:6px;font-size:11px;white-space:nowrap}
