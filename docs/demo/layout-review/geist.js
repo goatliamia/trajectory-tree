@@ -4,7 +4,11 @@
   const geistMeasureWidths = new Map();
   function geistSyncMeasureFont() {
     const font = '12px ' + getComputedStyle(document.body).getPropertyValue('--sans');
-    if (font !== geistMeasureFont) { geistMeasureFont = font; geistMeasureWidths.clear(); }
+    if (font !== geistMeasureFont) {
+      geistMeasureFont = font;
+      geistMeasureWidths.clear();
+      reviewFileLayoutCache = null;
+    }
   }
   reviewMeasure = function(text) {
     if (!geistMeasureFont) geistSyncMeasureFont();
@@ -76,6 +80,7 @@
   // Re-measure labels once the self-hosted font is ready; preserve the viewport.
   document.fonts.ready.then(() => {
     geistMeasureWidths.clear();
+    reviewFileLayoutCache = null;
     const vp = $('graph-scroll'), left = vp.scrollLeft, top = vp.scrollTop;
     if (view === 'path') renderActionPath(); else renderOverview({ plotOnly: true });
     vp.scrollLeft = left; vp.scrollTop = top;

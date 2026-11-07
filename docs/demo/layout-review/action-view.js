@@ -153,7 +153,7 @@
       brText(gutter, height - 12, showContext ? ui('每步上下文变化 · 显示至 ±') + reviewTokens(scale.limit) : ui('步骤从左到右排列'), 'br-axis', 'start') +
       brText(viewportWidth - gutter, height - 12, ui('间距表示顺序 · 耗时见上方'), 'br-axis', 'end') + '</g>';
     reviewActionFileFrame = { t, x, base, gutter, height, viewportWidth, viewportLeft };
-    html += '<g id="review-files-layer">' + reviewActionFiles(t, x, base, viewport.scrollLeft + gutter, viewport.scrollLeft + viewportWidth - gutter, height) + '</g>';
+    html += '<g id="review-files-layer">' + reviewActionFiles(t, x, base, viewport.scrollLeft + gutter, viewport.scrollLeft + viewportWidth - gutter) + '</g>';
     const graph = $('graph');
     graph.setAttribute('viewBox', '0 0 ' + width + ' ' + height); graph.setAttribute('height', height);
     graph.style.width = width + 'px'; graph.innerHTML = html;

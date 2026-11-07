@@ -48,6 +48,7 @@ jobs:
           lib/i18n-test.mjs
           plugin/analysis-view/self-test.mjs
           plugin/analysis-view/presentation-test.mjs
+          docs/demo/layout-review/geist-interaction-test.mjs
           view/test.mjs
           report/smoke-test.mjs
       - name: Exercise the portable evidence tools and transports
