@@ -29,6 +29,9 @@ for (let i = 0; i < 2; i++) {
   add('tool/call', { turn: 2, step: 1, callId: 'unicode-' + i, name: 'read', arguments: JSON.stringify({ file_path: unicodePath }) });
   add('tool/result', { turn: 2, step: 1, message: { source: { kind: 'tool', callId: 'unicode-' + i }, content: content('same file') } }, 'append');
 }
+const failedRead = add('tool/call', { turn: 2, step: 1, callId: 'failed', name: 'read', arguments: '{"file_path":"D:/missing.txt"}' });
+add('tool/result', { turn: 2, step: 1, message: { source: { kind: 'tool', callId: 'failed' }, isError: true, content: content('file missing') } }, 'append');
+const pending = add('tool/call', { turn: 2, step: 1, callId: 'pending', name: 'pwsh', arguments: '{"command":"build"}' });
 add('assistant/message', { turn: 2, step: 1, message: { content: content('The changed file is verified.') }, usage: { inputTokens: 50, cacheReadTokens: 20, cacheWriteTokens: 0, outputTokens: 3, totalTokens: 73 } }, 'append');
 add('step/end', { turn: 2, step: 1 }); add('turn/end', { turn: 2, reason: { kind: 'completed' } });
 // Replacement copies preserve history, but do not add usage or new attempts.
@@ -78,6 +81,21 @@ const unicodePage = await invoke('trajectory_inspect', { snapshot, view: 'io', f
 assert.ok(unicodePage.nextCursor.length > 3000, 'a supported Unicode selector can produce a long cursor');
 const unicodeNext = await invoke('trajectory_inspect', { cursor: unicodePage.nextCursor, turns: { from: 2, to: 2 }, limit: 1 });
 assert.equal(unicodeNext.ok, true); assert.equal(unicodeNext.offset, 1);
+
+const errors = await invoke('trajectory_inspect', { snapshot, view: 'io', outcome: 'error', groupBy: 'tool' });
+assert.equal(errors.scope.outcome, 'error');
+assert.deepEqual(errors.items.map(r => [r.tool, r.calls, r.errors]), [['read', 1, 1]]);
+assert.equal(errors.reads[0].args.seq, failedRead);
+const abnormal = await invoke('trajectory_inspect', { snapshot, view: 'io', outcome: 'abnormal', sort: 'time', limit: 1 });
+assert.equal(abnormal.totalEntries, 2);
+assert.equal(abnormal.items[0].status, 'error');
+const abnormalNext = await invoke('trajectory_inspect', { cursor: abnormal.nextCursor });
+assert.deepEqual(abnormalNext.items.map(r => [r.seq, r.status]), [[pending, 'unknown']]);
+assert.equal((await invoke('trajectory_inspect', { cursor: abnormal.nextCursor, outcome: 'error' })).ok, false);
+const failureTable = await invoke('trajectory_inspect', { snapshot, view: 'io', format: 'data', outcome: 'error', focus: { file: 'D:/missing.txt' } });
+assert.equal(failureTable.source.query.outcome, 'error');
+assert.deepEqual(failureTable.rows.map(r => [r.name, r.status, r.evidence[0].seq]), [['read', 'error', failedRead]]);
+assert.equal((await invoke('trajectory_inspect', { snapshot, view: 'overview', outcome: 'error' })).ok, false);
 
 const linked = await invoke('trajectory_read', { snapshot, seq: inner, format: 'linked' });
 assert.equal(linked.ok, true);

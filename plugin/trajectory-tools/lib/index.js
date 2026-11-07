@@ -26,6 +26,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { SKILL_BODY, SKILL_DESCRIPTION, SKILL_NAME, SKILL_WHEN_TO_USE, loadDiagnosticSkills } from "./skill.js";
 import { InspectionService } from "./inspect-service.js";
+import { IO_OUTCOMES } from "./io-outcome.js";
 import { readField } from "./linked-read.js";
 import { costRequests, costTotals, costCoverage, costByTurn } from "./usage.js";
 export { cacheEfficiency, costRequests, costTotals, costCoverage, costByTurn } from "./usage.js";
@@ -1230,6 +1231,7 @@ export function apply(ctx, config = {}) {
     description: "查询会话统计、步骤、工具文件操作和上下文构成，返回原文位置。",
     parameters: {
       view: { type: "string", enum: ["overview", "latency", "cost", "repeats", "io", "context"], description: "overview=时间过程(默认);latency=等待;cost=用量和定义;repeats=同参候选;io=操作;context=变化" },
+      outcome: { type: "string", enum: IO_OUTCOMES, description: "仅 io。error=明确报错；abnormal=明确报错或结果未确认。省略时包含所有调用。" },
       format: { type: "string", enum: ["summary", "data"], description: "summary(默认)返回摘要；data返回表格，保持来源顺序；repeats仅支持summary" },
       session: { type: "string", description: "会话 id，省略为当前会话" },
       turns: { type: "object", additionalProperties: true, description: "轮次闭区间 {from,to}，省略为全会话；沿用 snapshot 时可换范围" },

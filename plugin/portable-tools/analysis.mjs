@@ -1,5 +1,6 @@
 import { hash } from './sources.mjs';
 import { estimateVisibleTokens } from '../../analyzers/codex-adapter.mjs';
+import { matchesIoOutcome } from '../trajectory-tools/lib/io-outcome.js';
 
 export const CATEGORIES = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
 export const VIEWS = ['overview', 'latency', 'cost', 'repeats', 'io', 'context'];
@@ -50,7 +51,7 @@ export function selectPortableEvidence(data, q) {
   const range = q.turns || { from: session.turns[0]?.number || 1, to: session.turns.at(-1)?.number || 1 };
   let turns = session.turns.filter(t => t.number >= range.from && t.number <= range.to);
   const allCalls = turns.flatMap(t => t.steps.flatMap(s => s.calls.map(c => ({ ...c, turn: t.number, step: s.number, precise: c.timingSource?.endsWith('-capture') || c.timingSource === 'local-rollout' || s.endObserved && data.host === 'codex' }))));
-  let calls = allCalls.filter(c => q.includeSelf || !self(toolName(c)));
+  let calls = allCalls.filter(c => (q.includeSelf || !self(toolName(c))) && matchesIoOutcome(c.status, q.outcome));
   const bySeq = new Map(data.records.map(r => [r.seq, r]));
   let files = context.fileOperations.filter(f => f.turn >= range.from && f.turn <= range.to);
   if (q.focus?.tool) calls = calls.filter(c => toolName(c) === q.focus.tool || c.name === q.focus.tool);
@@ -147,5 +148,5 @@ export function inspectData(data, q) {
     };
     rows = withoutSamples(rows); extra = withoutSamples(extra);
   }
-  return { summary, coverage, range, focus: q.focus ?? null, ...extra, rows };
+  return { summary, coverage, range, focus: q.focus ?? null, ...(q.outcome ? { outcome: q.outcome } : {}), ...extra, rows };
 }

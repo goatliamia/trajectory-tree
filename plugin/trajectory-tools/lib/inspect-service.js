@@ -2,6 +2,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { buildInspection, readOfficialProjections, inspectionPage, evidencePointers, INSPECT_VIEWS } from './inspect.js';
 import { linkedPlan, linkedRecord } from './linked-read.js';
 import { inspectionReportData, reportPage } from './report-data.js';
+import { validateIoOutcome } from './io-outcome.js';
 
 const GROUPS = { overview: ['turn', 'tool', 'file'], latency: ['turn'], cost: ['turn'], io: ['tool', 'file'], repeats: [], context: [] };
 const SORTS = { overview: ['time', 'wall', 'input', 'output', 'returned', 'count'], latency: ['time', 'wall', 'input', 'output'], cost: ['time', 'wall', 'input', 'output'], io: ['time', 'returned', 'count'], repeats: ['time', 'count'], context: ['time', 'change'] };
@@ -11,6 +12,9 @@ function selection(args, previous = {}) {
   for (const key of ['view', 'turns', 'focus', 'groupBy', 'sort', 'format', 'samples']) q[key] = args[key] === undefined ? previous[key] ?? null : args[key];
   q.view ||= 'overview';
   q.format ||= 'summary';
+  const outcome = args.outcome === undefined ? previous.outcome : args.outcome;
+  validateIoOutcome(q.view, outcome);
+  if (outcome !== undefined) q.outcome = outcome;
   // 白名单外的新参数默认值在这里归一:null 会被下游当成 false,误省原文。
   if (q.samples === null || q.samples === undefined) q.samples = true;
   if (typeof q.samples !== 'boolean') throw Error('samples must be a boolean');
@@ -90,7 +94,8 @@ export class InspectionService {
       if (q.sort && q.sort !== 'time') throw Error('Data format keeps source order; choose ranking in the figure');
       if (q.groupBy && !(q.view === 'io' && ['tool', 'file'].includes(q.groupBy))) throw Error('Data groupBy is available only for io tool/file; other data keeps source rows');
       const source = { host: 'dsh', session: entry.session, snapshot: id, log: entry.index.log?.id ?? entry.index.log,
-        cut: entry.index.scope.toSeq, query: { view: q.view, turns: q.turns, focus: q.focus, groupBy: q.groupBy } };
+        cut: entry.index.scope.toSeq, query: { view: q.view, turns: q.turns, focus: q.focus, groupBy: q.groupBy,
+          ...(q.outcome ? { outcome: q.outcome } : {}) } };
       const page = reportPage(inspectionReportData(entry.index, q, source), offset, limit);
       return { ok: true, ...page, nextCursor: page.nextOffset == null ? null : id + ':' + Buffer.from(JSON.stringify(q)).toString('base64url') + ':' + page.nextOffset };
     }

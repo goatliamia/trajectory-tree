@@ -4,6 +4,7 @@ import { describeOperation } from './inspect-models/operations.mjs';
 import { replayOfficialStats, estimateToolsTokens } from './official-stats.js';
 import { costRequests, costTotals, costCoverage } from './usage.js';
 import { buildRelations } from './linked-read.js';
+import { matchesIoOutcome } from './io-outcome.js';
 
 export const INSPECT_VIEWS = ['overview', 'latency', 'cost', 'repeats', 'io', 'context'];
 const replacement = e => e.surfaceOp && typeof e.surfaceOp === 'object';
@@ -215,8 +216,8 @@ function groupCalls(calls, by) {
   return [...groups.values()];
 }
 export function inspectionPage(index, view, offset = 0, limit = 3, options = {}) {
-  const { turns = index.scope.turns, focus, groupBy, sort, samples = true } = options;
-  const calls = index.views.io.filter(c => inRange(c.turn, turns) && matches(c, focus));
+  const { turns = index.scope.turns, focus, outcome, groupBy, sort, samples = true } = options;
+  const calls = index.views.io.filter(c => inRange(c.turn, turns) && matches(c, focus) && matchesIoOutcome(c.status, outcome));
   const callBySeq = new Map(index.views.io.map(c => [c.seq, c]));
   // Code Mode is unwrapped for operation statistics, but a query for its actual
   // transport name must still locate the outer calls and owning whole steps.
@@ -227,13 +228,15 @@ export function inspectionPage(index, view, offset = 0, limit = 3, options = {})
     const transport = { seq: root.callSeq, callSeq: root.callSeq, resultSeq: root.resultSeq, turn, step,
       name: root.name, family: 'transport', transportOnly: true, files: [], outputCharacters: null,
       status: root.resultSeq == null ? 'unknown' : 'returned' };
-    calls.push(transport); callBySeq.set(root.callSeq, transport);
+    if (matchesIoOutcome(transport.status, outcome)) calls.push(transport);
+    callBySeq.set(root.callSeq, transport);
   }
   const focusSteps = focus ? new Set(calls.map(c => c.turn + ':' + c.step)) : null;
   const steps = index.stepEntries.filter(s => inRange(s.turn, turns) && (!focusSteps || focusSteps.has(s.turn + ':' + s.step)));
   const allowedTurns = new Set([...steps.map(s => s.turn), ...calls.map(c => c.turn)]);
   const ownTurns = index.turnEntries.filter(t => inRange(t.turn, turns) && (!focus || allowedTurns.has(t.turn)));
-  const scope = { ...index.scope, turns: turns || null, ...(focus ? { focus, metricsScope: 'whole steps containing matching calls; not per-object token/time attribution' } : {}) };
+  const scope = { ...index.scope, turns: turns || null, ...(outcome ? { outcome } : {}),
+    ...(focus ? { focus, metricsScope: 'whole steps containing matching calls; not per-object token/time attribution' } : {}) };
   const hydration = s => !samples ? s : ({ ...s, evidence: { ...s.evidence, callSeqs: undefined,
     prompt: index.turnEntries.find(t => t.turn === s.turn)?.prompt,
     calls: s.evidence.callSeqs.map(seq => callBySeq.get(seq)).filter(Boolean) } });

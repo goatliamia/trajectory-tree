@@ -69,6 +69,7 @@ const snapshot = { capturedAt: '2026-01-01T00:00:10Z', source: 'test', thread: {
   { id: 'user', type: 'userMessage', content: [{ type: 'text', text: '检查构建' }] },
   { id: 'cmd', type: 'commandExecution', command: 'cat file.js', commandActions: [], aggregatedOutput: 'body', durationMs: 7, exitCode: 0, status: 'completed' },
   { id: 'dyn', type: 'dynamicToolCall', namespace: 'extension', tool: 'check', arguments: { path: '/project/a.js' }, status: 'completed', success: false, contentItems: [{ type: 'text', text: 'failed' }] },
+  { id: 'pending', type: 'commandExecution', command: 'npm run build', status: 'inProgress' },
   { id: 'reasoning', type: 'reasoning', content: ['PRIVATE_THINKING'] },
   { id: 'image-view', type: 'imageView', path: '/project/preview.png' },
   { id: 'output-only', type: 'functionCallOutput', namespace: 'extra', name: 'orphan', output: { text: 'output without parameters' } },
@@ -84,9 +85,22 @@ const rollout = [
 const codex = new PortableService({ load: async () => datasetFromNative('codex', snapshot, { rollout }) });
 try {
   const report = await codex.call('trajectory_inspect', { view: 'cost' });
-  assert.equal(report.summary.calls, 3); assert.equal(report.summary.errors, 1);
+  assert.equal(report.summary.calls, 4); assert.equal(report.summary.errors, 1);
   assert.equal(report.summary.usage.records, 1); assert.equal(report.summary.usage.input, 100); assert.equal(report.summary.usage.uncachedInput, 40); assert.equal(report.summary.usage.output, 15);
   assert.equal(report.summary.toolCoveredMs, 10000); assert.equal(report.coverage.crossTurnToolIntervals, 1);
+  const io = { snapshot: report.snapshot, view: 'io' };
+  const errors = await executeTool(codex, 'trajectory_inspect', { ...io, outcome: 'error', groupBy: 'tool' });
+  assert.equal(errors.outcome, 'error');
+  assert.deepEqual(errors.rows.map(r => [r.tool, r.count, r.errors]), [['extension/check', 1, 1]]);
+  const abnormal = await executeTool(codex, 'trajectory_inspect', { ...io, outcome: 'abnormal', groupBy: 'tool', limit: 1 });
+  assert.equal(abnormal.summary.calls, 2); assert.equal(abnormal.summary.errors, 1);
+  const abnormalNext = await executeTool(codex, 'trajectory_inspect', { cursor: abnormal.cursor });
+  assert.deepEqual(abnormalNext.rows.map(r => [r.tool, r.count, r.errors, r.positions[0].status]), [['commandExecution', 1, 0, 'unknown']]);
+  await assert.rejects(executeTool(codex, 'trajectory_inspect', { cursor: abnormal.cursor, outcome: 'error' }), /Cursor/);
+  const table = await executeTool(codex, 'trajectory_inspect', { ...io, format: 'data', outcome: 'abnormal', focus: { tool: 'commandExecution' } });
+  assert.equal(table.source.query.outcome, 'abnormal');
+  assert.deepEqual(table.rows.map(r => [r.name, r.status]), [['commandExecution', 'unknown']]);
+  await assert.rejects(executeTool(codex, 'trajectory_inspect', { view: 'overview', outcome: 'error' }), /only available for the io view/);
   const raw = await codex.call('trajectory_search', { snapshot: report.snapshot, query: 'output without parameters' }); assert.equal(raw.rows.length, 1);
   const hidden = await codex.call('trajectory_search', { snapshot: report.snapshot, query: 'PRIVATE_THINKING' }); assert.equal(hidden.total, 0);
   const image = await codex.call('trajectory_search', { snapshot: report.snapshot, query: '/project/preview.png' }); assert.ok(image.total > 0);

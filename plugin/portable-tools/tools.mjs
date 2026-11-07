@@ -1,5 +1,6 @@
 import { Type } from 'typebox';
 import { Compile } from 'typebox/compile';
+import { IO_OUTCOMES } from '../trajectory-tools/lib/io-outcome.js';
 
 const string = { type: 'string', minLength: 1 }, integer = { type: 'integer', minimum: 0 };
 const turns = { type: 'object', properties: { from: { type: 'integer', minimum: 1 }, to: { type: 'integer', minimum: 1 } }, required: ['from', 'to'], additionalProperties: false };
@@ -8,6 +9,7 @@ const common = { session: { ...string, description: '原生会话 ID；已绑定
 const page = { cursor: string, limit: { type: 'integer', minimum: 1, maximum: 20 }, turns, includeSelf: { type: 'boolean', description: '默认从调用统计中排除诊断工具自身。' } };
 const definitions = [
   ['trajectory_inspect', '查询会话统计、步骤、工具文件操作和可见上下文，返回原生标识与原文位置。', { ...page,
+    outcome: { enum: IO_OUTCOMES, description: 'For io only. error selects recorded errors. abnormal also includes calls with an unconfirmed result. Omit to include all calls.' },
     samples: { type: 'boolean', description: 'Include short source excerpts in summary rows (default true). Set false for compact statistics; read pointers remain available.' },
     format: { enum: ['summary', 'data'], description: 'summary 默认；data 返回同切点表格；repeats 仅支持 summary。' },
     limit: { type: 'integer', minimum: 1, maximum: 500, description: 'summary 每页1–20项(默认6)，data每页1–500行(默认250)。' },

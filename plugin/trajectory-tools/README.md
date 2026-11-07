@@ -93,6 +93,7 @@ the spend was worth it stays the model's interpretation.
 | `session` | Session ID; defaults to the current session |
 | `turns` | Inclusive `{from,to}`; may change while reusing a snapshot |
 | `focus` | `{tool: exactName}` or `{file: exactReturnedPath}` |
+| `outcome` | `io` only. `error` selects recorded errors. `abnormal` includes recorded errors and calls with unconfirmed results. Omit for all calls. |
 | `groupBy` | overview: turn/tool/file; latency/cost: turn; io: tool/file |
 | `sort` | Time or a supported metric; see the tool parameter description |
 | `limit` | 1–10 entries; overview defaults to 6, other views to 3 |
@@ -271,6 +272,7 @@ trajectory_search(view="cost", session=<id>)             # tokens + cache effici
 | `session` | 会话 ID，省略为当前会话 |
 | `turns` | 轮次闭区间 `{from,to}`；沿用 snapshot 时可更换范围 |
 | `focus` | `{tool:精确工具名}` 或 `{file:返回过的完整路径}` |
+| `outcome` | 仅 `io`。`error` 只看明确报错，`abnormal` 也包含结果未确认的调用。省略时查询所有调用。 |
 | `groupBy` | overview 支持 turn/tool/file；latency、cost 支持 turn；io 支持 tool/file |
 | `sort` | 时间或该主题支持的指标，具体取值见工具参数说明 |
 | `limit` | 每页 1–10 项；overview 默认 6，其余默认 3 |

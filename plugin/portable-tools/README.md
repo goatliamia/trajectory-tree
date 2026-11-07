@@ -2,6 +2,8 @@
 
 沿用四个入口：`trajectory_inspect`、`trajectory_search`、`trajectory_read`、`trajectory_graph`。支持过程诊断和当前可取得材料的静态剖面；分析方法由 `trace-analysis`、`context-profile` skill 提供。
 
+按工具统计报错可以传 `{"view":"io","groupBy":"tool","outcome":"error","sort":"count"}`。`abnormal` 也包含结果未确认的调用。需要逐条查看时，省略 `groupBy` 并传 `format:"data"`。
+
 需要 Node.js 20+，先在仓库根目录执行：
 
 ```sh

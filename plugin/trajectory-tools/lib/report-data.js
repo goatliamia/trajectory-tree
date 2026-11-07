@@ -1,6 +1,7 @@
 // The evidence service owns measurements; renderers receive this compact,
 // versioned table without excerpts, methods, or a second statistics formula.
 import { createHash } from 'node:crypto';
+import { matchesIoOutcome } from './io-outcome.js';
 
 export const REPORT_DATA_VERSION = 'trajectory-data/1';
 export const REPORT_COLUMNS = {
@@ -56,8 +57,9 @@ export function inspectionReportData(index, query, source) {
     if (inRange(turn)) calls.push({ seq: root.callSeq, resultSeq: root.resultSeq, turn, step, name: root.name,
       files: [], status: root.resultSeq == null ? 'unknown' : 'returned', outputCharacters: null, start: null, end: null });
   }
-  calls.sort((a,b)=>a.seq-b.seq);
-  const keys = query.focus ? new Set(calls.map(c => c.turn + ':' + c.step)) : null;
+  const selectedCalls = query.outcome ? calls.filter(c => matchesIoOutcome(c.status, query.outcome)) : calls;
+  selectedCalls.sort((a, b) => a.seq - b.seq);
+  const keys = query.focus ? new Set(selectedCalls.map(c => c.turn + ':' + c.step)) : null;
   const selected = row => inRange(row.turn) && (!keys || keys.has(row.turn + ':' + row.step));
   const coverage = { ...index.coverage, ...(query.focus ? { focusedMetrics: 'Whole owning steps; not attributed tool/file usage or waiting' } : {}) };
   if (query.groupBy === 'file') coverage.grouping = 'Calls touching multiple files occur in multiple groups; returned characters describe each complete call result';
@@ -79,7 +81,7 @@ export function inspectionReportData(index, query, source) {
     if (query.view === 'repeats') throw Error('Use the repeats summary and linked reads to select an evidence-backed sequence; no inferred attempt graph');
     if (query.groupBy) {
       const groups = new Map();
-      for (const c of calls) for (const label of new Set(query.groupBy === 'tool' ? [c.name] : c.files.map(f => f.path))) {
+      for (const c of selectedCalls) for (const label of new Set(query.groupBy === 'tool' ? [c.name] : c.files.map(f => f.path))) {
         if (!groups.has(label)) groups.set(label, { id: 'group:' + label, name: query.groupBy === 'tool' ? label : null, file: query.groupBy === 'file' ? label : null, calls: 0, errors: 0, returnedCharacters: 0, evidence: [] });
         const g = groups.get(label); g.calls++; g.errors += c.status === 'error' ? 1 : 0;
         g.returnedCharacters = g.returnedCharacters === null || c.outputCharacters == null ? null : g.returnedCharacters + c.outputCharacters;
@@ -87,7 +89,7 @@ export function inspectionReportData(index, query, source) {
       }
       return table('groups', [...groups.values()], [query.groupBy === 'tool' ? 'name' : 'file', 'calls', 'errors', 'returnedCharacters']);
     }
-    return table('calls', calls.map(c => ({ ...c, id: 'call:' + c.seq, returnedCharacters: c.outputCharacters,
+    return table('calls', selectedCalls.map(c => ({ ...c, id: 'call:' + c.seq, returnedCharacters: c.outputCharacters,
       evidence: [...reportRef(index, c.seq), ...reportRef(index, c.resultSeq)] })), ['turn', 'step', 'name', 'status', 'start', 'end', 'returnedCharacters']);
   }
   return table('steps', index.stepEntries.filter(selected).sort((a,b)=>(a.evidence.seq??Infinity)-(b.evidence.seq??Infinity)).map(s => ({ id: 'step:' + s.turn + ':' + s.step,
