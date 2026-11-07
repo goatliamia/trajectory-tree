@@ -1199,6 +1199,41 @@ function compactDiff(rows, context = 3) {
   return result;
 }
 
+const patchHunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+
+function recordedDiffRows(change) {
+  if (!change.diff?.text) return null;
+  const lines = change.diff.text.split(/\r?\n/);
+  if (lines.at(-1) === '') lines.pop();
+  const type = change.kind?.type;
+  if (type === 'add' || type === 'delete') {
+    // Codex records the file contents for additions and deletions.
+    const added = type === 'add';
+    return lines.map((text, i) => ({ kind: added ? 'add' : 'remove', before: added ? null : i + 1, after: added ? i + 1 : null, text }));
+  }
+
+  const firstHunk = lines.findIndex(line => patchHunk.test(line));
+  const rows = [], signs = { ' ': 'same', '+': 'add', '-': 'remove' };
+  let before = null, after = null;
+  for (const line of lines.slice(Math.max(0, firstHunk))) {
+    const hunk = patchHunk.exec(line);
+    if (hunk) {
+      before = Number(hunk[1]); after = Number(hunk[2]);
+      rows.push({ kind: 'hunk', text: line });
+      continue;
+    }
+    if (line.startsWith('\\ ')) {
+      rows.push({ kind: 'meta', text: line });
+      continue;
+    }
+    const kind = signs[line[0]];
+    if (!kind || firstHunk < 0 && /^(?:---|\+\+\+) /.test(line)) return null;
+    rows.push({ kind, before: before != null && kind !== 'add' ? before++ : null,
+      after: after != null && kind !== 'remove' ? after++ : null, text: line.slice(1) });
+  }
+  return rows.some(row => row.kind === 'add' || row.kind === 'remove') ? rows : null;
+}
+
 function fileIdentity(path) {
   const slash = String(path).replace(/\\/g, '/');
   const normalized = slash.replace(/\/{2,}/g, '/').replace(/^\//, slash.startsWith('//') ? '//' : '/');
@@ -1890,30 +1925,39 @@ function fileChangeHistory(operations, path) {
     $('graph-caption').querySelector('[data-br-layer="context"]')?.setAttribute('title', ui('上下文来源变化，以及压缩与裁短记录；与停顿、再试独立'));
   }
 
+  const reviewGoalOperations = { create: ui('创建'), resume: ui('恢复'), pause: ui('暂停'), edit: ui('编辑'), complete: ui('完成'),
+    block: ui('受阻'), blocked: ui('受阻'), clear: ui('清除目标'), read: ui('读取目标') };
+  const reviewGoalOperation = marker => Object.hasOwn(reviewGoalOperations, marker.operation) ? reviewGoalOperations[marker.operation] : marker.operation || ui('变更');
+  const reviewGoalClass = marker => marker.operation === 'block' ? 'blocked' : Object.hasOwn(reviewGoalOperations, marker.operation) ? marker.operation : '';
+  function reviewGoalRecord(goal, id) {
+    const records = goal.goals || [];
+    return records.find(record => record.id === id) || ((id != null ? id === goal.id : records.length <= 1) ? goal : {});
+  }
+  function reviewGoalEventLabel(marker) {
+    const turn = Number.isSafeInteger(marker.turn) ? ui(' · 第 ') + marker.turn + ui(' 轮') : '';
+    return reviewGoalOperation(marker) + turn + ' · seq ' + marker.seq;
+  }
   function reviewGoalBand(goalData, markers, mapTime, gy) {
     const life = markers.filter(m => m.operation && m.operation !== 'read');
     const reads = markers.filter(m => m.operation === 'read');
-    const goalState = { create: ui('创建'), resume: ui('恢复'), pause: ui('暂停'), edit: ui('编辑'), complete: ui('完成'), blocked: ui('受阻') };
-    const goalClass = operation => Object.hasOwn(goalState, operation) ? operation : '';
-    const goalLabel = operation => Object.hasOwn(goalState, operation) ? goalState[operation] : operation;
     // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
     const byGoalAll = new Map();
-    for (const m of markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
+    for (const m of markers) { const key = m.goalId ?? null; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
     const byGoalLife = new Map();
-    for (const m of life) { const key = m.goalId || 'goal'; if (!byGoalLife.has(key)) byGoalLife.set(key, []); byGoalLife.get(key).push({ ...m, x: mapTime(m.time) }); }
+    for (const m of life) { const key = m.goalId ?? null; if (!byGoalLife.has(key)) byGoalLife.set(key, []); byGoalLife.get(key).push({ ...m, x: mapTime(m.time) }); }
     // 先把每条目标摊成一段,再按范围重叠错行;行长一致的区间才不会互相压。
     const goals = [];
     for (const [id, list] of byGoalLife) {
       const pts = list.filter(m => Number.isFinite(m.x));
       if (!pts.length) continue;
       const all = (byGoalAll.get(id) || []).map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
-      goals.push({ id, pts, x0: all.length ? all[0].x : pts[0].x, x1: pts[pts.length - 1].x });
+      const objective = reviewGoalRecord(goalData, id).objective || pts.at(-1).objective || ui('会话目标');
+      goals.push({ objective, pts, x0: all.length ? all[0].x : pts[0].x, x1: pts[pts.length - 1].x });
     }
     const goalLanes = [];
     // 标签按实际字宽截断,并按"线 + 标签"的宽度占行,避免两段目标文字叠在一起。
     const goalCompact = goal => {
-      const own = (goalData.goals || []).find(x => x.id === goal.id) || null;
-      const objective = String(own?.objective || goalData.objective || ui('目标')).replace(/\s+/g, ' ');
+      const objective = String(goal.objective).replace(/\s+/g, ' ');
       const limit = Math.max(24, Math.max(18, goal.x1 - goal.x0) - 28);
       let compact = objective;
       if (tlMeasure(compact) > limit) {
@@ -1931,29 +1975,42 @@ function fileChangeHistory(operations, path) {
       goalLanes[laneIndex] = Math.max(goal.x1, goal.x0 + goal.labelW + 10);
       goal.lane = Math.min(laneIndex, 2);
     }
-    let band = '<g class="goal-band" data-goal-band="1" role="button" tabindex="0" aria-label="' + esc(ui('会话目标')) + '" style="cursor:pointer;pointer-events:all">';
+    const dot = (m, x, y, radius, css) => brGroup('class="goal-marker" data-goal-marker="' + esc(m.seq) + '"',
+      '<circle class="br-hit" cx="' + x + '" cy="' + y + '" r="5"/><circle cx="' + x + '" cy="' + y + '" r="' + radius + '" class="' + css + '"/>', reviewGoalEventLabel(m));
+    let bands = '', dots = '';
     for (const goal of goals) {
       const { pts, x0, x1, compact } = goal, laneY = gy - goal.lane * 22;
-      const last = pts[pts.length - 1];
-      // 不用胶囊:一条实线加两端刻度就够,事件点是线上的刻度。
-      band += '<path d="M' + x0 + ' ' + laneY + 'H' + x1 + '" class="goal-line"/>';
-      band += '<path d="M' + x0 + ' ' + (laneY - 5) + 'v10M' + x1 + ' ' + (laneY - 5) + 'v10" class="goal-cap"/>';
-      for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + laneY + '" r="3.2" class="goal-dot ' + goalClass(m.operation) + '"><title>' + esc(goalLabel(m.operation)) + ui(' · 第 ') + esc(m.turn) + ui(' 轮 · seq ') + esc(m.seq) + '</title></circle>';
-      band += '<text x="' + x0 + '" y="' + (laneY - 7) + '" class="goal-label"><tspan class="goal-text">' + esc(compact) + '</tspan><tspan class="goal-state ' + goalClass(last.operation) + '" dx="6">' + esc(goalLabel(last.operation)) + '</tspan></text>';
+      const last = pts.at(-1), hitWidth = Math.max(x1 - x0, goal.labelW, 8) + 10;
+      const band = '<rect class="br-hit" x="' + (x0 - 5) + '" y="' + (laneY - 19) + '" width="' + hitWidth + '" height="24"/>' +
+        '<path d="M' + x0 + ' ' + laneY + 'H' + x1 + '" class="goal-line"/>' +
+        '<path d="M' + x0 + ' ' + (laneY - 5) + 'v10M' + x1 + ' ' + (laneY - 5) + 'v10" class="goal-cap"/>' +
+        '<text x="' + x0 + '" y="' + (laneY - 7) + '" class="goal-label"><tspan class="goal-text">' + esc(compact) + '</tspan><tspan class="goal-state ' + reviewGoalClass(last) + '" dx="6">' + esc(reviewGoalOperation(last)) + '</tspan></text>';
+      bands += brGroup('class="goal-band" data-goal-band="' + esc(last.seq) + '"', band, goal.objective);
+      for (const m of pts) dots += dot(m, m.x, laneY, 3.2, 'goal-dot ' + reviewGoalClass(m));
     }
     const readDots = reads.map(m => {
       const x = mapTime(m.time);
-      return Number.isFinite(x) ? '<circle cx="' + x + '" cy="' + gy + ui('" r="1.6" class="goal-read"><title>读取目标 · 第 ') + esc(m.turn) + ui(' 轮</title></circle>') : '';
+      return Number.isFinite(x) ? dot(m, x, gy, 1.6, 'goal-read') : '';
     }).join('');
-    return goals.length || readDots ? band + readDots + '</g>' : '';
+    return bands + readDots + dots;
   }
 
-  function reviewOpenGoalSummary(goal) {
-    const label = ui('目标 ') + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
-    const rows = [[ui('目标'), goal.objective || ui('未记录')], [ui('阶段'), goal.phase || ui('未记录')],
-      [ui('轮次'), goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : ui('未记录')],
-      [ui('变更'), (goal.markers || []).map(marker => (marker.operation || '') + '@' + marker.seq).join(' · ') || ui('未记录')]];
-    openDrawer(ui('会话目标'), label, '<dl class="geist-timing-facts">' + rows.map(([key, value]) => '<div><dt>' + esc(key) + '</dt><dd>' + esc(value) + '</dd></div>').join('') + '</dl>');
+  function reviewOpenGoalSummary(goal, marker) {
+    const id = marker.goalId ?? null, record = reviewGoalRecord(goal, id);
+    const events = goal.markers.filter(event => (event.goalId ?? null) === id);
+    const started = marker.roundsStarted ?? record.roundsStarted, max = marker.maxGoalRounds ?? record.maxGoalRounds;
+    const rows = [[ui('目标'), marker.objective || record.objective || ui('未记录')],
+      [ui('阶段'), marker.phase || record.phase || ui('未记录')], [ui('轮次'), started != null ? started + ' / ' + (max ?? '?') : ui('未记录')]];
+    const jump = Number.isSafeInteger(marker.turn) && marker.turn > 0;
+    const choices = events.length > 1 ? '<div class="review-list">' + events.map(event =>
+      '<button data-goal-select="' + esc(event.seq) + '" aria-current="' + (event.seq === marker.seq) + '">' + esc(reviewGoalEventLabel(event)) + '</button>').join('') + '</div>' : '';
+    const actions = jump ? ui('<div class="drawer-actions"><button class="action-button primary" id="review-goal-path">在行动路径中查看 ↗</button></div>') : '';
+    openDrawer(ui('会话目标'), reviewGoalEventLabel(marker), '<dl class="geist-timing-facts">' + rows.map(([key, value]) => '<div><dt>' + esc(key) + '</dt><dd>' + esc(value) + '</dd></div>').join('') + '</dl>' + choices + actions, null, jump ? marker.turn : null);
+    $('drawer-body').querySelectorAll('[data-goal-select]').forEach(el => el.onclick = () => {
+      const event = events.find(e => e.seq === Number(el.dataset.goalSelect));
+      if (event) reviewOpenGoalSummary(goal, event);
+    });
+    if (jump) $('review-goal-path').onclick = () => { closeDrawer(); reviewEnterPath(marker.turn, marker.step); };
   }
 
   let reviewFocusedTurn = null, reviewPathEnteredAt = 0;
@@ -2132,18 +2189,74 @@ function fileChangeHistory(operations, path) {
   function reviewHasChange(fact) {
     return Boolean(fact?.preview || fact?.diffChanges?.length);
   }
-  function reviewOpenChange(t, step, fact, nested = false) {
+  function reviewDiffRow(row) {
+    if (row.kind === 'fold') return ui('<button class="review-diff-fold">展开 ') + row.count + ui(' 行未改动内容</button>');
+    if (row.kind === 'hunk' || row.kind === 'meta') return '<div class="review-diff-marker"><code>' + esc(row.text) + '</code></div>';
+    return '<div class="review-diff-row ' + row.kind + '"><span class="review-diff-line-number">' + (row.before ?? '') + '</span><span class="review-diff-line-number">' + (row.after ?? '') + '</span><span class="review-diff-sign">' + (row.kind === 'add' ? '+' : row.kind === 'remove' ? '−' : '') + '</span><code>' + esc(row.text || ' ') + '</code></div>';
+  }
+  function reviewOpenRecordedChange(fact, detail, nested, path) {
+    const changes = fact.diffChanges, pageSize = 500;
+    let index = Math.max(0, changes.findIndex(change => change.path === path));
+    let raw = false, shown = pageSize;
+    detail.html = '<div class="review-change-status" data-tone="' + esc(fact.tone) + '">' + esc(fact.outcome) + '</div>' +
+      '<div class="review-patch-file">' + (changes.length > 1 ? ui('<select id="review-patch-files" aria-label="选择改动文件">') +
+        changes.map((change, i) => '<option value="' + i + '">' + esc(change.path) + '</option>').join('') + '</select>' : '') +
+        '<span id="review-patch-path"></span></div>' +
+      '<div class="review-diff-toolbar"><span id="review-patch-count"></span><button id="review-patch-raw"></button></div>' +
+      '<p class="review-diff-note" id="review-patch-note"></p>' +
+      ui('<div class="review-diff-scroller review-patch-scroller" tabindex="0" aria-label="改动内容"><div id="review-patch-view"></div><button id="review-patch-more" class="review-diff-fold" hidden>显示更多行</button></div>');
+    detail.bind = () => {
+      const files = $('review-patch-files'), pane = $('review-patch-view'), toggle = $('review-patch-raw'), more = $('review-patch-more');
+      const types = { add: ui('新增文件'), delete: ui('删除文件'), update: ui('修改文件') };
+      let change, rows;
+      const render = () => {
+        const formatted = rows && !raw;
+        toggle.hidden = !rows;
+        toggle.textContent = raw ? ui('行级对比') : ui('原始补丁');
+        more.hidden = !formatted || shown >= rows.length;
+        pane.classList.toggle('review-diff-lines', !!formatted);
+        pane.innerHTML = formatted
+          ? ui('<div class="review-diff-column-key"><span>原</span><span>新</span><span></span><span>改动片段</span></div>') + rows.slice(0, shown).map(reviewDiffRow).join('')
+          : change.diff?.text ? '<pre class="excerpt">' + esc(change.diff.text) + '</pre>' : ui('<p class="review-patch-empty">未记录补丁正文。</p>');
+      };
+      const select = () => {
+        change = changes[index]; rows = recordedDiffRows(change);
+        const destination = change.kind?.move_path;
+        const name = destination ? ui('移动文件') : types[change.kind?.type];
+        if (files) files.title = change.path;
+        const pathLabel = [files ? '' : change.path, destination ? '→ ' + destination : ''].filter(Boolean).join(' ');
+        $('review-patch-path').textContent = [name, pathLabel].filter(Boolean).join(' · ');
+        const removed = rows?.filter(row => row.kind === 'remove').length;
+        const added = rows?.filter(row => row.kind === 'add').length;
+        $('review-patch-count').innerHTML = rows ? '<b class="removed">− ' + removed + ui(' 行</b><b class="added">+ ') + added + ui(' 行</b>') : '';
+        $('review-patch-note').textContent = change.diff?.omitted
+          ? ui('片段过长，当前为截取内容；行数统计仅针对展示部分。')
+          : ui('按本次记录的补丁展示，未记录的行号留空。');
+        render();
+        pane.parentElement.scrollTo(0, 0);
+      };
+      if (files) {
+        files.value = String(index);
+        files.onchange = () => { index = Number(files.value); shown = pageSize; select(); };
+      }
+      toggle.onclick = () => { raw = !raw; render(); pane.parentElement.scrollTo(0, 0); };
+      more.onclick = () => {
+        pane.insertAdjacentHTML('beforeend', rows.slice(shown, shown + pageSize).map(reviewDiffRow).join(''));
+        shown += pageSize;
+        if (shown >= rows.length) { more.hidden = true; pane.parentElement.focus({ preventScroll: true }); }
+      };
+      select();
+    };
+    reviewOpenDetail(detail, nested);
+  }
+  function reviewOpenChange(t, step, fact, nested = false, path = null) {
     if (!reviewHasChange(fact)) return;
     const preview = fact.preview;
     const planned = fact.tone === 'bad' || fact.tone === 'unknown';
     const title = planned ? ui('原计划改动') : ui('改动对比');
-    const subtitle = (fact.target || fact.title) + ui(' · 第 ') + t.number + ui(' 轮 / 第 ') + step.number + ui(' 步');
-    if (!preview) {
-      const html = fact.diffChanges.map(change => '<div class="review-detail-section"><h3>' + esc(change.path) + '</h3><p>' +
-        esc(change.kind?.type || '') + '</p>' + block(change.diff) + '</div>').join('');
-      reviewOpenDetail({ title, subtitle, html }, nested);
-      return;
-    }
+    const position = ui('第 ') + t.number + ui(' 轮 / 第 ') + step.number + ui(' 步');
+    if (!preview) return reviewOpenRecordedChange(fact, { title, subtitle: position }, nested, path);
+    const subtitle = (fact.target || fact.title) + ' · ' + position;
     const rows = changedLines(preview.before, preview.after), removed = rows.filter(r => r.kind === 'remove').length, added = rows.filter(r => r.kind === 'add').length;
     const folded = compactDiff(rows), hasFolds = folded.some(row => row.kind === 'fold');
     const detail = {
@@ -2158,9 +2271,7 @@ function fileChangeHistory(operations, path) {
         const render = () => {
           const visible = detail.all ? rows : folded;
           if ($('review-diff-toggle')) $('review-diff-toggle').textContent = detail.all ? ui('只看改动附近') : ui('显示全部片段');
-          $('review-diff-lines').innerHTML = visible.map(row => row.kind === 'fold'
-            ? ui('<button class="review-diff-fold">展开 ') + row.count + ui(' 行未改动内容</button>')
-            : '<div class="review-diff-row ' + row.kind + '"><span class="review-diff-line-number">' + (row.before ?? '') + '</span><span class="review-diff-line-number">' + (row.after ?? '') + '</span><span class="review-diff-sign">' + (row.kind === 'add' ? '+' : row.kind === 'remove' ? '−' : '') + '</span><code>' + esc(row.text || ' ') + '</code></div>').join('');
+          $('review-diff-lines').innerHTML = visible.map(reviewDiffRow).join('');
           $('review-diff-lines').querySelectorAll('.review-diff-fold').forEach(el => el.onclick = () => { detail.all = true; render(); });
         };
         if ($('review-diff-toggle')) $('review-diff-toggle').onclick = () => { detail.all = !detail.all; render(); };
@@ -2605,7 +2716,10 @@ function fileChangeHistory(operations, path) {
     if (goalMarkers.length) html += reviewGoalBand(goalInfo, goalMarkers, mapTime, h - 70);
     $('graph').setAttribute('viewBox',`0 0 ${w} ${h}`);$('graph').setAttribute('height',h);$('graph').style.width=w+'px';$('graph').innerHTML=html;
     const bind=(selector,enter,click,dbl)=>$('graph').querySelectorAll(selector).forEach(el=>{el.onmouseenter=()=>enter?.(el);el.onclick=ev=>{ev.stopPropagation();click?.(el);};el.ondblclick=ev=>{ev.preventDefault();ev.stopPropagation();(dbl||click)?.(el);};el.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();click?.(el);}};});
-    bind('[data-goal-band]', null, () => reviewOpenGoalSummary(goalInfo));
+    bind('[data-goal-band], [data-goal-marker]', null, el => {
+      const marker = goalMarkers.find(m => m.seq === Number(el.dataset.goalMarker ?? el.dataset.goalBand));
+      if (marker) reviewOpenGoalSummary(goalInfo, marker);
+    });
     bind('[data-br-round]',el=>reviewRoundReadout(brRound(Number(el.dataset.brRound))),el=>{const t=brRound(Number(el.dataset.brRound));turnIndex=turns.indexOf(t);header();tlFocusRange(t,t.start,endOf(t));reviewRoundReadout(t);});
     bind('[data-br-step]',el=>{const [n,k]=el.dataset.brStep.split(':').map(Number),t=brRound(n);tlStepReadout(t,t.steps.find(s=>s.number===k));},el=>{const [n,k]=el.dataset.brStep.split(':').map(Number),t=brRound(n);tlOpenStep(t,t.steps.find(s=>s.number===k));});
     bind('[data-br-episode]',el=>{const e=episodes.find(e=>e.id===el.dataset.brEpisode);tlReadout(ui`第 ${e.turn} 轮 · ${e.reason} · ${e.failedCount} 次失败 · ${e.summary}，点击展开`,()=>openOverviewEpisode(e.id));},el=>openOverviewEpisode(el.dataset.brEpisode));
@@ -3112,7 +3226,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       };
       body.querySelectorAll('[data-history-diff]').forEach(el => el.onclick = () => {
         const op = history.operations.find(o => o.seq === Number(el.dataset.historyDiff)), t = brRound(op.turn), step = t?.steps.find(s => s.number === op.step);
-        if (step) reviewOpenChange(t, step, factFor(op), true);
+        if (step) reviewOpenChange(t, step, factFor(op), true, op.path);
       });
       body.querySelectorAll('[data-history-step]').forEach(el => el.onclick = () => {
         const op = history.operations.find(o => o.seq === Number(el.dataset.historyStep)); reviewCloseDetail();

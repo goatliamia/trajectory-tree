@@ -12,7 +12,7 @@ assert.equal(classifyCodexItem(command('1', 'rg --files')).kind, 'query');
 assert.equal(commandReadEvidence('Get-Content -LiteralPath "a b/SKILL.md"')[0].path, 'a b/SKILL.md');
 assert.equal(commandReadEvidence('Get-Content $variable').length, 0);
 assert.equal(commandReadEvidence('Get-Content C:\\a\\SKILL.md', [{ type: 'read', path: 'C:\\a\\SKILL.md' }]).length, 1);
-const fixture = { capturedAt: '2026-01-01T00:00:10Z', source: 'fixture', thread: { id: 'fixture', cwd: '/project', createdAt: 1767225600, turns: [{ id: 't1', startedAt: 1767225600, completedAt: 1767225610, status: 'completed', items: [{ type: 'userMessage', id: 'u1', content: [{ type: 'text', text: 'read file' }, { type: 'skill', name: 'test-skill', path: '/skill/SKILL.md' }] }, command('c1', 'Get-Content missing.js', 1), command('c2', 'Get-Content missing.js'), { type: 'fileChange', id: 'f1', status: 'completed', changes: [{ path: '/project/a.js', kind: { type: 'update' }, diff: '-old\n+new' }] }] }] } };
+const fixture = { capturedAt: '2026-01-01T00:00:10Z', source: 'fixture', thread: { id: 'fixture', cwd: '/project', createdAt: 1767225600, turns: [{ id: 't1', startedAt: 1767225600, completedAt: 1767225610, status: 'completed', items: [{ type: 'userMessage', id: 'u1', content: [{ type: 'text', text: 'read file' }, { type: 'skill', name: 'test-skill', path: '/skill/SKILL.md' }] }, command('c1', 'Get-Content missing.js', 1), command('c2', 'Get-Content missing.js'), { type: 'fileChange', id: 'f1', status: 'completed', changes: [{ path: '/project/a.js', kind: { type: 'update' }, diff: '-old\n+new PASS' }] }] }] } };
 const raw = [
   { timestamp: '2026-01-01T00:00:00Z', type: 'session_meta', payload: { id: 'fixture' } },
   { timestamp: '2026-01-01T00:00:00Z', type: 'turn_context', payload: { turn_id: 't1', model: 'fixture-model' } },
@@ -33,7 +33,9 @@ assert.equal(adapted.officialStats.context.pressure.pressureTokens, 240, 'cutoff
 assert.equal(adapted.context.skillEvents.length, 1, 'catalog paths are not loaded skill content');
 assert.equal(adapted.context.fileOperations.find(o => o.path.endsWith('missing.js')).status, 'error');
 assert.equal(session.overview.episodes[0].complete, true, 'identical later operation succeeds');
-assert.ok(Object.values(adapted.context.callFacts).some(f => f.diffChanges?.[0]?.diff.text === '-old\n+new'));
+const patchFact = Object.values(adapted.context.callFacts).find(f => f.diffChanges?.length);
+assert.equal(patchFact.diffChanges[0].diff.text, '-old\n+new PASS');
+assert.equal(patchFact.outcome, 'Codex 记录文件改动已完成。', 'Patch text does not imply a successful test');
 assert.ok(collectToolResults(session, adapted.context.callFacts, adapted.context.fileOperations).length);
 assert.ok(fileObjects(adapted.context.fileOperations).length);
 assert.ok(contextByTurn(adapted.context.requests).length);

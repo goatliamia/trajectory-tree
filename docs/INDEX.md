@@ -10,7 +10,7 @@
 
 | 目录 | 作用 | 关键入口 | 是否生成 |
 |---|---|---|---|
-| `plugin/` | 宿主侧插件与工具 | `plugin/trajectory-tools`（DSH 工具）、`plugin/analysis-view`（DSH 路径页）、`plugin/portable-tools`（Pi/Codex 共用实现）、`plugin/claude` | 部分生成 |
+| `plugin/` | 宿主侧插件与工具 | `plugin/trajectory-tools`（DSH 工具）、`plugin/analysis-view`（DSH 路径页）、`plugin/portable-tools`（Pi、Codex、Claude Code 共用工具）、`plugin/claude` | 部分生成 |
 | `view/` | 跨宿主的视图源码与资源 | `view/render.mjs`（页面装配）、`view/assets/`（CSS / 宿主适配 / 观察层） | 否 |
 | `report/` | HTML 报告组件与写作规范 | `report/AUTHORING.md`（组件绑定）、`report/WRITING.md`（写作）、`report/out/`（产出） | `out/` 是产物 |
 | `skill/` | 诊断方法源文件 | `skill/trace-analysis`、`skill/context-profile` | 否；由 `scripts/sync-host-skills.mjs` 分发到各宿主 |
@@ -35,16 +35,19 @@
 
 **视图**
 - [分析视图设计](analysis-view-design.md) — 路径页的结构与数据流
+- [DSH 目标定位](demo/layout-review/goal-layer.js) — 按目标与事件打开详情，定位关联轮次
+- [Codex 历史改动](demo/layout-review/diff-model.mjs) — 从记录的补丁生成增删行与行号
 - [上下文证据接口](context-evidence-interface.md) — 七类构成的数据来源
 - [静态上下文剖面](static-context-profile.md)
 
 **诊断方法**
+- [工具结果筛选](../plugin/portable-tools/README.md) — `trajectory_inspect` 的 `outcome` 参数
 - [诊断方法（定稿）](diagnostic-method-and-tools.md) · [诊断草稿](diagnostic-methods-draft.md)
 - [诊断 v3](diagnostic-analysis-v3.md) · [v3 实验结果](diagnostic-experiment-v3-results.md) · [试点结果](diagnostic-pilot-results.md)
 - [提示词（定稿）](diagnostic-prompts.md) · [提示词草稿](diagnostic-prompts-draft.md)
 
 **报告**
-- [报告写作](report/WRITING.md) · [组件绑定](report/AUTHORING.md)
+- [报告写作](../report/WRITING.md) · [组件绑定](../report/AUTHORING.md)
 - [报告装配](report-assembly.md) · [报告模板](report-templates.md) · [编写流程](report-authoring-workflow.md)
 
 **其他**
@@ -66,6 +69,11 @@ node scripts/package-trajectory.mjs --host codex|pi|claude
 
 # DSH 共享视图资源（打包前自动执行）
 node scripts/sync-view-assets.mjs
+
+# 浏览器交互回归
+npm ci --prefix test/browser
+npm exec --prefix test/browser -- playwright install chromium firefox webkit
+npm test --prefix test/browser
 ```
 
 ---

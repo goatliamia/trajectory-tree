@@ -72,7 +72,7 @@
       };
       body.querySelectorAll('[data-history-diff]').forEach(el => el.onclick = () => {
         const op = history.operations.find(o => o.seq === Number(el.dataset.historyDiff)), t = brRound(op.turn), step = t?.steps.find(s => s.number === op.step);
-        if (step) reviewOpenChange(t, step, factFor(op), true);
+        if (step) reviewOpenChange(t, step, factFor(op), true, op.path);
       });
       body.querySelectorAll('[data-history-step]').forEach(el => el.onclick = () => {
         const op = history.operations.find(o => o.seq === Number(el.dataset.historyStep)); reviewCloseDetail();

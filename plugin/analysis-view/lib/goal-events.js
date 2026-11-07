@@ -20,15 +20,16 @@ export async function readGoalChanges(ctx, sessionId, toSeq, expectedSource) {
     handle = await persistence.open(sessionId, 'read');
     const result = await handle.read(0, undefined);
     const events = (result?.events || [])
-      .filter(e => e && e.type === 'goal/change' && e.data && e.data.goal)
+      .filter(e => e?.type === 'goal/change' && (e.data?.goal || e.data?.operation === 'clear' && e.data.cleared))
       .map(e => ({
         seq: e.seq, time: e.time,
-        goalId: e.data.goal.id ?? null,
+        goalId: e.data.goal?.id ?? e.data.cleared?.id ?? null,
         operation: e.data.operation ?? null,
-        phase: e.data.goal.phase ?? null,
-        revision: e.data.goal.revision ?? null,
+        objective: e.data.goal?.objective ?? null,
+        phase: e.data.goal?.phase ?? null,
+        revision: e.data.goal?.revision ?? e.data.cleared?.revision ?? null,
         roundsStarted: Number.isFinite(e.data.roundsStarted) ? e.data.roundsStarted : null,
-        maxGoalRounds: Number.isFinite(e.data.goal.maxGoalRounds) ? e.data.goal.maxGoalRounds : null,
+        maxGoalRounds: Number.isFinite(e.data.goal?.maxGoalRounds) ? e.data.goal.maxGoalRounds : null,
         createdAt: e.data.createdAt ?? null,
       }));
     const after = await persistenceSource(ctx, sessionId);

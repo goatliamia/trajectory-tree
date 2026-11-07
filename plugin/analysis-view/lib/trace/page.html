@@ -299,6 +299,11 @@
 .review-diff-sign{text-align:center;user-select:none}
 .review-diff-row.remove{background:#faeeec}.review-diff-row.remove .review-diff-sign{color:var(--branch-bad)}
 .review-diff-row.add{background:#edf6f1}.review-diff-row.add .review-diff-sign{color:var(--branch-good)}
+.review-patch-file{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;flex:none;font:11px/1.6 var(--sans);overflow-wrap:anywhere}
+.review-patch-file select{max-width:100%;min-width:0;border:1px solid var(--line);border-radius:4px;padding:4px 8px;color:var(--branch-ink);background:var(--surface);font:inherit}
+.review-diff-marker{padding:4px 16px;background:var(--soft);color:var(--branch-muted);white-space:pre;font:11px/18px var(--mono)}
+.review-diff-marker code{font:inherit}
+.review-patch-empty{margin:12px 16px;font:12px var(--sans);color:var(--branch-muted)}
 .review-diff-fold{width:100%;display:block;text-align:left;background:var(--review-action-tint);padding:8px 15px 8px 94px;font:10px var(--sans);color:var(--review-action)}
 @media(max-width:650px){.step-panel.review-step-summary{padding:15px 14px 13px}.review-step-footer{flex-wrap:wrap}.review-step-footer>div{flex-basis:100%}.review-detail-overlay{padding:10px}.review-detail-window>header{padding:16px}.review-detail-body{padding:16px}.review-operation-result{gap:10px}.review-detail-window header p{font-size:10px}}
 @media(prefers-color-scheme:dark){.review-detail-overlay{background:#050a127a}.review-diff-row.remove{background:#3b282b}.review-diff-row.add{background:#233b32}}
@@ -642,6 +647,7 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-review .review-detail-overlay{background:#00000040;padding:24px;backdrop-filter:blur(2px)}
 .geist-review .review-detail-window{border:1px solid var(--line);border-radius:12px;box-shadow:0 0 0 1px #00000004,0 16px 48px #00000024;height:auto;max-height:calc(100dvh - 48px)}
 .geist-review .review-detail-window:has(.review-diff-scroller){height:min(800px,calc(100dvh - 48px))}
+.geist-review .review-detail-window:has(.review-patch-scroller){height:auto}
 .geist-review .review-detail-window:has(.geist-history-rounds){height:min(820px,calc(100dvh - 48px));width:min(850px,100%)}
 .geist-review .review-detail-window>header{padding:24px;gap:16px}
 .geist-review .review-detail-window h2{font-size:18px;line-height:26px;font-weight:600;letter-spacing:-.025em}
@@ -938,7 +944,8 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .goal-cap { stroke: #8a8f98; stroke-width: 1; fill: none; opacity: .55; }
 .goal-band:hover .goal-line { stroke: var(--accent); opacity: 1; }
 .goal-band:hover .goal-cap { stroke: var(--accent); }
-.goal-band { color: var(--muted); }
+.goal-band, .goal-marker { color: var(--muted); cursor: pointer; }
+.review-list [data-goal-select][aria-current=true] { background: var(--soft); font-weight: 600; }
 
 /* 深色模式:语义色提亮,中性色已走变量。 */
 @media (prefers-color-scheme: dark) {
@@ -986,7 +993,8 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 /* 目标图标的步不画选中/柔光底,右侧那圈白边就是它露出来的。 */
 #graph g:has(> .review-goal-icon) > .review-action-halo { display: none; }
 .geist-result-label{display:block;margin:8px 0 2px;font:11px/18px var(--sans);color:var(--muted)}
-.geist-result-note{display:block;margin-top:2px;font:11px/18px var(--sans);color:var(--muted)}.geist-review .review-action-mode .graph-scroll{flex:0 0 auto;min-height:0;height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
+.geist-result-note{display:block;margin-top:2px;font:11px/18px var(--sans);color:var(--muted)}
+.geist-review .review-action-mode .graph-scroll{flex:0 0 auto;min-height:0;height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
 .geist-review .review-action-mode .graph-wrap{display:block;align-items:initial;min-height:0;height:auto;padding:0}
 .geist-review .review-action-mode .step-panel.geist-step{max-height:none;overflow:visible;flex:none;padding-bottom:24px}
 .geist-review .review-action-mode .geist-context-overview{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;padding:10px 24px}

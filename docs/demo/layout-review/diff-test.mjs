@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { changedLines, compactDiff } from './diff-model.mjs';
+import { changedLines, compactDiff, recordedDiffRows } from './diff-model.mjs';
 import { describeCall } from './step-insight.mjs';
 function roundtrip(before, after) {
   const rows = changedLines(before, after);
@@ -23,6 +23,20 @@ assert.equal(folded.filter(r => r.kind === 'remove').length, 1);
 assert.equal(folded.filter(r => r.kind === 'add').length, 1);
 assert.equal(folded.reduce((n, r) => n + (r.kind === 'fold' ? r.count : 1), 0), rows.length);
 roundtrip(Array(650).fill('a').join('\n'), Array(650).fill('b').join('\n'));
+const recorded = (type, text) => recordedDiffRows({ kind: { type }, diff: { text } });
+const patch = recorded('update', '--- a/file\r\n+++ b/file\r\n@@ -8,2 +11,2 @@\r\n unchanged\r\n-  before\r\n+  after\r\n@@ -20 +26 @@\r\n-old\r\n+new\r\n\\ No newline at end of file\r\n');
+assert.deepEqual(patch.filter(row => 'before' in row).map(row => [row.kind, row.before, row.after, row.text]), [
+  ['same', 8, 11, 'unchanged'], ['remove', 9, null, '  before'], ['add', null, 12, '  after'],
+  ['remove', 20, null, 'old'], ['add', null, 26, 'new'],
+]);
+assert.equal(patch.at(-1).kind, 'meta');
+assert.deepEqual(recorded('add', '+literal\n\n'), [
+  { kind: 'add', before: null, after: 1, text: '+literal' }, { kind: 'add', before: null, after: 2, text: '' },
+]);
+assert.deepEqual(recorded('delete', '  removed\n'), [{ kind: 'remove', before: 1, after: null, text: '  removed' }]);
+assert.deepEqual(recorded('update', '-old\n+new').map(row => [row.before, row.after]), [[null, null], [null, null]]);
+assert.equal(recorded('update', 'Binary files differ'), null);
+assert.equal(recorded('update', ''), null);
 const preview = describeCall({ name: 'edit', seq: 1, resultSeq: 2, status: 'returned',
   args: { text: JSON.stringify({ old_string: before, new_string: after }), omitted: 0 },
   result: { text: 'The file has been updated successfully.', omitted: 0 } }).preview;

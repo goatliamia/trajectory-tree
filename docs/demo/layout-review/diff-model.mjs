@@ -36,3 +36,38 @@ export function compactDiff(rows, context = 3) {
   if (hidden) result.push({ kind: 'fold', count: hidden });
   return result;
 }
+
+const patchHunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+
+export function recordedDiffRows(change) {
+  if (!change.diff?.text) return null;
+  const lines = change.diff.text.split(/\r?\n/);
+  if (lines.at(-1) === '') lines.pop();
+  const type = change.kind?.type;
+  if (type === 'add' || type === 'delete') {
+    // Codex records the file contents for additions and deletions.
+    const added = type === 'add';
+    return lines.map((text, i) => ({ kind: added ? 'add' : 'remove', before: added ? null : i + 1, after: added ? i + 1 : null, text }));
+  }
+
+  const firstHunk = lines.findIndex(line => patchHunk.test(line));
+  const rows = [], signs = { ' ': 'same', '+': 'add', '-': 'remove' };
+  let before = null, after = null;
+  for (const line of lines.slice(Math.max(0, firstHunk))) {
+    const hunk = patchHunk.exec(line);
+    if (hunk) {
+      before = Number(hunk[1]); after = Number(hunk[2]);
+      rows.push({ kind: 'hunk', text: line });
+      continue;
+    }
+    if (line.startsWith('\\ ')) {
+      rows.push({ kind: 'meta', text: line });
+      continue;
+    }
+    const kind = signs[line[0]];
+    if (!kind || firstHunk < 0 && /^(?:---|\+\+\+) /.test(line)) return null;
+    rows.push({ kind, before: before != null && kind !== 'add' ? before++ : null,
+      after: after != null && kind !== 'remove' ? after++ : null, text: line.slice(1) });
+  }
+  return rows.some(row => row.kind === 'add' || row.kind === 'remove') ? rows : null;
+}

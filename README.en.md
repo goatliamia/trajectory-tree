@@ -51,6 +51,8 @@ dsh plugin --profile web add ./dsh-trajectory-tools-0.6.4.tgz ./dsh-analysis-vie
 
 Restart `dsh web`, open Analysis, or use `/trajectory` for the current session's path. Stop an existing instance before restarting to avoid a port conflict. The plugins target the DSH 0.2.2 line; the package-by-package check is in [Shared views, host capabilities and language](docs/host-compatibility.md#dsh-version).
 
+Select a goal line in the overview to open that goal. Select an event marker to inspect that change and open the associated turn in the action path or conversation.
+
 Optionally add [Conversation search](plugin/conversation-search/README.md) for sidebar search and message navigation. DSH on-demand interpretation calls the current model. The post-compaction check-in is enabled by default; disable it with `config.reconcile: false`.
 
 [Analysis panel](plugin/analysis-view/README.md) · [Evidence tools](plugin/trajectory-tools/README.md)
@@ -87,6 +89,8 @@ Generate a view directly for the current session; local session reads require th
 ```sh
 node scripts/trajectory-view.mjs --host codex --serve
 ```
+
+Open **Compare changes** from an action or file history to switch between changed files, read added and removed lines with the recorded line numbers, or see the raw patch.
 
 [Plugin entry points](docs/host-entrypoints.md) · [Codex / MCP setup](plugin/portable-tools/README.md#codex)
 
@@ -128,6 +132,12 @@ The interface automatically follows the host or browser language. Choose Auto / 
 | `trajectory_read` | Read originals, connected actions and feedback; continue through full arguments and results |
 | `trajectory_graph` | Inspect record relations and session lineage |
 
+Use `outcome` to filter calls by result. This query counts recorded errors by tool. Use `abnormal` to also include calls with an unconfirmed result.
+
+```json
+{"view":"io","groupBy":"tool","outcome":"error","sort":"count"}
+```
+
 Queries are read-only. Each host exposes its recorded evidence; missing content remains unknown.
 
 | Host | Main data sources |
@@ -139,6 +149,7 @@ Queries are read-only. Each host exposes its recorded evidence; missing content 
 
 ## Documentation
 
+- [Repository index](docs/INDEX.md)
 - [Host setup and commands](docs/host-entrypoints.md)
 - [Tool configuration, queries and continued reads](plugin/portable-tools/README.md)
 - [Analysis methods](skill/trace-analysis/SKILL.md) · [Context and configuration profile](skill/context-profile/SKILL.md)

@@ -116,10 +116,21 @@ test('an older in-flight result cannot replace a newer installed observation', a
 
 test('the actual details stage reads and applies persisted goal markers', async () => {
   const { ctx, state } = host();
+  state.events = [
+    { type: 'goal/change', seq: 3, time: 1300, data: { operation: 'create', goal: { id: 'a', objective: 'First goal', phase: 'active', revision: 1 } } },
+    { type: 'goal/change', seq: 8, time: 1500, data: { operation: 'clear', cleared: { id: 'a', revision: 2 } } },
+    { type: 'goal/change', seq: 12, time: 1900, data: { operation: 'create', goal: { id: 'b', objective: 'Second goal', phase: 'active', revision: 1 } } },
+  ];
   const rows = [
     { type: 'turn/start', seq: 0, time: 1000, data: { turn: 1 } },
     { type: 'user/message', seq: 1, time: 1100, data: { turn: 1, source: { kind: 'user' }, content: [{ type: 'text', text: 'synthetic' }] } },
+    { type: 'step/start', seq: 2, time: 1200, data: { turn: 1, step: 1 } },
+    { type: 'step/end', seq: 4, time: 1400, data: { turn: 1, step: 1 } },
     { type: 'turn/end', seq: 5, time: 1500, data: { turn: 1 } },
+    { type: 'turn/start', seq: 9, time: 1700, data: { turn: 2 } },
+    { type: 'step/start', seq: 11, time: 1800, data: { turn: 2, step: 1 } },
+    { type: 'step/end', seq: 13, time: 2000, data: { turn: 2, step: 1 } },
+    { type: 'turn/end', seq: 14, time: 2100, data: { turn: 2 } },
   ];
   const resources = new TraceResources();
   const stages = new TraceStages(ctx, {
@@ -129,8 +140,13 @@ test('the actual details stage reads and applies persisted goal markers', async 
   try {
     const entry = await stages.load('s', 'synthetic-assets', new AbortController().signal);
     const payload = await stages.stage(entry, 'details');
-    assert.equal(payload.context.goal.phase, 'active');
-    assert.equal(payload.context.goal.markers.filter(row => row.source === 'event').length, 1);
+    const selected = payload.context.goal;
+    assert.equal(selected.id, 'b');
+    assert.equal(selected.objective, 'Second goal');
+    assert.deepEqual(selected.goals.map(row => [row.id, row.objective]), [['a', 'First goal'], ['b', 'Second goal']]);
+    assert.deepEqual(selected.markers.map(row => [row.seq, row.goalId, row.operation, row.turn, row.step, row.source]), [
+      [3, 'a', 'create', 1, 1, 'event'], [8, 'a', 'clear', null, undefined, 'event'], [12, 'b', 'create', 2, 1, 'event'],
+    ]);
     assert.equal(state.opens, 1); assert.equal(state.closes, 1);
   } finally { stages.dispose(); resources.dispose(); }
 });

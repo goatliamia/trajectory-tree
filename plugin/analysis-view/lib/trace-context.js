@@ -154,8 +154,8 @@ export function traceContext(events, payload, timeline) {
       roundsStarted: Number.isFinite(last?.roundsStarted) ? last.roundsStarted : null,
       maxGoalRounds: Number.isFinite(last?.maxGoalRounds) ? last.maxGoalRounds : null,
       goals: [...new Map(goalCalls.filter(x => x.goal).map(x => [x.goal.id, { id: x.goal.id, objective: x.goal.objective || '', phase: x.goal.phase || null, roundsStarted: x.goal.roundsStarted ?? null, maxGoalRounds: x.goal.maxGoalRounds ?? null }])).values()],
-      markers: goalCalls.map(c => ({ seq: c.seq, time: c.time, turn: c.turn, roundsStarted: c.goal?.roundsStarted ?? null, maxGoalRounds: c.goal?.maxGoalRounds ?? null,
-        goalId: c.goal?.id ?? c.args.goal_id ?? null,
+      markers: goalCalls.map(c => ({ seq: c.seq, time: c.time, turn: c.turn, step: c.step, roundsStarted: c.goal?.roundsStarted ?? null, maxGoalRounds: c.goal?.maxGoalRounds ?? null,
+        goalId: c.goal?.id ?? c.args.goal_id ?? null, objective: c.goal?.objective ?? null,
         operation: c.name === 'update_goal' ? (c.args.action || 'update') : c.name === 'create_goal' ? 'create' : 'read',
         phase: c.goal?.phase ?? null, revision: c.goal?.revision ?? c.args.revision ?? null })),
     };
@@ -277,11 +277,13 @@ export function applyGoalEvents(payload, events) {
   if (!Array.isArray(events) || !events.length) return;
   const session = payload.sessions?.[0];
   if (!session || !payload.context) return;
-  const turnOf = time => {
-    const turn = (session.turns || []).find(t => time >= t.start && time <= (t.end ?? Infinity));
-    return turn ? turn.number : null;
-  };
-  const fromEvents = events.map(e => ({ ...e, turn: turnOf(e.time) })).filter(e => e.turn != null);
+  const locate = (spans, event) => spans.find(span => Number.isSafeInteger(span.seq) && Number.isSafeInteger(span.endSeq)
+    ? event.seq >= span.seq && event.seq <= span.endSeq
+    : event.time >= span.start && event.time <= (span.end ?? Infinity));
+  const fromEvents = events.filter(e => Number.isFinite(e.time)).map(e => {
+    const turn = locate(session.turns || [], e), step = locate(turn?.steps || [], e);
+    return { ...e, turn: turn?.number ?? null, ...(step ? { step: step.number } : {}) };
+  });
   if (!fromEvents.length) return;
   const existing = payload.context.goal || { markers: [] };
   const bySeq = new Map((existing.markers || []).map(m => [m.seq, m]));
@@ -290,11 +292,15 @@ export function applyGoalEvents(payload, events) {
     bySeq.set(e.seq, { ...prev, ...e, source: 'event' });
   }
   const markers = [...bySeq.values()].sort((a, b) => a.seq - b.seq);
-  const last = fromEvents[fromEvents.length - 1];
-  payload.context.goal = { ...existing, ...{
-    id: last.goalId ?? existing.id ?? null,
-    phase: last.phase ?? existing.phase ?? null,
-    roundsStarted: last.roundsStarted ?? existing.roundsStarted ?? null,
-    maxGoalRounds: last.maxGoalRounds ?? existing.maxGoalRounds ?? null,
-  }, markers };
+  const goals = new Map((existing.goals || []).map(goal => [goal.id, goal]));
+  for (const marker of markers) {
+    if (marker.goalId == null) continue;
+    const known = goals.get(marker.goalId);
+    goals.set(marker.goalId, { id: marker.goalId,
+      objective: marker.objective ?? known?.objective ?? '', phase: marker.phase ?? known?.phase ?? null,
+      roundsStarted: marker.roundsStarted ?? known?.roundsStarted ?? null,
+      maxGoalRounds: marker.maxGoalRounds ?? known?.maxGoalRounds ?? null });
+  }
+  const current = goals.get(markers.findLast(marker => marker.source === 'event' && marker.goalId != null)?.goalId);
+  payload.context.goal = { ...existing, ...current, goals: [...goals.values()], markers };
 }

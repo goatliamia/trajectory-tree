@@ -53,6 +53,8 @@ dsh plugin --profile web add ./dsh-trajectory-tools-0.6.4.tgz ./dsh-analysis-vie
 
 重启 `dsh web`，在「分析」中查看统计，或用 `/trajectory` 打开当前会话路径。已运行的实例先退出，避免端口冲突。插件面向 DSH 0.2.2 系列，逐包核对见[兼容与语言说明](docs/host-compatibility.md#dsh-version)。
 
+在路径总览中，点击目标线可查看对应目标。点击事件点可查看那次变更，并从详情进入对应轮次的行动路径或对话。
+
 可另装 [对话搜索](plugin/conversation-search/README.md)，在右侧栏搜索并跳转到消息。DSH 的按需解读会调用当前模型；压缩后对账默认开启，可设 `config.reconcile: false` 关闭。
 
 [分析面板](plugin/analysis-view/README.md) · [取证工具](plugin/trajectory-tools/README.md)
@@ -89,6 +91,8 @@ node scripts/package-trajectory.mjs --host codex
 ```sh
 node scripts/trajectory-view.mjs --host codex --serve
 ```
+
+从动作或文件历史打开「改动对比」，可以按文件查看记录中的增删行、原／新行号和原始补丁。
 
 [插件入口](docs/host-entrypoints.md) · [Codex / MCP 配置](plugin/portable-tools/README.md#codex)
 
@@ -129,6 +133,12 @@ node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl
 | `trajectory_search` | 定位会话、字面记录与统计范围 |
 | `trajectory_read` | 查看原文、关联动作与反馈，分段追读完整参数和结果 |
 | `trajectory_graph` | 查看记录关系与会话谱系 |
+
+`trajectory_inspect` 可按结果筛选工具调用。下面按工具统计明确报错。将 `outcome` 改为 `abnormal` 也会纳入结果未确认的调用。
+
+```json
+{"view":"io","groupBy":"tool","outcome":"error","sort":"count"}
+```
 
 查询只读。各宿主按已有记录提供证据，不把未记录的内容补成事实。
 

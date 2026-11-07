@@ -213,7 +213,7 @@ export function adaptCodexThread(snapshot, options = {}) {
       if (item.evidenceSource === 'local-rollout' && item.type === 'collabAgentToolCall') call.nativeName = 'collaboration.' + item.tool;
       step.calls.push(call); step.errors = state === 'error' ? 1 : 0; output.errors += step.errors;
       let outcome = state === 'error' ? '操作未成功' + (item.exitCode != null ? '，退出码 ' + item.exitCode : '') + '。' : state === 'unknown' ? '尚未记录完成结果。' : item.type === 'fileChange' ? 'Codex 记录文件改动已完成。' : item.type === 'commandExecution' ? '命令退出码 0' + (String(result || '').trim() ? '，已返回输出。' : '，没有文字输出。') : '已收到工具返回。';
-      if (state === 'returned' && /\b(?:passed|PASS|self-test.*ok|tests?\s+ok)\b/i.test(result || '')) outcome += ' 输出包含检查通过标记。';
+      if (item.type !== 'fileChange' && state === 'returned' && /\b(?:passed|PASS|self-test.*ok|tests?\s+ok)\b/i.test(result || '')) outcome += ' 输出包含检查通过标记。';
       if (cls.reads?.length && state === 'returned') outcome += ' 读取目标来自命令参数；未逐条证明每个脚本分支执行。';
       callFacts[itemSeq] = { seq: itemSeq, title: cls.title, outcome, detail: '来源：' + cls.evidence + (precise ? '；起止：本地 rollout 对应 item.id' : '；轮内起止未记录，仅保留动作顺序'), tone: state === 'error' ? 'bad' : state === 'unknown' ? 'unknown' : 'normal', target, preview: null, resultSeq, evidence: cls, source: item.evidenceSource || 'official-api', ...(item.type === 'fileChange' ? { diffChanges: item.changes.map(c => ({ path: c.path, kind: c.kind, diff: excerpt(c.diff, 40000) })) } : {}) };
       if (item.type === 'collabAgentToolCall') {

@@ -42,18 +42,74 @@
   function reviewHasChange(fact) {
     return Boolean(fact?.preview || fact?.diffChanges?.length);
   }
-  function reviewOpenChange(t, step, fact, nested = false) {
+  function reviewDiffRow(row) {
+    if (row.kind === 'fold') return ui('<button class="review-diff-fold">展开 ') + row.count + ui(' 行未改动内容</button>');
+    if (row.kind === 'hunk' || row.kind === 'meta') return '<div class="review-diff-marker"><code>' + esc(row.text) + '</code></div>';
+    return '<div class="review-diff-row ' + row.kind + '"><span class="review-diff-line-number">' + (row.before ?? '') + '</span><span class="review-diff-line-number">' + (row.after ?? '') + '</span><span class="review-diff-sign">' + (row.kind === 'add' ? '+' : row.kind === 'remove' ? '−' : '') + '</span><code>' + esc(row.text || ' ') + '</code></div>';
+  }
+  function reviewOpenRecordedChange(fact, detail, nested, path) {
+    const changes = fact.diffChanges, pageSize = 500;
+    let index = Math.max(0, changes.findIndex(change => change.path === path));
+    let raw = false, shown = pageSize;
+    detail.html = '<div class="review-change-status" data-tone="' + esc(fact.tone) + '">' + esc(fact.outcome) + '</div>' +
+      '<div class="review-patch-file">' + (changes.length > 1 ? ui('<select id="review-patch-files" aria-label="选择改动文件">') +
+        changes.map((change, i) => '<option value="' + i + '">' + esc(change.path) + '</option>').join('') + '</select>' : '') +
+        '<span id="review-patch-path"></span></div>' +
+      '<div class="review-diff-toolbar"><span id="review-patch-count"></span><button id="review-patch-raw"></button></div>' +
+      '<p class="review-diff-note" id="review-patch-note"></p>' +
+      ui('<div class="review-diff-scroller review-patch-scroller" tabindex="0" aria-label="改动内容"><div id="review-patch-view"></div><button id="review-patch-more" class="review-diff-fold" hidden>显示更多行</button></div>');
+    detail.bind = () => {
+      const files = $('review-patch-files'), pane = $('review-patch-view'), toggle = $('review-patch-raw'), more = $('review-patch-more');
+      const types = { add: ui('新增文件'), delete: ui('删除文件'), update: ui('修改文件') };
+      let change, rows;
+      const render = () => {
+        const formatted = rows && !raw;
+        toggle.hidden = !rows;
+        toggle.textContent = raw ? ui('行级对比') : ui('原始补丁');
+        more.hidden = !formatted || shown >= rows.length;
+        pane.classList.toggle('review-diff-lines', !!formatted);
+        pane.innerHTML = formatted
+          ? ui('<div class="review-diff-column-key"><span>原</span><span>新</span><span></span><span>改动片段</span></div>') + rows.slice(0, shown).map(reviewDiffRow).join('')
+          : change.diff?.text ? '<pre class="excerpt">' + esc(change.diff.text) + '</pre>' : ui('<p class="review-patch-empty">未记录补丁正文。</p>');
+      };
+      const select = () => {
+        change = changes[index]; rows = recordedDiffRows(change);
+        const destination = change.kind?.move_path;
+        const name = destination ? ui('移动文件') : types[change.kind?.type];
+        if (files) files.title = change.path;
+        const pathLabel = [files ? '' : change.path, destination ? '→ ' + destination : ''].filter(Boolean).join(' ');
+        $('review-patch-path').textContent = [name, pathLabel].filter(Boolean).join(' · ');
+        const removed = rows?.filter(row => row.kind === 'remove').length;
+        const added = rows?.filter(row => row.kind === 'add').length;
+        $('review-patch-count').innerHTML = rows ? '<b class="removed">− ' + removed + ui(' 行</b><b class="added">+ ') + added + ui(' 行</b>') : '';
+        $('review-patch-note').textContent = change.diff?.omitted
+          ? ui('片段过长，当前为截取内容；行数统计仅针对展示部分。')
+          : ui('按本次记录的补丁展示，未记录的行号留空。');
+        render();
+        pane.parentElement.scrollTo(0, 0);
+      };
+      if (files) {
+        files.value = String(index);
+        files.onchange = () => { index = Number(files.value); shown = pageSize; select(); };
+      }
+      toggle.onclick = () => { raw = !raw; render(); pane.parentElement.scrollTo(0, 0); };
+      more.onclick = () => {
+        pane.insertAdjacentHTML('beforeend', rows.slice(shown, shown + pageSize).map(reviewDiffRow).join(''));
+        shown += pageSize;
+        if (shown >= rows.length) { more.hidden = true; pane.parentElement.focus({ preventScroll: true }); }
+      };
+      select();
+    };
+    reviewOpenDetail(detail, nested);
+  }
+  function reviewOpenChange(t, step, fact, nested = false, path = null) {
     if (!reviewHasChange(fact)) return;
     const preview = fact.preview;
     const planned = fact.tone === 'bad' || fact.tone === 'unknown';
     const title = planned ? ui('原计划改动') : ui('改动对比');
-    const subtitle = (fact.target || fact.title) + ui(' · 第 ') + t.number + ui(' 轮 / 第 ') + step.number + ui(' 步');
-    if (!preview) {
-      const html = fact.diffChanges.map(change => '<div class="review-detail-section"><h3>' + esc(change.path) + '</h3><p>' +
-        esc(change.kind?.type || '') + '</p>' + block(change.diff) + '</div>').join('');
-      reviewOpenDetail({ title, subtitle, html }, nested);
-      return;
-    }
+    const position = ui('第 ') + t.number + ui(' 轮 / 第 ') + step.number + ui(' 步');
+    if (!preview) return reviewOpenRecordedChange(fact, { title, subtitle: position }, nested, path);
+    const subtitle = (fact.target || fact.title) + ' · ' + position;
     const rows = changedLines(preview.before, preview.after), removed = rows.filter(r => r.kind === 'remove').length, added = rows.filter(r => r.kind === 'add').length;
     const folded = compactDiff(rows), hasFolds = folded.some(row => row.kind === 'fold');
     const detail = {
@@ -68,9 +124,7 @@
         const render = () => {
           const visible = detail.all ? rows : folded;
           if ($('review-diff-toggle')) $('review-diff-toggle').textContent = detail.all ? ui('只看改动附近') : ui('显示全部片段');
-          $('review-diff-lines').innerHTML = visible.map(row => row.kind === 'fold'
-            ? ui('<button class="review-diff-fold">展开 ') + row.count + ui(' 行未改动内容</button>')
-            : '<div class="review-diff-row ' + row.kind + '"><span class="review-diff-line-number">' + (row.before ?? '') + '</span><span class="review-diff-line-number">' + (row.after ?? '') + '</span><span class="review-diff-sign">' + (row.kind === 'add' ? '+' : row.kind === 'remove' ? '−' : '') + '</span><code>' + esc(row.text || ' ') + '</code></div>').join('');
+          $('review-diff-lines').innerHTML = visible.map(reviewDiffRow).join('');
           $('review-diff-lines').querySelectorAll('.review-diff-fold').forEach(el => el.onclick = () => { detail.all = true; render(); });
         };
         if ($('review-diff-toggle')) $('review-diff-toggle').onclick = () => { detail.all = !detail.all; render(); };

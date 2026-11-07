@@ -12,7 +12,10 @@ import { renderTracePage } from '../../plugin/analysis-view/lib/index.js';
 import { generateTraceView } from '../../view/generate.mjs';
 
 const goalText = 'Check <limits> & results';
-const nativeDiff = '-old value\n+new value';
+const secondGoalText = 'Review changed files';
+const nativeDiff = '@@ -23,2 +23,2 @@\n-const value = "<old>";\n+const value = "<new>";\n export { value };\n';
+const addedFile = '/sample/flag.js';
+const addedLines = 510;
 const assets = new Map();
 let directory, server, origin;
 
@@ -29,9 +32,13 @@ before(async () => {
   dsh.host = 'dsh';
   dsh.locale = 'zh-CN';
   const turns = dsh.sessions[0].turns;
-  dsh.context.goal = { phase: 'complete', objective: goalText, markers: [
-    { operation: 'create', time: turns[0].start, turn: turns[0].number, seq: 1 },
-    { operation: 'complete', time: turns.at(-1).end, turn: turns.at(-1).number, seq: 2 },
+  dsh.context.goal = { id: 'a', phase: 'completed', objective: goalText, goals: [
+    { id: 'a', objective: goalText, phase: 'completed' }, { id: 'b', objective: secondGoalText, phase: 'completed' },
+  ], markers: [
+    { goalId: 'a', operation: 'create', time: turns[0].start, turn: turns[0].number, seq: 1 },
+    { goalId: 'a', operation: 'complete', time: turns[2].end, turn: turns[2].number, seq: 2 },
+    { goalId: 'b', operation: 'create', time: turns[4].start, turn: turns[4].number, seq: 3 },
+    { goalId: 'b', operation: 'complete', time: turns.at(-1).end, turn: turns.at(-1).number, seq: 4 },
   ] };
   assets.set('/dsh', ['text/html; charset=utf-8', renderTracePage(dsh)]);
   for (const name of ['Geist-Variable.woff2', 'GeistMono-Variable.woff2']) {
@@ -46,6 +53,7 @@ before(async () => {
         { type: 'userMessage', id: 'u1', content: [{ type: 'text', text: '修改文件 <原文>' }] },
         { type: 'fileChange', id: 'f1', status: 'completed', changes: [
           { path: '/sample/value.js', kind: { type: 'update' }, diff: nativeDiff },
+          { path: addedFile, kind: { type: 'add' }, diff: Array.from({ length: addedLines }, (_, i) => 'export const flag' + i + ' = true;\n').join('') },
         ] },
       ],
     }],
@@ -95,11 +103,21 @@ async function checkDsh(page) {
   await page.goto(origin + '/host-dsh');
   const trace = page.frameLocator('iframe');
   const canvas = trace.locator('#graph-scroll');
-  const goal = trace.locator('[data-goal-band]');
-  await goal.waitFor({ state: 'attached' });
-  assert.equal(await goal.locator('.goal-text').textContent(), goalText);
-  await goal.press('Enter');
-  assert.ok((await trace.locator('#drawer-body').textContent()).includes(goalText));
+  await trace.locator('[data-goal-band="4"] .br-hit').click();
+  assert.equal(await trace.locator('#drawer-body dd').first().textContent(), secondGoalText);
+  assert.match(await trace.locator('#drawer-description').textContent(), /seq 4$/);
+  await trace.locator('#drawer-close').click();
+  await trace.locator('[data-goal-marker="1"]').press('Enter');
+  assert.equal(await trace.locator('#drawer-body dd').first().textContent(), goalText);
+  assert.match(await trace.locator('#drawer-description').textContent(), /seq 1$/);
+  await trace.locator('#drawer-close').click();
+  await trace.locator('[data-goal-marker="3"] .br-hit').click();
+  assert.equal(await trace.locator('#drawer-body dd').first().textContent(), secondGoalText);
+  assert.match(await trace.locator('#drawer-description').textContent(), /seq 3$/);
+  await trace.locator('[data-chat-jump="5"]').click();
+  await page.waitForFunction(() => window.lastJump === 5);
+  await trace.locator('[data-goal-select="4"]').click();
+  assert.match(await trace.locator('#drawer-description').textContent(), /seq 4$/);
   await trace.locator('#drawer-close').click();
 
   const files = trace.locator('#graph-caption [data-br-layer="files"]');
@@ -142,7 +160,28 @@ async function checkCodex(page) {
   // The branch group also spans empty SVG space. Use its actual pointer target.
   await trace.locator('#graph [data-tool-result] .br-hit').first().click();
   await trace.locator('[data-result-diff]').click();
-  assert.equal(await trace.locator('#review-detail-body pre.excerpt').textContent(), nativeDiff);
+  const patch = trace.locator('#review-patch-view');
+  const picker = trace.getByRole('combobox', { name: 'Select changed file' });
+  assert.equal(await patch.locator('.review-diff-row.remove .review-diff-line-number').first().textContent(), '23');
+  assert.equal(await patch.locator('.review-diff-row.add .review-diff-line-number').nth(1).textContent(), '23');
+  assert.equal(await patch.locator('.review-diff-row.add code').textContent(), 'const value = "<new>";');
+  await trace.getByRole('button', { name: 'Raw patch' }).click();
+  assert.equal(await patch.locator('pre.excerpt').textContent(), nativeDiff);
+  await trace.getByRole('button', { name: 'Line diff' }).click();
+  await picker.selectOption('1');
+  assert.equal(await trace.locator('#review-patch-path').textContent(), 'Added file');
+  assert.equal(await picker.locator('option:checked').textContent(), addedFile);
+  assert.equal(await patch.locator('.review-diff-row.add .review-diff-line-number').nth(1).textContent(), '1');
+  assert.ok(await trace.locator('.review-patch-scroller').evaluate(el => el.scrollHeight > el.clientHeight));
+  await trace.getByRole('button', { name: 'Show more lines' }).click();
+  assert.equal(await patch.locator('.review-diff-row.add').count(), addedLines);
+  await trace.locator('#review-detail-close').click();
+  await trace.locator('[data-result-file="1"]').click();
+  await trace.locator('[data-history-round="1"] summary').click();
+  await trace.locator('[data-history-diff]').click();
+  assert.equal(await picker.inputValue(), '1', 'Opening from history selects the file that was clicked');
+  await trace.locator('#review-detail-back').click();
+  assert.equal(await trace.locator('[data-history-round="1"]').getAttribute('open'), '');
   assert.equal(await trace.locator('[data-chat-jump]').count(), 0);
   assert.equal(await trace.locator('[data-br-layer="goal"]').count(), 0);
 }
