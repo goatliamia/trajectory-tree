@@ -20,7 +20,7 @@ Start with the whole session, then open a turn to inspect arguments, results, fi
 
 ## Follow context as it changes
 
-Select one or more sources to follow their retained size and changes. Delta and total layers can coexist in the path view; **the total trend starts off and can be enabled when needed**.
+Select one or more sources to follow their retained size and changes. The path view shows per-turn deltas only.
 
 ![Context component showing retained content and per-turn changes by source](docs/media/context-trend.jpg)
 
@@ -38,7 +38,7 @@ Bring findings, evidence and next actions into one report, using metrics, distri
 
 ## Quick start
 
-Run commands from the repository root. DSH plugins require Node.js 18+; other hosts and standalone views require Node.js 20+.
+Run commands from the repository root. The plugin packages declare Node.js 18+, but DSH 0.2.2 and later require Node.js 24.9+ for the host itself; other hosts and standalone views require Node.js 20+.
 
 <details>
 <summary><strong>DSH · Native plugins and analysis panel</strong></summary>
@@ -46,10 +46,10 @@ Run commands from the repository root. DSH plugins require Node.js 18+; other ho
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.0.tgz ./dsh-analysis-view-0.10.32.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.4.tgz ./dsh-analysis-view-0.10.142.tgz
 ```
 
-Restart `dsh web`, open Analysis, or use `/trajectory` for the current session's path. Stop an existing instance before restarting to avoid a port conflict.
+Restart `dsh web`, open Analysis, or use `/trajectory` for the current session's path. Stop an existing instance before restarting to avoid a port conflict. The plugins target the DSH 0.2.2 line; the package-by-package check is in [Shared views, host capabilities and language](docs/host-compatibility.md#dsh-version).
 
 Optionally add [Conversation search](plugin/conversation-search/README.md) for sidebar search and message navigation. DSH on-demand interpretation calls the current model. The post-compaction check-in is enabled by default; disable it with `config.reconcile: false`.
 
@@ -116,6 +116,8 @@ node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl
 ```
 
 Generation does not call a model. The command returns a standalone HTML file and a local preview URL; fonts are embedded for offline viewing.
+
+The interface automatically follows the host or browser language. Choose Auto / 中文 / English in the page, or pass `--lang en` or `--lang zh-CN`. Report prose follows the user's request; quoted logs, paths and arguments remain unchanged. See [host compatibility and language selection](docs/host-compatibility.md) for evidence boundaries and supported capabilities.
 
 ## One set of evidence tools
 

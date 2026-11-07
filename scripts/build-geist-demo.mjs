@@ -25,9 +25,10 @@ const encodedPayload = JSON.stringify(payload).replace(/</g, '\\u003c').replace(
 page = page.replace(dataMatch[0], () => '<script id="trace-data" type="application/json">' + encodedPayload + '</script>');
 // preserved.html is built from the current demo sources, so the renderer files are already
 // swapped in; only the Geist-only seams below still need patching.
-if (!page.includes('right=scroll+vw-gutter,base=232;') || !page.includes('const mainH=Math.max(420,bottom+72)')) throw new Error('Overview geometry seam changed');
+if (!page.includes('right=scroll+vw-gutter,base=232;') || !page.includes('const mainH=Math.max(420,bottom+72+goalPad)')) throw new Error('Overview geometry seam changed');
 page = page.replace('right=scroll+vw-gutter,base=232;', 'right=scroll+vw-gutter,base=(geistOverviewFrame=geistOverviewGeometry()).base;');
-page = page.replace('const mainH=Math.max(420,bottom+72)', 'const mainH=Math.max(geistOverviewFrame.height,bottom+72)');
+page = page.replace('const mainH=Math.max(420,bottom+72+goalPad)', 'const mainH=Math.max(geistOverviewFrame.height,bottom+72+goalPad)');
+if (!page.includes('trace-context-layer')) throw new Error('Context layer missing from the built page');
 const gestureStart = page.indexOf('  function bindOverviewViewport(){');
 const gestureEnd = page.indexOf('  const preciseTime=', gestureStart);
 if (gestureStart < 0 || gestureEnd < 0) throw new Error('Frozen gesture seam changed');
@@ -37,7 +38,7 @@ if (!page.includes(seam)) throw new Error('Frozen renderer boot seam changed');
 page = page.replace(/<title>[^<]*<\/title>/, '<title>执行路径 · Geist 视觉试作</title>');
 page = page.replace('<body>', '<body class="geist-review">');
 page = page.replace('</head>', '<link rel="preload" href="/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/fonts/GeistMono-Variable.woff2" as="font" type="font/woff2" crossorigin><style>' + readFileSync(resolve(root, 'geist.css'), 'utf8') + readFileSync(resolve(root, 'actors.css'), 'utf8') + readFileSync(resolve(root, 'geist-progressive.css'), 'utf8') + '</style></head>');
-page = page.replace(seam, () => ['tool-result-model.mjs', 'context-overview-model.mjs', 'actor-model.mjs'].map(name => readFileSync(resolve(root, name), 'utf8').replaceAll('export function ', 'function ')).join('\n') + '\n' + ['geist-step.js', 'geist-selection.js', 'geist-file-history.js', 'geist-context-overview.js', 'geist-layout.js', 'geist.js', 'geist-tools.js', 'geist-actors.js', 'geist-materials.js', 'geist-skill-evidence.js', 'geist-persist.js', 'geist-chat-jump.js', 'geist-progressive.js', 'geist-updates.js'].map(name => readFileSync(resolve(root, name), 'utf8')).join('\n') + '\n' + seam);
+page = page.replace(seam, () => ['tool-result-model.mjs', 'context-overview-model.mjs', 'actor-model.mjs'].map(name => readFileSync(resolve(root, name), 'utf8').replace(/^import .* from [^\n]+\n/gm, '').replaceAll('export function ', 'function ')).join('\n') + '\n' + ['geist-step.js', 'geist-selection.js', 'geist-file-history.js', 'geist-context-overview.js', 'geist-layout.js', 'geist.js', 'geist-tools.js', 'geist-actors.js', 'geist-materials.js', 'geist-skill-evidence.js', 'geist-persist.js', 'geist-progressive.js', 'geist-updates.js'].map(name => readFileSync(resolve(root, name), 'utf8')).join('\n') + '\n' + seam);
 page = page.replace('<strong>执行路径</strong><small id="review-state">', '<strong>执行路径</strong><span class="geist-edition">02</span><small id="review-state">');
 page = page.replace('<a href="/baseline" target="_blank">安装版原图 ↗</a>', '<a href="/versions/files-v1" target="_blank" rel="noopener" class="geist-previous" title="打开已固定的文件层版本">上一版 ↗</a>');
 // Visual defaults and interaction fixes share the frozen event data and branch geometry.

@@ -1,4 +1,3 @@
-import {readFile,stat} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
@@ -9,14 +8,16 @@ import {adaptCodexThread} from '../analyzers/codex-adapter.mjs';
 import {readClaudeTranscript} from '../analyzers/claude-reader.mjs';
 import {projectClaudeTranscript,finalizeClaudeDataset} from '../analyzers/claude-adapter.mjs';
 import {writeHostTracePage} from './render.mjs';
+import {normalizeLocale} from '../lib/i18n.mjs';
+import {readBoundedFile} from '../lib/bounded-file.mjs';
 
 const readBounded=async(file,signal)=>{
- if((await stat(file)).size>128*1024*1024)throw Error('View source exceeds 128 MiB');
- const bytes=await readFile(file,{signal});if(bytes.length>128*1024*1024)throw Error('View source exceeds 128 MiB');return bytes.toString('utf8');
+ const bytes=await readBoundedFile(file,{maxBytes:128*1024*1024,signal,overflow:'View source exceeds 128 MiB'});
+ return bytes.toString('utf8');
 };
 // Deterministic view generation only. No model call or diagnostic prose.
 export async function generateTraceView(spec,{signal}={}){
- signal?.throwIfAborted();let payload;
+ signal?.throwIfAborted();const locale=spec.locale==='auto'?'auto':normalizeLocale(spec.locale);let payload;
  if(spec.host==='pi'){
   const input=spec.input||await readPiSession(spec.file,{leafId:spec.leafId,captureFile:spec.captureFile,synthetic:spec.synthetic,signal});
   payload=adaptPiSession(input);
@@ -38,5 +39,5 @@ export async function generateTraceView(spec,{signal}={}){
  signal?.throwIfAborted();const session=payload.sessions[0].id;
  const key=createHash('sha256').update(spec.host+':'+session).digest('hex').slice(0,20);
  const output=resolve(spec.output||join(tmpdir(),'trajectory-tree',key,'view.html'));
- return {...writeHostTracePage(payload,output),session,totals:payload.sessions[0].totals};
+ return {...writeHostTracePage(payload,output,{locale}),session,totals:payload.sessions[0].totals};
 }

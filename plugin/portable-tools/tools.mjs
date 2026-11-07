@@ -8,6 +8,7 @@ const common = { session: { ...string, description: '原生会话 ID；已绑定
 const page = { cursor: string, limit: { type: 'integer', minimum: 1, maximum: 20 }, turns, includeSelf: { type: 'boolean', description: '默认从调用统计中排除诊断工具自身。' } };
 const definitions = [
   ['trajectory_inspect', '查询会话统计、步骤、工具文件操作和可见上下文，返回原生标识与原文位置。', { ...page,
+    samples: { type: 'boolean', description: 'Include short source excerpts in summary rows (default true). Set false for compact statistics; read pointers remain available.' },
     format: { enum: ['summary', 'data'], description: 'summary 默认；data 返回同切点表格；repeats 仅支持 summary。' },
     limit: { type: 'integer', minimum: 1, maximum: 500, description: 'summary 每页1–20项(默认6)，data每页1–500行(默认250)。' },
     view: { enum: ['overview', 'latency', 'cost', 'repeats', 'io', 'context'],description:'overview=总览；latency=耗时；cost=用量与定义；repeats=重复调用候选；io=工具文件；context=可见构成。' }, focus, groupBy: { enum: ['turn', 'tool', 'file', 'definition'], description: 'summary:tool/file 用于 overview、io，cost 的 definition 看当前工具目录与使用；data 仅 io 支持 tool/file，其余保留原始行。不分摊实际用量。' }, sort: { enum: ['time', 'wall', 'input', 'output', 'returned', 'count', 'change'], description: 'data 仅 time，summary 可用本主题的指标排序。' } }],

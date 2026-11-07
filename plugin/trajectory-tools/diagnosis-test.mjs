@@ -57,7 +57,7 @@ assert.equal(first.summary.usage.settlements, 1); assert.equal(first.summary.usa
 const snapshot = first.snapshot;
 const second = await invoke('trajectory_inspect', { snapshot, view: 'overview', turns: { from: 2, to: 2 }, groupBy: 'turn' });
 assert.equal(second.ok, true); assert.equal(second.summary.usage.input, 50);
-assert.equal(second.summary.official.toolWall, null, 'out-of-step call spans do not masquerade as active wait');
+assert.equal(second.summary.official.toolWall, rawTiming.official.toolWall, 'Preserve official interval coverage; report crossing step bounds separately');
 assert.equal(second.coverage.timing.toolSpansOutsideStep, 1);
 assert.equal(second.method, undefined); assert.equal(second.outputRule, undefined);
 assert.equal(observations, 1, 'changing the query range reuses one prepared cut');

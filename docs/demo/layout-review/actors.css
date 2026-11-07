@@ -39,6 +39,14 @@
 .skill-trace-choices button{border:0;background:none;padding:1px 0;font:12px/22px var(--sans);color:var(--ink);cursor:pointer}
 .skill-trace-choices button[aria-pressed=true]{color:var(--chart-skill);text-decoration:underline;text-underline-offset:5px}
 .real-skill-range{fill:var(--chart-skill);opacity:.14;pointer-events:none}
+/* 追踪 Skill 是会话级筛选:跟着管它的开关落到页面底部图层行,不再占统计区。 */
+.geist-review .graph-caption .skill-trace-choices{padding:0;gap:2px 12px;font:11px/20px var(--sans);color:var(--muted)}
+.geist-review .graph-caption .skill-trace-choices button{font:11px/18px var(--sans)}
+.geist-review .graph-caption #actor-selection{padding:0;gap:12px;font:11px/20px var(--sans)}
+.geist-review .graph-caption #actor-selection button{font:11px/18px var(--sans)}
+/* 顶部:每个来源格子里的小字,是这个来源在当前这一轮的增减;不撑高、不另起一行。 */
+.geist-review .geist-context-delta{margin-left:6px;font:10px/18px var(--mono);color:var(--muted);white-space:nowrap}
+.geist-review .geist-context-delta[hidden]{display:none}
 .skill-scope-outside{opacity:.3}.skill-scope-intro strong{font-size:14px;font-weight:500}.skill-scope-intro p{font:13px/22px var(--sans)}
 .skill-scope-tools{display:flex;flex-wrap:wrap;gap:8px 18px;font:12px/22px var(--mono);margin-bottom:20px}.skill-scope-tools b{font-weight:400;color:var(--muted)}
 .skill-scope-source{padding:12px 0;border-bottom:1px solid var(--line);font:12px/21px var(--sans)}.skill-scope-source p{margin:5px 0;overflow-wrap:anywhere;white-space:pre-wrap}.skill-scope-source strong{font-weight:500}.skill-scope-source summary{cursor:pointer}

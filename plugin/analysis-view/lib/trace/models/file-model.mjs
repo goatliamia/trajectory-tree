@@ -44,7 +44,7 @@ export function fileObjects(operations, turns = null) {
 }
 export function packFileObjects(items, { left, right, measure, label, obstacles = [], gap = 8 }) {
   if (!items.length) return [];
-  let groups = items.map(item => [item]).sort((a, b) => a[0].x - b[0].x || a[0].file.id.localeCompare(b[0].file.id));
+  const sorted = [...items].sort((a, b) => a.x - b.x || a.file.id.localeCompare(b.file.id));
   const free = [[left, right]];
   for (const box of [...obstacles].sort((a, b) => a.left - b.left)) {
     for (let i = free.length - 1; i >= 0; i--) {
@@ -54,22 +54,32 @@ export function packFileObjects(items, { left, right, measure, label, obstacles 
     }
   }
   // Keep every member accessible through the file picker when the entire lane is occupied.
-  const widest = Math.max(0, ...free.map(([a, b]) => b - a));
-  if (widest < 62) return [{ members: groups.flat(), hidden: true }];
-  for (;;) {
-    const placed = groups.map(members => {
-      const text = label(members), desired = Math.min(166, Math.max(62, measure(text) + 36));
-      const width = Math.min(desired, widest);
-      const anchor = members.reduce((sum, item) => sum + item.x, 0) / members.length;
-      const candidates = free.filter(([a, b]) => b - a >= width).map(([a, b]) => Math.max(a + width / 2, Math.min(b - width / 2, anchor)));
-      const cx = candidates.sort((a, b) => Math.abs(a - anchor) - Math.abs(b - anchor))[0] ?? (left + right) / 2;
-      return { members, label: text, width, cx, left: cx - width / 2, right: cx + width / 2 };
-    });
-    let collision = -1;
-    for (let i = 1; i < placed.length; i++) if (placed[i].left < placed[i - 1].right + gap) { collision = i; break; }
-    if (collision < 0 || groups.length === 1) return placed;
-    groups.splice(collision - 1, 2, [...groups[collision - 1], ...groups[collision]]);
+  const widest = free.reduce((width, [a, b]) => Math.max(width, b - a), 0);
+  if (widest < 62) return [{ members: sorted, hidden: true }];
+  function place(members) {
+    const text = label(members), desired = Math.min(166, Math.max(62, measure(text) + 36));
+    const width = Math.min(desired, widest), half = width / 2;
+    const anchor = members.reduce((sum, item) => sum + item.x, 0) / members.length;
+    let cx = (left + right) / 2, nearest = Infinity;
+    for (const [a, b] of free) {
+      if (b - a < width) continue;
+      const candidate = Math.max(a + half, Math.min(b - half, anchor));
+      const distance = Math.abs(candidate - anchor);
+      if (distance < nearest) { cx = candidate; nearest = distance; }
+    }
+    return { members, label: text, width, cx, left: cx - half, right: cx + half };
   }
+  // Resolve the same leftmost collision first. Only the newly merged group
+  // needs measuring again, so the rest of the lane keeps its placement.
+  const placed = [];
+  for (const item of sorted) {
+    let group = place([item]);
+    while (placed.length && group.left < placed.at(-1).right + gap) {
+      group = place(placed.pop().members.concat(group.members));
+    }
+    placed.push(group);
+  }
+  return placed;
 }
 
 export function fileTouchClusters(points, gap = 24) {

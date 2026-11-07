@@ -7,6 +7,6 @@ const bundle=JSON.parse(readFileSync(option('--bundle'),'utf8'));
 if(bundle.schema!=='trajectory-report-bundle/1')throw Error('Unsupported report bundle');
 const markdown=readFileSync(option('--markdown'),'utf8');
 const figures=Array.isArray(bundle.figures)?Object.fromEntries(bundle.figures.map(row=>[row.id,row])):bundle.figures;
-const result=renderReport({markdown,datasets:bundle.datasets,figures,title:option('--title')||markdown.split('\n')[0].replace(/^#\s*/,'')});
+const result=renderReport({markdown,datasets:bundle.datasets,figures,title:option('--title')||markdown.split('\n')[0].replace(/^#\s*/,''),locale:option('--lang')});
 const output=resolve(option('--output'));mkdirSync(dirname(output),{recursive:true});writeFileSync(output,result.html);
 console.log(JSON.stringify({output,figures:result.figures.length,bytes:Buffer.byteLength(result.html)}));

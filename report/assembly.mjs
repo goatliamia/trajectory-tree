@@ -1,3 +1,4 @@
+import { ui } from "../lib/i18n.mjs";
 import { CONTEXT_SERIES, VISUAL_TOKENS } from './palette.mjs';
 import { assemblyFrames, assemblyDiff, assemblyLayout } from './assembly-model.mjs';
 
@@ -5,7 +6,7 @@ const assemblyEscape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;
 const assemblyColors=Object.fromEntries(CONTEXT_SERIES.map(([key,,color])=>[key,color]));
 const assemblyNames=Object.fromEntries(CONTEXT_SERIES.map(([key,label])=>[key,label]));
 const assemblyText=(x,y,text,cls='assembly-copy')=>'<text x="'+x+'" y="'+y+'" class="'+cls+'">'+assemblyEscape(text)+'</text>';
-const assemblyFrameLabel=frame=>frame.label||'第 '+frame.turn+' 轮'+(frame.step!=null?' · 第 '+frame.step+' 步':'');
+const assemblyFrameLabel=frame=>frame.label||ui('第 ')+frame.turn+ui(' 轮')+(frame.step!=null?ui(' · 第 ')+frame.step+ui(' 步'):'');
 
 function assemblyPieces(ids,focus){
   if(ids.length<=18)return ids.map(id=>[id]);
@@ -17,40 +18,40 @@ function assemblyPieces(ids,focus){
 function assemblyScene(frame,data,diff,phase,offset){
   const focus=phase==='mark'||phase==='fracture'?diff.removed:diff.added;
   const layout=assemblyLayout(frame,data,{focus,offset}),focusSet=new Set(focus),removed=new Set(diff.removed),red=phase==='mark'||phase==='fracture';
-  let scene=assemblyText(20,28,'这一轮带来的材料','assembly-heading')+assemblyText(280,28,'正在装配的上下文','assembly-heading');
+  let scene=assemblyText(20,28,ui('这一轮带来的材料'),'assembly-heading')+assemblyText(280,28,ui('正在装配的上下文'),'assembly-heading');
   const sourceY={user:202,skill:246,tool:290,assistant:334,inject:378};
-  for(const [key,y]of Object.entries(sourceY))scene+='<circle cx="25" cy="'+(y-4)+'" r="2.6" fill="'+assemblyColors[key]+'"/>'+assemblyText(38,y,assemblyNames[key],'assembly-source-label')+'<path d="M38 '+(y+11)+'H106" stroke="'+assemblyColors[key]+'" opacity=".45" stroke-width="2"/>';
+  for(const [key,y]of Object.entries(sourceY))scene+='<circle cx="25" cy="'+(y-4)+'" r="2.6" fill="'+assemblyColors[key]+'"/>'+assemblyText(38,y,ui(assemblyNames[key]),'assembly-source-label')+'<path d="M38 '+(y+11)+'H106" stroke="'+assemblyColors[key]+'" opacity=".45" stroke-width="2"/>';
   const piece=(ids,x,y,width)=>{
     const block=data.blocks[ids[0]],mixed=ids.length>1,alert=red&&ids.every(id=>removed.has(id)),color=mixed?'#a3a3a3':assemblyColors[block.category]||'#8b949e';
-    const label=mixed?'另 '+ids.length+' 条消息':(assemblyNames[block.category]||block.category)+' · '+block.label;
+    const label=mixed?ui('另 ')+ids.length+ui(' 条消息'):(ui(assemblyNames[block.category])||block.category)+' · '+block.label;
     return '<g class="assembly-fragment'+(alert?' is-rewritten':'')+'" transform="translate('+x+' '+y+')" data-assembly-ids="'+assemblyEscape(JSON.stringify(ids))+'" data-assembly-x="'+x+'" data-assembly-y="'+y+'" tabindex="0" role="button" aria-label="'+assemblyEscape(label)+'"><title>'+assemblyEscape(label)+'</title><g class="assembly-piece"><rect width="'+width+'" height="7" rx="1" fill="'+color+'"/>'+(alert?'<rect x="-2" y="-3" width="'+(width+4)+'" height="13" rx="2" fill="none" stroke="'+VISUAL_TOKENS.changePulse+'"/>':'')+(mixed?assemblyText(width/2-7,5,'···','assembly-ellipsis'):'')+'</g></g>';
   };
-  for(const [region,y,title]of [['system',78,'01  系统提示'],['tools',120,'02  工具定义']]){
+  for(const [region,y,title]of [['system',78,ui('01  系统提示')],['tools',120,ui('02  工具定义')]]){
     scene+=assemblyText(280,y-12,title,'assembly-region-label');
-    if(!frame[region].length)scene+=assemblyText(280,y+8,'此切点未提供','assembly-small');
+    if(!frame[region].length)scene+=assemblyText(280,y+8,ui('此切点未提供'),'assembly-small');
     else {const width=(352-(frame[region].length-1)*5)/frame[region].length;frame[region].forEach((id,i)=>{scene+=piece([id],280+i*(width+5),y,width);});}
     if(red&&diff.regions[region].rewrite)scene+='<path d="M270 '+(y-4)+'H646" class="assembly-break-rule"/>';
   }
-  scene+=assemblyText(280,161,'03  逐轮拼入的历史','assembly-region-label')+assemblyText(677,161,'来源轮次 / 消息数','assembly-small');
+  scene+=assemblyText(280,161,ui('03  逐轮拼入的历史'),'assembly-region-label')+assemblyText(677,161,ui('来源轮次 / 消息数'),'assembly-small');
   layout.shown.forEach((group,i)=>{
     const y=182+i*21,parts=assemblyPieces(group.ids,focusSet),width=(352-(parts.length-1)*5)/Math.max(1,parts.length);
     scene+='<path d="M276 '+(y+15)+'H640" stroke="#f0f0ed"/>';
     parts.forEach((ids,j)=>{scene+=piece(ids,280+j*(width+5),y,width);});
-    scene+=assemblyText(677,y+8,(group.key==='unknown'?'未记轮次':String(group.key).padStart(2,'0'))+' / '+group.ids.length,'assembly-small');
+    scene+=assemblyText(677,y+8,(group.key==='unknown'?ui('未记轮次'):String(group.key).padStart(2,'0'))+' / '+group.ids.length,'assembly-small');
     if(red&&group.ids.some(id=>removed.has(id)))scene+='<path d="M260 '+(y-5)+'H649" class="assembly-break-rule"/>';
   });
   const endY=layout.shown.length?182+(layout.shown.length-1)*21+8:150;
   scene+='<path d="M263 76h-9V'+endY+'h9" fill="none" stroke="'+(red?VISUAL_TOKENS.changePulse:VISUAL_TOKENS.line)+'" stroke-width="1.2"/>';
   const hidden=layout.before+layout.after;
-  scene+=assemblyText(280,465,hidden?'当前窗口之外还有 '+hidden+' 条消息 · 可平移历史窗口':'已保留的片段留在原位，新片段从来源侧拼入。','assembly-note');
-  scene+=assemblyText(280,488,'片段按逻辑顺序排列；宽度不表示 token 数或缓存位置。','assembly-small');
+  scene+=assemblyText(280,465,hidden?ui('当前窗口之外还有 ')+hidden+ui(' 条消息 · 可平移历史窗口'):ui('已保留的片段留在原位，新片段从来源侧拼入。'),'assembly-note');
+  scene+=assemblyText(280,488,ui('片段按逻辑顺序排列；宽度不表示 token 数或缓存位置。'),'assembly-small');
   return {scene,layout};
 }
 
 export function renderAssembly(data,spec={}){
   const frames=assemblyFrames(data,spec),index=spec.initialRow?frames.findIndex(frame=>frame.id===spec.initialRow):spec.autoplay?0:frames.length-1;
   const frame=frames[index],diff=assemblyDiff(frames[index-1],frame),{scene}=assemblyScene(frame,data,diff,'settled',null);
-  return '<div class="context-assembly" data-context-assembly><div class="assembly-story"><div><span data-assembly-position>'+assemblyEscape(assemblyFrameLabel(frame))+'</span><h3 data-assembly-sentence>上下文在这里接续。</h3></div><span class="assembly-badge">'+(data.coverage?.synthetic?'概念序列':'记录重放')+' · '+frames.length+' 个切点</span></div><svg class="assembly-scene" viewBox="0 0 800 510" role="group" aria-label="上下文逐轮拼装与历史结构变化">'+scene+'</svg><div class="assembly-transport"><div><button data-assembly-action="play">▶ 播放</button><button data-assembly-action="restart">↻ 重播</button><button data-assembly-action="change">下一处历史变化 ↗</button></div><span data-assembly-progress></span></div><nav class="assembly-timeline" aria-label="选择上下文记录位置">'+frames.map((f,i)=>'<button data-assembly-frame="'+i+'" aria-label="'+assemblyEscape(assemblyFrameLabel(f))+'" title="'+assemblyEscape(assemblyFrameLabel(f))+'"><i></i><span>'+assemblyEscape(f.turn??i)+'</span></button>').join('')+'</nav><div class="assembly-facts" aria-live="polite"><div><span>当前保留历史</span><strong data-assembly-count>'+frame.history.length+' 条消息</strong></div><div><span>历史前缀</span><strong data-assembly-prefix></strong></div><div><span>这次结构变化</span><strong data-assembly-change></strong></div></div><div class="assembly-window"><span data-assembly-window></span><div><button data-assembly-action="earlier">← 较早</button><button data-assembly-action="later">较后 →</button></div></div><div class="assembly-selection" data-assembly-selection hidden></div></div>';
+  return '<div class="context-assembly" data-context-assembly><div class="assembly-story"><div><span data-assembly-position>'+assemblyEscape(assemblyFrameLabel(frame))+ui('</span><h3 data-assembly-sentence>上下文在这里接续。</h3></div><span class="assembly-badge">')+(data.coverage?.synthetic?ui('概念序列'):ui('记录重放'))+' · '+frames.length+ui(' 个切点</span></div><svg class="assembly-scene" viewBox="0 0 800 510" role="group" aria-label="上下文逐轮拼装与历史结构变化">')+scene+ui('</svg><div class="assembly-transport"><div><button data-assembly-action="play">▶ 播放</button><button data-assembly-action="restart">↻ 重播</button><button data-assembly-action="change">下一处历史变化 ↗</button></div><span data-assembly-progress></span></div><nav class="assembly-timeline" aria-label="选择上下文记录位置">')+frames.map((f,i)=>'<button data-assembly-frame="'+i+'" aria-label="'+assemblyEscape(assemblyFrameLabel(f))+'" title="'+assemblyEscape(assemblyFrameLabel(f))+'"><i></i><span>'+assemblyEscape(f.turn??i)+'</span></button>').join('')+ui('</nav><div class="assembly-facts" aria-live="polite"><div><span>当前保留历史</span><strong data-assembly-count>')+frame.history.length+ui(' 条消息</strong></div><div><span>历史前缀</span><strong data-assembly-prefix></strong></div><div><span>这次结构变化</span><strong data-assembly-change></strong></div></div><div class="assembly-window"><span data-assembly-window></span><div><button data-assembly-action="earlier">← 较早</button><button data-assembly-action="later">较后 →</button></div></div><div class="assembly-selection" data-assembly-selection hidden></div></div>');
 }
 
 // One isolated controller per component. No global IDs, background fetching or
@@ -77,19 +78,19 @@ export function mountAssembly(root,data,spec={},options={}){
   const update=()=>{
     const frame=frames[index],change=diff.rewrite;
     find('position').textContent=assemblyFrameLabel(frame);
-    find('sentence').textContent=phase==='mark'?'较早的结构发生变化，先标出旧片段。':phase==='fracture'?'松开旧片段，其他内容继续保留。':phase==='insert'?'新片段回到它在上下文中的位置。':index===0?'从这个切点已有的内容开始。':change?'沿着变化后的结构，继续接续。':diff.added.length?'这一轮，从末尾接上。':'这一段结构继续保留。';
+    find('sentence').textContent=phase==='mark'?ui('较早的结构发生变化，先标出旧片段。'):phase==='fracture'?ui('松开旧片段，其他内容继续保留。'):phase==='insert'?ui('新片段回到它在上下文中的位置。'):index===0?ui('从这个切点已有的内容开始。'):change?ui('沿着变化后的结构，继续接续。'):diff.added.length?ui('这一轮，从末尾接上。'):ui('这一段结构继续保留。');
     root.classList.toggle('is-changing',phase==='mark'||phase==='fracture');
-    root.querySelector('[data-assembly-action="play"]').textContent=playing?'Ⅱ 暂停':index===frames.length-1&&phase==='settled'?'↻ 播放':'▶ 播放';
+    root.querySelector('[data-assembly-action="play"]').textContent=playing?ui('Ⅱ 暂停'):index===frames.length-1&&phase==='settled'?ui('↻ 播放'):ui('▶ 播放');
     find('progress').textContent=String(index+1).padStart(2,'0')+' / '+frames.length;
-    find('count').textContent=(shownFrame||frame).history.length+' 条消息';
-    find('prefix').textContent=index===0?'首个观察切点':diff.prefix+' 条沿用原顺序';
-    find('change').textContent=index===0?'已有结构':diff.added.length+' 新增 · '+diff.removed.length+' 移除'+(change&&!diff.removed.length?' · 顺序变化':'');
+    find('count').textContent=(shownFrame||frame).history.length+ui(' 条消息');
+    find('prefix').textContent=index===0?ui('首个观察切点'):diff.prefix+ui(' 条沿用原顺序');
+    find('change').textContent=index===0?ui('已有结构'):diff.added.length+ui(' 新增 · ')+diff.removed.length+ui(' 移除')+(change&&!diff.removed.length?ui(' · 顺序变化'):'');
     for(const button of root.querySelectorAll('[data-assembly-frame]')){const n=Number(button.dataset.assemblyFrame);button.setAttribute('aria-current',String(n===index));button.classList.toggle('is-past',n<index);button.classList.toggle('has-change',changes[n].rewrite);}
     options.onChange?.({frame,index,phase,playing});
   };
   const paint=(frame,stage)=>{
     shownFrame=frame;const rendered=assemblyScene(frame,data,diff,stage,offset);layout=rendered.layout;scene.innerHTML=rendered.scene;
-    find('window').textContent=layout.groups.length?'历史第 '+(layout.start+1)+'–'+Math.min(layout.groups.length,layout.start+12)+' 段，共 '+layout.groups.length+' 段':'还没有历史消息';
+    find('window').textContent=layout.groups.length?ui('历史第 ')+(layout.start+1)+'–'+Math.min(layout.groups.length,layout.start+12)+ui(' 段，共 ')+layout.groups.length+ui(' 段'):ui('还没有历史消息');
     root.querySelector('[data-assembly-action="earlier"]').disabled=layout.start===0;
     root.querySelector('[data-assembly-action="later"]').disabled=layout.start+12>=layout.groups.length;
   };
@@ -153,7 +154,7 @@ export function mountAssembly(root,data,spec={},options={}){
     const frameButton=event.target.closest('[data-assembly-frame]');if(frameButton){seek(Number(frameButton.dataset.assemblyFrame));return;}
     const part=event.target.closest('[data-assembly-ids]');if(part){
       pause();const ids=JSON.parse(part.dataset.assemblyIds),blocks=ids.map(id=>({id,...data.blocks[id]}));
-      find('selection').hidden=false;find('selection').textContent=blocks.length===1?blocks[0].label+' · '+(blocks[0].categoryBasis||'结构显示'):'所选片段包含 '+blocks.length+' 条消息';
+      find('selection').hidden=false;find('selection').textContent=blocks.length===1?blocks[0].label+' · '+(blocks[0].categoryBasis||ui('结构显示')):ui('所选片段包含 ')+blocks.length+ui(' 条消息');
       options.onSelect?.({frame:shownFrame,blocks,evidence:blocks.flatMap(block=>block.evidence||[])});
     }
   },{signal:abort.signal});

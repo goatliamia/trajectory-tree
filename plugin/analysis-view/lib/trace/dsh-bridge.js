@@ -1,4 +1,6 @@
+// DSH serves the live stages and supplies official client observations.
 (() => {
+  const ui = window.__trajectoryUi || (text => text);
   const element = document.getElementById('trace-data'), payload = JSON.parse(element.textContent);
   element.textContent = ''; window.__geistPayload = payload;
   const loading = payload.traceLoad, sessionId = loading?.sessionId || payload.mainSession;
@@ -28,7 +30,7 @@
     catch (error) {
       window.__renderGuard = String(error?.message || error);
       const box = document.createElement('pre'); box.className = 'trace-render-error';
-      box.textContent = '执行路径渲染失败：' + window.__renderGuard; document.body.appendChild(box);
+      box.textContent = ui('执行路径渲染失败：') + window.__renderGuard; document.body.appendChild(box);
     }
   };
   const apply = (patch, stage) => {
@@ -49,10 +51,10 @@
     const turnGeneration = generation, token = stage === 'core' ? null : cut;
     const response = await fetch(query(stage, turn, token), { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
     if (response.status === 409 && stage !== 'core' && retry) { await start(true); return read(stage, turn, false); }
-    if (!response.ok) throw new Error('读取失败 (' + response.status + ')');
+    if (!response.ok) throw new Error(ui('读取失败 (') + response.status + ')');
     const value = await response.json();
     if (!active || turnGeneration !== generation) { if (stage === 'core') release(value.cut); throw cancelled(); }
-    if (value.sessionId !== sessionId || (token && value.cut !== token)) throw new Error('记录版本不一致');
+    if (value.sessionId !== sessionId || (token && value.cut !== token)) throw new Error(ui('记录版本不一致'));
     if (stage !== 'core' && token !== cut) return read(stage, turn, false);
     if (stage === 'core') cut = value.cut;
     return value.payload;
@@ -128,7 +130,7 @@
   window.addEventListener('pagehide', pause);
   window.addEventListener('analysis-trace-retry', () => { if (loading) start(true); });
   if (loading) {
-    Object.assign(payload, { mainSession: sessionId, sessions: [{ id: sessionId, title: '执行路径', turns: [], totals: { turns: 0, steps: 0, calls: 0, errors: 0 }, overview: { episodes: [], turns: [], focus: {}, totals: {} }, communications: [] }],
+    Object.assign(payload, { mainSession: sessionId, sessions: [{ id: sessionId, title: ui('执行路径'), turns: [], totals: { turns: 0, steps: 0, calls: 0, errors: 0 }, overview: { episodes: [], turns: [], focus: {}, totals: {} }, communications: [] }],
       context: { requests: [], boundaries: [], callFacts: {}, fileOperations: [] }, traceStage: { core: 'loading', details: 'loading', actors: 'loading', context: window.parent === window ? 'unavailable' : 'loading' } });
   }
   boot();

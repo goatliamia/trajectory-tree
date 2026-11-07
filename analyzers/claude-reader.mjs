@@ -1,14 +1,12 @@
-import { readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
+import { readBoundedFile } from '../lib/bounded-file.mjs';
 
 // Explicit file only. Never infer the active session from modification time.
 export async function readClaudeTranscript(file, { signal, maxBytes = 128 * 1024 * 1024 } = {}) {
   if (!file) throw Error('Claude requires an explicit transcript file');
-  const path = resolve(file); signal?.throwIfAborted();
-  if ((await stat(path)).size > maxBytes) throw Error('Claude transcript exceeds input budget');
-  const bytes = await readFile(path, { signal });
-  if (bytes.length > maxBytes) throw Error('Claude transcript exceeds input budget');
+  const path = resolve(file);
+  const bytes = await readBoundedFile(path, { maxBytes, signal, overflow: 'Claude transcript exceeds input budget' });
   const input = bytes.toString('utf8'), lines = input.split(/\r?\n/), rows = [];
   let incompleteTail = false;
   for (let i = 0; i < lines.length; i++) {

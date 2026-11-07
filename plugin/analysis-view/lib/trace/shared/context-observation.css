@@ -33,3 +33,7 @@ body.context-trend-study{display:block;height:auto;min-height:100dvh;overflow:au
 @media(max-width:900px){.context-trend-study .geist-context-sources{grid-template-columns:repeat(4,minmax(0,1fr))}.context-trend-study #graph-scroll{height:350px}.context-trend-study #canvas[data-context-total=true] #graph-scroll{height:450px}}
 @media(max-width:600px){.context-trend-study .geist-context-sources{grid-template-columns:repeat(2,minmax(0,1fr))}.study-source-actions>span{display:none}}
 @media(prefers-reduced-motion:reduce){.context-trend-study *{transition:none!important}}
+/* English source names are longer than the original fixed-width labels. */
+html[lang=en] .geist-context-sources button>span{white-space:normal;flex-shrink:1;min-width:0;overflow-wrap:anywhere}
+html[lang=en] .geist-context-sources button{align-items:flex-start}
+html[lang=en] .geist-context-sources b{flex-shrink:0}

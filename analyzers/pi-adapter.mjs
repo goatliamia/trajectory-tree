@@ -76,8 +76,8 @@ export function adaptPiSession(input) {
   const path = piSessionPath(input.entries, input.leafId), synthetic = input.synthetic === true, source = synthetic ? 'synthetic' : 'pi-session-v3';
   const capture = input.capture || [], starts = new Map(), ends = new Map();
   for (const row of capture) {
-    if (row.event.type === 'tool_execution_start') starts.set(row.event.toolCallId, row);
-    if (row.event.type === 'tool_execution_end') ends.set(row.event.toolCallId, row);
+    if (row.event?.type === 'tool_execution_start') starts.set(row.event.toolCallId, row);
+    if (row.event?.type === 'tool_execution_end') ends.set(row.event.toolCallId, row);
   }
   const callFacts = {}, fileOperations = [], requests = [], boundaries = [], skillEvents = [], events = [], turns = [], episodes = [], usage = [];
   const resultById = new Map(path.filter(e => e.type === 'message' && e.message.role === 'toolResult').map(e => [e.message.toolCallId, e]));
@@ -110,12 +110,15 @@ export function adaptPiSession(input) {
     const requestParts = composition.snapshot(), number = currentTurn.steps.length + 1;
     const responseEnd = message.durationMs == null ? at : message.timestamp + message.durationMs;
     const step = { number, seq: entrySeq, start: message.timestamp, end: responseEnd, endSeq: entrySeq, assistantSeq: entrySeq, assistantTime: responseEnd, reply: text(message.content) ? excerpt(text(message.content)) : null, calls: [], retries: [], markers: [], inTok: message.usage?.input ?? null, cacheTok: message.usage?.cacheRead ?? null, outTok: message.usage?.output ?? null, endObserved: message.durationMs != null, assistantDurationMs: message.durationMs ?? null, stopReason: message.stopReason ?? null, model: message.model ?? null, provider: message.provider ?? null, semanticUnit: 'pi-assistant-turn', errors: 0, synthetic };
-    latestUsage = message.usage ?? latestUsage;
+    latestUsage = message.usage ?? null;
     if (message.usage) usage.push({ turn: currentTurn.number, step: number, seq: entrySeq, time: at, usage: message.usage, source, synthetic, semanticUnit: 'assistant-usage' });
-    for (const native of message.content.filter(c => c.type === 'toolCall')) {
-      const resultEntry = resultById.get(native.id), result = resultEntry?.message, begin = starts.get(native.id), finish = ends.get(native.id);
+    for (const native of (Array.isArray(message.content) ? message.content : []).filter(c => c.type === 'toolCall')) {
+      const resultEntry = resultById.get(native.id), result = resultEntry?.message;
+      const matches = row => row && (!row.event.toolName || row.event.toolName === native.name) && Number.isFinite(row.observedAt);
+      const rawBegin = starts.get(native.id), rawFinish = ends.get(native.id);
+      const begin = matches(rawBegin) ? rawBegin : null, finish = matches(rawFinish) ? rawFinish : null;
       const state = !result ? 'unknown' : result.isError ? 'error' : 'returned', callSeq = ++seq;
-      const completeTiming = begin && finish;
+      const completeTiming = begin && finish && begin.observedAt <= finish.observedAt;
       const observedEnd = finish?.observedAt ?? result?.timestamp ?? null;
       const start = completeTiming ? begin.observedAt : observedEnd ?? begin?.observedAt ?? responseEnd, end = observedEnd;
       const call = { id: native.id, seq: callSeq, name: native.name === 'bash' ? 'bash' : native.name, nativeName: native.name, signature: signature(native.name, native.arguments), target: native.arguments.path || null, args: excerpt(JSON.stringify(native.arguments)), start, end, observedStart: begin?.observedAt ?? null, observedEnd, resultSeq: result ? ++seq : null, status: state, error: result?.isError ? { code: 'PI_TOOL_ERROR', message: text(result.content).slice(0, 180) } : null, result: result ? excerpt(text(result.content)) : null, durationMs: finish?.event.durationMs ?? result?.durationMs ?? null, timingSource: completeTiming ? source + '-capture' : 'unrecorded-start', source, synthetic };
@@ -144,7 +147,8 @@ export function adaptPiSession(input) {
   for (const t of turns) t.calls = t.steps.reduce((n, s) => n + s.calls.length, 0);
   const totals = { turns: turns.length, steps: turns.reduce((n, t) => n + t.steps.length, 0), calls: turns.reduce((n, t) => n + t.calls, 0), errors: episodes.length };
   const session = { id: input.header.id, title: path.findLast(e => e.type === 'session_info')?.name || (synthetic ? 'Pi · 模拟账单导出任务' : turns[0]?.title || 'Pi 会话'), parentSession: input.header.parentSession ?? null, source: { host: 'pi', session: input.header.id, file: input.source?.file || (synthetic ? 'synthetic-session.jsonl' : null), revision: input.source?.revision }, firstSeq: 0, lastSeq: seq, eventCount: path.length, diagnostics: { replacementEventsExcluded: 0, unmatchedResults: 0, duplicateResults: 0, unresolvedCalls: turns.flatMap(t => t.steps).flatMap(s => s.calls).filter(c => c.resultSeq == null).length }, turns, communications: [], totals, overview: { rulesVersion: 1, episodes, retries: [], representatives: episodes.map(e => e.id) } };
-  const lastModel = path.findLast(e => e.type === 'model_change'), lastAssistant = path.findLast(e => e.type === 'message' && e.message.role === 'assistant')?.message;
+  const modelEntry = path.findLast(e => e.type === 'model_change' || e.type === 'message' && e.message.role === 'assistant');
+  const lastModel = modelEntry?.type === 'model_change' ? modelEntry : null, lastAssistant = path.findLast(e => e.type === 'message' && e.message.role === 'assistant')?.message;
   const matchingModel = !!input.scope?.model && !!input.scope?.provider && input.scope.model === lastAssistant?.model && input.scope.provider === lastAssistant?.provider;
   return { schema: 1, host: 'pi', synthetic, generatedAt: input.capturedAt || new Date().toISOString(), mainSession: session.id, sessions: [session], events, evidence: { synthetic, source: input.source, scenario: input.scenario, nativeFields: ['Session v3 parentId tree', 'SystemMessage.sections/toolsAdded/toolsRemoved', 'AssistantMessage.durationMs/usage', 'ToolResultMessage.isError/details/durationMs', 'CompactionEntry.firstKeptEntryId/systemMessage', 'tool_execution_start/end'], context: { estimate: true, incomplete: true, excluded: ['hidden thinking', 'image tokens', 'provider serialization'] }, agents: 'Pi core has no built-in sub-agents; optional extension activity is only included when recorded.' }, context: { session: session.id, cutoffSeq: seq, eventCount: path.length, source: { name: synthetic ? 'Pi source-format simulation; independent visible-text estimate' : 'Pi Session v3; independent visible-text estimate' }, requests, boundaries, retries: [], retryStarted: [], callFacts, fileOperations, supplementSources: [], current: piVisibleComposition(path), route: { model: lastModel?.modelId || lastAssistant?.model || (synthetic ? 'pi-demo-model · 模拟' : null), provider: lastModel?.provider || lastAssistant?.provider || (synthetic ? 'synthetic-provider' : null) }, skillEvents, agentBranches: [], usage, scope: input.scope ?? null }, officialStats: { session: session.id, source: { name: synthetic ? 'Synthetic Pi Usage; not provider measurements' : 'Pi recorded AssistantMessage.usage' }, snapshot: { turns: [], steps: [], stepCount: 0 }, context: { pressure: { pressureTokens: latestUsage && ['input', 'cacheRead', 'cacheWrite'].every(k => Number.isFinite(latestUsage[k])) ? latestUsage.input + latestUsage.cacheRead + latestUsage.cacheWrite : null, contextWindow: matchingModel ? input.scope.contextWindow ?? null : null }, breakdown: null, source: synthetic ? 'synthetic' : 'Pi recorded last assistant usage' } } };
 }

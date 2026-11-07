@@ -46,6 +46,11 @@ try{
  const report=renderReport({markdown:'demo',datasets:{use:full,unused:{secret:'NOT_FOR_EXPORT'}},figures:{f:{id:'f',type:'bar',data:'use',fields:{label:'turn',value:'uncachedInputTokens'}}},compile:()=>({blocks:[{html:'<p>[[figure:f]]</p>'}],map:{}})});
  assert.ok(!report.html.includes('NOT_FOR_EXPORT'),'Unused datasets are not silently bundled');
  assert.ok(!report.html.includes("url('/fonts/"),'Offline report embeds its fonts');
+ const english=renderReport({locale:'en',title:'用户指定标题',markdown:'工具输出：保留这段原文。',datasets:{},figures:{}});
+ assert.ok(english.html.includes('<html lang="en">'));
+ assert.ok(english.html.includes('<title data-i18n-preserve>用户指定标题</title>'));
+ assert.ok(english.html.includes('data-i18n-preserve><h1') || english.html.includes('工具输出：保留这段原文。'));
+ new vm.Script(english.html.match(/<script>([\s\S]*?)<\/script>/)[1]);
 }finally{service.dispose();}
 
 // The portable host must not invent TTFT or precise intervals from an API-only

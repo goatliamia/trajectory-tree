@@ -1,11 +1,14 @@
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {visualTokenCss} from '../design/tokens.mjs';
+import {i18nModuleSource} from '../lib/i18n.mjs';
 const root=new URL('../',import.meta.url),output=new URL('../plugin/analysis-view/lib/trace/shared/',import.meta.url),check=process.argv.includes('--check');
 const assets={
  'context-observation.js':readFileSync(new URL('view/assets/context-observation.js',root),'utf8'),
  'context-observation.css':readFileSync(new URL('view/assets/context-observation.css',root),'utf8'),
  'context-trend-geometry.js':readFileSync(new URL('lib/context-trend-geometry.mjs',root),'utf8').replaceAll('export function ','function '),
  'visual-tokens.css':visualTokenCss({legacyAliases:true}),
+ 'i18n.mjs':i18nModuleSource(),
+ 'host-capabilities.mjs':readFileSync(new URL('lib/host-capabilities.mjs',root),'utf8'),
 };
 let changed=false;
 for(const [name,content] of Object.entries(assets)){

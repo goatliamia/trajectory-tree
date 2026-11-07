@@ -4,7 +4,11 @@
   const geistMeasureWidths = new Map();
   function geistSyncMeasureFont() {
     const font = '12px ' + getComputedStyle(document.body).getPropertyValue('--sans');
-    if (font !== geistMeasureFont) { geistMeasureFont = font; geistMeasureWidths.clear(); }
+    if (font !== geistMeasureFont) {
+      geistMeasureFont = font;
+      geistMeasureWidths.clear();
+      reviewFileLayoutCache = null;
+    }
   }
   reviewMeasure = function(text) {
     if (!geistMeasureFont) geistSyncMeasureFont();
@@ -34,13 +38,13 @@
       const switches = caption.querySelector('.br-layers');
       if (switches) {
         const row = document.createElement('div'); row.className = 'geist-observe-row';
-        const label = document.createElement('span'); label.className = 'geist-section-label'; label.textContent = '观察';
+        const label = document.createElement('span'); label.className = 'geist-section-label'; label.textContent = ui('观察');
         row.append(label, switches); caption.prepend(row);
       }
       legend = document.createElement('div'); legend.id = 'geist-legend'; legend.className = 'geist-legend';
       caption.append(legend);
       const toggle = document.createElement('button'); toggle.id = 'geist-legend-toggle'; toggle.className = 'geist-text-action quiet';
-      toggle.textContent = '符号说明'; toggle.setAttribute('aria-controls', legend.id);
+      toggle.innerHTML = '<span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span>' + ui('符号说明'); toggle.setAttribute('aria-controls', legend.id);
       toggle.onclick = () => { geistLegendOpen = !geistLegendOpen; geistSyncLegend(); };
       caption.querySelector('.geist-observe-row')?.append(toggle);
       // Controls belong to the canvas; the inspector follows without another card.
@@ -56,7 +60,20 @@
     geistSyncLegend();
   }
   const geistOverviewBase = renderOverview;
-  renderOverview = function(...args) { window.__geistView = 'overview'; geistSyncMeasureFont(); const value = geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); return value; };
+  let geistFitPass = false;
+  renderOverview = function(...args) {
+    geistSyncMeasureFont();
+    const value = geistOverviewBase(...args);
+    geistArrangeCaption(); geistGoalChip();
+    // Fit again if arranging the caption changed the available box. The SVG
+    // itself can legitimately be taller when the goal or branch lanes overflow.
+    const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
+    if (!geistFitPass && box > 120 && Math.abs((geistOverviewFrame?.height || 0) - Math.max(240, box)) > 14) {
+      geistFitPass = true;
+      try { geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); } finally { geistFitPass = false; }
+    }
+    return value;
+  };
   // 目标入口放在观察行:caption 每次重排都会重建子节点,所以放在重排之后补。
   function geistGoalChip() {
     const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
@@ -64,7 +81,7 @@
     const caption = $('graph-caption');
     const layers = caption && caption.querySelector('.br-layers');
     if (layers && !layers.querySelector('[data-br-layer="goal"]')) {
-      layers.insertAdjacentHTML('beforeend', '<label class="br-layer"><input type="checkbox" data-br-layer="goal"' + (overviewLayers.has('goal') ? ' checked' : '') + '>目标</label>');
+      layers.insertAdjacentHTML('beforeend', '<label class="br-layer"><input type="checkbox" data-br-layer="goal"' + (overviewLayers.has('goal') ? ' checked' : '') + ui('>目标</label>'));
       layers.querySelector('[data-br-layer="goal"]').onchange = event => {
         event.target.checked ? overviewLayers.add('goal') : overviewLayers.delete('goal');
         renderOverview();
@@ -72,10 +89,11 @@
     }
   }
   const geistActionBase = renderActionPath;
-  renderActionPath = function(...args) { window.__geistView = 'path'; geistSyncMeasureFont(); const value = geistActionBase(...args); geistArrangeCaption(); return value; };
+  renderActionPath = function(...args) { geistSyncMeasureFont(); const value = geistActionBase(...args); geistArrangeCaption(); return value; };
   // Re-measure labels once the self-hosted font is ready; preserve the viewport.
   document.fonts.ready.then(() => {
     geistMeasureWidths.clear();
+    reviewFileLayoutCache = null;
     const vp = $('graph-scroll'), left = vp.scrollLeft, top = vp.scrollTop;
     if (view === 'path') renderActionPath(); else renderOverview({ plotOnly: true });
     vp.scrollLeft = left; vp.scrollTop = top;

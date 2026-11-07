@@ -82,7 +82,7 @@ try {
 
 // Exercise real bridge delivery ordering without a browser or a timing race.
 // In particular, an empty core must never erase official detail received first.
-const bridge = readFileSync(new URL('../../docs/demo/layout-review/trace-bridge.js', import.meta.url), 'utf8');
+const bridge = readFileSync(new URL('./lib/trace/dsh-bridge.js', import.meta.url), 'utf8');
 for (const early of [true, false]) {
   const coreGate = deferred(), detailGate = deferred(), actorGate = deferred(), turnGate = deferred();
   const handlers = new Map(), frames = [], calls = [], announcements = [];

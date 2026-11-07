@@ -1,8 +1,8 @@
 // Trajectory Tree visual source of truth. Source colors match the final Geist
 // render layer of the existing path view, not its pre-theme model defaults.
 export const CONTEXT_SERIES = [
-  ['system','系统提示','#8053e3'],['tools','工具定义','#d49b00'],['user','用户消息','#44a56b'],
-  ['inject','补充内容','#c442a7'],['skill','技能内容','#e66d26'],['assistant','助手消息','#5b9fe8'],['tool','工具结果','#3ab4a4'],
+  ['system','系统提示','#8053e3'],['tools','工具定义','#d49b00'],['user','用户输入','#44a56b'],
+  ['inject','运行时注入','#c442a7'],['skill','技能内容','#e66d26'],['assistant','模型输出（含思考）','#5b9fe8'],['tool','工具输出','#3ab4a4'],
 ];
 export const VISUAL_TOKENS = {
   surface:'#ffffff',canvas:'#fafafa',ink:'#171717',muted:'#666666',line:'#e6e6e6',grid:'#ededed',soft:'#f5f5f5',
@@ -15,6 +15,10 @@ export const VISUAL_TOKENS = {
 };
 
 const DARK_TOKENS = { surface:'#0a0a0a', canvas:'#151515', ink:'#ededed', muted:'#a1a1a1', line:'#303030', grid:'#292929', soft:'#222222' };
+// Dark context series: the seven hues re-balanced for a near-black surface. They
+// match the path view's own dark block, which a light-only alias emission used to
+// override once the tokens were injected last.
+const DARK_CONTEXT = { system:'#a78bfa', tools:'#eab308', user:'#4fc77a', inject:'#e879c6', skill:'#fb923c', assistant:'#4c9fff', tool:'#21c4ad' };
 export function visualTokenCss({legacyAliases=false}={}){
   const t=VISUAL_TOKENS,vars=[];
   for(const key of ['surface','canvas','ink','muted','line','grid','soft','action','metric','success','error','warning','retry','changePulse'])vars.push('--tt-'+key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase())+':'+t[key]);
@@ -31,6 +35,11 @@ export function visualTokenCss({legacyAliases=false}={}){
     for(const [alias,key]of Object.entries({surface:'surface',ink:'ink',muted:'muted',line:'line',grid:'grid',soft:'soft',accent:'action',sans:'font-sans',mono:'font-mono'}))vars.push('--'+alias+':var(--tt-'+key+')');
   }
   // 亮暗两套都输出:只给亮色时,后注入的 legacy 别名会把 dark 变量覆盖回白色。
-  const dark = Object.entries(DARK_TOKENS).map(([key, value]) => '--tt-' + key + ':' + value).join(';');
+  // 分类色同理——只发亮色会让页面在深色下继续用亮色七类色。
+  const dark = [
+    ...Object.entries(DARK_TOKENS).map(([key, value]) => '--tt-' + key + ':' + value),
+    ...CONTEXT_SERIES.map(([key]) => '--tt-context-' + key + ':' + DARK_CONTEXT[key]),
+    ...(legacyAliases ? CONTEXT_SERIES.map(([key]) => '--chart-' + key + ':' + DARK_CONTEXT[key]) : []),
+  ].join(';');
   return ':root{' + vars.join(';') + '}\n@media (prefers-color-scheme: dark){:root{' + dark + '}}\n';
 }

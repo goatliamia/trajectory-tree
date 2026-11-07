@@ -2,13 +2,15 @@
 window.__geistBoot = () => {
   'use strict';
   const data = window.__geistPayload;
+  const ui = window.__trajectoryUi || ((text, ...values) => Array.isArray(text) ? text.map((part, i) => part + (i < values.length ? String(values[i]) : '')).join('') : text);
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const clockFormat = new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
-  const dayFormat = new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric'});
-  const clock = t => clockFormat.format(t);
-  const day = t => dayFormat.format(t);
-  const dur = ms => { if (ms == null) return '未记录'; if (ms < 1000) return (ms < 100 ? '<0.1' : (ms / 1000).toFixed(1)) + ' 秒'; const s = ms / 1000; if (s < 60) return s.toFixed(s < 10 ? 1 : 0) + ' 秒'; const m = Math.floor(s / 60), r = Math.round(s % 60); return r === 60 ? `${m+1} 分` : `${m} 分${r ? ` ${r} 秒` : ''}`; };
+  const clockFormat = new Intl.DateTimeFormat(window.__trajectoryLocale || 'zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  const dayFormat = new Intl.DateTimeFormat(window.__trajectoryLocale || 'zh-CN',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric'});
+  const clock = t => typeof t === 'number' && Number.isFinite(t) ? clockFormat.format(t) : ui('未记录');
+  const day = t => typeof t === 'number' && Number.isFinite(t) ? dayFormat.format(t) : ui('未记录');
+  const recordDuration = row => Number.isFinite(row.durationMs) && row.durationMs >= 0 ? row.durationMs : row.endObserved === false || row.timingSource === 'ordinal-only' ? null : Number.isFinite(row.start) && Number.isFinite(row.end) && row.end >= row.start ? row.end - row.start : null;
+  const dur = ms => { if (ms == null) return ui('未记录'); if (ms < 1000) return (ms < 100 ? '<0.1' : (ms / 1000).toFixed(1)) + ui(' 秒'); const s = ms / 1000; if (s < 60) return s.toFixed(s < 10 ? 1 : 0) + ui(' 秒'); const m = Math.floor(s / 60), r = Math.round(s % 60); return r === 60 ? ui`${m+1} 分` : ui`${m} 分${r ? ui` ${r} 秒` : ''}`; };
   const elapsed = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
   const shorten = (s,n) => String(s).replace(/\s+/g,' ').slice(0,n) + (String(s).replace(/\s+/g,' ').length > n ? '…' : '');
   let session = data.sessions.find(s => s.id === data.mainSession);
@@ -17,7 +19,7 @@ window.__geistBoot = () => {
   const turn = () => session.turns[turnIndex];
   const endOf = t => t.end ?? t.steps.at(-1)?.end ?? t.start;
   const allCalls = g => g.steps.flatMap(s => s.calls);
-  const stepName = g => g.steps.length === 1 ? `第 ${g.steps[0].number} 步` : `第 ${g.steps[0].number}—${g.steps.at(-1).number} 步`;
+  const stepName = g => g.steps.length === 1 ? ui`第 ${g.steps[0].number} 步` : ui`第 ${g.steps[0].number}—${g.steps.at(-1).number} 步`;
   const names = calls => { const m = new Map(); calls.forEach(c => m.set(c.name,(m.get(c.name)||0)+1)); return [...m].sort((a,b)=>b[1]-a[1]); };
   function makeGroups(steps, detailed = false) {
     const result = [], limit = Math.min(90000, Math.max(18000,(endOf(turn())-turn().start)/4));
@@ -33,22 +35,22 @@ window.__geistBoot = () => {
   function header() {
     for (const id of ['review-rounds','review-path','review-in','review-out','review-fit','path-button','overview-button','previous','next']) if ($(id)) $(id).disabled = !session.turns.length;
     if (!session.turns.length) {
-      $('page-title').textContent = session.title || '执行路径';
-      $('session-name').textContent = '正在读取会话记录';
-      $('strip-total').textContent = '读取中'; $('rail-count').textContent = '';
-      $('review-state').textContent = '正在读取轮次'; return;
+      $('page-title').textContent = session.title || ui('执行路径');
+      $('session-name').textContent = ui('正在读取会话记录');
+      $('strip-total').textContent = ui('读取中'); $('rail-count').textContent = '';
+      $('review-state').textContent = ui('正在读取轮次'); return;
     }
     $('parent-button').hidden = !returnState;
-    $('page-title').textContent = session.parentSession ? '子任务执行路径' : session.title;
-    $('session-name').textContent = session.parentSession ? session.title : `${day(session.turns[0].start)} — ${day(endOf(session.turns.at(-1)))} · 本地对话记录`;
+    $('page-title').textContent = session.parentSession ? ui('子任务执行路径') : session.title;
+    $('session-name').textContent = session.parentSession ? session.title : ui`${day(session.turns[0].start)} — ${day(endOf(session.turns.at(-1)))} · 本地对话记录`;
     const totals = session.totals;
-    $('strip-total').textContent = `${totals.turns} 轮`;
-    $('session-facts').innerHTML = `${totals.turns} 轮<span>/</span>${totals.steps} 步<span>/</span>${totals.calls.toLocaleString()} 次工具调用`;
-    $('rail-count').textContent = `${totals.turns} 轮`;
-    $('rail-footer').innerHTML = session.parentSession ? '<button class="back-link" id="parent-link">← 返回主会话</button>' : `${day(session.turns[0].start)} ${clock(session.turns[0].start).slice(0,5)} — ${day(endOf(session.turns.at(-1)))} ${clock(endOf(session.turns.at(-1))).slice(0,5)}`;
+    $('strip-total').textContent = ui`${totals.turns} 轮`;
+    $('session-facts').innerHTML = ui`${totals.turns} 轮<span>/</span>${totals.steps} 步<span>/</span>${totals.calls.toLocaleString()} 次工具调用`;
+    $('rail-count').textContent = ui`${totals.turns} 轮`;
+    $('rail-footer').innerHTML = session.parentSession ? ui('<button class="back-link" id="parent-link">← 返回主会话</button>') : `${day(session.turns[0].start)} ${clock(session.turns[0].start).slice(0,5)} — ${day(endOf(session.turns.at(-1)))} ${clock(endOf(session.turns.at(-1))).slice(0,5)}`;
     if ($('parent-link')) $('parent-link').onclick = returnParent;
     const max = Math.max(...session.turns.map(t=>endOf(t)-t.start));
-    $('turn-list').innerHTML = session.turns.map((t,i) => `<button class="turn" data-turn="${i}" aria-current="${i===turnIndex}" aria-label="第${t.number}轮，${esc(shorten(t.title,70))}，${dur(endOf(t)-t.start)}${t.errors?`，${t.errors}次工具报错`:''}"><span class="turn-no">${String(t.number).padStart(2,'0')}</span><span class="turn-title">${esc(t.title)}</span><span class="turn-meta"><span class="mono">${clock(t.start).slice(0,5)}</span><i class="turn-bar" style="width:${Math.max(6,(endOf(t)-t.start)/max*65)}px"></i><span>${dur(endOf(t)-t.start)}</span>${t.errors?`<i class="error-dot"></i><span class="error-small">${t.errors}</span>`:''}</span></button>`).join('');
+    $('turn-list').innerHTML = session.turns.map((t,i) => ui`<button class="turn" data-turn="${i}" aria-current="${i===turnIndex}" aria-label="第${t.number}轮，${esc(shorten(t.title,70))}，${dur(endOf(t)-t.start)}${t.errors?ui`，${t.errors}次工具报错`:''}"><span class="turn-no">${String(t.number).padStart(2,'0')}</span><span class="turn-title">${esc(t.title)}</span><span class="turn-meta"><span class="mono">${clock(t.start).slice(0,5)}</span><i class="turn-bar" style="width:${Math.max(6,(endOf(t)-t.start)/max*65)}px"></i><span>${dur(endOf(t)-t.start)}</span>${t.errors?`<i class="error-dot"></i><span class="error-small">${t.errors}</span>`:''}</span></button>`).join('');
     $('turn-list').querySelectorAll('[data-turn]').forEach(b => b.onclick = () => view==='overview'?focusOverview(Number(b.dataset.turn)):selectTurn(Number(b.dataset.turn)));
     $('count-label').textContent = `${String(turn().number).padStart(2,'0')} / ${session.turns.length}`;
     $('previous').disabled = turnIndex === 0; $('next').disabled = turnIndex === session.turns.length-1;
@@ -98,10 +100,10 @@ window.__geistBoot = () => {
     for(const s of steps) {
       const x1=mapX(s.start),x2=mapX(s.assistantTime??s.end),gi=groupOf(s);
       const fill=s.assistantTime!==null?'var(--model)':s.retries.length?'var(--warm)':'var(--unknown)';
-      append(gi,`<rect x="${x1}" y="${base-4}" width="${Math.max(2,x2-x1)}" height="8" rx="3" fill="${fill}" opacity=".88"><title>第 ${s.number} 步 · ${clock(s.start)} → ${clock(s.assistantTime??s.end)} · ${s.assistantTime!==null?'模型响应':'没有完整响应记录'}</title></rect>`);
+      append(gi,ui`<rect x="${x1}" y="${base-4}" width="${Math.max(2,x2-x1)}" height="8" rx="3" fill="${fill}" opacity=".88"><title>第 ${s.number} 步 · ${clock(s.start)} → ${clock(s.assistantTime??s.end)} · ${s.assistantTime!==null?ui('模型响应'):ui('没有完整响应记录')}</title></rect>`);
       for(const retry of s.retries) {
         const xx=mapX(retry.time);
-        append(gi,`<path d="M${xx-8} ${base-9} C${xx-16} ${base-34},${xx+16} ${base-34},${xx+8} ${base-9}" fill="none" stroke="var(--warm)" stroke-width="1.8"/><path d="M${xx+4} ${base-14} L${xx+8} ${base-8} L${xx+12} ${base-14}" fill="none" stroke="var(--warm)" stroke-width="1.4"><title>模型请求重试 · ${esc(retry.failure?.code||'请求失败')} · seq ${retry.seq}</title></path>`);
+        append(gi,ui`<path d="M${xx-8} ${base-9} C${xx-16} ${base-34},${xx+16} ${base-34},${xx+8} ${base-9}" fill="none" stroke="var(--warm)" stroke-width="1.8"/><path d="M${xx+4} ${base-14} L${xx+8} ${base-8} L${xx+12} ${base-14}" fill="none" stroke="var(--warm)" stroke-width="1.4"><title>模型请求重试 · ${esc(retry.failure?.code||ui('请求失败'))} · seq ${retry.seq}</title></path>`);
       }
     }
     for(const b of batchList) {
@@ -118,7 +120,7 @@ window.__geistBoot = () => {
       const gi=groupOf(b.step),name=b.name+(count>1?' ×'+count:'');
       const label=(bad||detailed)&&!overview;
       let s=`<path class="branch ${bad?'bad':''}" d="M${fork} ${base} C${fork} ${cy+((bad?-1:1)*19)},${cx-10} ${cy},${cx} ${cy}" fill="none" stroke="${color}"/><path class="branch ${bad?'bad':''}" d="M${cx} ${cy} C${cx+10} ${cy},${join} ${cy+((bad?-1:1)*19)},${join} ${base}" fill="none" stroke="${color}" ${unknown?'stroke-dasharray="3 3"':''}/>`;
-      s+=`<rect class="graph-tool-node" x="${cx-nodeW/2}" y="${cy-6}" width="${nodeW}" height="12" rx="4" fill="${color}"><title>${esc(name)} · ${b.status==='error'?'工具报错':unknown?'无结果记录':'结果已返回'} · ${clock(b.start)}${b.end===null?'':' → '+clock(b.end)} · ${count} 次调用</title></rect>`;
+      s+=ui`<rect class="graph-tool-node" x="${cx-nodeW/2}" y="${cy-6}" width="${nodeW}" height="12" rx="4" fill="${color}"><title>${esc(name)} · ${b.status==='error'?ui('工具报错'):unknown?ui('无结果记录'):ui('结果已返回')} · ${clock(b.start)}${b.end===null?'':' → '+clock(b.end)} · ${count} 次调用</title></rect>`;
       if(count>1)s+=svgText(cx,cy+3,String(count),'graph-node-count','middle');
       else if(bad)s+=`<path d="M${cx-2} ${cy-2} l4 4 m0 -4 l-4 4" stroke="var(--surface)" stroke-width="1.3"/>`;
       if(b.end!==null)s+=`<line x1="${start}" x2="${Math.max(start+.8,finish)}" y1="${cy+10}" y2="${cy+10}" stroke="${color}" stroke-width="2.2" stroke-linecap="round"/>`;
@@ -130,7 +132,7 @@ window.__geistBoot = () => {
       if(!child)continue;
       const a=mapX(m.time),last=endOf(child.turns.at(-1)),out=last>endOf(t),b=mapX(Math.min(last,endOf(t))),yy=23;
       const gi=groupOf(s);
-      append(gi,`<path d="M${a} ${base} C${a} ${yy},${a+12} ${yy},${a+20} ${yy}" fill="none" stroke="var(--child)" stroke-width="1.4"/><line x1="${a+20}" x2="${Math.max(a+22,b)}" y1="${yy}" y2="${yy}" stroke="var(--child)" stroke-width="4" stroke-linecap="round" ${out?'stroke-dasharray="5 4"':''}/>${svgText(a+24,yy-10,`子任务 · ${child.totals.steps} 步${out?' · 跨轮继续':''}`,'graph-node-label')}`);
+      append(gi,`<path d="M${a} ${base} C${a} ${yy},${a+12} ${yy},${a+20} ${yy}" fill="none" stroke="var(--child)" stroke-width="1.4"/><line x1="${a+20}" x2="${Math.max(a+22,b)}" y1="${yy}" y2="${yy}" stroke="var(--child)" stroke-width="4" stroke-linecap="round" ${out?'stroke-dasharray="5 4"':''}/>${svgText(a+24,yy-10,ui`子任务 · ${child.totals.steps} 步${out?ui(' · 跨轮继续'):''}`,'graph-node-label')}`);
     }
     return contents;
   }
@@ -142,7 +144,7 @@ window.__geistBoot = () => {
     if(/^(web_search|web_fetch|trajectory_|session_)/.test(c.name))return 'query';
     return 'other';
   }
-  function kindLabel(kind){return kind==='read'?'读取':kind==='write'?'修改':kind==='run'?'执行':kind==='query'?'查询':'动作';}
+  function kindLabel(kind){return kind==='read'?ui('读取'):kind==='write'?ui('修改'):kind==='run'?ui('执行'):kind==='query'?ui('查询'):ui('动作');}
   function kindOfStep(s){
     const calls=s.calls||[];if(!calls.length)return 'other';
     const counts={};for(const c of calls){const k=callKind(c);counts[k]=(counts[k]||0)+1;}
@@ -151,9 +153,9 @@ window.__geistBoot = () => {
   function callSubject(c){
     const kind=callKind(c);
     if(kind==='run'){
-      const text=(c.args&&c.args.text)||'';let cmd='命令';
+      const text=(c.args&&c.args.text)||'';let cmd=ui('命令');
       try{cmd=JSON.parse(text).command||cmd;}catch{}
-      cmd=String(cmd).trim().split(/\s+/)[0]||'命令';
+      cmd=String(cmd).trim().split(/\s+/)[0]||ui('命令');
       return kind+'|'+cmd;
     }
     if(c.target)return kind+'|'+String(c.target).split(/[\\/]/).pop().toLowerCase();
@@ -163,7 +165,7 @@ window.__geistBoot = () => {
   }
   function behaviorTitle(kind,subject){
     const name=subject.split('|')[1]||'';
-    const verb=kind==='read'?'读 ':kind==='write'?'改 ':kind==='run'?'跑 ':kind==='query'?'查：':'';
+    const verb=kind==='read'?ui('读 '):kind==='write'?ui('改 '):kind==='run'?ui('跑 '):kind==='query'?ui('查：'):'';
     return verb+name;
   }
 
@@ -174,12 +176,12 @@ window.__geistBoot = () => {
     if(!steps.length){renderActionPath();return;}
     const start=steps[0].start,end=steps.at(-1).end,duration=Math.max(1,end-start);
     groups=groupsFor(steps);
-    $('turn-heading').innerHTML=`<div class="eyebrow"><strong>第 ${t.number} 轮</strong><span>${day(t.start)}</span><span>细节 · 第 ${range[0]}—${range[1]} 步</span></div><h2 class="prompt">${esc(t.title)}</h2>`;
+    $('turn-heading').innerHTML=ui`<div class="eyebrow"><strong>第 ${t.number} 轮</strong><span>${day(t.start)}</span><span>细节 · 第 ${range[0]}—${range[1]} 步</span></div><h2 class="prompt">${esc(t.title)}</h2>`;
     if($('prompt-button'))$('prompt-button').onclick=showPrompts;
-    $('caption-note').textContent='这一段按动作类型归并 · 点一块看具体调用';
+    $('caption-note').textContent=ui('这一段按动作类型归并 · 点一块看具体调用');
     const w=Math.max(620,$('graph-scroll').clientWidth),h=Math.max(220,$('graph-scroll').clientHeight-2),left=44,right=w-44,top=64,barH=64;
     const x=time=>left+Math.max(0,Math.min(1,(time-start)/duration))*(right-left);
-    let html=`<title>模块细节</title><desc>把这一段里的动作按类型归并,点击一块查看原始调用。</desc>`;
+    let html=ui(`<title>模块细节</title><desc>把这一段里的动作按类型归并,点击一块查看原始调用。</desc>`);
     const tick=[1,2,5,10,15,30,60,120,300,600].find(n=>n>=duration/1000/6)||1200;
     for(let sec=0;sec<=duration/1000;sec+=tick){const xx=x(start+sec*1000);html+=`<line x1="${xx}" x2="${xx}" y1="36" y2="${h-30}" stroke="var(--grid)" stroke-dasharray="2 5"/>`+svgText(xx,h-10,elapsed(sec*1000),'graph-axis','middle');}
     const stages=[];
@@ -187,22 +189,22 @@ window.__geistBoot = () => {
     stages.forEach((g,i)=>{
       const a=x(g.start),b=Math.max(x(g.end),a+4),calls=g.steps.flatMap(s=>s.calls||[]),failures=calls.filter(c=>c.status==='error').length;
       const tone=failures?'var(--error)':'var(--tool)';
-      const title=kindLabel(g.kind)+' '+calls.length+' 次'+(failures?' · '+failures+' 次失败':'');
+      const title=kindLabel(g.kind)+' '+calls.length+ui(' 次')+(failures?' · '+failures+ui(' 次失败'):'');
       html+=`<g class="group" data-group="${i}" role="button" tabindex="0" aria-label="${esc(title)}"><title>${esc(title)}</title><rect x="${a.toFixed(1)}" y="${top}" width="${Math.max(4,b-a).toFixed(1)}" height="${barH}" rx="9" fill="var(--soft)" stroke="${tone}" stroke-opacity=".4"/>`;
-      if(b-a>56)html+=svgText((a+b)/2,top+26,kindLabel(g.kind),'action-title','middle')+svgText((a+b)/2,top+46,`${calls.length} 次${failures?' · '+failures+' 失败':''}`,'action-small','middle');
+      if(b-a>56)html+=svgText((a+b)/2,top+26,kindLabel(g.kind),'action-title','middle')+svgText((a+b)/2,top+46,ui`${calls.length} 次${failures?' · '+failures+ui(' 失败'):''}`,'action-small','middle');
       html+='</g>';
     });
     $('graph').setAttribute('viewBox',`0 0 ${w} ${h}`);$('graph').setAttribute('height',h);$('graph').style.width=w+'px';$('graph').innerHTML=html;
     attachGraphActions();
   }
 
-  const PHASE={read:'研究',query:'研究',write:'改写',run:'验证',other:'其他'};
+  const PHASE={read:ui('研究'),query:ui('研究'),write:ui('改写'),run:ui('验证'),other:ui('其他')};
   function actionPlan(t) {
     const list=[];let cur=null;
     for(const s of t.steps){
       const calls=s.calls||[];
       if(!calls.length){cur=null;continue;}
-      const primary=calls[0],kind=callKind(primary),subject=callSubject(primary),phase=PHASE[kind]||'其他';
+      const primary=calls[0],kind=callKind(primary),subject=callSubject(primary),phase=PHASE[kind]||ui('其他');
       const gap=s.start-(cur?cur.end:s.start);
       if(cur&&cur.phase===phase&&gap<20000){cur.steps.push(s);cur.calls.push(...calls);cur.end=s.end;continue;}
       cur={phase,kind,subject,steps:[s],calls:[...calls],start:s.start,end:s.end};
@@ -210,7 +212,7 @@ window.__geistBoot = () => {
     }
     return list.map(b=>{
       const failures=b.calls.filter(c=>c.status==='error').length;
-      return {...b,title:PHASE[b.phase]||'其他',note:`${b.steps.length} 步 · ${b.calls.length} 次${failures?' · '+failures+' 次失败':''}`};
+      return {...b,title:PHASE[b.phase]||ui('其他'),note:ui`${b.steps.length} 步 · ${b.calls.length} 次${failures?' · '+failures+ui(' 次失败'):''}`};
     });
   }
 
@@ -223,11 +225,11 @@ window.__geistBoot = () => {
     query:'<circle cx="0" cy="0" r="4.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M-4.4 0 H4.4 M0 -4.4 C-2.4 -1.5 -2.4 1.5 0 4.4 C2.4 1.5 2.4 -1.5 0 -4.4" fill="none" stroke="currentColor" stroke-width="1"/>',
     other:'<circle cx="0" cy="0" r="2.3" fill="currentColor"/>',
   };
-  const COND_NAME={FS_NOT_OBSERVED:'目标文件尚未读取',FS_STALE_VERSION:'文件版本已变化',SESSION_QUERY_PERSISTENCE_FAILED:'历史存储不可用',TOOL_TIMEOUT:'调用超时',TOOL_ERROR:'调用报错'};
-  function conditionName(c){const code=c&&c.error&&(c.error.code||c.error.name);return COND_NAME[code]||'调用报错';}
+  const COND_NAME={FS_NOT_OBSERVED:ui('目标文件尚未读取'),FS_STALE_VERSION:ui('文件版本已变化'),SESSION_QUERY_PERSISTENCE_FAILED:ui('历史存储不可用'),TOOL_TIMEOUT:ui('调用超时'),TOOL_ERROR:ui('调用报错')};
+  function conditionName(c){const code=c&&c.error&&(c.error.code||c.error.name);return COND_NAME[code]||ui('调用报错');}
   function stepIcon(step){if(!step.calls.length)return STEP_ICON.other;return STEP_ICON[callKind(step.calls[0])]||STEP_ICON.other;}
   function stepLabel(step){
-    if(!step.calls.length)return '回复';
+    if(!step.calls.length)return ui('回复');
     const kind=callKind(step.calls[0]),first=step.calls[0];
     const subject=(first.target?String(first.target).split(/[\\/]/).pop():'')||'';
     return kindLabel(kind)+(step.calls.length>1?' ×'+step.calls.length:(subject?' '+subject:''));
@@ -239,15 +241,15 @@ window.__geistBoot = () => {
     if(!step)return;
     let html='';
     for(const c of step.calls)html+=callEntry(c);
-    if(!step.calls.length)html+='<div class="source-row">这一步没有工具调用,只有模型输出。</div>';
-    if(step.reply)html+=`<span class="code-label">助手原文</span>${block(step.reply)}`;
-    openDrawer(`第 ${t.number} 轮 · 第 ${step.number} 步`,`${clock(step.start)} → ${clock(step.end)} · ${step.calls.length} 次工具调用`,html);
+    if(!step.calls.length)html+=ui('<div class="source-row">这一步没有工具调用,只有模型输出。</div>');
+    if(step.reply)html+=ui`<span class="code-label">助手原文</span>${block(step.reply)}`;
+    openDrawer(ui`第 ${t.number} 轮 · 第 ${step.number} 步`,ui`${clock(step.start)} → ${clock(step.end)} · ${step.calls.length} 次工具调用`,html);
   }
   function reviewActionStepLabel(step) {
     const kinds = [...new Set(step.calls.map(callKind))];
     const titles = [...new Set(step.calls.map(c => reviewContextData.callFacts?.[c.seq]?.title).filter(Boolean))];
     if (kinds.length === 1 && kinds[0] === 'other' && titles.length === 1) return titles[0] + (step.calls.length > 1 ? ' ×' + step.calls.length : '');
-    return kinds.length > 1 ? kinds.slice(0, 2).map(kindLabel).join('、') + (kinds.length > 2 ? '等' : '') : stepLabel(step);
+    return kinds.length > 1 ? kinds.slice(0, 2).map(kindLabel).join('、') + (kinds.length > 2 ? ui('等') : '') : stepLabel(step);
   }
   function renderActionPath() {
     const t = turn(), steps = t.steps, count = steps.length, viewport = $('graph-scroll');
@@ -282,7 +284,7 @@ window.__geistBoot = () => {
     const downPixels = band - upPixels;
     const upSide = { limit: Math.max(1, sideUp), pixels: upPixels }, downSide = { limit: Math.max(1, sideDown), pixels: downPixels };
     const gridTop = base - upPixels, gridBottom = base + downPixels;
-    let html = '<title>第 ' + t.number + ' 轮 · 逐步行动</title><desc>每个图标是一段模型处理及随后发起的工具操作，步内可能经历请求重试。上下文与主线共用零点，向上增加、向下减少。步骤间距表示顺序，不表示耗时。</desc>', axisLabels = '';
+    let html = ui('<title>第 ') + t.number + ui(' 轮 · 逐步行动</title><desc>每个图标是一段模型处理及随后发起的工具操作，步内可能经历请求重试。上下文与主线共用零点，向上增加、向下减少。步骤间距表示顺序，不表示耗时。</desc>'), axisLabels = '';
     html += '<defs><pattern id="review-action-negative" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M0 5L5 0" stroke="var(--surface)" stroke-opacity=".6"/></pattern></defs>';
     if (showContext) {
       html += '<path d="M' + gutter + ' ' + gridTop + 'H' + (width - gutter) + '" class="review-context-grid"/>';
@@ -296,7 +298,7 @@ window.__geistBoot = () => {
       const info = reviewStepContext(t, step);
       let part = '<rect x="' + left + '" y="28" width="' + (right - left) + '" height="' + (height - 60) + '" class="br-hit"/>';
       // 步号与耗时并成一行,顶部少一行给图。
-      part += brText(pos, 48, '第 ' + step.number + ' 步' + (showTime ? ' · ' + preciseTime(step.end - step.start) : ''), 'review-turn-duration');
+      part += brText(pos, 48, ui`第 ${step.number} 步` + (showTime ? ' · ' + preciseTime(recordDuration(step)) : ''), 'review-turn-duration');
       // 耗时条:用官方每步的构成画占比,取代原来的等宽区间引导线。
       {
         const stats = typeof geistStatsByStep !== 'undefined' ? geistStatsByStep.get(t.number + ':' + step.number) : null;
@@ -333,13 +335,13 @@ window.__geistBoot = () => {
           if (!amount) continue;
           const edge = base - sign * side.height;
           const labelY = sign > 0 ? Math.min(base - 27, edge - 9) : Math.max(base + 78, edge + 15);
-          part += brText(pos, labelY, (info.initial ? '初始 ' : '') + reviewSigned(amount * sign) + (side.overflow ? ' · 收起' : ''), 'review-context-overflow-label');
+          part += brText(pos, labelY, (info.initial ? ui('初始 ') : '') + reviewSigned(amount * sign) + (side.overflow ? ui(' · 收起') : ''), 'review-context-overflow-label');
           if (side.overflow) {
             part += '<rect x="' + (pos - 20) + '" y="' + (edge - 4 * sign - 4) + '" width="40" height="8" rx="3" class="review-context-capped"/>';
             for (const dx of [-4, 0, 4]) part += '<circle cx="' + (pos + dx) + '" cy="' + (edge - 4 * sign) + '" r=".9" class="review-context-capped-dot"/>';
           }
         }
-      } else if (showContext) part += brText(pos, base - 30, '上下文未记录', 'br-note');
+      } else if (showContext) part += brText(pos, base - 30, ui('上下文未记录'), 'br-note');
       if (active) part += '<circle cx="' + pos + '" cy="' + base + '" r="18" class="review-action-halo"/>';
       part += '<circle cx="' + pos + '" cy="' + base + '" r="13" class="review-action-node"/>';
       // 步状态:环表示最严重的结局,徽标给数量。超时/拦截只看得到在支线里,
@@ -357,17 +359,17 @@ window.__geistBoot = () => {
       // DSH 的 goal-outline 图标(16×16):两段开口圆弧 + 一支射向靶心的箭头。
       const goalClass = 'review-goal-icon ' + goalMark.operation;
       const gx = pos - 9, gy2 = base - 9;
-      part += '<g class="' + goalClass + '" transform="translate(' + gx + ' ' + gy2 + ') scale(1.125)"><title>目标' + (goalMark.operation === 'create' ? '创建' : goalMark.operation === 'complete' ? '完成' : '中止') + '</title>'
+      part += '<g class="' + goalClass + '" transform="translate(' + gx + ' ' + gy2 + ui(') scale(1.125)"><title>目标') + (goalMark.operation === 'create' ? ui('创建') : goalMark.operation === 'complete' ? ui('完成') : ui('中止')) + '</title>'
         + '<path d="M14.5001 8C14.5 9.28552 14.1188 10.5422 13.4045 11.611C12.6903 12.6799 11.6752 13.5129 10.4875 14.0049C9.29982 14.4968 7.99295 14.6255 6.73212 14.3747C5.4713 14.124 4.31314 13.505 3.4041 12.596C2.49514 11.687 1.87614 10.5288 1.62537 9.26798C1.37459 8.00716 1.50331 6.70028 1.99525 5.51261C2.48719 4.32494 3.32025 3.30981 4.3891 2.59557C5.45795 1.88134 6.71458 1.50008 8.0001 1.5"/>'
         + '<path d="M11.5 8C11.5001 8.69227 11.2948 9.36901 10.9102 9.94463C10.5257 10.5202 9.97901 10.9689 9.33944 11.2338C8.69986 11.4987 7.99609 11.5681 7.31712 11.433C6.63816 11.2979 6.01449 10.9645 5.52501 10.475C5.03548 9.98552 4.70209 9.36185 4.56702 8.68289C4.43195 8.00392 4.50127 7.30015 4.76619 6.66057C5.03112 6.021 5.47976 5.47436 6.05538 5.08978C6.631 4.70519 7.30774 4.49995 8.00001 4.5"/>'
         + '<path d="M8.00024 7.99976L11.2 4.80005"/>'
         + '<path d="M12.4719 5.62245C12.4246 5.66972 12.3569 5.69025 12.2913 5.67715L10.7814 5.37555C10.7022 5.35972 10.6402 5.29781 10.6244 5.2186L10.3228 3.70866C10.3097 3.6431 10.3302 3.57533 10.3775 3.52806L12.1826 1.723C12.2863 1.61929 12.4627 1.65879 12.5122 1.79684L12.9271 2.95225C12.9472 3.00847 12.9915 3.05272 13.0477 3.07291L14.2031 3.48774C14.3412 3.5373 14.3807 3.71368 14.277 3.81739L12.4719 5.62245Z"/></g>';
     }
       const badges = [];
-      if (errors) badges.push(['error', '×', '报错 ' + errors + ' 次']);
-      if (timeouts) badges.push(['timeout', '◷', '超时 ' + timeouts + ' 次']);
-      if (blocked) badges.push(['blocked', '⊣', '拦截 ' + blocked + ' 次']);
-      if (retries) badges.push(['retry', '↻', '重试 ' + retries + ' 次']);
+      if (errors) badges.push(['error', '×', ui('报错 ') + errors + ui(' 次')]);
+      if (timeouts) badges.push(['timeout', '◷', ui('超时 ') + timeouts + ui(' 次')]);
+      if (blocked) badges.push(['blocked', '⊣', ui('拦截 ') + blocked + ui(' 次')]);
+      if (retries) badges.push(['retry', '↻', ui('重试 ') + retries + ui(' 次')]);
       badges.slice(0, 2).forEach(([kind, glyph, label], i) => {
         const bx = pos + 17 + i * 17, by = base - 17;
         part += '<g class="review-action-badge ' + kind + '" transform="translate(' + bx + ' ' + by + ')"><title>' + label + '</title>' +
@@ -377,9 +379,9 @@ window.__geistBoot = () => {
       part += '<g transform="translate(' + pos + ' ' + base + ')" class="review-action-icon">' + icon + '</g>';
       part += brText(pos, base + 34, shorten(reviewActionStepLabel(step), 16), 'br-label');
       html += brGroup('class="action-step review-action-step' + (active ? ' is-selected' : '') + '" data-step="' + index + '" aria-pressed="' + active + '"', part,
-        '第 ' + step.number + ' 步 · ' + reviewActionStepLabel(step) + ' · ' + preciseTime(step.end - step.start) + (info ? '；上下文净变化 ' + reviewSigned(info.amount) : ''));
+        ui('第 ') + step.number + ui(' 步 · ') + reviewActionStepLabel(step) + ' · ' + preciseTime(recordDuration(step)) + (info ? ui('；上下文净变化 ') + reviewSigned(info.amount) : ''));
     });
-    const fullTitle = '第 ' + t.number + ' 轮 · ' + String(t.prompts?.[0]?.text || t.title || '').replace(/\s+/g, ' ');
+    const fullTitle = ui('第 ') + t.number + ui(' 轮 · ') + String(t.prompts?.[0]?.text || t.title || '').replace(/\s+/g, ' ');
     const titleWidth = Math.max(60, viewportWidth - gutter * 2 - 210);
     let title = fullTitle;
     if (reviewMeasure(title) > titleWidth) {
@@ -391,20 +393,27 @@ window.__geistBoot = () => {
     // 本轮若是目标事件的落点,在钉住标题右侧标出,与底部目标入口共用同一份数据。
     const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
     const goalHere = goal && (goal.markers || []).find(m => m.time >= t.start && m.time <= (t.end ?? Infinity));
-    const goalText = goalHere ? ' · 目标 ' + (goalHere.operation || '') + (goal.roundsStarted != null ? ' ' + goal.roundsStarted + '/' + (goal.maxGoalRounds ?? '?') : '') : '';
+    const goalText = goalHere ? ui(' · 目标 ') + (goalHere.operation || '') + (goal.roundsStarted != null ? ' ' + goal.roundsStarted + '/' + (goal.maxGoalRounds ?? '?') : '') : '';
     html += '<g class="review-action-pinned" transform="translate(' + viewport.scrollLeft + ',0)">' + axisLabels +
       brText(gutter, 18, title, 'br-note', 'start') +
-      brText(viewportWidth - gutter, 18, count + ' 步' + (showTime ? ' · ' + reviewDuration(endOf(t) - t.start) : '') + (failures ? ' · ' + failures + ' 步受阻' : '') + goalText, 'br-note', 'end') +
-      brText(gutter, height - 12, showContext ? '每步上下文变化 · 显示至 ±' + reviewTokens(scale.limit) : '步骤从左到右排列', 'br-axis', 'start') +
-      brText(viewportWidth - gutter, height - 12, '间距表示顺序 · 耗时见上方', 'br-axis', 'end') + '</g>';
+      brText(viewportWidth - gutter, 18, count + ui(' 步') + (showTime ? ' · ' + reviewDuration(endOf(t) - t.start) : '') + (failures ? ' · ' + failures + ui(' 步受阻') : '') + goalText, 'br-note', 'end') +
+      brText(gutter, height - 12, showContext ? ui('每步上下文变化 · 显示至 ±') + reviewTokens(scale.limit) : ui('步骤从左到右排列'), 'br-axis', 'start') +
+      brText(viewportWidth - gutter, height - 12, ui('间距表示顺序 · 耗时见上方'), 'br-axis', 'end') + '</g>';
     reviewActionFileFrame = { t, x, base, gutter, height, viewportWidth, viewportLeft };
-    html += '<g id="review-files-layer">' + reviewActionFiles(t, x, base, viewport.scrollLeft + gutter, viewport.scrollLeft + viewportWidth - gutter, height) + '</g>';
+    html += '<g id="review-files-layer">' + reviewActionFiles(t, x, base, viewport.scrollLeft + gutter, viewport.scrollLeft + viewportWidth - gutter) + '</g>';
     const graph = $('graph');
     graph.setAttribute('viewBox', '0 0 ' + width + ' ' + height); graph.setAttribute('height', height);
     graph.style.width = width + 'px'; graph.innerHTML = html;
     // 步骤分组整体是选中;柱段单独接管:点它看这一轮的上下文变化明细。
     graph.querySelectorAll('[data-step] [data-context-segment]').forEach(el => {
-      el.onclick = e => { e.stopPropagation(); reviewOpenContext(t.number); };
+      el.onclick = e => {
+        e.stopPropagation();
+        const group = el.closest('[data-step]');
+        // data-step 存的是步的下标,不是步号。
+        const index = group ? Number(group.dataset.step) : NaN;
+        const step = Number.isInteger(index) && t.steps[index] ? t.steps[index].number : undefined;
+        reviewOpenContext(t.number, step);
+      };
     });
     graph.querySelectorAll('[data-step]').forEach(el => {
       el.onclick = () => selectStep(Number(el.dataset.step));
@@ -464,19 +473,19 @@ window.__geistBoot = () => {
     const renderCall = fact => '<article class="review-operation">' +
       (single ? '' : '<h4>' + esc(fact.title) + '</h4>') +
       '<div class="review-operation-result"><p data-tone="' + fact.tone + '">' + esc(fact.outcome) + '</p>' +
-      (fact.preview ? '<button class="review-operation-change" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? '查看原计划' : '对比改动') + ' ↗</button>' : '') + '</div></article>';
-    const onward = insight.links[0] || (insight.following ? { step: insight.following.step, text: '第 ' + insight.following.step + ' 步 · ' + insight.following.text } : null);
-    panel.innerHTML = '<div class="review-step-heading"><div><p>第 ' + step.number + ' 步' +
-      (overviewLayers.has('duration') ? ' · ' + preciseTime(step.end - step.start) : '') + (calls.length ? ' · ' + calls.length + ' 项操作' : '') +
-      '</p><h3>' + esc(title) + '</h3></div><button class="review-panel-quiet" id="panel-record">原始记录 ↗</button><button class="review-panel-quiet" id="panel-expand">展开全文</button></div>' +
+      (fact.preview ? '<button class="review-operation-change" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('对比改动')) + ' ↗</button>' : '') + '</div></article>';
+    const onward = insight.links[0] || (insight.following ? { step: insight.following.step, text: ui('第 ') + insight.following.step + ui(' 步 · ') + insight.following.text } : null);
+    panel.innerHTML = ui('<div class="review-step-heading"><div><p>第 ') + step.number + ui(' 步') +
+      (overviewLayers.has('duration') ? ' · ' + preciseTime(recordDuration(step)) : '') + (calls.length ? ' · ' + calls.length + ui(' 项操作') : '') +
+      '</p><h3>' + esc(title) + ui('</h3></div><button class="review-panel-quiet" id="panel-record">原始记录 ↗</button><button class="review-panel-quiet" id="panel-expand">展开全文</button></div>') +
       '<div class="review-operations">' + insight.calls.slice(0, 2).map(renderCall).join('') +
       (!calls.length && insight.reply ? '<p class="review-reply-summary">' + esc(insight.reply) + '</p>' : '') +
-      (!calls.length && !insight.reply ? '<p class="review-reply-summary">没有记录到本步的文字回复或工具操作。</p>' : '') + '</div>' +
-      '<div class="review-step-footer"><div>' + (onward ? '<span>' + (insight.links.length ? '后续确认' : '接下来') + '</span><button data-insight-step="' + onward.step + '" class="' + (insight.links.length ? 'review-insight-proof' : '') + '">' + esc(onward.text) + ' ↗</button>' : '<span>本轮执行记录到这里</span>') +
-      '</div><button class="review-panel-quiet" id="review-panel-details">' + (insight.calls.length > 2 ? '全部 ' + insight.calls.length + ' 项操作与依据' : '前后文与依据') + ' ↗</button></div>';
+      (!calls.length && !insight.reply ? ui('<p class="review-reply-summary">没有记录到本步的文字回复或工具操作。</p>') : '') + '</div>' +
+      '<div class="review-step-footer"><div>' + (onward ? '<span>' + (insight.links.length ? ui('后续确认') : ui('接下来')) + '</span><button data-insight-step="' + onward.step + '" class="' + (insight.links.length ? 'review-insight-proof' : '') + '">' + esc(onward.text) + ' ↗</button>' : ui('<span>本轮执行记录到这里</span>')) +
+      '</div><button class="review-panel-quiet" id="review-panel-details">' + (insight.calls.length > 2 ? ui('全部 ') + insight.calls.length + ui(' 项操作与依据') : ui('前后文与依据')) + ' ↗</button></div>';
     $('panel-record').onclick = () => showStep(selectedStep);
     const expand = $('panel-expand');
-    if (expand) expand.onclick = () => { const open = panel.classList.toggle('is-open'); expand.textContent = open ? '收起' : '展开全文'; };
+    if (expand) expand.onclick = () => { const open = panel.classList.toggle('is-open'); expand.textContent = open ? ui('收起') : ui('展开全文'); };
     $('review-panel-details').onclick = () => reviewOpenStepDetail(t, step, insight, info);
     panel.querySelectorAll('[data-insight-change]').forEach(el => el.onclick = () => reviewOpenChange(t, step, insight.calls.find(f => f.seq === Number(el.dataset.insightChange))));
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
@@ -488,22 +497,22 @@ window.__geistBoot = () => {
     selectStep(index); $('graph').querySelector('[data-step="' + index + '"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }
   function reviewRenderActionCaption() {
-    $('graph-caption').innerHTML = '<div class="br-key"><span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" class="review-action-node"/></svg>操作步骤</span>' +
-      '<span class="br-key-item"><svg viewBox="0 0 12 12">' + brCap(6, 6) + '</svg>报错</span>' +
-      '<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.2" fill="none" stroke="#c0503f" stroke-width="1.6"/></svg>步状态环（红报错 / 橙超时 / 灰拦截）</span>' +
-      '<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="#fff" stroke="#6a7f9a"/><text x="6" y="8.6" text-anchor="middle" font-size="7" fill="#4d6076">↻</text></svg>徽标数量</span>' +
-      '<span class="br-key-item"><svg viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span>' +
-      '<span class="br-key-item"><svg viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span>' +
+    $('graph-caption').innerHTML = ui('<div class="br-key"><span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" class="review-action-node"/></svg>操作步骤</span>') +
+      '<span class="br-key-item"><svg viewBox="0 0 12 12">' + brCap(6, 6) + ui('</svg>报错</span>') +
+      ui('<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.2" fill="none" stroke="#c0503f" stroke-width="1.6"/></svg>步状态环（红报错 / 橙超时 / 灰拦截）</span>') +
+      ui('<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="#fff" stroke="#6a7f9a"/><text x="6" y="8.6" text-anchor="middle" font-size="7" fill="#4d6076">↻</text></svg>徽标数量</span>') +
+      ui('<span class="br-key-item"><svg viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span>') +
+      ui('<span class="br-key-item"><svg viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span>') +
       '</div>' +
-      '<div class="review-action-guidance">点图标看这一步 · 双击看原始记录 · 缩小返回总览</div>' +
-      '<div class="review-overlay-key" aria-hidden="' + !overviewLayers.has('context') + '"><span class="review-overlay-caption">上下文 <b>↑增 ↓减</b></span>' +
+      ui('<div class="review-action-guidance">点图标看这一步 · 双击看原始记录 · 缩小返回总览</div>') +
+      '<div class="review-overlay-key" aria-hidden="' + !overviewLayers.has('context') + ui('"><span class="review-overlay-caption" data-context-caption>上下文 <b>↑增 ↓减</b></span>') +
       CONTEXT_CATEGORIES.map(c => '<button class="review-overlay-source" data-action-source="' + c.key + '"><i style="background:' + c.color + '"></i>' + c.label + '</button>').join('') + '</div>';
     $('graph-caption').querySelectorAll('[data-action-source]').forEach(el => el.onclick = () => reviewOpenContextSources(el.dataset.actionSource));
   }
 
   function renderPath(){
     $('canvas').classList.remove('tree-mode','spine-mode','overview-mode','lane-mode');
-    $('graph-caption').innerHTML='<span class="legend-item"><i class="legend-line"></i>普通经过</span><span class="legend-item"><i class="legend-line error"></i>受阻</span><span class="legend-item"><i class="legend-line tool"></i>补齐条件后继续</span><span class="caption-note" id="caption-note"></span>';
+    $('graph-caption').innerHTML=ui('<span class="legend-item"><i class="legend-line"></i>普通经过</span><span class="legend-item"><i class="legend-line error"></i>受阻</span><span class="legend-item"><i class="legend-line tool"></i>补齐条件后继续</span><span class="caption-note" id="caption-note"></span>');
     if(zoom)renderTechnicalPath();else renderActionPath();
   }
 
@@ -528,7 +537,7 @@ window.__geistBoot = () => {
     overviewViewportBound = true;
     const viewport = $('graph-scroll');
     viewport.tabIndex = 0;
-    viewport.setAttribute('aria-label', '执行路径画布，可左右拖动或用方向键平移');
+    viewport.setAttribute('aria-label', ui('执行路径画布，可左右拖动或用方向键平移'));
     let drag = null, suppressClickUntil = 0, wheelFrame = 0, pendingScale = 1, pendingX = 0;
     const blocked = () => $('canvas').classList.contains('drawer-open') || Boolean($('review-detail-overlay'));
     viewport.addEventListener('wheel', e => {
@@ -583,58 +592,58 @@ window.__geistBoot = () => {
     });
   }
 
-  const preciseTime=ms=>ms<1000?`${Math.round(ms)} 毫秒`:ms<60000?`${(ms/1000).toFixed(1)} 秒`:dur(ms);
-  const stopLabel=kind=>({aborted:'用户停止',interrupted:'新输入中断',error:'本轮出错'}[kind]);
-  const focusNames={failures:'错误与接续',duration:'轮次耗时',interruptions:'中断与重试'};
+  const preciseTime=ms=>!Number.isFinite(ms)||ms<0?ui('未记录'):ms<1000?ui`${Math.round(ms)} 毫秒`:ms<60000?ui`${(ms/1000).toFixed(1)} 秒`:dur(ms);
+  const stopLabel=kind=>({aborted:ui('用户停止'),interrupted:ui('新输入中断'),error:ui('本轮出错')}[kind]);
+  const focusNames={failures:ui('错误与接续'),duration:ui('轮次耗时'),interruptions:ui('中断与重试')};
   const focusRules={
-    failures:'纳入所有显式工具错误，按实际问题归组。主图先展开修改受阻最多、失败调用耗时最长、服务不可用三类代表；其他受阻保留主线原位标记，点击可换入查看。成功后处理路径接回主线，未确认结果的分支保持开放。',
-    duration:'所有轮次统一按起止时间计时。条段宽度表示真实执行时长，轮间等待明确折叠；文字能放下时统一显示编号和时长，任一轮悬停都可查看完整耗时。双击轮次聚焦并展开步骤与工具。',
-    interruptions:'纳入 turn/end 为停止、中断或错误的轮次，以及有 llm/retry 的轮次。优先标注中断，其次请求重试较多的轮次；图上最多常显8轮。'
+    failures:ui('纳入所有显式工具错误，按实际问题归组。主图先展开修改受阻最多、失败调用耗时最长、服务不可用三类代表；其他受阻保留主线原位标记，点击可换入查看。成功后处理路径接回主线，未确认结果的分支保持开放。'),
+    duration:ui('所有轮次统一按起止时间计时。条段宽度表示真实执行时长，轮间等待明确折叠；文字能放下时统一显示编号和时长，任一轮悬停都可查看完整耗时。双击轮次聚焦并展开步骤与工具。'),
+    interruptions:ui('纳入 turn/end 为停止、中断或错误的轮次，以及有 llm/retry 的轮次。优先标注中断，其次请求重试较多的轮次；图上最多常显8轮。')
   };
   function focusOverview(index){turnIndex=Math.max(0,Math.min(session.turns.length-1,index));view='overview';zoom=null;closeDrawer();render();tlFocusRange(turn(),turn().start,endOf(turn()));}
   const overviewFact=number=>session.overview.turns.find(f=>f.turn===number);
   const overviewTurn=number=>session.turns.find(t=>t.number===number);
   function factLabel(f,focus='failures'){
-    if(focus==='duration')return {title:`第 ${f.turn} 轮 · ${dur(f.durationMs)}`,note:`${f.steps} 步 · ${f.calls} 次调用`,tone:'normal'};
-    if(focus==='interruptions')return {title:`第 ${f.turn} 轮 · ${f.stop?stopLabel(f.stop):'请求重试'}`,note:f.retryCount?`${f.retryCount} 次模型请求重试`:'本轮提前结束',tone:'normal'};
-    return {title:`第 ${f.turn} 轮 · ${f.errors} 次报错`,note:f.summary.replace('段受阻，均有后续成功','段受阻后均成功'),tone:f.unconfirmedCount?'unknown':'recovered'};
+    if(focus==='duration')return {title:ui`第 ${f.turn} 轮 · ${dur(f.durationMs)}`,note:ui`${f.steps} 步 · ${f.calls} 次调用`,tone:'normal'};
+    if(focus==='interruptions')return {title:ui`第 ${f.turn} 轮 · ${f.stop?stopLabel(f.stop):ui('请求重试')}`,note:f.retryCount?ui`${f.retryCount} 次模型请求重试`:ui('本轮提前结束'),tone:'normal'};
+    return {title:ui`第 ${f.turn} 轮 · ${f.errors} 次报错`,note:f.summary.replace(ui('段受阻，均有后续成功'),ui('段受阻后均成功')),tone:f.unconfirmedCount?'unknown':'recovered'};
   }
   function whyThisTurn(f,focus='failures'){
-    if(focus==='duration')return `本轮执行 ${dur(f.durationMs)}，从 ${clock(overviewTurn(f.turn).start)} 到 ${clock(endOf(overviewTurn(f.turn)))}，不包含轮间等待。`;
-    if(focus==='interruptions')return [f.stop?`结束记录：${stopLabel(f.stop)}`:'',f.retryCount?`${f.retryCount} 次模型请求重试`:''].filter(Boolean).join('；')+'。';
-    return f.unconfirmedCount?`${f.unconfirmedCount} 次失败调用尚未找到同一轮、完全相同参数的后续成功；这不等于本轮任务失败。`:f.episodeCount>1?`同一轮中出现 ${f.episodeCount} 段独立受阻，分别有后续成功。`:`${f.errors} 次工具报错，原调用随后均返回成功；最长间隔 ${preciseTime(f.continuationMs)}。`;
+    if(focus==='duration')return ui`本轮执行 ${dur(f.durationMs)}，从 ${clock(overviewTurn(f.turn).start)} 到 ${clock(endOf(overviewTurn(f.turn)))}，不包含轮间等待。`;
+    if(focus==='interruptions')return [f.stop?ui`结束记录：${stopLabel(f.stop)}`:'',f.retryCount?ui`${f.retryCount} 次模型请求重试`:''].filter(Boolean).join('；')+'。';
+    return f.unconfirmedCount?ui`${f.unconfirmedCount} 次失败调用尚未找到同一轮、完全相同参数的后续成功；这不等于本轮任务失败。`:f.episodeCount>1?ui`同一轮中出现 ${f.episodeCount} 段独立受阻，分别有后续成功。`:ui`${f.errors} 次工具报错，原调用随后均返回成功；最长间隔 ${preciseTime(f.continuationMs)}。`;
   }
-  function openOverviewEpisode(id){
+  function openOverviewEpisode(id,back){
     const e=session.overview.episodes.find(e=>e.id===id),t=overviewTurn(e.turn),all=t.steps.flatMap(s=>s.calls),find=seq=>all.find(c=>c.seq===seq);
-    let html=`<div class="ov-evidence-summary"><div><span>失败调用</span><strong>${e.failedCount} 次</strong></div><div><span>原调用后续成功</span><strong>${e.confirmedCount} / ${e.failedCount}</strong></div><div><span>再次成功的间隔</span><strong>${e.continuationMs===null?'待确认':preciseTime(e.continuationMs)}</strong></div></div>`;
+    let html=ui`<div class="ov-evidence-summary"><div><span>失败调用</span><strong>${e.failedCount} 次</strong></div><div><span>原调用后续成功</span><strong>${e.confirmedCount} / ${e.failedCount}</strong></div><div><span>再次成功的间隔</span><strong>${e.continuationMs===null?ui('待确认'):preciseTime(e.continuationMs)}</strong></div></div>`;
     html+=`<div class="ov-episode-flow">${e.sequence.map(s=>`<div class="ov-episode-stage ${s.kind}"><i></i><strong>${esc(s.label)}</strong><span>${clock(s.time)}</span></div>`).join('')}</div>`;
-    html+=`<p class="drawer-note">${esc(e.reason)}${e.targets.length?`，涉及 ${e.targets.length} 个目标文件`:''}。${e.complete?`${e.readConfirmed?'读取目标文件后，':''}原操作在 ${preciseTime(e.continuationMs)} 内再次返回成功。`:'原操作的后续结果尚未确认。'}</p>`;
-    if(e.complete)html+=`<details class="ov-proof"><summary>查看识别依据</summary><div class="source-row">失败之后，同一工具以完全相同的参数再次返回成功。间隔从第一条错误结果算到最后一条对应成功结果。${e.readConfirmed?`其间记录了 ${e.readSeqs.length} 次成功读取，覆盖所有 ${e.targets.length} 个目标文件。`:''}</div></details>`;
-    else html+='<details class="ov-proof"><summary>查看识别依据</summary><div class="source-row">没有找到全部原调用的后续成功。可能换了工具或参数，不据此认定整轮失败。</div></details>';
-    html+=`<div class="drawer-actions"><button class="action-button primary" id="episode-round">查看第 ${e.turn} 轮行动路径 ↗</button></div><h3>失败调用 · 原始记录</h3>`+e.failureSeqs.map(find).filter(Boolean).map(callEntry).join('');
-    if(e.readSeqs.length)html+='<h3>补充读取 · 原始记录</h3>'+e.readSeqs.map(find).filter(Boolean).map(callEntry).join('');
-    if(e.pairs.length)html+='<h3>对应成功 · 原始记录</h3>'+[...new Set(e.pairs.map(p=>p.successSeq))].map(find).filter(Boolean).map(callEntry).join('');
-    openDrawer(`第 ${e.turn} 轮 · ${e.reason}`,`第 ${e.steps.join('、')} 步 · ${e.summary}`,html);
+    html+=`<p class="drawer-note">${esc(e.reason)}${e.targets.length?ui`，涉及 ${e.targets.length} 个目标文件`:''}。${e.complete?ui`${e.readConfirmed?ui('读取目标文件后，'):''}原操作在 ${preciseTime(e.continuationMs)} 内再次返回成功。`:ui('原操作的后续结果尚未确认。')}</p>`;
+    if(e.complete)html+=ui`<details class="ov-proof"><summary>查看识别依据</summary><div class="source-row">失败之后，同一工具以完全相同的参数再次返回成功。间隔从第一条错误结果算到最后一条对应成功结果。${e.readConfirmed?ui`其间记录了 ${e.readSeqs.length} 次成功读取，覆盖所有 ${e.targets.length} 个目标文件。`:''}</div></details>`;
+    else html+=ui('<details class="ov-proof"><summary>查看识别依据</summary><div class="source-row">没有找到全部原调用的后续成功。可能换了工具或参数，不据此认定整轮失败。</div></details>');
+    html+=ui`<div class="drawer-actions"><button class="action-button primary" id="episode-round">查看第 ${e.turn} 轮行动路径 ↗</button></div><h3>失败调用 · 原始记录</h3>`+e.failureSeqs.map(find).filter(Boolean).map(callEntry).join('');
+    if(e.readSeqs.length)html+=ui('<h3>补充读取 · 原始记录</h3>')+e.readSeqs.map(find).filter(Boolean).map(callEntry).join('');
+    if(e.pairs.length)html+=ui('<h3>对应成功 · 原始记录</h3>')+[...new Set(e.pairs.map(p=>p.successSeq))].map(find).filter(Boolean).map(callEntry).join('');
+    openDrawer(ui`第 ${e.turn} 轮 · ${e.reason}`,ui`第 ${e.steps.join('、')} 步 · ${e.summary}`,html,back);
     $('episode-round').onclick=()=>{const i=session.turns.findIndex(r=>r.number===e.turn);selectTurn(i<0?0:i);};
   }
   function openOverviewRound(number,focus='failures'){
     const f=overviewFact(number),t=overviewTurn(number),episodes=session.overview.episodes.filter(e=>e.turn===number);
-    let html=`<div class="ov-evidence-summary"><div><span>本轮执行</span><strong>${dur(f.durationMs)}</strong></div><div><span>工具调用</span><strong>${f.calls} 次</strong></div><div><span>独立受阻事件</span><strong>${f.episodeCount} 件</strong></div></div><p class="drawer-note">${esc(whyThisTurn(f,focus))}</p>`;
-    if(episodes.length)html+='<div class="ov-bucket-list">'+episodes.map(e=>`<button class="ov-bucket-item" data-episode="${esc(e.id)}"><span class="ov-bucket-item-head"><strong>${esc(e.reason)}</strong><b>${e.failedCount} 次报错</b></span><span class="ov-bucket-item-reason">${esc(e.summary)}</span><span class="ov-bucket-item-meta"><span>第 ${e.steps.join('、')} 步${e.targets.length?' · '+e.targets.length+' 个文件':''}</span><span class="${e.complete?'ov-recovered':''}">${e.complete?preciseTime(e.continuationMs)+' 后原调用成功':'后续结果待确认'}</span></span></button>`).join('')+'</div>';
+    let html=ui`<div class="ov-evidence-summary"><div><span>本轮执行</span><strong>${dur(f.durationMs)}</strong></div><div><span>工具调用</span><strong>${f.calls} 次</strong></div><div><span>独立受阻事件</span><strong>${f.episodeCount} 件</strong></div></div><p class="drawer-note">${esc(whyThisTurn(f,focus))}</p>`;
+    if(episodes.length)html+='<div class="ov-bucket-list">'+episodes.map(e=>ui`<button class="ov-bucket-item" data-episode="${esc(e.id)}"><span class="ov-bucket-item-head"><strong>${esc(e.reason)}</strong><b>${e.failedCount} 次报错</b></span><span class="ov-bucket-item-reason">${esc(e.summary)}</span><span class="ov-bucket-item-meta"><span>第 ${e.steps.join('、')} 步${e.targets.length?' · '+e.targets.length+ui(' 个文件'):''}</span><span class="${e.complete?'ov-recovered':''}">${e.complete?preciseTime(e.continuationMs)+ui(' 后原调用成功'):ui('后续结果待确认')}</span></span></button>`).join('')+'</div>';
     const retries=t.steps.flatMap(s=>s.retries.map(r=>({s,r})));
-    if(f.stop||retries.length){html+='<h3>结束与请求记录</h3>';if(f.stop)html+=`<div class="source-row"><span>${clock(endOf(t))}</span>${stopLabel(f.stop)}</div>`;html+=retries.map(({s,r})=>`<div class="source-row"><span>第 ${s.number} 步 · ${clock(r.time)}</span>模型请求重试 · ${esc(r.failure?.code||'请求失败')} · 日志退避等待 ${preciseTime(r.delayMs||0)}</div>`).join('');}
-    html+=`<div class="drawer-actions" style="margin-top:20px"><button class="action-button primary" id="overview-to-path">查看本轮行动路径 ↗</button></div><h3>本轮用户原文</h3><div class="original-prompt">${esc(t.title)}</div>`;
-    openDrawer(`第 ${number} 轮`,`${clock(t.start)} → ${clock(endOf(t))} · ${f.steps} 步`,html);
+    if(f.stop||retries.length){html+=ui('<h3>结束与请求记录</h3>');if(f.stop)html+=`<div class="source-row"><span>${clock(endOf(t))}</span>${stopLabel(f.stop)}</div>`;html+=retries.map(({s,r})=>ui`<div class="source-row"><span>第 ${s.number} 步 · ${clock(r.time)}</span>模型请求重试 · ${esc(r.failure?.code||ui('请求失败'))} · 日志退避等待 ${preciseTime(r.delayMs||0)}</div>`).join('');}
+    html+=ui`<div class="drawer-actions" style="margin-top:20px"><button class="action-button primary" id="overview-to-path">查看本轮行动路径 ↗</button></div><h3>本轮用户原文</h3><div class="original-prompt">${esc(t.title)}</div>`;
+    openDrawer(ui`第 ${number} 轮`,ui`${clock(t.start)} → ${clock(endOf(t))} · ${f.steps} 步`,html);
     $('drawer-body').querySelectorAll('[data-episode]').forEach(b=>b.onclick=()=>openOverviewEpisode(b.dataset.episode));
     $('overview-to-path').onclick=()=>selectTurn(session.turns.indexOf(t));
   }
   function openOverviewFocusList(){
-    let html=overviewLayers.size?'':'<p class="drawer-note">勾选关注项后，会在同一张图上显示对应的信息。</p>';
-    for(const focus of overviewLayers){const order=focus==='duration'?session.turns.map(t=>t.number):session.overview.focus[focus];html+=`<h3>${focusNames[focus]} · ${order.length} 轮</h3><p class="drawer-note">${focusRules[focus]}</p><div class="ov-bucket-list">`;
+    let html=overviewLayers.size?'':ui('<p class="drawer-note">勾选关注项后，会在同一张图上显示对应的信息。</p>');
+    for(const focus of overviewLayers){const order=focus==='duration'?session.turns.map(t=>t.number):session.overview.focus[focus];html+=ui`<h3>${focusNames[focus]} · ${order.length} 轮</h3><p class="drawer-note">${focusRules[focus]}</p><div class="ov-bucket-list">`;
       html+=order.map(number=>{const f=overviewFact(number),label=factLabel(f,focus);return `<button class="ov-bucket-item" data-key-turn="${number}" data-key-focus="${focus}"><span class="ov-bucket-item-head"><strong>${label.title}</strong></span><span class="ov-bucket-item-reason">${esc(label.note)}</span></button>`;}).join('')+'</div>';
     }
-    html+='<h3>受阻事件如何划分</h3><p class="drawer-note">先以单轮为边界。同一步产生的同类错误作为一批；后续错误只有在涉及相同操作对象、且先前问题还没有成功结束时才接入。同轮的历史存储不可用按同一个服务故障归组。成功后再失败另起一件，不跨轮合并。</p>';
-    openDrawer('图层与选择依据',`${overviewLayers.size} 类信息已勾选 · 选择与分组不随缩放改变`,html);
+    html+=ui('<h3>受阻事件如何划分</h3><p class="drawer-note">先以单轮为边界。同一步产生的同类错误作为一批；后续错误只有在涉及相同操作对象、且先前问题还没有成功结束时才接入。同轮的历史存储不可用按同一个服务故障归组。成功后再失败另起一件，不跨轮合并。</p>');
+    openDrawer(ui('图层与选择依据'),ui`${overviewLayers.size} 类信息已勾选 · 选择与分组不随缩放改变`,html);
     $('drawer-body').querySelectorAll('[data-key-turn]').forEach(b=>b.onclick=()=>openOverviewRound(Number(b.dataset.keyTurn),b.dataset.keyFocus));
   }
 
@@ -669,20 +678,20 @@ window.__geistBoot = () => {
     if($('tl-readout'))$('tl-readout').textContent=text;
   }
   function tlRoundReadout(t){
-    tlReadout(`第 ${t.number} 轮 · 执行 ${dur(endOf(t)-t.start)} · ${t.steps.length} 步 · ${t.calls} 次调用${t.errors?' · '+t.errors+' 次工具报错':''}`,()=>openOverviewRound(t.number,'duration'));
+    tlReadout(ui`第 ${t.number} 轮 · 执行 ${dur(endOf(t)-t.start)} · ${t.steps.length} 步 · ${t.calls} 次调用${t.errors?' · '+t.errors+ui(' 次工具报错'):''}`,()=>openOverviewRound(t.number,'duration'));
   }
   function tlStepReadout(t,s){
-    tlReadout(`第 ${t.number} 轮 / 第 ${s.number} 步 · ${preciseTime(s.end-s.start)} · ${s.calls.length} 次工具调用${s.errors?' · '+s.errors+' 次报错':''}`,()=>tlOpenStep(t,s));
+    tlReadout(ui`第 ${t.number} 轮 / 第 ${s.number} 步 · ${preciseTime(recordDuration(s))} · ${s.calls.length} 次工具调用${s.errors?' · '+s.errors+ui(' 次报错'):''}`,()=>tlOpenStep(t,s));
   }
   function tlOpenStep(t,s){
-    let html=`<p class="drawer-note">${clock(s.start)} → ${clock(s.end)} · 模型响应 ${preciseTime((s.assistantTime??s.end)-s.start)} · ${s.calls.length} 次工具调用</p>`;
-    html+=s.calls.map(callEntry).join('');if(s.reply)html+='<h3>助手原文</h3>'+block(s.reply);
-    openDrawer(`第 ${t.number} 轮 · 第 ${s.number} 步`,'本图中的实际步骤与工具记录',html);
+    let html=ui`<p class="drawer-note">${clock(s.start)} → ${clock(s.end)} · 模型响应 ${preciseTime((s.assistantTime??s.end)-s.start)} · ${s.calls.length} 次工具调用</p>`;
+    html+=s.calls.map(callEntry).join('');if(s.reply)html+=ui('<h3>助手原文</h3>')+block(s.reply);
+    openDrawer(ui`第 ${t.number} 轮 · 第 ${s.number} 步`,ui('本图中的实际步骤与工具记录'),html);
   }
   function tlOpenBatch(b){
     const recovered=b.status==='error'&&b.calls.every(c=>tlModel(session).matched.has(c.seq));
-    const html=`<div class="ov-evidence-summary"><div><span>调用数量</span><strong>${b.calls.length} 次</strong></div><div><span>实际工具区间</span><strong>${b.end===null?'待确认':preciseTime(b.end-b.start)}</strong></div></div><p class="drawer-note">${recovered?'这批原调用在同轮中随后均返回成功。':''}${view==='overview'?'枝条上的实心短条表示实际工具区间，名称按附近空位排布。失败截口表示本次调用失败；错误结果仍会返回调用方。':'节点宽度用于容纳工具名，节点下方的短线表示实际起止时间。'}</p>`+b.calls.map(callEntry).join('');
-    openDrawer(`${b.name}${b.calls.length>1?' ×'+b.calls.length:''}`,`第 ${b.turn.number} 轮 · 第 ${b.step.number} 步`,html);
+    const html=ui`<div class="ov-evidence-summary"><div><span>调用数量</span><strong>${b.calls.length} 次</strong></div><div><span>实际工具区间</span><strong>${b.end===null?ui('待确认'):preciseTime(b.end-b.start)}</strong></div></div><p class="drawer-note">${recovered?ui('这批原调用在同轮中随后均返回成功。'):''}${view==='overview'?ui('枝条上的实心短条表示实际工具区间，名称按附近空位排布。失败截口表示本次调用失败；错误结果仍会返回调用方。'):ui('节点宽度用于容纳工具名，节点下方的短线表示实际起止时间。')}</p>`+b.calls.map(callEntry).join('');
+    openDrawer(`${b.name}${b.calls.length>1?' ×'+b.calls.length:''}`,ui`第 ${b.turn.number} 轮 · 第 ${b.step.number} 步`,html);
   }
   function tlFocusRange(t,start,end){
     const viewport=$('graph-scroll'),p=overviewProjection,duration=Math.max(600,end-start),padding=duration*.09;
@@ -781,7 +790,7 @@ function aggregateInScreen(items, maxSpan = 30) {
   return groups;
 }
 
-function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48, 77, -94, 122], gap = 10, aggregateSpan = 30, obstacles = [] }) {
+function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48, 77, -94, 122], gap = 10, aggregateSpan = 30, obstacles = [], labelSide = 'right' }) {
   let groups = aggregateInScreen(items, aggregateSpan);
   const intersects = (a, b) => a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + 5 && a.bottom + 5 > b.top;
   const stemHits = (anchor, dy, box) => anchor > box.left - 4 && anchor < box.right + 4 && Math.max(0, dy) > box.top - 4 && Math.min(0, dy) < box.bottom + 4;
@@ -790,11 +799,13 @@ function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48
     let failed = -1;
     for (let i = 0; i < groups.length; i++) {
       const members = groups[i], x = members[Math.floor((members.length - 1) / 2)].x;
+      const side = (typeof labelSide === 'function' ? labelSide(members) : labelSide) === 'left' ? -1 : 1;
       const label = labelOf(members), width = measure(label) + 6;
-      const cx = Math.max(left + width / 2, Math.min(right - width / 2, x + 20));
-      const occupiedLeft = Math.min(cx - width / 2, x + 9), occupiedRight = Math.max(cx + width / 2, x + 44);
+      const cx = Math.max(left + width / 2, Math.min(right - width / 2, side > 0 ? x + 20 : x - 24 - width / 2));
+      const occupiedLeft = side > 0 ? Math.min(cx - width / 2, x + 9) : Math.min(cx - width / 2, x - 44);
+      const occupiedRight = side > 0 ? Math.max(cx + width / 2, x + 44) : Math.max(cx + width / 2, x - 9);
       const candidate = slots.map(dy => ({
-        x, cx, dy, label, members,
+        x, cx, dy, label, members, side,
         left: occupiedLeft, right: occupiedRight,
         top: dy > 0 ? dy - 9 : dy - 28, bottom: dy > 0 ? dy + 25 : dy + 9,
       })).find(p => placed.every(q => !intersects(p, q) && !stemHits(p.x, p.dy, q) && !stemHits(q.x, q.dy, p)) && obstacles.every(q => !intersects(p, q)));
@@ -812,43 +823,43 @@ function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48
 
 function episodeMeaning(e) {
   if (e.condition === 'FS_NOT_OBSERVED') return e.readConfirmed && e.complete
-    ? { short: '先看后改好', why: '修改前还没有读取目标文件。', outcome: '补看文件后，同样的修改全部成功了。' }
-    : { short: '修改前没看文件', why: '修改前还没有读取目标文件。', outcome: e.complete ? '同样的修改后来成功了。' : '没有找到全部原修改后续成功的记录。' };
+    ? { short: ui('先看后改好'), why: ui('修改前还没有读取目标文件。'), outcome: ui('补看文件后，同样的修改全部成功了。') }
+    : { short: ui('修改前没看文件'), why: ui('修改前还没有读取目标文件。'), outcome: e.complete ? ui('同样的修改后来成功了。') : ui('没有找到全部原修改后续成功的记录。') };
   if (e.condition === 'FS_STALE_VERSION') return {
-    short: e.readConfirmed && e.complete ? '重看后改好' : '文件已变化',
-    why: '文件内容在先前读取之后发生了变化。',
-    outcome: e.complete ? '同样的修改后来成功了。' : '没有找到全部原修改后续成功的记录。',
+    short: e.readConfirmed && e.complete ? ui('重看后改好') : ui('文件已变化'),
+    why: ui('文件内容在先前读取之后发生了变化。'),
+    outcome: e.complete ? ui('同样的修改后来成功了。') : ui('没有找到全部原修改后续成功的记录。'),
   };
-  if (e.condition === 'TOOL_TIMEOUT') return { short: '等太久中止', why: '这次操作超过了允许等待的时间。', outcome: e.complete ? '同样的操作后来成功了。' : '后续是否通过其他方式完成，还不能确认。' };
-  if (e.condition === 'SESSION_QUERY_PERSISTENCE_FAILED') return { short: '历史没读到', why: '读取历史记录时，存储服务返回了错误。', outcome: e.complete ? '同样的读取后来成功了。' : '这次读取失败，不能据此判断整项任务失败。' };
+  if (e.condition === 'TOOL_TIMEOUT') return { short: ui('等太久中止'), why: ui('这次操作超过了允许等待的时间。'), outcome: e.complete ? ui('同样的操作后来成功了。') : ui('后续是否通过其他方式完成，还不能确认。') };
+  if (e.condition === 'SESSION_QUERY_PERSISTENCE_FAILED') return { short: ui('历史没读到'), why: ui('读取历史记录时，存储服务返回了错误。'), outcome: e.complete ? ui('同样的读取后来成功了。') : ui('这次读取失败，不能据此判断整项任务失败。') };
   const image = e.condition.includes('read_image');
-  return { short: image ? '图片没读到' : '这一步出错', why: image ? '读取图片的操作返回了错误。' : '这一步的操作返回了错误。', outcome: e.complete ? '同样的操作后来成功了。' : '没有找到同样操作的后续成功记录，可能换了做法。' };
+  return { short: image ? ui('图片没读到') : ui('这一步出错'), why: image ? ui('读取图片的操作返回了错误。') : ui('这一步的操作返回了错误。'), outcome: e.complete ? ui('同样的操作后来成功了。') : ui('没有找到同样操作的后续成功记录，可能换了做法。') };
 }
 
 function stepMeaning(step) {
   const calls = step.calls || [], names = calls.map(c => c.name);
   const targets = [...new Set(calls.map(c => c.target).filter(Boolean))];
   const kinds = [
-    ['查看文件', ['read', 'read_file', 'read_text_file', 'read_image']],
-    ['修改文件', ['edit', 'write', 'apply_patch', 'multi_edit', 'write_file']],
-    ['查找内容', ['grep', 'glob', 'search']],
-    ['运行命令', ['pwsh', 'bash', 'run_code']],
+    [ui('查看文件'), ['read', 'read_file', 'read_text_file', 'read_image']],
+    [ui('修改文件'), ['edit', 'write', 'apply_patch', 'multi_edit', 'write_file']],
+    [ui('查找内容'), ['grep', 'glob', 'search']],
+    [ui('运行命令'), ['pwsh', 'bash', 'run_code']],
   ];
   const labels = kinds.filter(([, set]) => names.some(n => set.includes(n))).map(([label]) => label);
-  const short = labels.length === 1 ? labels[0] : labels.length ? labels.slice(0, 2).join('、') : calls.length ? '执行操作' : step.reply ? '整理回复' : '暂无动作记录';
+  const short = labels.length === 1 ? labels[0] : labels.length ? labels.slice(0, 2).join('、') : calls.length ? ui('执行操作') : step.reply ? ui('整理回复') : ui('暂无动作记录');
   const failed = calls.filter(c => c.status === 'error').length, missing = calls.filter(c => c.status === 'unknown').length;
-  const outcome = failed ? failed + ' 次操作返回了错误。' : missing ? missing + ' 次操作还没有结果记录。' : calls.length ? calls.length + ' 次操作均已返回。' : step.reply ? '这一段产生了回复。' : '没有足够记录判断这一段做了什么。';
+  const outcome = failed ? failed + ui(' 次操作返回了错误。') : missing ? missing + ui(' 次操作还没有结果记录。') : calls.length ? calls.length + ui(' 次操作均已返回。') : step.reply ? ui('这一段产生了回复。') : ui('没有足够记录判断这一段做了什么。');
   return { short, targets, count: calls.length, outcome, failed, missing };
 }
 
 function retryMeaning(retries, responded) {
   const transport = retries.every(r => r.failure?.code === 'TRANSPORT');
   const started = retries.filter(r => r.started === true).length;
-  const attempt = started === retries.length ? '系统又尝试了 ' + started + ' 次。' : '系统安排了 ' + retries.length + ' 次再次尝试，记录确认其中 ' + started + ' 次已开始。';
+  const attempt = started === retries.length ? ui('系统又尝试了 ') + started + ui(' 次。') : ui('系统安排了 ') + retries.length + ui(' 次再次尝试，记录确认其中 ') + started + ui(' 次已开始。');
   return {
-    short: '自动再试',
-    why: (transport ? '连接过程出了问题，' : '没有顺利得到回应，') + attempt,
-    outcome: responded ? '随后收到了回应。' : '当前记录里还没有看到后续回应。',
+    short: ui('自动再试'),
+    why: (transport ? ui('连接过程出了问题，') : ui('没有顺利得到回应，')) + attempt,
+    outcome: responded ? ui('随后收到了回应。') : ui('当前记录里还没有看到后续回应。'),
     delayMs: retries.reduce((sum, r) => sum + (r.delayMs || 0), 0),
   };
 }
@@ -859,18 +870,18 @@ function turnMeaning(turn) {
   const files = [...new Set(writes.map(c => c.target).filter(Boolean))];
   const reads = [...new Set(calls.filter(c => ['read', 'read_file', 'read_text_file'].includes(c.name) && c.status === 'returned').map(c => c.target).filter(Boolean))];
   const commands = calls.filter(c => ['pwsh', 'bash', 'run_code'].includes(c.name)).length;
-  const short = files.length ? '修改 ' + files.length + ' 个文件' : reads.length ? '查看 ' + reads.length + ' 个文件' : commands ? '运行 ' + commands + ' 次命令' : calls.length ? '执行 ' + calls.length + ' 次操作' : '整理回复';
+  const short = files.length ? ui('修改 ') + files.length + ui(' 个文件') : reads.length ? ui('查看 ') + reads.length + ui(' 个文件') : commands ? ui('运行 ') + commands + ui(' 次命令') : calls.length ? ui('执行 ') + calls.length + ui(' 次操作') : ui('整理回复');
   return { short, files, reads, commands, failed: calls.filter(c => c.status === 'error').length };
 }
 
 const CONTEXT_CATEGORIES = [
-  { key: 'system', label: '系统提示', color: '#7065c6' },
-  { key: 'tools', label: '工具定义', color: '#bf8b32' },
-  { key: 'user', label: '用户输入', color: '#4c946d' },
-  { key: 'inject', label: '运行时注入', color: '#ab6ba4' },
-  { key: 'skill', label: '技能内容', color: '#cf7950' },
-  { key: 'assistant', label: '模型输出（含思考）', color: '#5286bf' },
-  { key: 'tool', label: '工具输出', color: '#39a29b' },
+  { key: 'system', label: ui('系统提示'), color: '#7065c6' },
+  { key: 'tools', label: ui('工具定义'), color: '#bf8b32' },
+  { key: 'user', label: ui('用户输入'), color: '#4c946d' },
+  { key: 'inject', label: ui('运行时注入'), color: '#ab6ba4' },
+  { key: 'skill', label: ui('技能内容'), color: '#cf7950' },
+  { key: 'assistant', label: ui('模型输出（含思考）'), color: '#5286bf' },
+  { key: 'tool', label: ui('工具输出'), color: '#39a29b' },
 ];
 
 // Independent implementation of the documented context turn/delta semantics:
@@ -968,6 +979,23 @@ const insightText = (value, limit = 120) => {
   return text.length > limit ? text.slice(0, limit) + '…' : text;
 };
 const insightFile = value => String(value || '').replace(/\\/g, '/').split('/').filter(Boolean).slice(-2).join('/');
+// 结果摘要:先读已知的计数字段,读不到再取返回正文的第一行。这里不猜语义,只把已有内容说清楚。
+function insightDigest(value, text) {
+  if (value && typeof value === 'object') {
+    const labels = [['turns', ui('轮')], ['steps', ui('步')], ['calls', ui('次调用')], ['returned', ui('条结果')],
+      ['hitCount', ui('条命中')], ['total', ui('条记录')], ['totalEntries', ui('条记录')], ['events', ui('条事件')],
+      ['sessions', ui('个会话')], ['nodes', ui('个节点')], ['edges', ui('条关系')]];
+    const source = value.summary && typeof value.summary === 'object' ? { ...value, ...value.summary } : value;
+    const parts = [];
+    for (const [key, label] of labels) {
+      const count = source?.[key];
+      if (Number.isFinite(count) && count > 0 && parts.length < 3) parts.push(count + ' ' + label);
+    }
+    if (parts.length) return ui('返回 ') + parts.join(' · ');
+  }
+  const line = String(text || '').split(/\r?\n/).map(row => row.trim()).find(Boolean) || '';
+  return line ? insightText(line, 110) : '';
+}
 function insightJSON(excerpt) {
   if (!excerpt || excerpt.omitted > 0) return null;
   try { const value = JSON.parse(excerpt.text); return value && typeof value === 'object' ? value : null; } catch { return null; }
@@ -990,103 +1018,146 @@ function editPreview(before, after) {
 function describeCall(call) {
   const args = insightJSON(call.args) || {}, result = insightJSON(call.result);
   const target = call.target || args.file_path || args.path || args.filePath || '';
-  const file = insightFile(target), text = call.result?.text || '', name = call.name || '工具';
-  let title = '调用 ' + name, outcome = '', detail = '', preview = null;
+  const file = insightFile(target), text = call.result?.text || '', name = call.name || ui('工具');
+  let title = ui('调用 ') + name, outcome = '', detail = '', preview = null;
   if (['read', 'read_file', 'read_text_file', 'read_image'].includes(name)) {
-    title = (name === 'read_image' ? '查看图片 ' : '读取 ') + (file || '文件');
+    title = (name === 'read_image' ? ui('查看图片 ') : ui('读取 ')) + (file || ui('文件'));
     const range = text.match(/Showing lines (\d+)-(\d+) of (\d+)/);
-    if (range) outcome = '返回第 ' + range[1] + '–' + range[2] + ' 行，文件共 ' + range[3] + ' 行。';
-    else if (/<type>file<\/type>/.test(text)) outcome = '返回了文件内容。';
-    if (Number.isFinite(args.offset)) detail = '请求从第 ' + args.offset + ' 行开始' + (Number.isFinite(args.limit) ? '，最多 ' + args.limit + ' 行' : '');
+    if (range) outcome = ui('返回第 ') + range[1] + '–' + range[2] + ui(' 行，文件共 ') + range[3] + ui(' 行。');
+    else if (/<type>file<\/type>/.test(text)) outcome = ui('返回了文件内容。');
+    if (Number.isFinite(args.offset)) detail = ui('请求从第 ') + args.offset + ui(' 行开始') + (Number.isFinite(args.limit) ? ui('，最多 ') + args.limit + ui(' 行') : '');
   } else if (['edit', 'write', 'write_file', 'apply_patch', 'multi_edit'].includes(name)) {
-    title = (name === 'write' || name === 'write_file' ? '写入 ' : '修改 ') + (file || '文件');
-    if (/\b(?:updated|written|created) successfully\b|Successfully (?:wrote|updated|applied)/i.test(text)) outcome = '工具确认文件已更新。';
+    title = (name === 'write' || name === 'write_file' ? ui('写入 ') : ui('修改 ')) + (file || ui('文件'));
+    if (/\b(?:updated|written|created) successfully\b|Successfully (?:wrote|updated|applied)/i.test(text)) outcome = ui('工具确认文件已更新。');
     if (name === 'edit') preview = editPreview(args.old_string, args.new_string);
-    if (preview) detail = args.replace_all ? '替换所有匹配片段' : '替换指定文本片段';
+    if (preview) detail = args.replace_all ? ui('替换所有匹配片段') : ui('替换指定文本片段');
   } else if (name === 'trajectory_read' || name === 'session_event_read') {
     const range = result?.requested;
     title = range && Number.isFinite(range.from) && Number.isFinite(range.to)
-      ? '读取会话记录 #' + range.from + '–' + range.to
-      : Number.isFinite(args.seq) ? '读取会话记录 #' + args.seq + (name === 'trajectory_read' ? ' 附近' : '') : '读取会话记录';
-    if (Number.isFinite(result?.returned)) outcome = '返回 ' + result.returned + ' 条事件记录。';
+      ? ui('读取会话记录 #') + range.from + '–' + range.to
+      : Number.isFinite(args.seq) ? ui('读取会话记录 #') + args.seq + (name === 'trajectory_read' ? ui(' 附近') : '') : ui('读取会话记录');
+    if (Number.isFinite(result?.returned)) outcome = ui('返回 ') + result.returned + ui(' 条事件记录。');
     const event = result?.events?.find(e => e.seq === args.seq);
-    if (event) detail = '目标记录 #' + event.seq + '：' + ({ 'user/message': '用户消息', 'assistant/message': '模型回复', 'tool/call': '工具调用', 'tool/result': '工具返回', 'agent/inbox/spliced': '待处理消息队列变更' }[event.type] || event.type);
+    if (event) detail = ui('目标记录 #') + event.seq + '：' + ({ 'user/message': ui('用户消息'), 'assistant/message': ui('模型回复'), 'tool/call': ui('工具调用'), 'tool/result': ui('工具返回'), 'agent/inbox/spliced': ui('待处理消息队列变更') }[event.type] || event.type);
   } else if (['trajectory_search', 'session_search', 'session_event_search', 'web_search', 'grep', 'glob'].includes(name)) {
     const query = args.query ?? args.pattern ?? args.q ?? '';
-    title = (name.startsWith('trajectory') || name.startsWith('session') ? '搜索会话' : name === 'web_search' ? '搜索网页' : '查找文件内容') +
+    title = (name.startsWith('trajectory') || name.startsWith('session') ? ui('搜索会话') : name === 'web_search' ? ui('搜索网页') : ui('查找文件内容')) +
       (query ? '“' + insightText(query, 55) + '”' : '');
-    if (Number.isFinite(result?.hitCount)) outcome = '命中 ' + result.hitCount + ' 条' + (Number.isFinite(result.returned) ? '，本次返回 ' + result.returned + ' 条' : '') + '。';
-    else if (Number.isFinite(result?.returned)) outcome = '本次返回 ' + result.returned + ' 条结果。';
+    if (Number.isFinite(result?.hitCount)) outcome = ui('命中 ') + result.hitCount + ui(' 条') + (Number.isFinite(result.returned) ? ui('，本次返回 ') + result.returned + ui(' 条') : '') + '。';
+    else if (Number.isFinite(result?.returned)) outcome = ui('本次返回 ') + result.returned + ui(' 条结果。');
     const hit = result?.items?.find(item => typeof item.text === 'string' && item.text.trim());
-    if (hit) detail = '命中摘录：' + insightText(hit.text, 100);
+    if (hit) detail = ui('命中摘录：') + insightText(hit.text, 100);
   } else if (['pwsh', 'bash', 'run_code'].includes(name)) {
     const command = args.command || args.code || '';
     const read = commandSubject(command, 'Get-Content'), path = commandArgument(command, 'Path'), pattern = commandArgument(command, 'Pattern');
-    if (/\bSelect-String\b/i.test(command) && pattern) title = '查找“' + insightText(pattern, 45) + '”' + (path ? ' · ' + insightFile(path) : '');
-    else if (read) title = '读取 ' + insightFile(read);
+    if (/\bSelect-String\b/i.test(command) && pattern) title = ui('查找“') + insightText(pattern, 45) + '”' + (path ? ' · ' + insightFile(path) : '');
+    else if (read) title = ui('读取 ') + insightFile(read);
     else {
       const script = command.match(/\bnode\s+['"]?([^'"\s;|]+\.m?js)\b/i);
-      title = script ? '运行 ' + insightFile(script[1]) : '运行命令';
-      if (!script && args.description) detail = '调用方说明：' + insightText(args.description, 95);
+      title = script ? ui('运行 ') + insightFile(script[1]) : ui('运行命令');
+      if (!script && args.description) detail = ui('调用方说明：') + insightText(args.description, 95);
     }
     const found = [...new Set([...text.matchAll(/^([^\r\n:<>]+\.(?:[cm]?js|tsx?|css|json)):\d+:/gm)].map(m => insightFile(m[1])))];
-    if (found.length) outcome = '输出定位到 ' + found.slice(0, 3).join('、') + (found.length > 3 ? ' 等文件' : '') + '。';
+    if (found.length) outcome = ui('输出定位到 ') + found.slice(0, 3).join('、') + (found.length > 3 ? ui(' 等文件') : '') + '。';
     const reported = text.split(/\r?\n/).find(line => /^(?:PASS\b|FAIL\b|Tests?\s+(?:passed|failed)|Test Files\s)/i.test(line.trim()));
-    if (reported) outcome = '命令输出报告：' + insightText(reported, 110);
-    if (!outcome && text.trim()) outcome = '命令返回了输出。';
+    if (reported) outcome = ui('命令输出报告：') + insightText(reported, 110);
+    if (!outcome && text.trim()) outcome = ui('命令返回了输出。');
   } else if (name === 'web_fetch') {
-    try { const url = new URL(args.url); title = '读取网页 ' + url.hostname + url.pathname; } catch { title = '读取网页'; }
+    try { const url = new URL(args.url); title = ui('读取网页 ') + url.hostname + url.pathname; } catch { title = ui('读取网页'); }
+  } else if (name === 'skill') {
+    const skillName = (text.match(/name="([^"]+)"/) || [])[1];
+    title = ui('读取 Skill') + (skillName ? ' · ' + insightText(skillName, 40) : '');
+    if (text.trim()) {
+      outcome = ui('返回了 Skill 正文。');
+      detail = ui('正文 ') + text.trim().length + ui(' 字符');
+    }
+  } else if (name === 'trajectory_inspect') {
+    const kind = String(args.view || 'overview');
+    title = ({ overview: ui('查看执行统计'), latency: ui('查看耗时分布'), cost: ui('查看用量与缓存'), repeats: ui('查看反复尝试'), io: ui('查看工具与文件'), context: ui('查看上下文构成') })[kind] || ui('查看执行统计');
+    const summary = result?.summary && typeof result.summary === 'object' ? result.summary : null;
+    if (summary) {
+      const parts = [];
+      if (Number.isFinite(summary.turns)) parts.push(summary.turns + ui(' 轮'));
+      if (Number.isFinite(summary.steps)) parts.push(summary.steps + ui(' 步'));
+      if (Number.isFinite(summary.calls)) parts.push(summary.calls + ui(' 次调用'));
+      if (parts.length) outcome = ui('覆盖 ') + parts.join(' · ');
+    }
+    if (!outcome && Number.isFinite(result?.totalEntries)) outcome = ui('返回 ') + result.totalEntries + ui(' 条记录。');
+  } else if (name === 'trajectory_graph') {
+    title = ui('查看记录关系');
+    outcome = insightDigest(result, text);
+  } else if (name === 'trajectory_trace') {
+    title = ui('查看会话谱系');
+    outcome = insightDigest(result, text);
   } else if (name === 'cordis_inspect_query') {
-    title = '查询运行时状态';
-    if (args.query) detail = '查询：' + insightText(typeof args.query === 'string' ? args.query : JSON.stringify(args.query), 100);
+    title = ui('查询运行时状态');
+    if (args.query) detail = ui('查询：') + insightText(typeof args.query === 'string' ? args.query : JSON.stringify(args.query), 100);
+    outcome = insightDigest(result?.data ?? result, text);
+  } else if (name === 'cordis_inspect_list') {
+    title = ui('查看可用查询');
+    outcome = insightDigest(result?.data ?? result, text);
   } else if (name === 'plugin_manager') {
-    title = '管理插件' + (args.action ? ' · ' + insightText(args.action, 30) : '');
-  } else if (args.description) detail = '调用方说明：' + insightText(args.description, 100);
+    title = ui('管理插件') + (args.action ? ' · ' + insightText(args.action, 30) : '');
+    outcome = insightDigest(result, text);
+  } else if (args.description) detail = ui('调用方说明：') + insightText(args.description, 100);
   const code = call.error?.code || call.error?.info?.code;
   let tone = 'normal';
   if (call.status === 'error') {
     tone = 'bad';
     outcome = ({
-      FS_NOT_OBSERVED: '修改被拦住：还没有读取过目标文件，需要先读再改。',
-      FS_STALE_VERSION: '修改被拦住：文件在上次读取后发生了变化，需要重新读取。',
-      TOOL_TIMEOUT: '操作等待超时，未取得正常返回。',
-      SESSION_QUERY_PERSISTENCE_FAILED: '历史存储服务报错，本次读取没有完成。',
-      TOOL_ABORTED_BEFORE_DISPATCH: '执行前已被取消，工具没有实际启动。',
-    })[code] || ('工具报错：' + insightText(text.replace(/^Error:\s*/i, '') || call.error?.message || code || '没有错误说明', 130));
-    if (preview) detail = '原计划' + detail;
+      FS_NOT_OBSERVED: ui('修改被拦住：还没有读取过目标文件，需要先读再改。'),
+      FS_STALE_VERSION: ui('修改被拦住：文件在上次读取后发生了变化，需要重新读取。'),
+      TOOL_TIMEOUT: ui('操作等待超时，未取得正常返回。'),
+      SESSION_QUERY_PERSISTENCE_FAILED: ui('历史存储服务报错，本次读取没有完成。'),
+      TOOL_ABORTED_BEFORE_DISPATCH: ui('执行前已被取消，工具没有实际启动。'),
+    })[code] || (ui('工具报错：') + insightText(text.replace(/^Error:\s*/i, '') || call.error?.message || code || ui('没有错误说明'), 130));
+    if (preview) detail = ui('原计划') + detail;
   } else if (call.status === 'unknown' || call.resultSeq == null) {
-    tone = 'unknown'; outcome = '没有对应的返回记录，暂时不能判断结果。';
+    tone = 'unknown'; outcome = ui('没有对应的返回记录，暂时不能判断结果。');
   } else if (result?.ok === false) {
-    tone = 'bad'; outcome = '工具已返回，但结果报告未成功' + (typeof result.error?.message === 'string' ? '：' + insightText(result.error.message, 100) : '。');
-  } else if (!outcome) outcome = text.trim() ? '已收到工具返回，可展开查看具体内容。' : '工具已返回，没有文字内容。';
+    tone = 'bad'; outcome = ui('工具已返回，但结果报告未成功') + (typeof result.error?.message === 'string' ? '：' + insightText(result.error.message, 100) : '。');
+  } else if (!outcome) {
+    // 结果被截断时只说明"有返回、较长",不把半截 JSON 里的数字当成结论。
+    if (!text.trim()) outcome = ui('工具已返回，没有文字内容。');
+    else if ((call.result?.omitted || 0) > 0) outcome = ui('已收到工具返回，结果较长；展开看前 10 行，原文见原始记录。');
+    else outcome = insightDigest(result, text);
+  }
   return { seq: call.seq, title: insightText(title, 110), target: target ? String(target) : null,
     outcome, detail, preview, tone, resultSeq: call.resultSeq, resultExcerpted: (call.result?.omitted || 0) > 0 };
 }
 function stepInsight(turn, step, episodes, facts = {}) {
-  const calls = step.calls.map(c => facts[c.seq] || describeCall(c)), index = turn.steps.indexOf(step);
+  const calls = step.calls.map(c => presentCallFact(c, facts[c.seq])), index = turn.steps.indexOf(step);
   const previous = turn.steps[index - 1], next = turn.steps[index + 1];
   const stepFor = seq => turn.steps.find(s => s.calls.some(c => c.seq === seq));
   const links = [];
   for (const e of episodes.filter(e => e.turn === turn.number)) for (const pair of e.pairs) {
     if (step.calls.some(c => c.seq === pair.failedSeq)) {
       const success = stepFor(pair.successSeq);
-      if (success) links.push({ step: success.number, text: '同样的操作在第 ' + success.number + ' 步返回成功', kind: 'recovery' });
+      if (success) links.push({ step: success.number, text: ui('同样的操作在第 ') + success.number + ui(' 步返回成功'), kind: 'recovery' });
     }
     if (step.calls.some(c => c.seq === pair.successSeq)) {
       const failed = stepFor(pair.failedSeq);
-      if (failed) links.push({ step: failed.number, text: '这次补上了第 ' + failed.number + ' 步未成功的同样操作', kind: 'recovery' });
+      if (failed) links.push({ step: failed.number, text: ui('这次补上了第 ') + failed.number + ui(' 步未成功的同样操作'), kind: 'recovery' });
     }
   }
   const uniqueLinks = links.filter((l, i) => links.findIndex(other => other.step === l.step && other.text === l.text) === i);
   const before = previous?.calls.filter(c => c.resultSeq != null && c.end <= step.start);
-  const input = index === 0 ? { label: '本轮问题', text: insightText(turn.prompts?.[0]?.text || turn.title || '没有记录到用户原文', 120) }
-    : before?.length ? { label: '此前拿到', text: (before.length > 1 ? before.length + ' 项工具返回，其中：' : '') + (facts[before[0].seq] || describeCall(before[0])).outcome }
-    : { label: '承接', text: '继续第 ' + previous.number + ' 步之后的执行。' };
+  const input = index === 0 ? { label: ui('本轮问题'), text: insightText(turn.prompts?.[0]?.text || turn.title || ui('没有记录到用户原文'), 120) }
+    : before?.length ? { label: ui('此前拿到'), text: (before.length > 1 ? before.length + ui(' 项工具返回，其中：') : '') + presentCallFact(before[0], facts[before[0].seq]).outcome }
+    : { label: ui('承接'), text: ui('继续第 ') + previous.number + ui(' 步之后的执行。') };
   const following = next ? { step: next.number, text: next.calls.length
-    ? (facts[next.calls[0].seq] || describeCall(next.calls[0])).title + (next.calls.length > 1 ? ' 等 ' + next.calls.length + ' 项操作' : '')
-    : next.reply ? '整理并给出回复' : '继续执行' } : null;
+    ? presentCallFact(next.calls[0], facts[next.calls[0].seq]).title + (next.calls.length > 1 ? ui(' 等 ') + next.calls.length + ui(' 项操作') : '')
+    : next.reply ? ui('整理并给出回复') : ui('继续执行') } : null;
   const prose = step.reply?.text?.split(/\u0060{3}/)[0].replace(/(^|\n)#{1,6}\s+/g, '$1').replace(/\*\*|__|\u0060/g, '');
-  return { calls, input, links: uniqueLinks, following, reply: step.reply?.text ? insightText(prose || '本步回复包含代码，可查看原文。', 220) : null };
+  return { calls, input, links: uniqueLinks, following, reply: step.reply?.text ? insightText(prose || ui('本步回复包含代码，可查看原文。'), 220) : null };
+}
+
+// Stored annotations may have been produced in another locale. Rebuild only
+// their presentation from structured calls; never translate paths or results.
+function presentCallFact(call, fact) {
+  if (globalThis.__trajectoryLocale !== 'en') return fact || describeCall(call);
+  const described = describeCall(call);
+  return fact ? { ...fact, title: described.title, outcome: described.outcome, detail: described.detail } : described;
 }
 
 function changedLines(before, after) {
@@ -1173,7 +1244,7 @@ function fileObjects(operations, turns = null) {
 }
 function packFileObjects(items, { left, right, measure, label, obstacles = [], gap = 8 }) {
   if (!items.length) return [];
-  let groups = items.map(item => [item]).sort((a, b) => a[0].x - b[0].x || a[0].file.id.localeCompare(b[0].file.id));
+  const sorted = [...items].sort((a, b) => a.x - b.x || a.file.id.localeCompare(b.file.id));
   const free = [[left, right]];
   for (const box of [...obstacles].sort((a, b) => a.left - b.left)) {
     for (let i = free.length - 1; i >= 0; i--) {
@@ -1183,22 +1254,32 @@ function packFileObjects(items, { left, right, measure, label, obstacles = [], g
     }
   }
   // Keep every member accessible through the file picker when the entire lane is occupied.
-  const widest = Math.max(0, ...free.map(([a, b]) => b - a));
-  if (widest < 62) return [{ members: groups.flat(), hidden: true }];
-  for (;;) {
-    const placed = groups.map(members => {
-      const text = label(members), desired = Math.min(166, Math.max(62, measure(text) + 36));
-      const width = Math.min(desired, widest);
-      const anchor = members.reduce((sum, item) => sum + item.x, 0) / members.length;
-      const candidates = free.filter(([a, b]) => b - a >= width).map(([a, b]) => Math.max(a + width / 2, Math.min(b - width / 2, anchor)));
-      const cx = candidates.sort((a, b) => Math.abs(a - anchor) - Math.abs(b - anchor))[0] ?? (left + right) / 2;
-      return { members, label: text, width, cx, left: cx - width / 2, right: cx + width / 2 };
-    });
-    let collision = -1;
-    for (let i = 1; i < placed.length; i++) if (placed[i].left < placed[i - 1].right + gap) { collision = i; break; }
-    if (collision < 0 || groups.length === 1) return placed;
-    groups.splice(collision - 1, 2, [...groups[collision - 1], ...groups[collision]]);
+  const widest = free.reduce((width, [a, b]) => Math.max(width, b - a), 0);
+  if (widest < 62) return [{ members: sorted, hidden: true }];
+  function place(members) {
+    const text = label(members), desired = Math.min(166, Math.max(62, measure(text) + 36));
+    const width = Math.min(desired, widest), half = width / 2;
+    const anchor = members.reduce((sum, item) => sum + item.x, 0) / members.length;
+    let cx = (left + right) / 2, nearest = Infinity;
+    for (const [a, b] of free) {
+      if (b - a < width) continue;
+      const candidate = Math.max(a + half, Math.min(b - half, anchor));
+      const distance = Math.abs(candidate - anchor);
+      if (distance < nearest) { cx = candidate; nearest = distance; }
+    }
+    return { members, label: text, width, cx, left: cx - half, right: cx + half };
   }
+  // Resolve the same leftmost collision first. Only the newly merged group
+  // needs measuring again, so the rest of the lane keeps its placement.
+  const placed = [];
+  for (const item of sorted) {
+    let group = place([item]);
+    while (placed.length && group.left < placed.at(-1).right + gap) {
+      group = place(placed.pop().members.concat(group.members));
+    }
+    placed.push(group);
+  }
+  return placed;
 }
 
 function fileTouchClusters(points, gap = 24) {
@@ -1253,7 +1334,7 @@ function fileChangeHistory(operations, path) {
   }
   function reviewOverviewSummary() {
     const events = session.overview.episodes, recovered = events.filter(e => e.complete).length;
-    return events.length + ' 处受阻 · ' + recovered + ' 处后来成功 · ' + (events.length - recovered) + ' 处结果待确认';
+    return events.length + ui(' 处受阻 · ') + recovered + ui(' 处后来成功 · ') + (events.length - recovered) + ui(' 处结果待确认');
   }
   function reviewTargetLabels(paths) {
     const leaves = paths.map(p => p.split(/[\\/]/).at(-1));
@@ -1266,7 +1347,7 @@ function fileChangeHistory(operations, path) {
   function reviewBranchLabel(members) {
     if (members.length > 1) {
       const pending = members.filter(m => !m.e.complete).length;
-      return pending ? members.length + ' 处 · ' + pending + ' 待确认' : members.length + ' 处已恢复';
+      return pending ? members.length + ui(' 处 · ') + pending + ui(' 待确认') : members.length + ui(' 处已恢复');
     }
     const e = members[0].e;
     return String(e.turn).padStart(2, '0') + ' · ' + episodeMeaning(e).short;
@@ -1295,9 +1376,9 @@ function fileChangeHistory(operations, path) {
     return { html, bottom };
   }
   function reviewBranchSentence(events) {
-    if (events.length === 1) { const e = events[0], meaning = episodeMeaning(e); return '第 ' + e.turn + ' 轮：' + meaning.why + meaning.outcome; }
+    if (events.length === 1) { const e = events[0], meaning = episodeMeaning(e); return ui('第 ') + e.turn + ui(' 轮：') + meaning.why + meaning.outcome; }
     const done = events.filter(e => e.complete).length;
-    return '这里有 ' + events.length + ' 处受阻；' + done + ' 处找到了后续成功。点击逐条查看。';
+    return ui('这里有 ') + events.length + ui(' 处受阻；') + done + ui(' 处找到了后续成功。点击逐条查看。');
   }
   function reviewRetries(mapTime, base, visible) {
     const groups = aggregateInScreen(reviewRetryEvents.map(r => ({
@@ -1329,7 +1410,7 @@ function fileChangeHistory(operations, path) {
         if (reviewBranchesNow.some(p => p.dy > 0 && p.x > cx - width / 2 - 8 && p.x < cx + width / 2 + 8)) continue;
         html += brGroup('class="review-activity" data-review-turn-activity="' + l.turn.number + '"',
           '<rect class="br-hit" x="' + start + '" y="' + (base + 3) + '" width="' + (end - start) + '" height="25"/>' + brText(cx, base + 21, label, 'review-activity-label'),
-          '第 ' + l.turn.number + ' 轮 · ' + label);
+          ui('第 ') + l.turn.number + ui(' 轮 · ') + label);
       }
       return html;
     }
@@ -1353,43 +1434,43 @@ function fileChangeHistory(operations, path) {
     reviewMarkBranchFiles(events);
     if (events.length === 1) {
       const e = events[0], m = episodeMeaning(e), t = brRound(e.turn);
-      let html = '<p class="review-explain">' + esc(m.why) + '</p><div class="review-step"><strong>后来怎么样了</strong>' + esc(m.outcome) + '</div>';
-      if (e.readConfirmed) html += '<div class="review-step"><strong>中间做了什么</strong>补看了 ' + (e.targets?.length || 0) + ' 个目标文件，然后重新执行了先前的修改。</div>';
-      html += '<p class="review-quiet">' + e.failedCount + ' 次操作没成功。' + (e.complete ? '之后原操作全部返回成功；这不等于整项任务已经完成。' : '其他做法是否完成了任务，需要结合后续记录判断。') + '</p>';
-      if (e.synthetic) html += '<p class="review-quiet">这是一条用于密集布局的合成记录。</p>';
+      let html = '<p class="review-explain">' + esc(m.why) + ui('</p><div class="review-step"><strong>后来怎么样了</strong>') + esc(m.outcome) + '</div>';
+      if (e.readConfirmed) html += ui('<div class="review-step"><strong>中间做了什么</strong>补看了 ') + (e.targets?.length || 0) + ui(' 个目标文件，然后重新执行了先前的修改。</div>');
+      html += '<p class="review-quiet">' + e.failedCount + ui(' 次操作没成功。') + (e.complete ? ui('之后原操作全部返回成功；这不等于整项任务已经完成。') : ui('其他做法是否完成了任务，需要结合后续记录判断。')) + '</p>';
+      if (e.synthetic) html += ui('<p class="review-quiet">这是一条用于密集布局的合成记录。</p>');
       else {
-        html += '<div class="drawer-actions"><button class="action-button primary" id="review-path-jump">查看本轮行动路径 ↗</button><button class="action-button" id="review-focus">在全景中放大</button></div><button class="back-link" id="review-evidence">查看原始记录</button>';
-        html += '<details class="ov-proof"><summary>这条判断依据什么</summary><p class="review-quiet">依据明确的错误结果，以及同一轮中工具与完整参数一致的后续成功。没有把相邻事件直接当作因果。</p><p class="review-targets">失败记录 ' + e.failureSeqs.join(', ') + '</p></details>';
+        html += ui('<div class="drawer-actions"><button class="action-button primary" id="review-path-jump">查看本轮行动路径 ↗</button><button class="action-button" id="review-focus">在全景中放大</button></div><button class="back-link" id="review-evidence">查看原始记录</button>');
+        html += ui('<details class="ov-proof"><summary>这条判断依据什么</summary><p class="review-quiet">依据明确的错误结果，以及同一轮中工具与完整参数一致的后续成功。没有把相邻事件直接当作因果。</p><p class="review-targets">失败记录 ') + e.failureSeqs.join(', ') + '</p></details>';
       }
-      openDrawer(m.short, '第 ' + e.turn + ' 轮 · ' + e.failedCount + ' 次操作', html);
-      if ($('review-evidence')) $('review-evidence').onclick = () => openOverviewEpisode(e.id);
+      openDrawer(m.short, ui('第 ') + e.turn + ui(' 轮 · ') + e.failedCount + ui(' 次操作'), html);
+      if ($('review-evidence')) $('review-evidence').onclick = () => openOverviewEpisode(e.id, { label: m.short, open: () => reviewOpenBranch([e]) });
       if ($('review-focus')) $('review-focus').onclick = () => { closeDrawer(); brFocusEpisode(e); };
       if ($('review-path-jump')) $('review-path-jump').onclick = () => reviewEnterPath(e.turn, e.steps?.[0]);
       return;
     }
-    let html = '<p class="review-explain">' + esc(reviewBranchSentence(events)) + '</p><button class="action-button primary" id="review-expand-group">放大这段，展开分叉</button><div class="review-list">';
-    html += events.map((e, i) => '<button data-review-item="' + i + '">第 ' + e.turn + ' 轮 · ' + esc(episodeMeaning(e).short) + '<small>' + esc(episodeMeaning(e).outcome) + '</small></button>').join('');
-    openDrawer(events.length + ' 处受阻', '位置很近，合在一条细分叉上；每条记录仍然保留。', html + '</div>');
+    let html = '<p class="review-explain">' + esc(reviewBranchSentence(events)) + ui('</p><button class="action-button primary" id="review-expand-group">放大这段，展开分叉</button><div class="review-list">');
+    html += events.map((e, i) => '<button data-review-item="' + i + ui('">第 ') + e.turn + ui(' 轮 · ') + esc(episodeMeaning(e).short) + '<small>' + esc(episodeMeaning(e).outcome) + '</small></button>').join('');
+    openDrawer(events.length + ui(' 处受阻'), ui('位置很近，合在一条细分叉上；每条记录仍然保留。'), html + '</div>');
     $('drawer-body').querySelectorAll('[data-review-item]').forEach(b => b.onclick = () => reviewOpenBranch([events[Number(b.dataset.reviewItem)]]));
     $('review-expand-group').onclick = () => reviewExpandEvents(events);
   }
   function reviewOpenRetry(group) {
     const m = retryMeaning(group.entries, group.entries.every(r => r.responded));
-    const html = '<p class="review-explain">' + esc(m.why) + '</p><div class="review-step"><strong>接下来</strong>' + esc(m.outcome) + '</div><p class="review-quiet">再次尝试前，系统共等了 ' + preciseTime(m.delayMs) + '。这是记录中的等待间隔，不代表整个问题造成的总延迟。</p><details class="ov-proof"><summary>查看记录</summary>' +
-      group.entries.map(r => '<div class="source-row"><span>第 ' + r.turn + ' 轮 / 第 ' + r.step + ' 步 · ' + clock(r.time) + ' · seq ' + r.seq + '</span>' + esc(r.failure?.code || '回应未成功') + ' · 等待 ' + preciseTime(r.delayMs || 0) + '</div>').join('') + '</details><div class="review-list">' +
-      group.turns.map(number => '<button data-review-retry-path="' + number + '">查看第 ' + number + ' 轮行动路径 ↗</button>').join('') + '</div>';
-    openDrawer('自动再试', group.entries.length + ' 次 · ' + group.turns.length + ' 轮', html);
+    const html = '<p class="review-explain">' + esc(m.why) + ui('</p><div class="review-step"><strong>接下来</strong>') + esc(m.outcome) + ui('</div><p class="review-quiet">再次尝试前，系统共等了 ') + preciseTime(m.delayMs) + ui('。这是记录中的等待间隔，不代表整个问题造成的总延迟。</p><details class="ov-proof"><summary>查看记录</summary>') +
+      group.entries.map(r => ui('<div class="source-row"><span>第 ') + r.turn + ui(' 轮 / 第 ') + r.step + ui(' 步 · ') + clock(r.time) + ' · seq ' + r.seq + '</span>' + esc(r.failure?.code || ui('回应未成功')) + ui(' · 等待 ') + preciseTime(r.delayMs || 0) + '</div>').join('') + '</details><div class="review-list">' +
+      group.turns.map(number => '<button data-review-retry-path="' + number + ui('">查看第 ') + number + ui(' 轮行动路径 ↗</button>')).join('') + '</div>';
+    openDrawer(ui('自动再试'), group.entries.length + ui(' 次 · ') + group.turns.length + ui(' 轮'), html);
     $('drawer-body').querySelectorAll('[data-review-retry-path]').forEach(b => b.onclick = () => reviewEnterPath(Number(b.dataset.reviewRetryPath)));
   }
   function reviewOpenStep(t, s) {
     const m = stepMeaning(s), index = t.steps.indexOf(s), next = t.steps[index + 1], prior = t.steps[index - 1];
-    let html = '<p class="review-explain">' + esc(m.short) + (m.count ? '，发起了 ' + m.count + ' 次操作。' : '。') + '</p>';
-    html += '<div class="review-step"><strong>这一步拿到了什么</strong>' + (prior?.calls?.length ? '前一步的 ' + prior.calls.filter(c => c.resultSeq !== null).length + ' 条操作结果已返回；不能据此断言模型采用了它们。' : '这一轮从你的输入继续。') + '</div>';
-    html += '<div class="review-step"><strong>结果</strong>' + esc(m.outcome) + '</div>';
+    let html = '<p class="review-explain">' + esc(m.short) + (m.count ? ui('，发起了 ') + m.count + ui(' 次操作。') : '。') + '</p>';
+    html += ui('<div class="review-step"><strong>这一步拿到了什么</strong>') + (prior?.calls?.length ? ui('前一步的 ') + prior.calls.filter(c => c.resultSeq !== null).length + ui(' 条操作结果已返回；不能据此断言模型采用了它们。') : ui('这一轮从你的输入继续。')) + '</div>';
+    html += ui('<div class="review-step"><strong>结果</strong>') + esc(m.outcome) + '</div>';
     if (m.targets.length) html += '<p class="review-targets">' + reviewTargetLabels(m.targets).map(esc).join('<br>') + '</p>';
-    if (next) html += '<div class="review-step"><strong>随后</strong>' + esc(stepMeaning(next).short) + '</div>';
-    html += '<p class="review-quiet">这一步经过 ' + preciseTime(s.end - s.start) + '。</p><div class="drawer-actions"><button class="action-button primary" id="review-step-path">查看本轮行动路径 ↗</button><button class="action-button" id="review-step-evidence">查看原始记录</button></div>';
-    openDrawer(m.short, '第 ' + t.number + ' 轮', html);
+    if (next) html += ui('<div class="review-step"><strong>随后</strong>') + esc(stepMeaning(next).short) + '</div>';
+    html += ui('<p class="review-quiet">这一步经过 ') + preciseTime(recordDuration(s)) + ui('。</p><div class="drawer-actions"><button class="action-button primary" id="review-step-path">查看本轮行动路径 ↗</button><button class="action-button" id="review-step-evidence">查看原始记录</button></div>');
+    openDrawer(m.short, ui('第 ') + t.number + ui(' 轮'), html);
     $('review-step-evidence').onclick = () => tlOpenStep(t, s);
     $('review-step-path').onclick = () => reviewEnterPath(t.number, s.number);
   }
@@ -1397,17 +1478,17 @@ function fileChangeHistory(operations, path) {
     const episodes = session.overview.episodes.filter(e => e.turn === t.number);
     const kinds = [...new Set(t.steps.map(s => stepMeaning(s).short))];
     const done = episodes.filter(e => e.complete).length;
-    tlReadout('第 ' + t.number + ' 轮：' + kinds.slice(0, 3).join('、') + '。' +
-      (episodes.length ? episodes.length + ' 处受阻，其中 ' + done + ' 处找到了后续成功。' : '没有记录到明确的操作错误。') + '点击放大。');
+    tlReadout(ui('第 ') + t.number + ui(' 轮：') + kinds.slice(0, 3).join('、') + '。' +
+      (episodes.length ? episodes.length + ui(' 处受阻，其中 ') + done + ui(' 处找到了后续成功。') : ui('没有记录到明确的操作错误。')) + ui('点击放大。'));
   }
   function reviewOpenTurn(t) {
     const m = turnMeaning(t), episodes = session.overview.episodes.filter(e => e.turn === t.number);
     let html = '<p class="review-explain">' + esc(m.short) + '。</p>';
-    if (t.prompts[0]) html += '<div class="review-step"><strong>这一轮你说</strong>' + esc(shorten(t.prompts[0].text, 160)) + '</div>';
-    if (m.files.length) html += '<div class="review-step"><strong>修改操作已返回的文件</strong><div class="review-targets">' + reviewTargetLabels(m.files).map(esc).join('<br>') + '</div></div>';
-    html += '<div class="review-step"><strong>执行情况</strong>' + (episodes.length ? episodes.length + ' 处受阻，' + episodes.filter(e => e.complete).length + ' 处有对应操作的后续成功。' : '没有记录到明确的操作错误。') + '</div>';
-    html += '<p class="review-quiet">这是执行记录能确认的动作；完成任务、满足要求，还需要结合实际产物和检查结果判断。</p><button class="action-button primary" id="review-turn-path">查看本轮行动路径 ↗</button>';
-    openDrawer(m.short, '第 ' + t.number + ' 轮', html);
+    if (t.prompts[0]) html += ui('<div class="review-step"><strong>这一轮你说</strong>') + esc(shorten(t.prompts[0].text, 160)) + '</div>';
+    if (m.files.length) html += ui('<div class="review-step"><strong>修改操作已返回的文件</strong><div class="review-targets">') + reviewTargetLabels(m.files).map(esc).join('<br>') + '</div></div>';
+    html += ui('<div class="review-step"><strong>执行情况</strong>') + (episodes.length ? episodes.length + ui(' 处受阻，') + episodes.filter(e => e.complete).length + ui(' 处有对应操作的后续成功。') : ui('没有记录到明确的操作错误。')) + '</div>';
+    html += ui('<p class="review-quiet">这是执行记录能确认的动作；完成任务、满足要求，还需要结合实际产物和检查结果判断。</p><button class="action-button primary" id="review-turn-path">查看本轮行动路径 ↗</button>');
+    openDrawer(m.short, ui('第 ') + t.number + ui(' 轮'), html);
     $('review-turn-path').onclick = () => reviewEnterPath(t.number);
   }
   function reviewBind() {
@@ -1424,10 +1505,10 @@ function fileChangeHistory(operations, path) {
       el => { const [n, k] = el.dataset.reviewStep.split(':').map(Number), t = brRound(n); reviewOpenStep(t, t.steps.find(s => s.number === k)); });
     bind('[data-review-turn-activity]', el => reviewRoundReadout(brRound(Number(el.dataset.reviewTurnActivity))),
       el => reviewOpenTurn(brRound(Number(el.dataset.reviewTurnActivity))));
-    $('review-fit').textContent = overviewScale === 1 ? '全览' : Math.round(overviewScale) + '×';
+    $('review-fit').textContent = overviewScale === 1 ? ui('全览') : Math.round(overviewScale) + '×';
     const allRetries = $('review-all-retries');
     if (allRetries) {
-      $('review-retry-total').textContent = '自动再试 ' + reviewRetryEvents.length + ' 次';
+      $('review-retry-total').textContent = ui('自动再试 ') + reviewRetryEvents.length + ui(' 次');
       allRetries.onclick = () => reviewOpenRetry({ entries: reviewRetryEvents, turns: [...new Set(reviewRetryEvents.map(r => r.turn))] });
     }
     reviewContextBind();
@@ -1468,13 +1549,13 @@ function fileChangeHistory(operations, path) {
     const returnButton = $('review-return'); if (returnButton) returnButton.hidden = !path;
     $('review-overview-controls').hidden = false;
     $('review-in').disabled = path;
-    $('review-fit').textContent = path ? '全览' : overviewScale === 1 ? '全览' : Math.round(overviewScale) + '×';
-    $('review-out').title = path ? '缩小，返回刚才的总览位置' : '缩小';
+    $('review-fit').textContent = path ? ui('全览') : overviewScale === 1 ? ui('全览') : Math.round(overviewScale) + '×';
+    $('review-out').title = path ? ui('缩小，返回刚才的总览位置') : ui('缩小');
     $('review-stress').hidden = path;
     $('review-path').hidden = path;
-    if (path) $('review-state').textContent = '第 ' + turn().number + ' 轮 › 逐步行动 · 缩小返回';
-    else $('review-state').textContent = reviewStress ? '160 处合成受阻 · 仅测试密集布局' : reviewFocusedTurn && overviewScale > 1 ? '总览 › 第 ' + reviewFocusedTurn + ' 轮 · 继续放大看行动' : session.turns.length + ' 轮 · 放大逐层查看';
-    if ($('review-rounds')) $('review-rounds').textContent = overviewLayers.has('duration') ? '每轮耗时' : '定位轮次';
+    if (path) $('review-state').textContent = ui('第 ') + turn().number + ui(' 轮 › 逐步行动 · 缩小返回');
+    else $('review-state').textContent = reviewStress ? ui('160 处合成受阻 · 仅测试密集布局') : reviewFocusedTurn && overviewScale > 1 ? ui('总览 › 第 ') + reviewFocusedTurn + ui(' 轮 · 继续放大看行动') : session.turns.length + ui(' 轮 · 放大逐层查看');
+    if ($('review-rounds')) $('review-rounds').textContent = overviewLayers.has('duration') ? ui('每轮耗时') : ui('定位轮次');
   }
   const reviewSelectTurnBase = selectTurn;
   selectTurn = function(index) {
@@ -1490,7 +1571,7 @@ function fileChangeHistory(operations, path) {
       return { ...reviewRealEpisodes[i % reviewRealEpisodes.length], id: 'synthetic-' + i, turn: t.number, firstError: time, synthetic: true };
     }) : reviewRealEpisodes;
     $('review-stress').setAttribute('aria-pressed', reviewStress);
-    $('review-state').textContent = reviewStress ? '160 处合成受阻 · 仅测试密集布局' : session.turns.length + ' 轮真实记录';
+    $('review-state').textContent = reviewStress ? ui('160 处合成受阻 · 仅测试密集布局') : session.turns.length + ui(' 轮真实记录');
     overviewScale = 1; $('graph-scroll').scrollLeft = 0; closeDrawer(); renderOverview();
   }
 
@@ -1511,8 +1592,8 @@ function fileChangeHistory(operations, path) {
   const reviewSigned = value => (value > 0 ? '+' : value < 0 ? '−' : '') + reviewTokens(Math.abs(value));
   function reviewDuration(ms) {
     const seconds = Math.max(0, Math.round(ms / 1000));
-    if (seconds < 60) return seconds + '秒';
-    return Math.floor(seconds / 60) + '分' + (seconds % 60 ? seconds % 60 + '秒' : '');
+    if (seconds < 60) return seconds + ui('秒');
+    return Math.floor(seconds / 60) + ui('分') + (seconds % 60 ? seconds % 60 + ui('秒') : '');
   }
   function reviewTimeLayer(layout, visible, left, right, mainHeight, mapTime) {
     if (!overviewLayers.has('duration')) return '';
@@ -1527,15 +1608,24 @@ function fileChangeHistory(operations, path) {
       if (!visible(group.start, group.end)) continue;
       const first = group.rows[0].turn.number, last = group.rows.at(-1).turn.number;
       const start = Math.max(left, group.start), end = Math.min(right, group.end), cx = (start + end) / 2;
-      const label = first === last ? '第 ' + first + ' 轮' : first + '–' + last + ' 轮 · 展开';
+      const label = first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮` + ui(' · 展开');
       const ongoing = group.rows.some(l => l.turn.end === null);
-      const duration = (first === last ? '' : '共 ') + (ongoing ? '≥' : '') + reviewDuration(group.duration);
+      const duration = (first === last ? '' : ui('共 ')) + (ongoing ? '≥' : '') + reviewDuration(group.duration);
+      // 宽度不够时退到短标签,再不够就只留时长;都放不下就整条不画,避免只剩一个空框。
+      const span = end - start - 8;
+      const shortLabel = first === last ? ui('第 ') + first + ui(' 轮') : first + '–' + last;
+      const fitWidth = value => reviewMeasure(value) * 1.08 + 6;
+      const full = span >= Math.max(fitWidth(label), fitWidth(duration));
+      const single = !full && span >= fitWidth(shortLabel) ? shortLabel
+        : !full && duration && span >= fitWidth(duration) ? duration : '';
+      if (!full && !single) continue;
       let body = '<rect x="' + start + '" y="28" width="' + Math.max(1, end - start - 3) + '" height="38" rx="4" class="review-duration-band"/>';
       body += '<path d="M' + (start + 4) + ' 62v4H' + Math.max(start + 4, end - 7) + 'v-4" class="review-interval-guide"/>';
-      if (end - start >= Math.max(reviewMeasure(label), reviewMeasure(duration)) + 8)
-        body += brText(cx, 42, label, 'review-turn-duration') + brText(cx, 57, duration, 'review-turn-duration review-duration-value');
+      body += full
+        ? brText(cx, 42, label, 'review-turn-duration') + brText(cx, 57, duration, 'review-turn-duration review-duration-value')
+        : brText(cx, 49, single, 'review-turn-duration' + (single === duration ? ' review-duration-value' : ''));
       html += brGroup('data-review-duration-range="' + first + ':' + last + '" class="review-duration-hit"', body,
-        label + ' · ' + duration + '。点击查看每一轮耗时，没有按时长筛选。');
+        label + ' · ' + duration + ui('。点击查看每一轮耗时，没有按时长筛选。'));
     }
     const last = layout.at(-1);
     if (last && visible(last.end)) html += '<path d="M' + last.end + ' 96V' + (mainHeight - 38) + '" class="review-turn-divider"/>';
@@ -1543,12 +1633,12 @@ function fileChangeHistory(operations, path) {
   }
   function reviewContextMissing(number) {
     const first = Math.min(...(reviewContextData.requests || []).map(row => row.turn));
-    return number < first && Number.isFinite(first) ? '本轮早于当前返回的历史范围；当前增量从第 ' + first + ' 轮开始' : '没有这轮的请求构成记录';
+    return number < first && Number.isFinite(first) ? ui('本轮早于当前返回的历史范围；当前增量从第 ') + first + ui(' 轮开始') : ui('没有这轮的请求构成记录');
   }
   function reviewContextNote(row, number) {
     if (!row) return reviewContextMissing(number);
-    if (row.isBaseline) return '首轮已有 ' + reviewTokens(row.total) + ' · 看开始时的构成';
-    return '第 ' + row.turn + ' 轮 · ' + (row.net >= 0 ? '净增 ' : '净减 ') + reviewTokens(Math.abs(row.net));
+    if (row.isBaseline) return ui('首轮已有 ') + reviewTokens(row.total) + ui(' · 看开始时的构成');
+    return ui('第 ') + row.turn + ui(' 轮 · ') + (row.net >= 0 ? ui('净增 ') : ui('净减 ')) + reviewTokens(Math.abs(row.net));
   }
   function reviewContextLayer(layout, base, left, right, visible) {
     if (!overviewLayers.has('context')) return '';
@@ -1591,18 +1681,18 @@ function fileChangeHistory(operations, path) {
         }
       }
       const note = reviewContextNote(row, l.turn.number);
-      html += brGroup('class="review-context-turn" data-context-turn="' + l.turn.number + '"', body, note + (row && !row.isBaseline ? '；增加 ' + reviewTokens(row.increase) + '，减少 ' + reviewTokens(row.decrease) : '；显示末次请求已有构成，作为后续轮次的比较基线') + (positive.overflow || negative.overflow ? '；实际量超过本图 ' + reviewTokens(scale.limit) + ' 显示范围，柱高已收起，不表示模型上下文超限' : ''));
+      html += brGroup('class="review-context-turn" data-context-turn="' + l.turn.number + '"', body, note + (row && !row.isBaseline ? ui('；增加 ') + reviewTokens(row.increase) + ui('，减少 ') + reviewTokens(row.decrease) : ui('；显示末次请求已有构成，作为后续轮次的比较基线')) + (positive.overflow || negative.overflow ? ui('；实际量超过本图 ') + reviewTokens(scale.limit) + ui(' 显示范围，柱高已收起，不表示模型上下文超限') : ''));
     }
     for (const sign of [1, -1]) {
       const occupied = [];
       for (const item of overflowLabels.filter(i => i.sign === sign).sort((a, b) => Number(b.baseline) - Number(a.baseline) || Math.abs(b.value) - Math.abs(a.value))) {
-        const label = (item.baseline ? '首轮 ' + reviewTokens(item.value) : reviewSigned(item.value)) + ' · 收起', width = reviewMeasure(label);
+        const label = (item.baseline ? ui('首轮 ') + reviewTokens(item.value) : reviewSigned(item.value)) + ui(' · 收起'), width = reviewMeasure(label);
         const x = Math.max(left + width / 2, Math.min(right - width / 2, item.x));
         const y = sign > 0 ? top - 7 : bottom + 15;
         if (occupied.some(box => x - width / 2 < box.right + 10 && x + width / 2 > box.left - 10)) continue;
         if (reviewBranchesNow.some(p => x - width / 2 < p.right + 5 && x + width / 2 > p.left - 5 && y + 3 > base + p.top - 3 && y - 10 < base + p.bottom + 3)) continue;
         html += brGroup('class="review-context-overflow" data-context-turn="' + item.turn + '"',
-          brText(x, y, label, 'review-context-overflow-label'), '第 ' + item.turn + ' 轮 · 实际 ' + reviewTokens(item.value) + ' tokens；柱高已收起，点开看完整构成');
+          brText(x, y, label, 'review-context-overflow-label'), ui('第 ') + item.turn + ui(' 轮 · 实际 ') + reviewTokens(item.value) + ui(' tokens；柱高已收起，点开看完整构成'));
         occupied.push({ left: x - width / 2, right: x + width / 2 });
       }
     }
@@ -1617,11 +1707,11 @@ function fileChangeHistory(operations, path) {
       const x = group[0].x;
       if (x < left || x > right) continue;
       const events = group.map(item => item.e);
-      const caption = events.length === 1 ? '压缩上下文 · 第 ' + events[0].turn + ' 轮' : events.length + ' 次压缩上下文';
+      const caption = events.length === 1 ? ui('压缩上下文 · 第 ') + events[0].turn + ui(' 轮') : events.length + ui(' 次压缩上下文');
       html += '<path d="M' + x + ' 96V' + (mainHeight - 38) + '" class="review-compaction-divider"/>';
       html += brGroup('class="review-compaction-marker" data-context-compaction="' + events.map(e => e.seq).join(',') + '"',
         '<rect x="' + (x - 12) + '" y="68" width="24" height="24" rx="5" class="review-compaction-hit"/>' +
-        '<g transform="translate(' + (x - 8) + ' 71)" class="review-scissors"><circle cx="3" cy="4" r="2.4"/><circle cx="3" cy="13" r="2.4"/><path d="M5 5.3L14.5 14M5 11.6L14.5 3"/></g>' +
+        '<g transform="translate(' + (x - 8) + ' 71)" class="review-compact-fold"><path d="M2.5 5.5 6 8l-3.5 2.5"/><path d="M13.5 5.5 10 8l3.5 2.5"/></g>' +
         (events.length > 1 ? brText(x + 15, 83, String(events.length), 'review-compaction-count') : ''), caption);
     }
     return html;
@@ -1629,66 +1719,131 @@ function fileChangeHistory(operations, path) {
   function reviewOpenCompaction(seqs) {
     const events = reviewContextData.boundaries.filter(e => seqs.includes(e.seq));
     const event = events[0], row = reviewContextMap.get(event.turn);
-    let html = '<p class="review-explain">系统把较早的一段对话整理成摘要，再带着摘要继续。黄色虚线标出摘要实际写入上下文的位置；原会话日志仍然保留。</p>';
-    if (row) html += '<p class="review-context-change-note">第 ' + row.turn + ' 轮净变化 ' + reviewSigned(row.net) + ' tokens。这个数还包含本轮新增内容，不等于这次压缩单独减少的量。</p>';
-    html += '<div class="review-list">' + events.map(e => '<button data-compaction-turn="' + e.turn + '">第 ' + e.turn + ' 轮 · 查看上下文来源变化<small>压缩记录 seq ' + e.seq + '</small></button>').join('') + '</div>';
-    html += '<div class="drawer-actions"><button class="action-button primary" id="review-compaction-path">查看本轮行动路径 ↗</button></div>';
-    openDrawer(events.length > 1 ? events.length + ' 次压缩上下文' : '压缩上下文', '较早的对话 → 摘要', html);
+    let html = ui('<p class="review-explain">系统把较早的一段对话整理成摘要，再带着摘要继续。靛蓝虚线标出摘要实际写入上下文的位置；原会话日志仍然保留。</p>');
+    if (row) html += ui('<p class="review-context-change-note">第 ') + row.turn + ui(' 轮净变化 ') + reviewSigned(row.net) + ui(' tokens。这个数还包含本轮新增内容，不等于这次压缩单独减少的量。</p>');
+    html += '<div class="review-list">' + events.map(e => '<button data-compaction-turn="' + e.turn + ui('">第 ') + e.turn + ui(' 轮 · 查看上下文来源变化<small>压缩记录 seq ') + e.seq + '</small></button>').join('') + '</div>';
+    html += ui('<div class="drawer-actions"><button class="action-button primary" id="review-compaction-path">查看本轮行动路径 ↗</button></div>');
+    openDrawer(events.length > 1 ? events.length + ui(' 次压缩上下文') : ui('压缩上下文'), ui('较早的对话 → 摘要'), html);
     document.querySelectorAll('[data-compaction-turn]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.compactionTurn)));
     $('review-compaction-path').onclick = () => reviewEnterPath(event.turn);
   }
-  function reviewOpenContext(turnNumber) {
+  // 抽屉的当前目标:上下文数据晚到时按它重开,不把步级视图退回轮级。
+  let reviewContextDrawer = null;
+  function reviewOpenContext(turnNumber, stepNumber) {
+    const target = stepNumber == null ? null : session.turns.find(t => t.number === turnNumber);
+    if (target && target.steps.some(step => step.number === stepNumber)) return reviewOpenStepContext(target, stepNumber);
+    reviewContextDrawer = { turn: turnNumber, step: null };
     const row = reviewContextMap.get(turnNumber);
     if (!row) {
-      openDrawer('上下文增量尚未包含本轮', '第 ' + turnNumber + ' 轮', '<p class="review-explain">' + reviewContextMissing(turnNumber) + '。缺失不表示零。</p>');
+      openDrawer(ui('上下文增量尚未包含本轮'), ui('第 ') + turnNumber + ui(' 轮'), '<p class="review-explain">' + reviewContextMissing(turnNumber) + ui('。缺失不表示零。</p>'));
       $('drawer').dataset.contextTurn = turnNumber;
       geistContextCoverage(); return;
     }
     reviewContextSelected = turnNumber;
     const first = reviewContextRequests.find(r => r.turn === row.turn);
     const max = Math.max(1, ...CONTEXT_CATEGORIES.map(c => Math.abs(row.parts[c.key][row.isBaseline ? 'after' : 'delta'])));
-    let html = '<div class="review-context-headline"><strong>' + (row.isBaseline ? reviewTokens(row.total) : reviewSigned(row.net)) + '</strong><span>' + (row.isBaseline ? '首轮末次请求 · 已有上下文' : 'tokens · 净变化') + '</span></div>';
-    if (row.isBaseline) html += '<p class="review-context-change-note">首次请求已经带着约 ' + reviewTokens(CONTEXT_CATEGORIES.reduce((n, c) => n + (first[c.key] || 0), 0)) + ' tokens，并不是空白。下面同时列出首次请求与本轮末次请求的构成。</p>';
+    let html = '<div class="review-context-headline"><strong>' + (row.isBaseline ? reviewTokens(row.total) : reviewSigned(row.net)) + '</strong><span>' + (row.isBaseline ? ui('首轮末次请求 · 已有上下文') : ui('tokens · 净变化')) + '</span></div>';
+    if (row.isBaseline) html += ui('<p class="review-context-change-note">首次请求已经带着约 ') + reviewTokens(CONTEXT_CATEGORIES.reduce((n, c) => n + (first[c.key] || 0), 0)) + ui(' tokens，并不是空白。下面同时列出首次请求与本轮末次请求的构成。</p>');
     if (!row.isBaseline && (row.increase || row.decrease)) html += '<div class="review-context-totals">' +
-      (row.increase ? '<span>增加 <b>' + reviewSigned(row.increase) + '</b></span>' : '') +
-      (row.decrease ? '<span>减少 <b>' + reviewSigned(-row.decrease) + '</b></span>' : '') + '</div>';
+      (row.increase ? ui('<span>增加 <b>') + reviewSigned(row.increase) + '</b></span>' : '') +
+      (row.decrease ? ui('<span>减少 <b>') + reviewSigned(-row.decrease) + '</b></span>' : '') + '</div>';
     html += '<div class="review-context-breakdown">';
     const changedCategories = CONTEXT_CATEGORIES.filter(c => row.isBaseline ? row.parts[c.key].after !== 0 : row.parts[c.key].delta !== 0);
-    if (!changedCategories.length) html += '<p class="review-quiet">本轮各来源没有净变化。</p>';
+    if (!changedCategories.length) html += ui('<p class="review-quiet">本轮各来源没有净变化。</p>');
     for (const c of changedCategories) {
       const p = row.parts[c.key], shareBase = p.delta >= 0 ? row.increase : row.decrease;
       const share = shareBase ? Math.abs(p.delta) / shareBase * 100 : 0;
       html += '<div class="review-context-category"><div><i style="background:' + c.color + '"></i><span>' + c.label + '</span><b>' + (row.isBaseline ? '≈' + reviewTokens(p.after) : reviewSigned(p.delta)) + '</b></div>';
       const amount = row.isBaseline ? p.after : Math.abs(p.delta);
       if (amount) html += '<div class="review-context-meter"><i style="width:' + amount / max * 100 + '%;background:' + c.color + ';opacity:' + (p.delta >= 0 ? .9 : .6) + '"></i></div>';
-      html += '<small>' + (row.isBaseline ? '开始时 ≈' + reviewTokens(first[c.key] || 0) + ' → 末次请求 ≈' + reviewTokens(p.after) : '≈' + reviewTokens(p.before) + ' → ≈' + reviewTokens(p.after) + (p.delta ? ' · 占本轮' + (p.delta > 0 ? '增加 ' : '减少 ') + share.toFixed(1) + '%' : ' · 未变')) + '</small></div>';
+      html += '<small>' + (row.isBaseline ? ui('开始时 ≈') + reviewTokens(first[c.key] || 0) + ui(' → 末次请求 ≈') + reviewTokens(p.after) : '≈' + reviewTokens(p.before) + ' → ≈' + reviewTokens(p.after) + (p.delta ? ui(' · 占本轮') + (p.delta > 0 ? ui('增加 ') : ui('减少 ')) + share.toFixed(1) + '%' : ui(' · 未变'))) + '</small></div>';
     }
     html += '</div>';
     const boundaries = row.baselineSeq === null ? [] : (reviewContextData.boundaries || []).filter(e => e.seq > row.baselineSeq && e.seq <= row.seq);
     const prunes = boundaries.filter(e => e.kind === 'prune'), compactions = boundaries.filter(e => e.kind === 'compaction');
-    if (compactions.length) html += '<p class="review-context-change-note">' + compactions.length + ' 次压缩：把较早的对话整理成摘要，黄色剪刀线标出实际发生的位置。</p>';
+    if (compactions.length) html += '<p class="review-context-change-note">' + compactions.length + ui(' 次压缩：把较早的对话整理成摘要，黄色剪刀线标出实际发生的位置。</p>');
     if (prunes.length) {
       const names = [...new Set(prunes.flatMap(e => e.tools || []))];
-      html += '<p class="review-context-change-note">' + prunes.length + ' 条过长的工具返回被裁短：保留开头和结尾，省去中间内容。' + (names.length ? '涉及 ' + names.map(esc).join('、') + '。' : '') + '按日志明确指定的被替换返回记录对应，计在裁短实际发生的这一轮；不挂在报错分叉上，也不会删除行动路径或原会话日志。</p>';
-      html += '<details class="ov-proof"><summary>裁短了哪些工具返回</summary>' + prunes.flatMap(e => (e.replaced || []).map(r =>
-        '<div class="source-row"><span>' + esc(r.tool || '工具') + (r.turn ? ' · 原第 ' + r.turn + ' 轮 / 第 ' + r.step + ' 步' : '') + '</span>原返回 seq ' + r.seq + ' → 裁短记录 seq ' + e.seq + '</div>')).join('') + '</details>';
+      html += '<p class="review-context-change-note">' + prunes.length + ui(' 条过长的工具返回被裁短：保留开头和结尾，省去中间内容。') + (names.length ? ui('涉及 ') + names.map(esc).join('、') + '。' : '') + ui('按日志明确指定的被替换返回记录对应，计在裁短实际发生的这一轮；不挂在报错分叉上，也不会删除行动路径或原会话日志。</p>');
+      html += ui('<details class="ov-proof"><summary>裁短了哪些工具返回</summary>') + prunes.flatMap(e => (e.replaced || []).map(r =>
+        '<div class="source-row"><span>' + esc(r.tool || ui('工具')) + (r.turn ? ui(' · 原第 ') + r.turn + ui(' 轮 / 第 ') + r.step + ui(' 步') : '') + ui('</span>原返回 seq ') + r.seq + ui(' → 裁短记录 seq ') + e.seq + '</div>')).join('') + '</details>';
     }
-    if (contextBarAmounts(row).increase > reviewContextScale.limit || row.decrease > reviewContextScale.limit) html += '<p class="review-quiet">图的柱高显示到 ' + reviewTokens(reviewContextScale.limit) + ' tokens，超过时用省略号收起柱高。这是显示范围，不是模型容量限制。这里显示完整数值。</p>';
-    html += '<p class="review-quiet">' + (row.isBaseline ? '首轮显示已有量，作为下一轮的比较基线；不能把它称作相对上一轮的增量。' : '比较第 ' + row.baselineTurn + ' 轮与第 ' + row.turn + ' 轮的末次请求，反映每类内容的净变化。') + '这些不是累计花费，也不包括末次请求之后才产生的回复。</p>';
+    if (contextBarAmounts(row).increase > reviewContextScale.limit || row.decrease > reviewContextScale.limit) html += ui('<p class="review-quiet">图的柱高显示到 ') + reviewTokens(reviewContextScale.limit) + ui(' tokens，超过时用省略号收起柱高。这是显示范围，不是模型容量限制。这里显示完整数值。</p>');
+    html += '<p class="review-quiet">' + (row.isBaseline ? ui('首轮显示已有量，作为下一轮的比较基线；不能把它称作相对上一轮的增量。') : ui('比较第 ') + row.baselineTurn + ui(' 轮与第 ') + row.turn + ui(' 轮的末次请求，反映每类内容的净变化。')) + ui('这些不是累计花费，也不包括末次请求之后才产生的回复。</p>');
     // 已经在行动路径里时,"查看本轮行动路径"是重复操作,只留定位与对话跳转。
     const inPath = view === 'path';
-    html += '<div class="drawer-actions">' + (inPath ? '' : '<button class="action-button primary" id="review-context-path">查看本轮行动路径 ↗</button>') + '<button class="action-button" id="review-context-focus">在全景中放大本轮</button></div>';
-    openDrawer('第 ' + turnNumber + ' 轮 · 上下文变化', row.steps + ' 次请求 · 各来源均为估算', html);
+    html += '<div class="drawer-actions">' + (inPath ? '' : ui('<button class="action-button primary" id="review-context-path">查看本轮行动路径 ↗</button>')) + ui('<button class="action-button" id="review-context-focus">在全景中放大本轮</button></div>');
+    openDrawer(ui('第 ') + turnNumber + ui(' 轮 · 上下文变化'), row.steps + ui(' 次请求 · 各来源均为估算'), html);
     if ($('review-context-path')) $('review-context-path').onclick = () => reviewEnterPath(turnNumber);
     $('review-context-focus').onclick = () => reviewFocusTurn(turnNumber);
+  }
+  // 步级视图:行动路径以步为单位,点哪根柱就答哪一步。轮级读数在页面顶部,这里不重复摊开。
+  function reviewOpenStepContext(t, stepNumber) {
+    const step = t.steps.find(row => row.number === stepNumber);
+    if (!step) return;
+    reviewContextDrawer = { turn: t.number, step: stepNumber };
+    const title = ui('第 ') + t.number + ui(' 轮 · 第 ') + stepNumber + ui(' 步 · 上下文变化');
+    const index = reviewContextStepIndex.get(t.number + ':' + stepNumber);
+    const info = index === undefined ? null : reviewStepContext(t, step);
+    if (!info) {
+      let carry = null;
+      for (const row of reviewContextRequests) {
+        if (row.turn < t.number || (row.turn === t.number && row.step <= stepNumber)) carry = row;
+        else break;
+      }
+      if (!carry) {
+        openDrawer(title, ui('本步没有发起新的请求'),
+          ui('<p class="review-quiet">这一步没有模型请求,也没有更早的请求可以沿用,因此没有可比较的上下文构成。缺失不表示零。</p>'));
+        return;
+      }
+      const total = CONTEXT_CATEGORIES.reduce((sum, c) => sum + (carry[c.key] || 0), 0);
+      const origin = carry.turn === t.number ? ui('第 ') + carry.step + ui(' 步') : ui('上一轮第 ') + carry.step + ui(' 步');
+      let html = '<div class="review-context-headline"><strong>≈' + reviewTokens(total) + '</strong><span>' + ui('tokens · 沿用 ') + origin + ui(' 的请求') + '</span></div>';
+      html += ui('<p class="review-explain">这一步没有重新请求模型,模型看到的内容与上一次请求相同;下面的构成取自那次请求,不是本步的新增。</p>');
+      html += '<div class="review-context-breakdown">' + CONTEXT_CATEGORIES.filter(c => (carry[c.key] || 0) > 0).map(c =>
+        '<div class="review-context-category"><div><i style="background:' + c.color + '"></i><span>' + c.label + '</span><b>≈' + reviewTokens(carry[c.key]) + '</b></div></div>').join('') + '</div>';
+      html += '<div class="drawer-actions">' + ui('<button class="action-button" id="review-step-turn">查看本轮上下文 ↗</button>') + '</div>';
+      openDrawer(title, ui('沿用最近一次请求'), html);
+      if ($('review-step-turn')) $('review-step-turn').onclick = () => reviewOpenContext(t.number);
+      return;
+    }
+    const increase = CONTEXT_CATEGORIES.reduce((n, c) => n + Math.max(0, info.parts[c.key]), 0);
+    const decrease = CONTEXT_CATEGORIES.reduce((n, c) => n + Math.max(0, -info.parts[c.key]), 0);
+    const max = Math.max(1, ...CONTEXT_CATEGORIES.map(c => Math.abs(info.parts[c.key])));
+    const prior = index > 0 ? reviewContextRequests[index - 1] : null;
+    const priorLabel = !prior ? '' : prior.turn === t.number ? ui('第 ') + prior.step + ui(' 步') : ui('上一轮第 ') + prior.step + ui(' 步');
+    let html = info.initial
+      ? '<div class="review-context-headline"><strong>≈' + reviewTokens(info.total) + '</strong><span>' + ui('tokens · 首次请求已有量') + '</span></div>'
+      : '<div class="review-context-headline"><strong>' + reviewSigned(info.amount) + '</strong><span>' + ui('tokens · 本步净变化') + '</span></div>';
+    if (!info.initial && (increase || decrease)) html += '<div class="review-context-totals">' +
+      (increase ? ui('<span>增加 <b>') + reviewSigned(increase) + '</b></span>' : '') +
+      (decrease ? ui('<span>减少 <b>') + reviewSigned(-decrease) + '</b></span>' : '') + '</div>';
+    const changed = CONTEXT_CATEGORIES.filter(c => info.parts[c.key] !== 0);
+    if (!changed.length) html += ui('<p class="review-quiet">这一步各来源没有净变化。</p>');
+    else {
+      html += '<div class="review-context-breakdown">';
+      for (const c of changed) {
+        const delta = info.parts[c.key], after = info.current[c.key] || 0, before = after - delta;
+        const shareBase = delta >= 0 ? increase : decrease, share = shareBase ? Math.abs(delta) / shareBase * 100 : 0;
+        html += '<div class="review-context-category"><div><i style="background:' + c.color + '"></i><span>' + c.label + '</span><b>' + (info.initial ? '≈' + reviewTokens(after) : reviewSigned(delta)) + '</b></div>';
+        if (delta) html += '<div class="review-context-meter"><i style="width:' + Math.abs(delta) / max * 100 + '%;background:' + c.color + ';opacity:' + (delta >= 0 ? .9 : .6) + '"></i></div>';
+        html += '<small>≈' + reviewTokens(before) + ' → ≈' + reviewTokens(after) + (share ? ui(' · 占本步') + (delta > 0 ? ui('增加 ') : ui('减少 ')) + share.toFixed(1) + '%' : ui(' · 未变')) + '</small></div>';
+      }
+      html += '</div>';
+    }
+    const turnRow = reviewContextMap.get(t.number);
+    if (turnRow && !turnRow.isBaseline) html += ui('<p class="review-quiet">本轮合计（轮末相对上一轮末）') + reviewSigned(turnRow.net) + ui(' tokens。步级增量相加不等于轮级增量:没有重新请求的步不计入,跨轮边界也不按步切。</p>');
+    html += '<div class="drawer-actions">' + ui('<button class="action-button" id="review-step-turn">查看本轮上下文 ↗</button>') + '</div>';
+    openDrawer(title, prior ? ui('比较 ') + priorLabel + ui(' → 第 ') + stepNumber + ui(' 步') : ui('首次请求 · 已有上下文'), html);
+    if ($('review-step-turn')) $('review-step-turn').onclick = () => reviewOpenContext(t.number);
   }
   function reviewContextBind() {
     let key = $('review-overlay-key');
     if (view === 'overview') {
       if (!key) {
         key = document.createElement('div'); key.id = 'review-overlay-key'; key.className = 'review-overlay-key';
-        key.innerHTML = '<span class="review-overlay-caption">上下文 <b>首轮已有量 · 之后↑增 ↓减</b></span>' + CONTEXT_CATEGORIES.map(c => '<button class="review-overlay-source" data-context-category="' + c.key + '"><i style="background:' + c.color + '"></i>' + c.label + '</button>').join('') +
-          '<button id="review-context-readout" class="review-overlay-pick"></button><button id="review-context-scale-note" class="review-overlay-scale">柱高至 ±' + reviewTokens(reviewContextScale.limit) + ' · …收起更大量</button>';
+        key.innerHTML = ui('<span class="review-overlay-caption" data-context-caption>上下文 <b>首轮已有量 · 之后↑增 ↓减</b></span>') + CONTEXT_CATEGORIES.map(c => '<button class="review-overlay-source" data-context-category="' + c.key + '"><i style="background:' + c.color + '"></i>' + c.label + '</button>').join('') +
+          ui('<button id="review-context-readout" class="review-overlay-pick"></button><button id="review-context-scale-note" class="review-overlay-scale">柱高至 ±') + reviewTokens(reviewContextScale.limit) + ui(' · …收起更大量</button>');
         $('graph-caption').append(key);
       }
       key.setAttribute('aria-hidden', String(!overviewLayers.has('context')));
@@ -1701,7 +1856,7 @@ function fileChangeHistory(operations, path) {
       el.onmouseenter = () => {
         reviewContextSelected = number;
         if ($('review-context-readout')) $('review-context-readout').textContent = reviewContextNote(row);
-        tlReadout(row && !row.isBaseline ? '第 ' + number + ' 轮：增加 ' + reviewTokens(row.increase) + '，减少 ' + reviewTokens(row.decrease) + '，净变化 ' + reviewSigned(row.net) + ' tokens。点击看来源。' : reviewContextNote(row));
+        tlReadout(row && !row.isBaseline ? ui('第 ') + number + ui(' 轮：增加 ') + reviewTokens(row.increase) + ui('，减少 ') + reviewTokens(row.decrease) + ui('，净变化 ') + reviewSigned(row.net) + ui(' tokens。点击看来源。') : reviewContextNote(row));
       };
       el.onclick = e => { e.stopPropagation(); reviewOpenContext(number); };
       el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reviewOpenContext(number); } };
@@ -1709,7 +1864,7 @@ function fileChangeHistory(operations, path) {
     $('graph').querySelectorAll('[data-review-duration-range]').forEach(el => {
       const [first, last] = el.dataset.reviewDurationRange.split(':').map(Number);
       const open = () => reviewOpenDurations(first, last);
-      el.onmouseenter = () => tlReadout(first === last ? '第 ' + first + ' 轮：点击定位本轮，或查看上下文与行动。' : '第 ' + first + '–' + last + ' 轮：点击展开每一轮的耗时，短轮次也在其中。');
+      el.onmouseenter = () => tlReadout(first === last ? ui('第 ') + first + ui(' 轮：点击定位本轮，或查看上下文与行动。') : ui('第 ') + first + '–' + last + ui(' 轮：点击展开每一轮的耗时，短轮次也在其中。'));
       el.onclick = e => { e.stopPropagation(); open(); };
       el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     });
@@ -1717,7 +1872,7 @@ function fileChangeHistory(operations, path) {
       const seqs = el.dataset.contextCompaction.split(',').map(Number);
       el.onclick = e => { e.stopPropagation(); reviewOpenCompaction(seqs); };
       el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reviewOpenCompaction(seqs); } };
-      el.onmouseenter = () => tlReadout('剪刀与黄色虚线：较早的对话在这里被整理成摘要。点击看详情。');
+      el.onmouseenter = () => tlReadout(ui('折叠标记与靛蓝虚线：较早的对话在这里被整理成摘要。点击看详情。'));
     });
     $('canvas').querySelectorAll('[data-context-category]').forEach(el => {
       el.onclick = () => reviewOpenContextSources(el.dataset.contextCategory);
@@ -1732,55 +1887,121 @@ function fileChangeHistory(operations, path) {
         el.setAttribute('aria-hidden', String(!overviewLayers.has('context')));
       }
     });
-    $('graph-caption').querySelector('[data-br-layer="context"]')?.setAttribute('title', '上下文来源变化，以及压缩与裁短记录；与停顿、再试独立');
+    $('graph-caption').querySelector('[data-br-layer="context"]')?.setAttribute('title', ui('上下文来源变化，以及压缩与裁短记录；与停顿、再试独立'));
+  }
+
+  function reviewGoalBand(goalData, markers, mapTime, gy) {
+    const life = markers.filter(m => m.operation && m.operation !== 'read');
+    const reads = markers.filter(m => m.operation === 'read');
+    const goalState = { create: ui('创建'), resume: ui('恢复'), pause: ui('暂停'), edit: ui('编辑'), complete: ui('完成'), blocked: ui('受阻') };
+    const goalClass = operation => Object.hasOwn(goalState, operation) ? operation : '';
+    const goalLabel = operation => Object.hasOwn(goalState, operation) ? goalState[operation] : operation;
+    // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
+    const byGoalAll = new Map();
+    for (const m of markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
+    const byGoalLife = new Map();
+    for (const m of life) { const key = m.goalId || 'goal'; if (!byGoalLife.has(key)) byGoalLife.set(key, []); byGoalLife.get(key).push({ ...m, x: mapTime(m.time) }); }
+    // 先把每条目标摊成一段,再按范围重叠错行;行长一致的区间才不会互相压。
+    const goals = [];
+    for (const [id, list] of byGoalLife) {
+      const pts = list.filter(m => Number.isFinite(m.x));
+      if (!pts.length) continue;
+      const all = (byGoalAll.get(id) || []).map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
+      goals.push({ id, pts, x0: all.length ? all[0].x : pts[0].x, x1: pts[pts.length - 1].x });
+    }
+    const goalLanes = [];
+    // 标签按实际字宽截断,并按"线 + 标签"的宽度占行,避免两段目标文字叠在一起。
+    const goalCompact = goal => {
+      const own = (goalData.goals || []).find(x => x.id === goal.id) || null;
+      const objective = String(own?.objective || goalData.objective || ui('目标')).replace(/\s+/g, ' ');
+      const limit = Math.max(24, Math.max(18, goal.x1 - goal.x0) - 28);
+      let compact = objective;
+      if (tlMeasure(compact) > limit) {
+        let lo = 1, hi = compact.length;
+        while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (tlMeasure(compact.slice(0, mid) + '…') <= limit) lo = mid; else hi = mid - 1; }
+        compact = compact.slice(0, lo) + '…';
+      }
+      return compact;
+    };
+    for (const goal of goals) {
+      goal.compact = goalCompact(goal);
+      goal.labelW = tlMeasure(goal.compact);
+      const lane = goalLanes.findIndex(right => right < goal.x0 - 12);
+      const laneIndex = lane < 0 ? goalLanes.length : lane;
+      goalLanes[laneIndex] = Math.max(goal.x1, goal.x0 + goal.labelW + 10);
+      goal.lane = Math.min(laneIndex, 2);
+    }
+    let band = '<g class="goal-band" data-goal-band="1" role="button" tabindex="0" aria-label="' + esc(ui('会话目标')) + '" style="cursor:pointer;pointer-events:all">';
+    for (const goal of goals) {
+      const { pts, x0, x1, compact } = goal, laneY = gy - goal.lane * 22;
+      const last = pts[pts.length - 1];
+      // 不用胶囊:一条实线加两端刻度就够,事件点是线上的刻度。
+      band += '<path d="M' + x0 + ' ' + laneY + 'H' + x1 + '" class="goal-line"/>';
+      band += '<path d="M' + x0 + ' ' + (laneY - 5) + 'v10M' + x1 + ' ' + (laneY - 5) + 'v10" class="goal-cap"/>';
+      for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + laneY + '" r="3.2" class="goal-dot ' + goalClass(m.operation) + '"><title>' + esc(goalLabel(m.operation)) + ui(' · 第 ') + esc(m.turn) + ui(' 轮 · seq ') + esc(m.seq) + '</title></circle>';
+      band += '<text x="' + x0 + '" y="' + (laneY - 7) + '" class="goal-label"><tspan class="goal-text">' + esc(compact) + '</tspan><tspan class="goal-state ' + goalClass(last.operation) + '" dx="6">' + esc(goalLabel(last.operation)) + '</tspan></text>';
+    }
+    const readDots = reads.map(m => {
+      const x = mapTime(m.time);
+      return Number.isFinite(x) ? '<circle cx="' + x + '" cy="' + gy + ui('" r="1.6" class="goal-read"><title>读取目标 · 第 ') + esc(m.turn) + ui(' 轮</title></circle>') : '';
+    }).join('');
+    return goals.length || readDots ? band + readDots + '</g>' : '';
+  }
+
+  function reviewOpenGoalSummary(goal) {
+    const label = ui('目标 ') + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
+    const rows = [[ui('目标'), goal.objective || ui('未记录')], [ui('阶段'), goal.phase || ui('未记录')],
+      [ui('轮次'), goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : ui('未记录')],
+      [ui('变更'), (goal.markers || []).map(marker => (marker.operation || '') + '@' + marker.seq).join(' · ') || ui('未记录')]];
+    openDrawer(ui('会话目标'), label, '<dl class="geist-timing-facts">' + rows.map(([key, value]) => '<div><dt>' + esc(key) + '</dt><dd>' + esc(value) + '</dd></div>').join('') + '</dl>');
   }
 
   let reviewFocusedTurn = null, reviewPathEnteredAt = 0;
   function reviewOpenScaleNote() {
-    openDrawer('柱高为什么会收起', '这是图的显示范围，不是模型容量限制',
-      '<p class="review-explain">按本会话约九成五轮次的新增量选取，图先展示 ±' + reviewTokens(reviewContextScale.limit) + ' 的范围。这样几千 tokens 的变化也能看清。</p>' +
-      '<p class="review-explain">例如实际新增 132.7k，柱顶仍写 <b>+132.7k · 收起</b>，省略号表示柱高被收起。颜色仍按真实来源占比分配，点柱可查看全部数值。</p>' +
-      '<p class="review-quiet">范围按本会话新增量第 95 百分位向上取整。平移、放大不会改变纵向单位。首轮柱显示末次请求已有量，后续轮次显示相对上一轮的变化。</p>');
+    openDrawer(ui('柱高为什么会收起'), ui('这是图的显示范围，不是模型容量限制'),
+      ui('<p class="review-explain">按本会话约九成五轮次的新增量选取，图先展示 ±') + reviewTokens(reviewContextScale.limit) + ui(' 的范围。这样几千 tokens 的变化也能看清。</p>') +
+      ui('<p class="review-explain">例如实际新增 132.7k，柱顶仍写 <b>+132.7k · 收起</b>，省略号表示柱高被收起。颜色仍按真实来源占比分配，点柱可查看全部数值。</p>') +
+      ui('<p class="review-quiet">范围按本会话新增量第 95 百分位向上取整。平移、放大不会改变纵向单位。首轮柱显示末次请求已有量，后续轮次显示相对上一轮的变化。</p>'));
   }
   function reviewOpenContextSources(selected = 'inject') {
     const definitions = {
-      system: '模型的基础行为规则。单独计入系统提示，不计入下面的运行时注入。',
-      tools: '本次可调用工具的名称、用途与参数说明。它是工具清单，不是执行工具后得到的结果。',
-      user: '用户自己输入的文本（消息不带来源标记）。附件、宿主补的环境说明与通知另计，归入运行时注入。',
-      inject: '运行环境或插件自动补进来的文字，例如工作目录、项目说明、当前时间、后台任务通知，以及压缩后继续对话的说明。这里原来叫“注入内容”。',
-      skill: '技能目录、已加载技能的操作说明。它虽然也是自动提供的，但单独归类。',
-      assistant: '模型产生的回复、思考和工具调用内容。',
-      tool: '工具执行后的返回内容，例如文件正文、命令输出、搜索结果。过长返回被裁短时，这一类可能减少。',
+      system: ui('模型的基础行为规则。单独计入系统提示，不计入下面的运行时注入。'),
+      tools: ui('本次可调用工具的名称、用途与参数说明。它是工具清单，不是执行工具后得到的结果。'),
+      user: ui('用户自己输入的文本（消息不带来源标记）。附件、宿主补的环境说明与通知另计，归入运行时注入。'),
+      inject: ui('运行环境或插件自动补进来的文字，例如工作目录、项目说明、当前时间、后台任务通知，以及压缩后继续对话的说明。这里原来叫“注入内容”。'),
+      skill: ui('技能目录、已加载技能的操作说明。它虽然也是自动提供的，但单独归类。'),
+      assistant: ui('模型产生的回复、思考和工具调用内容。'),
+      tool: ui('工具执行后的返回内容，例如文件正文、命令输出、搜索结果。过长返回被裁短时，这一类可能减少。'),
     };
     const sourceNames = {
-      'agent-instructions': '项目与工作区说明', 'runtime-context': '运行环境',
-      'time-context': '时间信息', 'plugin:out-of-band': '运行中补充通知',
-      'tool-jobs': '后台任务通知', 'tool-registry': '工具清单变更说明',
-      'agent-message': '其他 Agent 的消息', 'subagent-settled': '子任务结束通知',
-      goal: '任务目标', 'compact-checkpoint': '压缩后继续对话的说明', 'user-approval': '审批结果',
-      'plugin:dsh-runtime-seam': '运行环境插件补充', 'plugin:dsh-trajectory-tools': '轨迹工具插件补充',
+      'agent-instructions': ui('项目与工作区说明'), 'runtime-context': ui('运行环境'),
+      'time-context': ui('时间信息'), 'plugin:out-of-band': ui('运行中补充通知'),
+      'tool-jobs': ui('后台任务通知'), 'tool-registry': ui('工具清单变更说明'),
+      'agent-message': ui('其他 Agent 的消息'), 'subagent-settled': ui('子任务结束通知'),
+      goal: ui('任务目标'), 'compact-checkpoint': ui('压缩后继续对话的说明'), 'user-approval': ui('审批结果'),
+      'plugin:dsh-runtime-seam': ui('运行环境插件补充'), 'plugin:dsh-trajectory-tools': ui('轨迹工具插件补充'),
     };
     const ordered = [...CONTEXT_CATEGORIES].sort((a, b) => (b.key === selected) - (a.key === selected));
     let html = ordered.map(c => '<div class="review-source-definition"><strong><i style="background:' + c.color + '"></i>' + c.label + '</strong><p>' + definitions[c.key] + '</p></div>').join('');
-    html += '<details class="ov-proof"><summary>这份会话记录了哪些补充来源</summary><p class="review-quiet">以下为写入记录的次数，不是当前仍保留的 tokens。</p>' +
-      (reviewContextData.supplementSources || []).map(s => '<div class="source-row"><span>' + esc(sourceNames[s.kind] || s.kind) + '</span>' + s.count + ' 条</div>').join('') + '</details>';
-    html += '<p class="review-quiet">按消息的角色与来源标记归类，不根据文字内容猜测。所有 token 构成是估算值。</p>';
-    openDrawer('上下文从哪里来', '七类来源，各自只计一次', html);
+    html += ui('<details class="ov-proof"><summary>这份会话记录了哪些补充来源</summary><p class="review-quiet">以下为写入记录的次数，不是当前仍保留的 tokens。</p>') +
+      (reviewContextData.supplementSources || []).map(s => '<div class="source-row"><span>' + esc(sourceNames[s.kind] || s.kind) + '</span>' + s.count + ui(' 条</div>')).join('') + '</details>';
+    html += ui('<p class="review-quiet">按消息的角色与来源标记归类，不根据文字内容猜测。所有 token 构成是估算值。</p>');
+    openDrawer(ui('上下文从哪里来'), ui('七类来源，各自只计一次'), html);
   }
   function reviewOpenDurations(first = null, last = null) {
     const subset = session.turns.filter(t => first === null || t.number >= first && t.number <= last);
-    const title = first === null ? '每轮耗时' : first === last ? '第 ' + first + ' 轮' : '第 ' + first + '–' + last + ' 轮';
-    const html = '<form id="review-round-search" class="review-round-search"><label for="review-round-number">定位轮次</label><input id="review-round-number" type="number" min="1" inputmode="numeric" placeholder="例如 59"><button class="action-button" type="submit">定位</button></form>' +
-      '<p class="review-quiet">每一轮都列在这里，不按时长筛选。点轮号定位原图，点“行动”直接看逐步操作。</p>' +
-      (first !== null ? '<button class="back-link" id="review-all-rounds">查看全部 ' + session.turns.length + ' 轮</button>' : '') +
+    const title = first === null ? ui('每轮耗时') : first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮`;
+    const html = ui('<form id="review-round-search" class="review-round-search"><label for="review-round-number">定位轮次</label><input id="review-round-number" type="number" min="1" inputmode="numeric" placeholder="例如 59"><button class="action-button" type="submit">定位</button></form>') +
+      ui('<p class="review-quiet">每一轮都列在这里，不按时长筛选。点轮号定位原图，点“行动”直接看逐步操作。</p>') +
+      (first !== null ? ui('<button class="back-link" id="review-all-rounds">查看全部 ') + session.turns.length + ui(' 轮</button>') : '') +
       '<div class="review-round-grid" id="review-round-grid"></div>';
-    openDrawer(title, '从本轮开始到结束 · 含轮内等待，不含轮间等待', html);
+    openDrawer(title, ui('从本轮开始到结束 · 含轮内等待，不含轮间等待'), html);
     const draw = () => {
       const query = $('review-round-number').value.trim();
       const rounds = query ? session.turns.filter(t => String(t.number) === query) : subset;
       $('review-round-grid').innerHTML = rounds.length ? rounds.map(t => '<div class="review-round-card">' +
-        '<button data-review-focus-turn="' + t.number + '" title="' + esc(shorten(t.title || '', 100)) + '"><strong>第 ' + t.number + ' 轮</strong><b>' + (t.end === null ? '≥' : '') + reviewDuration(endOf(t) - t.start) + '</b></button>' +
-        '<div><button data-review-round-context="' + t.number + '">上下文</button><button data-review-round-path="' + t.number + '">行动 ↗</button></div></div>').join('') : '<p class="review-quiet">没有这个轮号。</p>';
+        '<button data-review-focus-turn="' + t.number + '" title="' + esc(shorten(t.title || '', 100)) + '"><strong>' + ui`第 ${t.number} 轮` + '</strong><b>' + (t.end === null ? '≥' : '') + reviewDuration(endOf(t) - t.start) + '</b></button>' +
+        '<div><button data-review-round-context="' + t.number + ui('">上下文</button><button data-review-round-path="') + t.number + ui('">行动 ↗</button></div></div>')).join('') : ui('<p class="review-quiet">没有这个轮号。</p>');
       $('review-round-grid').querySelectorAll('[data-review-focus-turn]').forEach(el => el.onclick = () => reviewFocusTurn(Number(el.dataset.reviewFocusTurn)));
       $('review-round-grid').querySelectorAll('[data-review-round-context]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.reviewRoundContext)));
       $('review-round-grid').querySelectorAll('[data-review-round-path]').forEach(el => el.onclick = () => reviewEnterPath(Number(el.dataset.reviewRoundPath)));
@@ -1800,7 +2021,7 @@ function fileChangeHistory(operations, path) {
     tlFocusRange(t, t.start, endOf(t));
     tlSelectionOutline(t);
     reviewSyncNavigation();
-    tlReadout('第 ' + number + ' 轮 · 总耗时 ' + reviewDuration(endOf(t) - t.start) + '。继续放大进入逐步行动，或点上方“行动路径”。');
+    tlReadout(ui('第 ') + number + ui(' 轮 · 总耗时 ') + reviewDuration(endOf(t) - t.start) + ui('。继续放大进入逐步行动，或点上方“行动路径”。'));
   }
   const reviewSetOverviewScaleBase = setOverviewScale;
   setOverviewScale = function(nextScale, viewportX) {
@@ -1858,7 +2079,7 @@ function fileChangeHistory(operations, path) {
   function reviewBindActionControls() {
     if (view !== 'path') return;
     const box = document.createElement('div'); box.className = 'br-layers';
-    box.innerHTML = [['duration', '耗时'], ['context', '上下文变化'], ['files', '文件']].map(([key, label]) =>
+    box.innerHTML = [['duration', ui('耗时')], ['context', ui('上下文变化')], ['files', ui('文件')]].map(([key, label]) =>
       '<label class="br-layer"><input type="checkbox" data-action-layer="' + key + '"' + (overviewLayers.has(key) ? ' checked' : '') + '>' + label + '</label>').join('');
     $('graph-caption').prepend(box);
     box.querySelectorAll('input').forEach(el => el.onchange = () => {
@@ -1879,7 +2100,7 @@ function fileChangeHistory(operations, path) {
     if (!overlay) {
       reviewDetailOrigin = document.activeElement;
       overlay = document.createElement('div'); overlay.id = 'review-detail-overlay'; overlay.className = 'review-detail-overlay';
-      overlay.innerHTML = '<section class="review-detail-window" role="dialog" aria-modal="true" aria-labelledby="review-detail-title"><header><button id="review-detail-back" aria-label="返回上一层">‹</button><div><h2 id="review-detail-title"></h2><p id="review-detail-subtitle"></p></div><button id="review-detail-close" aria-label="关闭详情">×</button></header><div class="review-detail-body" id="review-detail-body"></div></section>';
+      overlay.innerHTML = ui('<section class="review-detail-window" role="dialog" aria-modal="true" aria-labelledby="review-detail-title"><header><button id="review-detail-back" aria-label="返回上一层">‹</button><div><h2 id="review-detail-title"></h2><p id="review-detail-subtitle"></p></div><button id="review-detail-close" aria-label="关闭详情">×</button></header><div class="review-detail-body" id="review-detail-body"></div></section>');
       document.body.append(overlay);
       overlay.onclick = e => { if (e.target === overlay) reviewCloseDetail(); };
       $('review-detail-close').onclick = reviewCloseDetail;
@@ -1908,27 +2129,37 @@ function fileChangeHistory(operations, path) {
     $('review-detail-body').scrollTop = detail.scroll || 0;
     $('review-detail-close').focus({ preventScroll: true });
   }
+  function reviewHasChange(fact) {
+    return Boolean(fact?.preview || fact?.diffChanges?.length);
+  }
   function reviewOpenChange(t, step, fact, nested = false) {
+    if (!reviewHasChange(fact)) return;
     const preview = fact.preview;
-    if (!preview) return;
+    const planned = fact.tone === 'bad' || fact.tone === 'unknown';
+    const title = planned ? ui('原计划改动') : ui('改动对比');
+    const subtitle = (fact.target || fact.title) + ui(' · 第 ') + t.number + ui(' 轮 / 第 ') + step.number + ui(' 步');
+    if (!preview) {
+      const html = fact.diffChanges.map(change => '<div class="review-detail-section"><h3>' + esc(change.path) + '</h3><p>' +
+        esc(change.kind?.type || '') + '</p>' + block(change.diff) + '</div>').join('');
+      reviewOpenDetail({ title, subtitle, html }, nested);
+      return;
+    }
     const rows = changedLines(preview.before, preview.after), removed = rows.filter(r => r.kind === 'remove').length, added = rows.filter(r => r.kind === 'add').length;
     const folded = compactDiff(rows), hasFolds = folded.some(row => row.kind === 'fold');
-    const planned = fact.tone === 'bad' || fact.tone === 'unknown';
     const detail = {
-      title: planned ? '原计划改动' : '改动对比',
-      subtitle: (fact.target || fact.title) + ' · 第 ' + t.number + ' 轮 / 第 ' + step.number + ' 步',
+      title, subtitle,
       html: '<div class="review-change-status" data-tone="' + fact.tone + '">' + esc(fact.outcome) + '</div>' +
-        '<div class="review-diff-toolbar"><span><b class="removed">− ' + removed + ' 行</b><b class="added">+ ' + added + ' 行</b></span>' +
-        (hasFolds ? '<button id="review-diff-toggle">显示全部片段</button>' : '<span class="review-diff-complete">' + (preview.partial ? '截取片段' : '完整替换片段') + '</span>') + '</div>' +
-        '<p class="review-diff-note">本次替换片段对比，非整文件；“原 / 新”是对应片段中的行号。</p>' +
-        (preview.partial ? '<p class="review-change-status">片段过长，当前为截取内容；行数统计仅针对展示部分。</p>' : '') +
-        '<div class="review-diff-scroller" tabindex="0" aria-label="改动内容"><div class="review-diff-column-key"><span>原</span><span>新</span><span></span><span>改动片段</span></div><div id="review-diff-lines" class="review-diff-lines"></div></div>',
+        '<div class="review-diff-toolbar"><span><b class="removed">− ' + removed + ui(' 行</b><b class="added">+ ') + added + ui(' 行</b></span>') +
+        (hasFolds ? ui('<button id="review-diff-toggle">显示全部片段</button>') : '<span class="review-diff-complete">' + (preview.partial ? ui('截取片段') : ui('完整替换片段')) + '</span>') + '</div>' +
+        ui('<p class="review-diff-note">本次替换片段对比，非整文件；“原 / 新”是对应片段中的行号。</p>') +
+        (preview.partial ? ui('<p class="review-change-status">片段过长，当前为截取内容；行数统计仅针对展示部分。</p>') : '') +
+        ui('<div class="review-diff-scroller" tabindex="0" aria-label="改动内容"><div class="review-diff-column-key"><span>原</span><span>新</span><span></span><span>改动片段</span></div><div id="review-diff-lines" class="review-diff-lines"></div></div>'),
       bind: () => {
         const render = () => {
           const visible = detail.all ? rows : folded;
-          if ($('review-diff-toggle')) $('review-diff-toggle').textContent = detail.all ? '只看改动附近' : '显示全部片段';
+          if ($('review-diff-toggle')) $('review-diff-toggle').textContent = detail.all ? ui('只看改动附近') : ui('显示全部片段');
           $('review-diff-lines').innerHTML = visible.map(row => row.kind === 'fold'
-            ? '<button class="review-diff-fold">展开 ' + row.count + ' 行未改动内容</button>'
+            ? ui('<button class="review-diff-fold">展开 ') + row.count + ui(' 行未改动内容</button>')
             : '<div class="review-diff-row ' + row.kind + '"><span class="review-diff-line-number">' + (row.before ?? '') + '</span><span class="review-diff-line-number">' + (row.after ?? '') + '</span><span class="review-diff-sign">' + (row.kind === 'add' ? '+' : row.kind === 'remove' ? '−' : '') + '</span><code>' + esc(row.text || ' ') + '</code></div>').join('');
           $('review-diff-lines').querySelectorAll('.review-diff-fold').forEach(el => el.onclick = () => { detail.all = true; render(); });
         };
@@ -1942,13 +2173,13 @@ function fileChangeHistory(operations, path) {
     const html = '<div class="review-detail-section"><h3>' + insight.input.label + '</h3><p>' + esc(insight.input.text) + '</p></div>' +
       insight.calls.map(fact => '<div class="review-detail-section"><h3>' + esc(fact.title) + '</h3><p data-tone="' + fact.tone + '">' + esc(fact.outcome) + '</p>' +
         (fact.detail ? '<p class="review-detail-muted">' + esc(fact.detail) + '</p>' : '') +
-        (fact.preview ? '<button class="review-detail-link" data-detail-change="' + fact.seq + '">' + (fact.tone === 'bad' ? '查看原计划改动' : '查看改动对比') + ' ↗</button>' : '') + '</div>').join('') +
-      (insight.reply ? '<div class="review-detail-section"><h3>回复摘录</h3><p>' + esc(insight.reply) + '</p></div>' : '') +
-      (insight.links.length ? '<div class="review-detail-section"><h3>后续记录</h3>' + insight.links.map(l => '<button class="review-detail-link" data-detail-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('<br>') + '<p class="review-detail-muted">依据同一轮中工具与完整参数一致的失败、成功记录。</p></div>' : '') +
-      (insight.following ? '<div class="review-detail-section"><h3>接下来</h3><button class="review-detail-link" data-detail-step="' + insight.following.step + '">第 ' + insight.following.step + ' 步 · ' + esc(insight.following.text) + ' ↗</button></div>' : '') +
-      (info ? '<div class="review-detail-section"><h3>本步请求上下文</h3><p>已有 ≈' + reviewTokens(info.total) + ' tokens；' + (info.initial ? '首次载入 ' : '相比上次请求 ') + reviewSigned(info.amount) + '。</p><p class="review-detail-muted">请求发出前的估算构成，不含本次回复。</p></div>' : '') +
-      '<button class="review-detail-link" id="review-detail-record">查看调用与返回原文 ↗</button>';
-    reviewOpenDetail({ title: '第 ' + step.number + ' 步 · 前后文与依据', subtitle: '第 ' + t.number + ' 轮 · ' + reviewActionStepLabel(step), html,
+        (reviewHasChange(fact) ? '<button class="review-detail-link" data-detail-change="' + fact.seq + '">' + (fact.tone === 'bad' ? ui('查看原计划改动') : ui('查看改动对比')) + ' ↗</button>' : '') + '</div>').join('') +
+      (insight.reply ? ui('<div class="review-detail-section"><h3>回复摘录</h3><p>') + esc(insight.reply) + '</p></div>' : '') +
+      (insight.links.length ? ui('<div class="review-detail-section"><h3>后续记录</h3>') + insight.links.map(l => '<button class="review-detail-link" data-detail-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('<br>') + ui('<p class="review-detail-muted">依据同一轮中工具与完整参数一致的失败、成功记录。</p></div>') : '') +
+      (insight.following ? ui('<div class="review-detail-section"><h3>接下来</h3><button class="review-detail-link" data-detail-step="') + insight.following.step + ui('">第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + ' ↗</button></div>' : '') +
+      (info ? ui('<div class="review-detail-section"><h3>本步请求上下文</h3><p>已有 ≈') + reviewTokens(info.total) + ' tokens；' + (info.initial ? ui('首次载入 ') : ui('相比上次请求 ')) + reviewSigned(info.amount) + ui('。</p><p class="review-detail-muted">请求发出前的估算构成，不含本次回复。</p></div>') : '') +
+      ui('<button class="review-detail-link" id="review-detail-record">查看调用与返回原文 ↗</button>');
+    reviewOpenDetail({ title: ui('第 ') + step.number + ui(' 步 · 前后文与依据'), subtitle: ui('第 ') + t.number + ui(' 轮 · ') + reviewActionStepLabel(step), html,
       bind: () => {
         $('review-detail-body').querySelectorAll('[data-detail-change]').forEach(el => el.onclick = () => reviewOpenChange(t, step, insight.calls.find(f => f.seq === Number(el.dataset.detailChange)), true));
         $('review-detail-body').querySelectorAll('[data-detail-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.detailStep)));
@@ -1957,8 +2188,8 @@ function fileChangeHistory(operations, path) {
   }
 
   let reviewFileOperations = data.context?.fileOperations || [];
-  let reviewFileSelection = null, reviewFileGroups = [], reviewFilesInScope = [], reviewFilePoints = [], reviewFileTouchGroups = [];
-  let reviewFilePositions = new Map(), reviewFileGeometry = null;
+  let reviewFileSelection = null, reviewFileGroups = [], reviewFilesInScope = [], reviewFileTouchGroups = [];
+  let reviewFileLayoutCache = null, reviewFileGeometry = null, reviewFileStatusState = null;
   let reviewActionFileFrame = null, reviewFilesFramePending = false;
   function reviewRefreshActionFiles() {
     if (reviewFilesFramePending) return;
@@ -1966,10 +2197,10 @@ function fileChangeHistory(operations, path) {
     requestAnimationFrame(() => {
       reviewFilesFramePending = false;
       if (view !== 'path' || !reviewActionFileFrame || !$('review-files-layer')) return;
-      const { t, x, base, gutter, height } = reviewActionFileFrame, vp = $('graph-scroll');
+      const { t, x, base, gutter } = reviewActionFileFrame, vp = $('graph-scroll');
       const left = vp.scrollLeft;
       reviewActionFileFrame.viewportLeft = left;
-      $('review-files-layer').innerHTML = reviewActionFiles(t, x, base, left + gutter, left + reviewActionFileFrame.viewportWidth - gutter, height);
+      $('review-files-layer').innerHTML = reviewActionFiles(t, x, base, left + gutter, left + reviewActionFileFrame.viewportWidth - gutter);
       reviewFilesBind();
     });
   }
@@ -1978,12 +2209,12 @@ function fileChangeHistory(operations, path) {
     if (members.length === 1) {
       // 单独显示一个文件时,先给它的身份:读 / 改 / 受阻,再给次数。
       const f = members[0].file;
-      const kind = f.changes.length ? '改' : f.reads.length ? '读' : f.failed.length ? '受阻' : '待确认';
+      const kind = f.changes.length ? ui('改') : f.reads.length ? ui('读') : f.failed.length ? ui('受阻') : ui('待确认');
       const count = f.changes.length || f.reads.length || f.failed.length;
       return '[' + kind + '] ' + f.label + (count ? ' · ' + count : '');
     }
-    const first = [...members].sort((a, b) => b.file.operations.length - a.file.operations.length)[0].file;
-    return first.label.split('/').at(-1) + ' 等 ' + members.length + ' 个';
+    const representative = members.reduce((best, { file }) => file.operations.length > best.operations.length ? file : best, members[0].file);
+    return representative.label.split('/').at(-1) + ui(' 等 ') + members.length + ui(' 个');
   }
   function reviewFileIcon(x, y) {
     return '<path d="M' + x + ' ' + (y - 5) + 'h5l3 3v8h-8zM' + (x + 5) + ' ' + (y - 5) + 'v3h3" class="review-file-icon"/>';
@@ -1998,27 +2229,59 @@ function fileChangeHistory(operations, path) {
     }
     return label;
   }
-  function reviewFileLayer(scope, point, base, left, right, height, obstacles = { read: [], change: [] }, lowerY = height - 44, bounds = { left, right }) {
-    reviewFileGroups = []; reviewFilePoints = []; reviewFilePositions = new Map();
-    reviewFileGeometry = { base, left, right, height };
-    reviewFilesInScope = fileObjects(reviewFileOperations, scope);
-    const materialFiles = typeof geistSkillMaterials === 'function' ? geistSkillMaterials(reviewFilesInScope, scope) : reviewFilesInScope;
-    if (!overviewLayers.has('files') && !materialFiles.some(f => f.skillId)) return '';
-    const items = materialFiles.filter(file => overviewLayers.has('files') || file.skillId).map(file => {
-      const coordinates = file.operations.map(o => ({ operation: o, x: point(o) })).filter(p => Number.isFinite(p.x));
-      coordinates.forEach(p => { reviewFilePositions.set(p.operation.seq, p.x); reviewFilePoints.push({ ...p, file }); });
-      const a = Math.min(...coordinates.map(p => p.x)), b = Math.max(...coordinates.map(p => p.x));
-      return { file, x: (a + b) / 2, start: a, end: b };
-    }).filter(item => Number.isFinite(item.x));
-    let html = '<g class="review-file-object-layer">';
+  function reviewGetFileLayout(geometry, context, build) {
+    const operations = reviewFileOperations, operationCount = operations.length;
+    const filesEnabled = overviewLayers.has('files');
+    const skills = typeof geistSkillMaterials === 'function' && geistActorLayers.skills ? geistSkills : null;
+    const cached = reviewFileLayoutCache;
+    if (cached && cached.geometry === geometry && cached.context === context && cached.operations === operations &&
+        cached.operationCount === operationCount && cached.filesEnabled === filesEnabled && cached.skills === skills) {
+      return cached.layout;
+    }
+    const layout = build(filesEnabled);
+    reviewFileLayoutCache = { geometry, context, operations, operationCount, filesEnabled, skills, layout };
+    return layout;
+  }
+  function reviewPackFiles(scope, point, bounds, obstacles, filesEnabled) {
+    const files = fileObjects(reviewFileOperations, scope);
+    const materials = typeof geistSkillMaterials === 'function' ? geistSkillMaterials(files, scope) : files;
+    const points = new Map(), lanes = [];
+    if (!filesEnabled && !materials.some(file => file.skillId)) return { files, points, lanes };
+    const items = { read: [], change: [] };
+    for (const file of materials) {
+      if (!filesEnabled && !file.skillId) continue;
+      const filePoints = [];
+      let start = Infinity, end = -Infinity;
+      for (const operation of file.operations) {
+        const x = point(operation);
+        if (!Number.isFinite(x)) continue;
+        filePoints.push({ operation, x });
+        start = Math.min(start, x);
+        end = Math.max(end, x);
+      }
+      if (filePoints.length) points.set(file.id, filePoints);
+      const x = (start + end) / 2;
+      if (Number.isFinite(x)) items[file.lane].push({ file, x, start, end });
+    }
     for (const lane of ['read', 'change']) {
-      const y = lane === 'read' ? 84 : lowerY;
-      const packed = packFileObjects(items.filter(item => item.file.lane === lane), {
+      const groups = packFileObjects(items[lane], {
         left: bounds.left + 4, right: bounds.right - 4, measure: reviewMeasure, label: reviewFileLabel,
         obstacles: obstacles[lane] || [],
       });
-      if (packed.some(p => !p.hidden)) html += brText(bounds.left - 9, y + 4, lane === 'read' ? '材料' : '修改', 'review-file-lane-label ' + lane, 'end');
-      for (const p of packed) {
+      lanes.push({ lane, groups, visible: groups.some(group => !group.hidden) });
+    }
+    return { files, points, lanes };
+  }
+  function reviewFileLayer(layout, base, left, right, lowerY, laneX) {
+    reviewFileGroups = [];
+    reviewFilesInScope = layout.files;
+    reviewFileGeometry = { base, left, right, layout };
+    if (!layout.lanes.length) return '';
+    let html = '<g class="review-file-object-layer">';
+    for (const { lane, groups, visible } of layout.lanes) {
+      const y = lane === 'read' ? 84 : lowerY;
+      if (visible) html += brText(laneX, y + 4, lane === 'read' ? ui('读取') : ui('修改'), 'review-file-lane-label ' + lane, 'end');
+      for (const p of groups) {
         if (p.hidden || p.right < left - 60 || p.left > right + 60) continue;
         const index = reviewFileGroups.length; reviewFileGroups.push({ ...p, y, lane });
         const selected = p.members.some(m => m.file.id === reviewFileSelection);
@@ -2026,41 +2289,61 @@ function fileChangeHistory(operations, path) {
         html += brGroup('class="review-file-object ' + lane + (selected ? ' selected' : '') + '" data-file-group="' + index + '" aria-pressed="' + selected + '"',
           '<rect x="' + p.left + '" y="' + (y - 10) + '" width="' + p.width + '" height="20" rx="4" class="review-file-body"/>' +
           reviewFileIcon(p.left + 8, y) + brText(p.left + 23, y + 3.5, label, 'review-file-name', 'start'),
-          p.members.length === 1 ? p.members[0].file.path + '；点击突出它的读写位置' : p.members.length + ' 个文件集中在这里；点击选择文件');
+          p.members.length === 1 ? p.members[0].file.path + ui('；点击突出它的读写位置') : p.members.length + ui(' 个文件集中在这里；点击选择文件'));
       }
     }
     html += '<g id="review-file-touch-layer">' + reviewFileTouchMarkup() + '</g></g>';
     return html;
   }
   function reviewOverviewFiles(layout, mapTime, base, left, right, height) {
-    const scope = new Set(layout.map(l => l.turn.number));
-    const obstacles = overviewLayers.has('context') ? (reviewContextData.boundaries || []).filter(e => e.kind === 'compaction').map(e => ({ left: mapTime(e.time) - 15, right: mapTime(e.time) + 15 })) : [];
-    return reviewFileLayer(scope, o => mapTime(o.time), base, left, right, height, { read: obstacles }, height - 44, { left: layout[0]?.x ?? 54, right: layout.at(-1)?.end ?? right });
+    // The renderer creates fresh rows during a pan, but their timeline coordinates stay put.
+    const geometry = layout.map(({ turn, x, end }) => [turn.number, turn.start, endOf(turn), x, end].join(':')).join('|');
+    const bounds = { left: layout[0]?.x ?? 54, right: layout.at(-1)?.end ?? right };
+    const boundaries = overviewLayers.has('context') ? reviewContextData.boundaries : null;
+    const fileLayout = reviewGetFileLayout(geometry, boundaries, filesEnabled => {
+      const scope = new Set(layout.map(row => row.turn.number));
+      const read = (boundaries || []).filter(event => event.kind === 'compaction').map(event => {
+        const x = mapTime(event.time);
+        return { left: x - 15, right: x + 15 };
+      });
+      return reviewPackFiles(scope, operation => mapTime(operation.time), bounds, { read }, filesEnabled);
+    });
+    return reviewFileLayer(fileLayout, base, left, right, height - 44, bounds.left - 9);
   }
-  function reviewActionFiles(t, x, base, left, right, height) {
-    const indices = new Map(t.steps.map((s, i) => [s.number, i]));
-    const lower = [];
-    if (overviewLayers.has('context')) for (const [index, step] of t.steps.entries()) {
-      const info = reviewStepContext(t, step), amount = info ? Object.values(info.parts).reduce((sum, value) => sum + Math.max(0, -value), 0) : 0;
-      if (amount) lower.push({ left: x(index) - 40, right: x(index) + 40 });
-    }
+  function reviewActionFiles(t, x, base, left, right) {
     const halfGap = t.steps.length > 1 ? (x(1) - x(0)) / 2 : 56;
-    return reviewFileLayer(new Set([t.number]), o => indices.has(o.step) ? x(indices.get(o.step)) : NaN, base, left, right, height, { change: lower }, base + 78, { left: x(0) - halfGap, right: x(t.steps.length - 1) + halfGap });
+    const bounds = { left: x(0) - halfGap, right: x(t.steps.length - 1) + halfGap };
+    const contextEnabled = overviewLayers.has('context');
+    // Panning an action path keeps the coordinate function from its last full draw.
+    const fileLayout = reviewGetFileLayout(x, contextEnabled, filesEnabled => {
+      const indices = new Map(t.steps.map((step, i) => [step.number, i]));
+      const change = [];
+      if (contextEnabled) for (const [index, step] of t.steps.entries()) {
+        const info = reviewStepContext(t, step);
+        const amount = info ? Object.values(info.parts).reduce((sum, value) => sum + Math.max(0, -value), 0) : 0;
+        if (amount) change.push({ left: x(index) - 40, right: x(index) + 40 });
+      }
+      return reviewPackFiles(new Set([t.number]), op => indices.has(op.step) ? x(indices.get(op.step)) : NaN, bounds, { change }, filesEnabled);
+    });
+    return reviewFileLayer(fileLayout, base, left, right, base + 78, bounds.left - 9);
   }
   function reviewFileTouchMarkup() {
     reviewFileTouchGroups = [];
     if (!overviewLayers.has('files') || !reviewFileSelection || !reviewFileGeometry) return '';
-    const { base, left, right } = reviewFileGeometry;
-    const groups = fileTouchClusters(reviewFilePoints.filter(p => p.file.id === reviewFileSelection));
+    const { base, left, right, layout } = reviewFileGeometry;
+    if (layout.touches?.file !== reviewFileSelection) {
+      layout.touches = { file: reviewFileSelection, groups: fileTouchClusters(layout.points.get(reviewFileSelection) || []) };
+    }
     let html = '';
-    for (const p of groups.filter(p => p.x >= left - 10 && p.x <= right + 10)) {
+    for (const p of layout.touches.groups) {
+      if (p.x < left - 10 || p.x > right + 10) continue;
       const index = reviewFileTouchGroups.length; reviewFileTouchGroups.push(p);
       const read = p.kind === 'read', y = base + (read ? -18 : 18), tone = p.members.some(m => m.operation.status === 'error') ? 'failed' : read ? 'read' : 'change';
       const body = '<path d="M' + p.x + ' ' + (base + (read ? -4 : 4)) + 'V' + y + '" class="review-file-tick"/>' +
         (read ? '<circle cx="' + p.x + '" cy="' + y + '" r="3.5" class="review-file-touch-dot"/>' : '<rect x="' + (p.x - 3.5) + '" y="' + (y - 3.5) + '" width="7" height="7" rx="1.5" class="review-file-touch-dot"/>');
       const first = p.members[0].operation;
       html += brGroup('class="review-file-touch ' + tone + '" data-file-touch="' + index + '"', body + (p.members.length > 1 ? '<circle cx="' + p.x + '" cy="' + y + '" r="6" class="review-file-touch-ring"/>' : ''),
-        p.members.length > 1 ? p.members.length + ' 次相邻' + (read ? '读取' : '写入/修改') + '；点击展开' : '第 ' + first.turn + ' 轮 / 第 ' + first.step + ' 步 · ' + (read ? '读取' : '写入/修改') + (first.status === 'returned' ? '已返回' : '未成功或未确认'));
+        p.members.length > 1 ? p.members.length + ui(' 次相邻') + (read ? ui('读取') : ui('写入/修改')) + ui('；点击展开') : ui('第 ') + first.turn + ui(' 轮 / 第 ') + first.step + ui(' 步 · ') + (read ? ui('读取') : ui('写入/修改')) + (first.status === 'returned' ? ui('已返回') : ui('未成功或未确认')));
     }
     return html;
   }
@@ -2077,7 +2360,7 @@ function fileChangeHistory(operations, path) {
   function reviewApplyFileFocus() {
     const enabled = overviewLayers.has('files');
     $('canvas').classList.toggle('review-files-on', enabled);
-    const selected = enabled && reviewFilesInScope.some(f => f.id === reviewFileSelection) ? reviewFileOperations.filter(o => fileIdentity(o.path) === reviewFileSelection) : [];
+    const selected = (enabled && reviewFileSelection ? reviewFilesInScope.find(f => f.id === reviewFileSelection)?.operations : null) || [];
     $('canvas').classList.toggle('review-file-focused', selected.length > 0);
     const steps = new Set(selected.map(o => o.turn + ':' + o.step)), seqs = new Set(selected.map(o => o.seq));
     $('graph').querySelectorAll('[data-file-group]').forEach(el => {
@@ -2088,8 +2371,8 @@ function fileChangeHistory(operations, path) {
       el.setAttribute('aria-pressed', String(chosen));
       const selectedFile = group.members.find(m => m.file.id === reviewFileSelection)?.file;
       el.querySelector('.review-file-name').textContent = reviewTrimFileLabel(selectedFile ? '✓ ' + selectedFile.label : group.label, group.width);
-      el.querySelector('title').textContent = selectedFile ? '已选：' + selectedFile.path + (group.members.length > 1 ? '；本组共 ' + group.members.length + ' 个文件，点击可换选' : '；点击查看读写位置') :
-        group.members.length === 1 ? group.members[0].file.path + '；点击突出它的读写位置' : group.members.length + ' 个文件集中在这里；点击选择文件';
+      el.querySelector('title').textContent = selectedFile ? ui('已选：') + selectedFile.path + (group.members.length > 1 ? ui('；本组共 ') + group.members.length + ui(' 个文件，点击可换选') : ui('；点击查看读写位置')) :
+        group.members.length === 1 ? group.members[0].file.path + ui('；点击突出它的读写位置') : group.members.length + ui(' 个文件集中在这里；点击选择文件');
     });
     $('graph').querySelectorAll('.review-action-step').forEach(el => el.classList.toggle('file-related', steps.has(turn().number + ':' + turn().steps[Number(el.dataset.step)]?.number)));
     $('graph').querySelectorAll('[data-review-branch]').forEach(el => {
@@ -2133,26 +2416,26 @@ function fileChangeHistory(operations, path) {
     let status = $('review-file-status');
     if (!status) { status = document.createElement('div'); status.id = 'review-file-status'; status.className = 'review-file-status'; $('graph-caption').append(status); }
     status.setAttribute('aria-hidden', String(!overviewLayers.has('files')));
-    const selected = reviewFilesInScope.find(f => f.id === reviewFileSelection);
-    const key = [view, reviewFileSelection, ...reviewFilesInScope.map(f => f.id + ':' + f.operations.length)].join('|');
-    if (status.dataset.key === key) return;
-    status.dataset.key = key;
+    const previous = reviewFileStatusState;
+    if (previous?.status === status && previous.view === view && previous.files === reviewFilesInScope && previous.selection === reviewFileSelection) return;
+    reviewFileStatusState = { status, view, files: reviewFilesInScope, selection: reviewFileSelection };
+    const selected = reviewFileSelection && reviewFilesInScope.find(f => f.id === reviewFileSelection);
     status.innerHTML = selected
-      ? '<strong title="' + esc(selected.path) + '">' + esc(selected.label) + '</strong><span>' + (view === 'path' ? '本轮 · ' : '全程 · ') + '读 ' + selected.reads.length + ' 次 · 写入/修改 ' + selected.changes.length + ' 次' + (selected.failed.length ? ' · ' + selected.failed.length + ' 次受阻' : '') + '</span><button id="review-file-history">全程记录 ↗</button><button id="review-file-clear" aria-label="取消文件选择" title="取消选择（Esc）">× 取消选择</button>'
-      : '<span>上方读取 · 下方写入/修改</span><button id="review-file-all">' + (view === 'overview' ? '全程 ' : '本轮 ') + reviewFilesInScope.length + ' 个文件 ↗</button><span class="review-file-source-note">按已记录的操作</span>';
+      ? '<strong title="' + esc(selected.path) + '">' + esc(selected.label) + '</strong><span>' + (view === 'path' ? ui('本轮 · ') : ui('全程 · ')) + ui('读 ') + selected.reads.length + ui(' 次 · 写入/修改 ') + selected.changes.length + ui(' 次') + (selected.failed.length ? ' · ' + selected.failed.length + ui(' 次受阻') : '') + ui('</span><button id="review-file-history">全程记录 ↗</button><button id="review-file-clear" aria-label="取消文件选择" title="取消选择（Esc）">× 取消选择</button>')
+      : ui('<span>上方读取 · 下方写入/修改</span><button id="review-file-all">') + (view === 'overview' ? ui('全程 ') : ui('本轮 ')) + reviewFilesInScope.length + ui(' 个文件 ↗</button><span class="review-file-source-note">按已记录的操作</span>');
     if ($('review-file-all')) $('review-file-all').onclick = () => reviewOpenFilePicker(reviewFilesInScope);
     if ($('review-file-clear')) $('review-file-clear').onclick = reviewClearFileSelection;
     if ($('review-file-history')) $('review-file-history').onclick = () => reviewOpenFileHistory(selected);
   }
   function reviewOpenFilePicker(files) {
-    reviewOpenDetail({ title: '这段执行涉及的文件', subtitle: '选择文件，查看它在整段会话中的修改过程',
-      html: '<div class="review-file-list">' + (files.length ? files.map((f, i) => '<button data-pick-file="' + i + '"><strong>' + esc(f.label) + '</strong><span>读取 ' + f.reads.length + ' 次 · 写入/修改 ' + f.changes.length + ' 次' + (f.failed.length ? ' · 受阻 ' + f.failed.length + ' 次' : '') + '</span><small>' + esc(f.path) + '</small></button>').join('') : '<p class="review-file-evidence-note">这段执行没有记录直接的文件读写操作。</p>') + '</div>',
+    reviewOpenDetail({ title: ui('这段执行涉及的文件'), subtitle: ui('选择文件，查看它在整段会话中的修改过程'),
+      html: '<div class="review-file-list">' + (files.length ? files.map((f, i) => '<button data-pick-file="' + i + '"><strong>' + esc(f.label) + ui('</strong><span>读取 ') + f.reads.length + ui(' 次 · 写入/修改 ') + f.changes.length + ui(' 次') + (f.failed.length ? ui(' · 受阻 ') + f.failed.length + ui(' 次') : '') + '</span><small>' + esc(f.path) + '</small></button>').join('') : ui('<p class="review-file-evidence-note">这段执行没有记录直接的文件读写操作。</p>')) + '</div>',
       bind: () => $('review-detail-body').querySelectorAll('[data-pick-file]').forEach(el => el.onclick = () => { const file = files[Number(el.dataset.pickFile)]; reviewCloseDetail(); reviewSelectFile(file.id); reviewOpenFileHistory(file); }) });
   }
   function reviewOpenFileHistory(file, operations = file.operations) {
-    reviewOpenDetail({ title: file.label, subtitle: '形成过程 · ' + operations.length + ' 条读写记录',
-      html: '<div class="review-file-history">' + operations.map(op => '<button data-file-step="' + op.seq + '"><span class="' + op.kind + '">' + (op.kind === 'read' ? '读取' : '写入/修改') + '</span><div><strong>第 ' + op.turn + ' 轮 · 第 ' + op.step + ' 步</strong><small>' + esc(reviewContextData.callFacts?.[op.seq]?.outcome || (op.status === 'returned' ? '工具已返回' : op.status === 'error' ? '操作受阻' : '结果未记录')) + '</small></div><span>查看这一步 ↗</span></button>').join('') + '</div>' +
-        '<p class="review-file-evidence-note">按文件工具的操作记录展示；本预览尚未接入最终文件差异。</p>',
+    reviewOpenDetail({ title: file.label, subtitle: ui('形成过程 · ') + operations.length + ui(' 条读写记录'),
+      html: '<div class="review-file-history">' + operations.map(op => '<button data-file-step="' + op.seq + '"><span class="' + op.kind + '">' + (op.kind === 'read' ? ui('读取') : ui('写入/修改')) + ui('</span><div><strong>第 ') + op.turn + ui(' 轮 · 第 ') + op.step + ui(' 步</strong><small>') + esc(reviewContextData.callFacts?.[op.seq]?.outcome || (op.status === 'returned' ? ui('工具已返回') : op.status === 'error' ? ui('操作受阻') : ui('结果未记录'))) + ui('</small></div><span>查看这一步 ↗</span></button>')).join('') + '</div>' +
+        ui('<p class="review-file-evidence-note">按文件工具的操作记录展示；本预览尚未接入最终文件差异。</p>'),
       bind: () => $('review-detail-body').querySelectorAll('[data-file-step]').forEach(el => el.onclick = () => {
         const op = file.operations.find(o => o.seq === Number(el.dataset.fileStep));
         reviewCloseDetail();
@@ -2170,8 +2453,8 @@ function fileChangeHistory(operations, path) {
   }
 
   let brSelected=null;
-  const brToolNames={edit:'修改',write:'写入',read:'读取',pwsh:'命令',bash:'命令',grep:'搜索',glob:'查找',cordis_inspect_query:'运行时查询',session_search:'历史查询',session_event_search:'事件查询',run_code:'执行代码',send_message:'发送消息',list_agents:'查看子任务'};
-  const brName=n=>brToolNames[n]||(n?shorten(n,18):'工具');
+  const brToolNames={edit:ui('修改'),write:ui('写入'),read:ui('读取'),pwsh:ui('命令'),bash:ui('命令'),grep:ui('搜索'),glob:ui('查找'),cordis_inspect_query:ui('运行时查询'),session_search:ui('历史查询'),session_event_search:ui('事件查询'),run_code:ui('执行代码'),send_message:ui('发送消息'),list_agents:ui('查看子任务')};
+  const brName=n=>brToolNames[n]||(n?shorten(n,18):ui('工具'));
   const brRound=n=>session.turns.find(t=>t.number===n);
   const brGroup=(attrs,body,title)=>`<g ${attrs} data-branch-action role="button" tabindex="0"><title>${esc(title)}</title>${body}</g>`;
   const brText=(x,y,text,cls='br-label',anchor='middle')=>`<text x="${x}" y="${y}" text-anchor="${anchor}" class="${cls}">${esc(text)}</text>`;
@@ -2182,11 +2465,11 @@ function fileChangeHistory(operations, path) {
     return `<path d="M${x-3} ${y-4} l6 8 M${x+3} ${y-4} l-6 8" class="br-cap"/>`;
   }
   function brEpisodeName(e){
-    if(e.condition==='FS_NOT_OBSERVED'||e.condition==='FS_STALE_VERSION')return '修改 ×'+e.failedCount;
-    if(e.condition==='TOOL_TIMEOUT')return '查询超时';
-    if(e.condition==='SESSION_QUERY_PERSISTENCE_FAILED')return '历史库异常 ×'+e.failedCount;
+    if(e.condition==='FS_NOT_OBSERVED'||e.condition==='FS_STALE_VERSION')return ui('修改 ×')+e.failedCount;
+    if(e.condition==='TOOL_TIMEOUT')return ui('查询超时');
+    if(e.condition==='SESSION_QUERY_PERSISTENCE_FAILED')return ui('历史库异常 ×')+e.failedCount;
     const call=brRound(e.turn)?.steps.flatMap(s=>s.calls).find(c=>e.failureSeqs.includes(c.seq));
-    return brName(call?.name)+'报错'+(e.failedCount>1?' ×'+e.failedCount:'');
+    return brName(call?.name)+ui('报错')+(e.failedCount>1?' ×'+e.failedCount:'');
   }
   function brPack(items,gap=13){
     const rows=[];
@@ -2199,11 +2482,11 @@ function fileChangeHistory(operations, path) {
     const calls=steps.flatMap(s=>s.calls).filter(c=>seqs.has(c.seq));
     const start=Math.min(...calls.map(c=>c.start)),end=Math.max(...calls.map(c=>c.end??c.start));
     tlFocusRange(brRound(e.turn),start,end);
-    tlReadout(`第 ${e.turn} 轮 · ${e.reason} · ${e.failedCount} 次失败${e.complete?' · 原操作随后成功':' · 原操作后续结果还不清楚'}`,()=>openOverviewEpisode(e.id));
+    tlReadout(ui`第 ${e.turn} 轮 · ${e.reason} · ${e.failedCount} 次失败${e.complete?ui(' · 原操作随后成功'):ui(' · 原操作后续结果还不清楚')}`,()=>openOverviewEpisode(e.id));
   }
   function spShowSource(){
-    const rows=[['真实记录',`${session.totals.turns} 轮 · ${session.totals.steps} 步 · ${session.totals.calls} 次工具调用 · ${session.totals.errors} 次显式工具报错`],['来源',session.source.file],['时间','轮内时间按同一线性比例；轮间等待用 // 折叠。概览事件是发生位置标记，放大后展开原始调用区间。'],['枝条','串行调用贴近主干；同一步真实区间重叠时展开并行枝；独立子 Agent 形成副枝。位置来自原始起止时间，不为标签搬动事件。'],['错误','文件前置条件拒绝使用截口，超时使用时钟，其他显式调用错误使用叉。失败调用自身的区间着红；后续处理经过的整段时间不着红。'],['再次尝试','虚线仅连接本轮完整参数相同、随后返回成功的原操作。成功标记表示原操作再次返回，不代表用户任务完成；没有找到后续同参成功时保持未知。'],['消息','子 Agent 的结束与报告送达分别取证。只有带发送方会话身份的真实消息形成回传连接，不推断父 Agent 已经采用。'],['缩放','全览保留全部轮次、错误事件和子任务；缩放后展开真实步骤与调用。同一步同工具同状态可以汇总数量，不按时间接近合并业务阶段。'],['证据',`每个动作可查看起止时间、调用参数、结果和 seq。${session.diagnostics.replacementEventsExcluded} 条历史替换记录不计入新执行。`],['校验 SHA-256',session.source.sha256]];
-    openDrawer('图例与数据来源','原始执行记录 · 确定性规则',rows.map(([k,v])=>`<div class="source-row"><span>${esc(k)}</span>${esc(v)}</div>`).join(''));
+    const rows=[[ui('真实记录'),ui`${session.totals.turns} 轮 · ${session.totals.steps} 步 · ${session.totals.calls} 次工具调用 · ${session.totals.errors} 次显式工具报错`],[ui('来源'),session.source.file],[ui('时间'),ui('轮内时间按同一线性比例；轮间等待用 // 折叠。概览事件是发生位置标记，放大后展开原始调用区间。')],[ui('枝条'),ui('串行调用贴近主干；同一步真实区间重叠时展开并行枝；独立子 Agent 形成副枝。位置来自原始起止时间，不为标签搬动事件。')],[ui('错误'),ui('文件前置条件拒绝使用截口，超时使用时钟，其他显式调用错误使用叉。失败调用自身的区间着红；后续处理经过的整段时间不着红。')],[ui('再次尝试'),ui('虚线仅连接本轮完整参数相同、随后返回成功的原操作。成功标记表示原操作再次返回，不代表用户任务完成；没有找到后续同参成功时保持未知。')],[ui('消息'),ui('子 Agent 的结束与报告送达分别取证。只有带发送方会话身份的真实消息形成回传连接，不推断父 Agent 已经采用。')],[ui('缩放'),ui('全览保留全部轮次、错误事件和子任务；缩放后展开真实步骤与调用。同一步同工具同状态可以汇总数量，不按时间接近合并业务阶段。')],[ui('证据'),ui`每个动作可查看起止时间、调用参数、结果和 seq。${session.diagnostics.replacementEventsExcluded} 条历史替换记录不计入新执行。`],[ui('校验 SHA-256'),session.source.sha256]];
+    openDrawer(ui('图例与数据来源'),ui('原始执行记录 · 确定性规则'),rows.map(([k,v])=>`<div class="source-row"><span>${esc(k)}</span>${esc(v)}</div>`).join(''));
   }
   function renderOverview({plotOnly=false}={}){
     zoom=null;groups=[];
@@ -2220,43 +2503,31 @@ function fileChangeHistory(operations, path) {
     const mapTime=time=>{const l=findRow(time);if(time>=l.turn.start)return l.x+Math.min(endOf(l.turn)-l.turn.start,Math.max(0,time-l.turn.start))*factor;const prev=layout[l.index-1];return prev?prev.end+Math.max(0,time-endOf(prev.turn))/Math.max(1,l.turn.start-endOf(prev.turn))*(l.x-prev.end):l.x;};
     const visible=(a,b=a)=>b>=left-90&&a<=right+90;
     const detail=false,showErrors=overviewLayers.has('failures'),showTime=overviewLayers.has('duration'),showInterrupt=overviewLayers.has('interruptions');
-    overviewProjection={layout,factor,baseFactor,gutter,mapTime,mainY:base,mainBottom:base+8,visibleLeft:left,visibleRight:right};
+    overviewProjection={layout,factor,baseFactor,gutter,mapTime,mainY:base,mainBottom:base+8,visibleLeft:left,visibleRight:right,viewportWidth:vw};
     if(!plotOnly){
-      $('turn-heading').innerHTML=`<div class="overview-heading"><div class="overview-heading-main"><strong>执行全景</strong><span>${turns.length} 轮</span></div><div class="overview-heading-meta"><span>${clock(turns[0].start).slice(0,5)} — ${clock(endOf(turns.at(-1))).slice(0,5)}</span><i></i><span>执行 ${dur(active)}</span></div></div><div class="ov-controls"><div class="ov-layer-checks">${Object.entries(focusNames).map(([id,name])=>`<label class="ov-layer-check"><input type="checkbox" data-br-layer="${id}" ${overviewLayers.has(id)?'checked':''}><span>${name}</span></label>`).join('')}</div><span class="spacer"></span><button class="ov-focus-rule" id="br-rules">图例与规则 ↗</button><div class="ov-zoom"><button id="ov-zoom-out" aria-label="缩小时间轴" ${overviewScale<=1?'disabled':''}>−</button><button id="ov-fit">${overviewScale===1?'全览':overviewScale.toFixed(overviewScale<10?1:0)+'×'}</button><button id="ov-zoom-in" aria-label="放大时间轴" ${overviewScale>=1024?'disabled':''}>＋</button></div></div><div class="br-key"><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 11 C7 11 5 3 11 3 H19 C24 3 23 11 28 11" class="br-connector"/></svg>行动</span><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 12 Q6 12 9 3 H27 M1 12 Q7 12 11 8 H23" class="br-connector"/></svg>并行 / 委派</span><span class="br-key-error">⊣ 拦截　◷ 超时　× 报错</span><span class="br-key-return">↻✓ 原操作后续成功</span><span>? 后续未确认</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="1.5" y="6" width="9" height="4" class="br-glyph" opacity=".45"/></svg>上下文总趋势</span><span class="br-key-note">${detail?'枝条按实际时间展开':'事件标记 · 点击展开'}</span></div>`;
+      $('turn-heading').innerHTML=ui`<div class="overview-heading"><div class="overview-heading-main"><strong>执行全景</strong><span>${turns.length} 轮</span></div><div class="overview-heading-meta"><span>${clock(turns[0].start).slice(0,5)} — ${clock(endOf(turns.at(-1))).slice(0,5)}</span><i></i><span>执行 ${dur(active)}</span></div></div><div class="ov-controls"><div class="ov-layer-checks">${Object.entries(focusNames).map(([id,name])=>`<label class="ov-layer-check"><input type="checkbox" data-br-layer="${id}" ${overviewLayers.has(id)?'checked':''}><span>${name}</span></label>`).join('')}</div><span class="spacer"></span><button class="ov-focus-rule" id="br-rules">图例与规则 ↗</button><div class="ov-zoom"><button id="ov-zoom-out" aria-label="缩小时间轴" ${overviewScale<=1?'disabled':''}>−</button><button id="ov-fit">${overviewScale===1?ui('全览'):overviewScale.toFixed(overviewScale<10?1:0)+'×'}</button><button id="ov-zoom-in" aria-label="放大时间轴" ${overviewScale>=1024?'disabled':''}>＋</button></div></div><div class="br-key"><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 11 C7 11 5 3 11 3 H19 C24 3 23 11 28 11" class="br-connector"/></svg>行动</span><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 12 Q6 12 9 3 H27 M1 12 Q7 12 11 8 H23" class="br-connector"/></svg>并行 / 委派</span><span class="br-key-error">⊣ 拦截　◷ 超时　× 报错</span><span class="br-key-return">↻✓ 原操作后续成功</span><span>? 后续未确认</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="1.5" y="6" width="9" height="4" class="br-glyph" opacity=".45"/></svg>上下文总趋势</span><span class="br-key-note">${detail?ui('枝条按实际时间展开'):ui('事件标记 · 点击展开')}</span></div>`;
       $('br-rules').onclick=spShowSource;
-      const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
-      if (goal) {
-        const label = '目标 ' + (goal.phase || 'active') + (goal.roundsStarted != null && goal.maxGoalRounds != null ? ' · ' + goal.roundsStarted + '/' + goal.maxGoalRounds : '');
-        // 目标放到底部观察行,作为可选入口,不占标题。
-        $('graph-caption').insertAdjacentHTML('afterbegin', '<button class="geist-text-action quiet" id="br-goal">' + label + ' ↗</button>');
-        $('br-goal').onclick = () => {
-          const rows = [['目标', goal.objective || '未记录'], ['阶段', goal.phase || '未记录'],
-            ['轮次', goal.roundsStarted != null ? goal.roundsStarted + ' / ' + (goal.maxGoalRounds ?? '?') : '未记录'],
-            ['变更', (goal.markers || []).map(m => (m.operation || '') + '@' + m.seq).join(' · ') || '未记录']];
-          openDrawer('会话目标', label, '<dl class="geist-timing-facts">' + rows.map(([k, v]) => '<div><dt>' + k + '</dt><dd>' + String(v).replace(/</g, '&lt;') + '</dd></div>').join('') + '</dl>');
-        };
-      }
       $('turn-heading').querySelectorAll('[data-br-layer]').forEach(el=>el.onchange=()=>{el.checked?overviewLayers.add(el.dataset.brLayer):overviewLayers.delete(el.dataset.brLayer);renderOverview();});
       $('ov-zoom-in').onclick=()=>setOverviewScale(overviewScale*1.8);$('ov-zoom-out').onclick=()=>setOverviewScale(overviewScale/1.8);$('ov-fit').onclick=()=>setOverviewScale(1);
-    $('graph-caption').innerHTML='<div class="tl-readout" id="tl-readout"></div><div class="br-key"><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><g class="br-cap"><path d="M3 3 L9 9 M9 3 L3 9"/></g></svg>报错</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><g class="br-cap"><circle cx="6" cy="6" r="4"/><path d="M6 3.4 V6 L7.8 7.5"/></g></svg>超时</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M2.4 6.4 L4.9 8.9 L9.7 3.1" class="br-check"/></svg>随后成功</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><text x="6" y="9" text-anchor="middle" class="br-note" font-size="10" fill="var(--branch-muted)">?</text></svg>结果还不清楚</span><button class="review-retry-summary" id="review-all-retries"><i></i><span id="review-retry-total">自动再试</span></button><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M4.4 2.5 V9.5 M7.6 2.5 V9.5" class="br-glyph"/></svg>中断</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><text x="6" y="9" text-anchor="middle" font-size="11" fill="var(--branch-ink)">✂</text></svg>压缩上下文</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M3 8.5 L4.4 3.5 M5.2 8.5 L6.6 3.5" class="br-glyph"/></svg>等待已折叠</span></div>';
+    $('graph-caption').innerHTML=ui('<div class="tl-readout" id="tl-readout"></div><div class="br-key"><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><g class="br-cap"><path d="M3 3 L9 9 M9 3 L3 9"/></g></svg>报错</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><g class="br-cap"><circle cx="6" cy="6" r="4"/><path d="M6 3.4 V6 L7.8 7.5"/></g></svg>超时</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M2.4 6.4 L4.9 8.9 L9.7 3.1" class="br-check"/></svg>随后成功</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><text x="6" y="9" text-anchor="middle" class="br-note" font-size="10" fill="var(--branch-muted)">?</text></svg>结果还不清楚</span><button class="review-retry-summary" id="review-all-retries"><i></i><span id="review-retry-total">自动再试</span></button><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M4.4 2.5 V9.5 M7.6 2.5 V9.5" class="br-glyph"/></svg>中断</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><text x="6" y="9" text-anchor="middle" font-size="11" fill="var(--branch-ink)">✂</text></svg>压缩上下文</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M3 8.5 L4.4 3.5 M5.2 8.5 L6.6 3.5" class="br-glyph"/></svg>等待已折叠</span></div>');
       const layerBox=document.createElement('div');
       layerBox.className='br-layers';
-      layerBox.innerHTML=[['failures','失败'],['duration','耗时'],['interruptions','停顿与再试'],['context','上下文变化'],['files','文件']].map(([key,label])=>`<label class="br-layer"><input type="checkbox" data-br-layer="${key}" ${overviewLayers.has(key)?'checked':''}>${label}</label>`).join('');
+      layerBox.innerHTML=[['failures',ui('失败')],['duration',ui('耗时')],['interruptions',ui('停顿与再试')],['context',ui('上下文变化')],['files',ui('文件')]].map(([key,label])=>`<label class="br-layer"><input type="checkbox" data-br-layer="${key}" ${overviewLayers.has(key)?'checked':''}>${label}</label>`).join('');
       $('graph-caption').prepend(layerBox);
       layerBox.querySelectorAll('[data-br-layer]').forEach(el=>{el.onchange=()=>{el.checked?overviewLayers.add(el.dataset.brLayer):overviewLayers.delete(el.dataset.brLayer);renderOverview();};});
-      tlReadout(tlLastReadout||'细分叉标出受阻与后续结果；放大主线可以看到当时在做什么。',tlAction);
+      tlReadout(tlLastReadout||ui('细分叉标出受阻与后续结果；放大主线可以看到当时在做什么。'),tlAction);
     }
     reviewRetriesNow=[];let html='';let bottom=base+42;
     html+=`<path d="M${gutter} ${base} H${cursor}" class="br-trunk"/>`;
     for(const l of layout){
       if(!visible(l.x,l.end))continue;
       const t=l.turn;let part=`<rect class="br-hit" x="${l.x}" y="${base-10}" width="${Math.max(3,l.end-l.x)}" height="20"/>`;
-      for(const s of t.steps){const a=mapTime(s.start),b=mapTime(s.assistantTime??s.end);if(!visible(a,mapTime(s.end)))continue;part+=`<rect class="br-model" x="${a}" y="${base-2.5}" width="${Math.max(.4,b-a)}" height="5" rx="1"/>`;if(detail){const label=`第 ${s.number} 步 · ${preciseTime(s.end-s.start)}`,lo=Math.max(left,a),hi=Math.min(right,mapTime(s.end));part+=brGroup(`class="br-round" data-br-step="${t.number}:${s.number}"`,`<rect class="br-hit" x="${a}" y="${base-8}" width="${Math.max(3,mapTime(s.end)-a)}" height="16"/>${hi-lo>tlMeasure(label)+24?brText((lo+hi)/2,base-18,label,'br-note'):''}`,`${t.number} 轮 / ${s.number} 步 · ${preciseTime(s.end-s.start)}`);}}
+      for(const s of t.steps){const a=mapTime(s.start),b=mapTime(s.assistantTime??s.end);if(!visible(a,mapTime(s.end)))continue;part+=`<rect class="br-model" x="${a}" y="${base-2.5}" width="${Math.max(.4,b-a)}" height="5" rx="1"/>`;if(detail){const label=ui`第 ${s.number} 步 · ${preciseTime(recordDuration(s))}`,lo=Math.max(left,a),hi=Math.min(right,mapTime(s.end));part+=brGroup(`class="br-round" data-br-step="${t.number}:${s.number}"`,`<rect class="br-hit" x="${a}" y="${base-8}" width="${Math.max(3,mapTime(s.end)-a)}" height="16"/>${hi-lo>tlMeasure(label)+24?brText((lo+hi)/2,base-18,label,'br-note'):''}`,ui`${t.number} 轮 / ${s.number} 步 · ${preciseTime(recordDuration(s))}`);}}
       part+=`<path d="M${l.x} ${base-5} v10" stroke="var(--surface)" stroke-width="1.4"/>`;
       const a=Math.max(left,l.x),b=Math.min(right,l.end),text=false?`${t.number} · ${dur(endOf(t)-t.start)}`:String(t.number);
       if(!detail&&overviewScale<8){if(b-a>tlMeasure(text)+12)part+=brText((a+b)/2,base-18,text,'br-round-label');else if(b-a>20)part+=brText((a+b)/2,base-18,String(t.number),'br-round-label');}
-      html+=brGroup(`class="br-round" data-br-round="${t.number}"`,part,`第 ${t.number} 轮 · ${dur(endOf(t)-t.start)} · ${t.steps.length} 步 · ${t.calls} 次调用`);
-      const next=layout[l.index+1];if(next&&visible(l.end,next.x)){const x=(l.end+next.x)/2;html+=brGroup(`class="br-gap" data-br-gap="${l.index}"`,`<rect x="${l.end}" y="${base-5}" width="${gap}" height="10" fill="var(--surface)"/><path d="M${x-2.5} ${base+3} l2 -6 M${x+.5} ${base+3} l2 -6" class="br-glyph"/>`,`轮间等待 ${dur(next.turn.start-endOf(t))}，已折叠`);}
+      html+=brGroup(`class="br-round" data-br-round="${t.number}"`,part,ui`第 ${t.number} 轮 · ${dur(endOf(t)-t.start)} · ${t.steps.length} 步 · ${t.calls} 次调用`);
+      const next=layout[l.index+1];if(next&&visible(l.end,next.x)){const x=(l.end+next.x)/2;html+=brGroup(`class="br-gap" data-br-gap="${l.index}"`,`<rect x="${l.end}" y="${base-5}" width="${gap}" height="10" fill="var(--surface)"/><path d="M${x-2.5} ${base+3} l2 -6 M${x+.5} ${base+3} l2 -6" class="br-glyph"/>`,ui`轮间等待 ${dur(next.turn.start-endOf(t))}，已折叠`);}
       if(showInterrupt){
         if(stopLabel(t.reason?.kind)){const x=l.end;html+=brGroup(`class="br-marker" data-br-stop="${t.number}"`,`<path d="M${x-2} ${base-6} v12 M${x+2} ${base-6} v12" class="br-glyph"/>`,stopLabel(t.reason.kind));}
 
@@ -2289,19 +2560,19 @@ function fileChangeHistory(operations, path) {
         if(bad)part+=brCap(p.end+5,y,condition);else if(unknown)part+=brText(p.end+9,y+4,'?','br-note');
         if(!unknown)part+=`<path d="M${p.end+(bad?13:2)} ${y} C${p.end+(bad?13:2)} ${y+12} ${join+2} ${base+12} ${join+2} ${base+2}" class="br-return"/>`;
         part+=brText(p.cx,y-(parallel?19:12),p.label,'br-label'+(bad?' bad':''));
-        if(showTime)part+=brText(p.cx,y+19,unknown?'结果未记录':(parallel?'并行 · ':'')+preciseTime(b.end-b.start),'br-note');
-        html+=brGroup(`class="br-action" data-br-batch="${b.index}"`,part,`第 ${b.turn.number} 轮 / 第 ${b.step.number} 步 · ${b.name} ×${b.calls.length} · ${bad?'调用失败':unknown?'结果未记录':'结果已返回'}`);
+        if(showTime)part+=brText(p.cx,y+19,unknown?ui('结果未记录'):(parallel?ui('并行 · '):'')+preciseTime(b.end-b.start),'br-note');
+        html+=brGroup(`class="br-action" data-br-batch="${b.index}"`,part,ui`第 ${b.turn.number} 轮 / 第 ${b.step.number} 步 · ${b.name} ×${b.calls.length} · ${bad?ui('调用失败'):unknown?ui('结果未记录'):ui('结果已返回')}`);
       }
       if(showErrors){
         const specs=episodes.filter(e=>e.pairs.length&&visible(mapTime(e.firstError),mapTime(e.resolvedAt??e.pairs.at(-1).successTime))).map(e=>{const a=mapTime(e.firstError),b=mapTime(e.resolvedAt??Math.max(...e.pairs.map(p=>p.successTime)));return {e,a,b,left:a-6,right:b+6};}).filter(p=>p.b-p.a>32);
         const relationBase=base+nodeRows*44+39;
         for(const p of brPack(specs,20)){
           const y=relationBase+p.row*36;bottom=Math.max(bottom,y+21);
-          const label=`${p.e.readConfirmed?'补读后 · ':''}原操作成功 ${p.e.confirmedCount}/${p.e.failedCount}`;
+          const label=ui`${p.e.readConfirmed?ui('补读后 · '):''}原操作成功 ${p.e.confirmedCount}/${p.e.failedCount}`;
           let part=`<rect x="${Math.max(left,p.a)-4}" y="${y-15}" width="${Math.max(20,Math.min(right,p.b)-Math.max(left,p.a)+12)}" height="34" rx="5" class="br-hover"/><path d="M${p.a} ${y-8} v8 Q${p.a} ${y+6} ${p.a+6} ${y+6} H${p.b-6} Q${p.b} ${y+6} ${p.b} ${y} v-8" class="br-association"/>`;
           if(p.b-p.a>tlMeasure(label)+30)part+=brText((Math.max(left,p.a)+Math.min(right,p.b))/2,y-3,label,'br-note');
           part+=brCheck(p.b+5,y-8);
-          html+=brGroup(`class="br-relation" data-br-proof="${p.e.id}"`,part,`${p.e.reason} · ${p.e.summary} · 经过 ${preciseTime(p.e.continuationMs??0)}`);
+          html+=brGroup(`class="br-relation" data-br-proof="${p.e.id}"`,part,ui`${p.e.reason} · ${p.e.summary} · 经过 ${preciseTime(p.e.continuationMs??0)}`);
         }
       }
     }
@@ -2312,101 +2583,76 @@ function fileChangeHistory(operations, path) {
       let part=`<path d="M${a} ${base-2} C${a} ${base-24} ${a+ramp} ${y} ${a+ramp} ${y} H${b}" class="br-child-path"/>`;
       for(const ct of child.turns)for(const s of ct.steps){const x1=mapTime(s.start),x2=mapTime(s.assistantTime??s.end);if(visible(x1,x2))part+=`<rect x="${x1}" y="${y-2}" width="${Math.max(.5,x2-x1)}" height="4" class="br-child-body"/>`;for(const c of s.calls){const x=mapTime(c.start),end=mapTime(c.end??c.start);if(visible(x,end))part+=`<path d="M${x} ${y+3} v4 h${Math.max(.6,end-x)}" class="${showErrors&&c.status==='error'?'br-cap':'br-return'}"/>`;}}
       part+=`<path d="M${b} ${y-4} v8" class="br-child-path"/>`;
-      const label=`子 Agent · ${child.totals.steps} 步 · ${child.totals.calls} 次调用`,cx=Math.max(left+tlMeasure(label)/2,Math.min(right-tlMeasure(label)/2,(a+b)/2));
+      const label=ui`子 Agent · ${child.totals.steps} 步 · ${child.totals.calls} 次调用`,cx=Math.max(left+tlMeasure(label)/2,Math.min(right-tlMeasure(label)/2,(a+b)/2));
       part+=brText(cx,y-16,label,'br-label')+brText(Math.max(left,a+ramp),y+24,dur(endOf(child.turns.at(-1))-child.turns[0].start),'br-note','start');
       const reports=(session.communications||[]).filter(r=>r.childId===child.id&&r.kind==='agent-message');
-      if(reports.length){const delivery=mapTime(reports[0].time);part+=`<path d="M${b} ${y} C${b+8} ${y} ${delivery} ${base-12} ${delivery} ${base-2}" class="br-child-return"/><path d="M${delivery-3} ${base-7} l3 5 l3 -5" class="br-glyph"/>`;if(visible(delivery))part+=brText(delivery+12,y+43,`回报送达 ×${reports.length}`,'br-note','start');}
+      if(reports.length){const delivery=mapTime(reports[0].time);part+=`<path d="M${b} ${y} C${b+8} ${y} ${delivery} ${base-12} ${delivery} ${base-2}" class="br-child-return"/><path d="M${delivery-3} ${base-7} l3 5 l3 -5" class="br-glyph"/>`;if(visible(delivery))part+=brText(delivery+12,y+43,ui`回报送达 ×${reports.length}`,'br-note','start');}
       part+=`<rect class="br-hit" x="${Math.max(left,a)-5}" y="${y-28}" width="${Math.max(20,Math.min(right,b)-Math.max(left,a)+10)}" height="62"/>`;
-      html+=brGroup(`class="br-child" data-br-child="${child.id}"`,part,`${m.label||'子 Agent'} · ${dur(endOf(child.turns.at(-1))-child.turns[0].start)} · ${reports.length} 条主动回报已送达`);
+      html+=brGroup(`class="br-child" data-br-child="${child.id}"`,part,ui`${m.label||ui('子 Agent')} · ${dur(endOf(child.turns.at(-1))-child.turns[0].start)} · ${reports.length} 条主动回报已送达`);
     }
-    const mainH=Math.max(geistOverviewFrame.height,bottom+72),h=mainH,axisY=mainH-24;html=reviewTimeLayer(layout,visible,left,right,mainH,mapTime)+'<g id="trace-context-layer">'+reviewContextLayer(layout,base,left,right,visible)+'</g>'+reviewCompactionLayer(mapTime,left,right,mainH)+html+reviewOverviewFiles(layout,mapTime,base,left,right,mainH);
+    // 目标带单独占一段高度:否则它会和下方文件行、时间刻度叠在一起。
+    const goalInfo = overviewLayers.has('goal') ? ((typeof data !== 'undefined' && data.context && data.context.goal) || null) : null;
+    const goalMarkers = goalInfo && Array.isArray(goalInfo.markers) ? goalInfo.markers : [];
+    const goalPad = goalMarkers.length ? 84 : 0;
+    const mainH=Math.max(geistOverviewFrame.height,bottom+72+goalPad),h=mainH,axisY=mainH-24;html=reviewTimeLayer(layout,visible,left,right,mainH,mapTime)+'<g id="trace-context-layer">'+reviewContextLayer(layout,base,left,right,visible)+'</g>'+reviewCompactionLayer(mapTime,left,right,mainH)+html+reviewOverviewFiles(layout,mapTime,base,left,right,mainH);
     let axis=`<path d="M${left} ${axisY} H${right}" class="br-rule"/>`;
     const span=(right-left)/factor,step=[100,200,500,1000,2000,5000,10000,30000,60000,120000,300000,600000,1200000].find(v=>v>=span/7)||1200000;
     let lastTick=-Infinity;
     for(const l of layout){if(!visible(l.x,l.end))continue;const start=Math.max(l.offset,l.offset+(left-l.x)/factor),end=Math.min(l.offset+endOf(l.turn)-l.turn.start,l.offset+(right-l.x)/factor);for(let ms=Math.ceil(start/step)*step;ms<=end;ms+=step){const x=l.x+(ms-l.offset)*factor;if(x-lastTick<55)continue;lastTick=x;axis+=`<path d="M${x} ${axisY-4} v8" class="br-rule"/>`+brText(x,axisY+20,ms<60000?preciseTime(ms):elapsed(ms),'br-axis');}}
     const visibleTurns=layout.filter(l=>l.end>=left&&l.x<=right).map(l=>l.turn.number);
-    const mode=overviewScale>1?'放大查看 · 点选细节':detail?`第 ${visibleTurns.join('、')} 轮 · 动作展开`:reviewOverviewSummary();
-    html=`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,showTime?"总耗时 "+reviewDuration(active):"累计执行时间",'br-note','end')}</g>`;
-    const goalData = overviewLayers.has('goal') ? ((typeof data !== 'undefined' && data.context && data.context.goal) || null) : null;
-    if (goalData && Array.isArray(goalData.markers) && goalData.markers.length) {
-      const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
-      const reads = goalData.markers.filter(m => m.operation === 'read');
-      const gy = h - 46;
-      // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
-      const byGoalAll = new Map();
-      for (const m of goalData.markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
-      const byGoalLife = new Map();
-      for (const m of life) { const key = m.goalId || 'goal'; if (!byGoalLife.has(key)) byGoalLife.set(key, []); byGoalLife.get(key).push({ ...m, x: mapTime(m.time) }); }
-      let band = '<g class="goal-band" data-goal-band="1" style="cursor:pointer;pointer-events:all">';
-      let drawn = 0;
-      for (const [id, list] of byGoalLife) {
-        const pts = list.filter(m => Number.isFinite(m.x));
-        if (!pts.length) continue;
-        drawn++;
-        const all = (byGoalAll.get(id) || []).map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
-        const x0 = all.length ? all[0].x : pts[0].x, x1 = pts[pts.length - 1].x, w = Math.max(18, x1 - x0);
-        band += '<rect x="' + x0 + '" y="' + (gy - 7) + '" width="' + w + '" height="14" rx="4" class="goal-block"/>';
-        if (pts.length > 1) band += '<path d="M' + pts[0].x + ' ' + gy + 'H' + x1 + '" class="goal-line"/>';
-        for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="4" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ' · 第 ' + m.turn + ' 轮 · seq ' + m.seq + '</title></circle>';
-        const last = pts[pts.length - 1];
-        const own = (goalData.goals || []).find(x => x.id === id) || null;
-        const objective = String(own?.objective || goalData.objective || '目标').replace(/\s+/g, ' ');
-        const compact = objective.length > 26 ? objective.slice(0, 26) + '…' : objective;
-        band += '<text x="' + (x0 + w / 2) + '" y="' + (gy + 16) + '" text-anchor="middle" class="goal-label"><tspan class="goal-text">' + compact + '</tspan><tspan class="goal-state ' + (last.operation || 'active') + '" dx="6">' + (last.operation || '') + '</tspan></text>';
-      }
-      for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + '" r="1.8" class="goal-read"><title>读取目标 · 第 ' + m.turn + ' 轮</title></circle>'; }
-      band += '</g>';
-      if (drawn) html += band;
-    }
+    const mode=overviewScale>1?'放大查看 · 点选细节':detail?ui`第 ${visibleTurns.join('、')} 轮 · 动作展开`:ui(reviewOverviewSummary());
+    html=ui`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,ui(showTime?"总耗时 "+reviewDuration(active):"累计执行时间"),'br-note','end')}</g>`;
+    if (goalMarkers.length) html += reviewGoalBand(goalInfo, goalMarkers, mapTime, h - 70);
     $('graph').setAttribute('viewBox',`0 0 ${w} ${h}`);$('graph').setAttribute('height',h);$('graph').style.width=w+'px';$('graph').innerHTML=html;
     const bind=(selector,enter,click,dbl)=>$('graph').querySelectorAll(selector).forEach(el=>{el.onmouseenter=()=>enter?.(el);el.onclick=ev=>{ev.stopPropagation();click?.(el);};el.ondblclick=ev=>{ev.preventDefault();ev.stopPropagation();(dbl||click)?.(el);};el.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();click?.(el);}};});
+    bind('[data-goal-band]', null, () => reviewOpenGoalSummary(goalInfo));
     bind('[data-br-round]',el=>reviewRoundReadout(brRound(Number(el.dataset.brRound))),el=>{const t=brRound(Number(el.dataset.brRound));turnIndex=turns.indexOf(t);header();tlFocusRange(t,t.start,endOf(t));reviewRoundReadout(t);});
     bind('[data-br-step]',el=>{const [n,k]=el.dataset.brStep.split(':').map(Number),t=brRound(n);tlStepReadout(t,t.steps.find(s=>s.number===k));},el=>{const [n,k]=el.dataset.brStep.split(':').map(Number),t=brRound(n);tlOpenStep(t,t.steps.find(s=>s.number===k));});
-    bind('[data-br-episode]',el=>{const e=episodes.find(e=>e.id===el.dataset.brEpisode);tlReadout(`第 ${e.turn} 轮 · ${e.reason} · ${e.failedCount} 次失败 · ${e.summary}，点击展开`,()=>openOverviewEpisode(e.id));},el=>openOverviewEpisode(el.dataset.brEpisode));
-    bind('[data-br-batch]',el=>{const b=model.batches[Number(el.dataset.brBatch)];tlReadout(`第 ${b.turn.number} 轮 / 第 ${b.step.number} 步 · ${b.name} ×${b.calls.length} · ${b.end===null?'结果未记录':preciseTime(b.end-b.start)}${b.status==='error'?' · '+(b.calls.find(c=>c.error)?.error?.code||'调用失败'):''}`,()=>tlOpenBatch(b));},el=>tlOpenBatch(model.batches[Number(el.dataset.brBatch)]));
-    bind('[data-br-proof]',el=>{const e=episodes.find(e=>e.id===el.dataset.brProof);tlReadout(`原操作随后成功 ${e.confirmedCount}/${e.failedCount} · ${e.summary} · 处理经过 ${preciseTime(e.continuationMs??0)}`,()=>openOverviewEpisode(e.id));},el=>openOverviewEpisode(el.dataset.brProof));
-    bind('[data-br-child]',el=>{const c=data.sessions.find(s=>s.id===el.dataset.brChild);tlReadout(`子 Agent · ${c.totals.steps} 步 · ${c.totals.calls} 次调用 · ${c.totals.errors} 次报错`,()=>openChild(c.id));},el=>openChild(el.dataset.brChild));
-    bind('[data-br-gap]',el=>{const l=layout[Number(el.dataset.brGap)],next=layout[l.index+1];tlReadout(`第 ${l.turn.number}—${next.turn.number} 轮间等待 ${dur(next.turn.start-endOf(l.turn))}，已折叠。`);},()=>{});
-    bind('[data-br-stop]',el=>tlReadout(`第 ${el.dataset.brStop} 轮 · ${stopLabel(brRound(Number(el.dataset.brStop)).reason.kind)}`),el=>openOverviewRound(Number(el.dataset.brStop),'interruptions'));
+    bind('[data-br-episode]',el=>{const e=episodes.find(e=>e.id===el.dataset.brEpisode);tlReadout(ui`第 ${e.turn} 轮 · ${e.reason} · ${e.failedCount} 次失败 · ${e.summary}，点击展开`,()=>openOverviewEpisode(e.id));},el=>openOverviewEpisode(el.dataset.brEpisode));
+    bind('[data-br-batch]',el=>{const b=model.batches[Number(el.dataset.brBatch)];tlReadout(ui`第 ${b.turn.number} 轮 / 第 ${b.step.number} 步 · ${b.name} ×${b.calls.length} · ${b.end===null?ui('结果未记录'):preciseTime(b.end-b.start)}${b.status==='error'?' · '+(b.calls.find(c=>c.error)?.error?.code||ui('调用失败')):''}`,()=>tlOpenBatch(b));},el=>tlOpenBatch(model.batches[Number(el.dataset.brBatch)]));
+    bind('[data-br-proof]',el=>{const e=episodes.find(e=>e.id===el.dataset.brProof);tlReadout(ui`原操作随后成功 ${e.confirmedCount}/${e.failedCount} · ${e.summary} · 处理经过 ${preciseTime(e.continuationMs??0)}`,()=>openOverviewEpisode(e.id));},el=>openOverviewEpisode(el.dataset.brProof));
+    bind('[data-br-child]',el=>{const c=data.sessions.find(s=>s.id===el.dataset.brChild);tlReadout(ui`子 Agent · ${c.totals.steps} 步 · ${c.totals.calls} 次调用 · ${c.totals.errors} 次报错`,()=>openChild(c.id));},el=>openChild(el.dataset.brChild));
+    bind('[data-br-gap]',el=>{const l=layout[Number(el.dataset.brGap)],next=layout[l.index+1];tlReadout(ui`第 ${l.turn.number}—${next.turn.number} 轮间等待 ${dur(next.turn.start-endOf(l.turn))}，已折叠。`);},()=>{});
+    bind('[data-br-stop]',el=>tlReadout(ui`第 ${el.dataset.brStop} 轮 · ${stopLabel(brRound(Number(el.dataset.brStop)).reason.kind)}`),el=>openOverviewRound(Number(el.dataset.brStop),'interruptions'));
     bindOverviewViewport();tlBindScroll();reviewBind();
   }
 
-  function openDrawer(title,description,html) { $('drawer-title').textContent=title;$('drawer-description').textContent=description;$('drawer-body').innerHTML=html;$('drawer-body').scrollTop=0;$('canvas').classList.add('drawer-open');$('drawer-close').focus({preventScroll:true}); }
+  function openDrawer(title,description,html,back) { const backButton=$('drawer-back'); if(backButton){backButton.hidden=!back;backButton.textContent=back?('← '+(back.label||ui('返回'))):'';backButton.onclick=back?()=>back.open():null;} $('drawer-title').textContent=title;$('drawer-description').textContent=description;$('drawer-body').innerHTML=html;$('drawer-body').scrollTop=0;$('canvas').classList.add('drawer-open');$('drawer-close').focus({preventScroll:true}); }
   function closeDrawer() { $('canvas').classList.remove('drawer-open');activeGroup=null;$('graph').querySelectorAll('.active').forEach(g=>g.classList.remove('active')); }
-  function block(value) { return value?`<pre class="excerpt">${esc(value.text)}</pre>${value.omitted?`<span class="truncated">节选 · 另有 ${value.omitted.toLocaleString()} 个字符未载入此 demo</span>`:''}`:'<span class="muted">未记录文本</span>'; }
+  function block(value) { return value?`<pre class="excerpt">${esc(value.text)}</pre>${value.omitted?ui`<span class="truncated">节选 · 另有 ${value.omitted.toLocaleString()} 个字符未载入此 demo</span>`:''}`:ui('<span class="muted">未记录文本</span>'); }
   function callEntry(c) {
-    return `<details class="entry" ${c.status==='error'?'open':''}><summary><div class="entry-top"><span class="entry-name">${esc(c.name)}</span><span class="entry-status ${c.status==='error'?'bad':''}">${c.status==='error'?'工具报错':c.status==='returned'?'已返回':'尚无结果记录'}</span><span class="spacer"></span><span class="mono muted" style="font-size:10px">${c.end===null?'—':dur(c.end-c.start)}</span></div><div class="entry-time">${clock(c.start)}${c.end===null?'':` → ${clock(c.end)}`} · seq ${c.seq}${c.resultSeq===null?'':` → ${c.resultSeq}`}</div></summary>${c.error?`<span class="code-label">错误类型</span><div class="mono" style="font-size:11px;color:var(--error)">${esc(c.error.code||c.error.name||'')}</div>`:''}<span class="code-label">调用参数</span>${block(c.args)}<span class="code-label">返回原文</span>${block(c.result)}</details>`;
+    return ui`<details class="entry" ${c.status==='error'?'open':''}><summary><span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span><div class="entry-head"><div class="entry-top"><span class="entry-name">${esc(c.name)}</span><span class="entry-status ${c.status==='error'?'bad':''}">${c.status==='error'?ui('工具报错'):c.status==='returned'?ui('已返回'):ui('尚无结果记录')}</span><span class="spacer"></span><span class="mono muted" style="font-size:10px">${c.end===null?'—':dur(c.end-c.start)}</span></div><div class="entry-time">${clock(c.start)}${c.end===null?'':` → ${clock(c.end)}`} · seq ${c.seq}${c.resultSeq===null?'':` → ${c.resultSeq}`}</div></div></summary>${c.error?ui`<span class="code-label">错误类型</span><div class="mono" style="font-size:11px;color:var(--error)">${esc(c.error.code||c.error.name||'')}</div>`:''}<span class="code-label">调用参数</span>${block(c.args)}<span class="code-label">返回原文</span>${block(c.result)}</details>`;
   }
   function showGroup(index) {
     try {
       activeGroup=index;const g=groups[index];const calls=allCalls(g);
       $('graph').querySelectorAll('[data-group]').forEach(el=>el.classList.toggle('active',Number(el.dataset.group)===index));
-      let html=g.steps.length>1?'<div class="drawer-actions"><button class="action-button primary" id="zoom-group">展开这段路径 ↗</button></div>':'';
+      let html=g.steps.length>1?ui('<div class="drawer-actions"><button class="action-button primary" id="zoom-group">展开这段路径 ↗</button></div>'):'';
       for(const s of g.steps){
-        html+=`<h3>第 ${s.number} 步 · ${clock(s.start)} → ${clock(s.end)}${s.endObserved?'':' · 无结束事件'}</h3>`;
+        html+=ui`<h3>第 ${s.number} 步 · ${clock(s.start)} → ${clock(s.end)}${s.endObserved?'':ui(' · 无结束事件')}</h3>`;
         for(const m of s.markers){
           const child=data.sessions.find(c=>c.id===m.childId);
-          html+=`<div class="source-row"><span>${clock(m.time)} · seq ${m.seq}</span>${m.type==='subagent/catalog'?`子任务：${esc(m.label||m.childId)}${child?`<br><button class="back-link child-link" data-child="${esc(child.id)}">查看子任务路径 · ${child.totals.steps} 步 ↗</button>`:''}`:m.type==='compaction/start'?'历史压缩开始':'历史压缩结束'}</div>`;
+          html+=`<div class="source-row"><span>${clock(m.time)} · seq ${m.seq}</span>${m.type==='subagent/catalog'?ui`子任务：${esc(m.label||m.childId)}${child?ui`<br><button class="back-link child-link" data-child="${esc(child.id)}">查看子任务路径 · ${child.totals.steps} 步 ↗</button>`:''}`:m.type==='compaction/start'?ui('历史压缩开始'):ui('历史压缩结束')}</div>`;
         }
-        for(const retry of s.retries)html+=`<div class="source-row"><span>模型请求重试 · seq ${retry.seq}</span>${esc(retry.failure?.code||'请求失败')} · 等待 ${dur(retry.delayMs)}</div>`;
+        for(const retry of s.retries)html+=ui`<div class="source-row"><span>模型请求重试 · seq ${retry.seq}</span>${esc(retry.failure?.code||ui('请求失败'))} · 等待 ${dur(retry.delayMs)}</div>`;
         html+=s.calls.map(callEntry).join('');
-        if(s.reply)html+=`<span class="code-label">助手原文 · seq ${s.assistantSeq}</span>${block(s.reply)}`;
+        if(s.reply)html+=ui`<span class="code-label">助手原文 · seq ${s.assistantSeq}</span>${block(s.reply)}`;
       }
-      openDrawer(g.title||stepName(g),`${clock(g.start)} → ${clock(g.end)} · ${calls.length} 次工具调用`,html);
+      openDrawer(g.title||stepName(g),ui`${clock(g.start)} → ${clock(g.end)} · ${calls.length} 次工具调用`,html);
       if($('zoom-group'))$('zoom-group').onclick=()=>{zoom=[g.steps[0].number,g.steps.at(-1).number];activeGroup=null;closeDrawer();render();$('graph-scroll').scrollTop=0;};
       $('drawer-body').querySelectorAll('[data-child]').forEach(b=>b.onclick=()=>openChild(b.dataset.child));
-      $('live-status').textContent=`已打开第${turn().number}轮，${stepName(g)}的原始记录`;
+      $('live-status').textContent=ui`已打开第${turn().number}轮，${stepName(g)}的原始记录`;
     } catch (error) {
       const group=groups[index]||{};
-      openDrawer(group.title||'记录','打开记录时出错',`<div class="source-row">${esc(String(error&&error.message||error))}</div>`+((group.steps||[]).map((s)=>`<h3>第 ${s.number} 步</h3>`).join('')));
+      openDrawer(group.title||ui('记录'),ui('打开记录时出错'),`<div class="source-row">${esc(String(error&&error.message||error))}</div>`+((group.steps||[]).map((s)=>ui`<h3>第 ${s.number} 步</h3>`).join('')));
     }
   }
 
-  function showPrompts(){openDrawer(`第 ${turn().number} 轮对话`,'用户输入原文，按发生顺序排列',turn().prompts.length?turn().prompts.map(p=>`<h3>${clock(p.time)} · seq ${p.seq}</h3><div class="original-prompt">${esc(p.text)}</div>${p.omitted?`<span class="truncated">节选 · 另有 ${p.omitted} 个字符</span>`:''}`).join(''):'<div class="muted">本轮没有新的用户文本。</div>');}
+  function showPrompts(){openDrawer(ui`第 ${turn().number} 轮对话`,ui('用户输入原文，按发生顺序排列'),turn().prompts.length?turn().prompts.map(p=>`<h3>${clock(p.time)} · seq ${p.seq}</h3><div class="original-prompt">${esc(p.text)}</div>${p.omitted?ui`<span class="truncated">节选 · 另有 ${p.omitted} 个字符</span>`:''}`).join(''):ui('<div class="muted">本轮没有新的用户文本。</div>'));}
   function showSource(){
     const s=session,d=s.diagnostics;
-    const rows=[['会话',s.id],['数据文件',s.source.file],['原始事件',`${s.eventCount.toLocaleString()} 条 · seq ${s.firstSeq}—${s.lastSeq}`],['执行记录',`${s.totals.turns} 轮 · ${s.totals.steps} 步 · ${s.totals.calls} 次工具调用 · ${s.totals.errors} 次工具报错`],['结果配对',`${s.totals.calls-d.unresolvedCalls} 次已有结果 · ${d.unresolvedCalls} 次无结果记录 · ${d.unmatchedResults} 条结果无法配对`],['历史替换',`${d.replacementEventsExcluded} 条替换记录已排除，不计为新的调用或回复`],['概览选择','主线保留所有54轮；优先展开修改受阻最多、失败调用耗时最长和服务不可用三类代表，其他受阻有原位标记。所有轮次使用同一耗时口径。点击可以换入关注事件，分组不随缩放改变。'],['概览标题','使用轮次号、错误条件与可核对的处理过程。只有所有失败目标都在重新调用前读取成功，且原调用随后同参成功，才显示补读/重读后成功；不使用AI归纳任务主题。'],['时间口径','概览使用累计轮内执行时间；轮间等待折叠为相同宽度间隔，真实时间保留在悬停信息。所有轮内区间共用线性比例，极短事件使用最小可见刻度；可放大时间轴。'],['报错条','红条覆盖出现工具报错的整个步骤：step/start 到 step/end，包括模型响应和工具返回。独立时间带保留原始位置，不叠加叉号或连接线。受阻事件按单轮、错误条件和未结束的操作对象归组，成功后再次受阻另起一件；不跨轮合并，也不按屏幕距离合并。'],['同参后续成功','同一轮内，使用完整参数（节选前）规范化 JSON 并生成签名。工具名和全部参数完全相同，且在失败结果后返回成功，才计入“后续同参成功 N/M”。主图不再绘制绿色恢复时间线；具体间隔保留在详情。参数改变、跨轮或缺少结果均不推断为恢复。'],['并行与中断','紫色支路使用有 parentSession 关联的子代理真实起止时间；灰色暂停符号直接来自 turn/end 的 aborted、interrupted 或 error。请求重试直接来自 llm/retry，以主线上实际时间位置的空心点标注，与工具受阻分支区分。'],['轮内行动标题','当前保留的第6轮行动路径是人工整理的表达样例；概览已全部改为上述确定性规则。其他轮次按工具动作归组。'],['状态口径','报错只认工具结果的显式错误字段。“已返回”和“本轮结束”不代表用户任务已经完成。'],['原文','保留用户文本、助手正文与工具结果节选；不包含模型推理正文、token 或计价数据。'],['文件校验 SHA-256',s.source.sha256]];
-    openDrawer('数据来源','本地会话快照 · 无模拟事件',rows.map(([k,v])=>`<div class="source-row"><span>${esc(k)}</span>${esc(v)}</div>`).join(''));
+    const rows=[[ui('会话'),s.id],[ui('数据文件'),s.source.file],[ui('原始事件'),ui`${s.eventCount.toLocaleString()} 条 · seq ${s.firstSeq}—${s.lastSeq}`],[ui('执行记录'),ui`${s.totals.turns} 轮 · ${s.totals.steps} 步 · ${s.totals.calls} 次工具调用 · ${s.totals.errors} 次工具报错`],[ui('结果配对'),ui`${s.totals.calls-d.unresolvedCalls} 次已有结果 · ${d.unresolvedCalls} 次无结果记录 · ${d.unmatchedResults} 条结果无法配对`],[ui('历史替换'),ui`${d.replacementEventsExcluded} 条替换记录已排除，不计为新的调用或回复`],[ui('概览选择'),ui('主线保留所有54轮；优先展开修改受阻最多、失败调用耗时最长和服务不可用三类代表，其他受阻有原位标记。所有轮次使用同一耗时口径。点击可以换入关注事件，分组不随缩放改变。')],[ui('概览标题'),ui('使用轮次号、错误条件与可核对的处理过程。只有所有失败目标都在重新调用前读取成功，且原调用随后同参成功，才显示补读/重读后成功；不使用AI归纳任务主题。')],[ui('时间口径'),ui('概览使用累计轮内执行时间；轮间等待折叠为相同宽度间隔，真实时间保留在悬停信息。所有轮内区间共用线性比例，极短事件使用最小可见刻度；可放大时间轴。')],[ui('报错条'),ui('红条覆盖出现工具报错的整个步骤：step/start 到 step/end，包括模型响应和工具返回。独立时间带保留原始位置，不叠加叉号或连接线。受阻事件按单轮、错误条件和未结束的操作对象归组，成功后再次受阻另起一件；不跨轮合并，也不按屏幕距离合并。')],[ui('同参后续成功'),ui('同一轮内，使用完整参数（节选前）规范化 JSON 并生成签名。工具名和全部参数完全相同，且在失败结果后返回成功，才计入“后续同参成功 N/M”。主图不再绘制绿色恢复时间线；具体间隔保留在详情。参数改变、跨轮或缺少结果均不推断为恢复。')],[ui('并行与中断'),ui('紫色支路使用有 parentSession 关联的子代理真实起止时间；灰色暂停符号直接来自 turn/end 的 aborted、interrupted 或 error。请求重试直接来自 llm/retry，以主线上实际时间位置的空心点标注，与工具受阻分支区分。')],[ui('轮内行动标题'),ui('当前保留的第6轮行动路径是人工整理的表达样例；概览已全部改为上述确定性规则。其他轮次按工具动作归组。')],[ui('状态口径'),ui('报错只认工具结果的显式错误字段。“已返回”和“本轮结束”不代表用户任务已经完成。')],[ui('原文'),ui('保留用户文本、助手正文与工具结果节选；不包含模型推理正文、token 或计价数据。')],[ui('文件校验 SHA-256'),s.source.sha256]];
+    openDrawer(ui('数据来源'),ui('本地会话快照 · 无模拟事件'),rows.map(([k,v])=>`<div class="source-row"><span>${esc(k)}</span>${esc(v)}</div>`).join(''));
   }
   function openChild(id){returnState={sessionId:session.id,turnIndex,zoom};session=data.sessions.find(s=>s.id===id);turnIndex=0;zoom=null;view='path';closeDrawer();render();$('graph-scroll').scrollTop=0;}
   function returnParent(){if(!returnState)return;session=data.sessions.find(s=>s.id===returnState.sessionId);turnIndex=returnState.turnIndex;zoom=returnState.zoom;returnState=null;closeDrawer();render();$('graph-scroll').scrollTop=0;}
@@ -2447,7 +2693,7 @@ function collectToolResults(session, facts, fileOperations) {
       let group = groups.get(key);
       if (!group) { group = { id: t.number + ':' + step.number + ':' + key, kind, family: operation?.family, recorded: !!operation, turn: t.number, step: step.number, time: call.end ?? call.start, seqs: [], calls: [] }; groups.set(key, group); }
       group.seqs.push(call.seq);
-      group.calls.push({ ...call, file: file?.path ?? null, files: records, fact });
+      group.calls.push({ ...call, file: file?.path ?? null, files: records, fact: presentCallFact(call, fact) });
       group.time = Math.max(group.time, call.end ?? call.start);
     }
     results.push(...groups.values());
@@ -2460,48 +2706,48 @@ function toolResultLabel(result) {
   const calls = result.calls, paths = [...new Set(calls.map(c => c.file).filter(Boolean))];
   if (result.recorded) {
     const call = calls[0], operation = call.fact?.operation;
-    if (result.kind === 'pending') return call.name + (calls.length > 1 ? ' ×' + calls.length : '') + ' · 待返回';
-    if (result.kind === 'error') return call.name + ' · 受阻';
+    if (result.kind === 'pending') return call.name + (calls.length > 1 ? ' ×' + calls.length : '') + ui(' · 待返回');
+    if (result.kind === 'error') return call.name + ui(' · 受阻');
     if (calls.length > 1) return call.name + ' ×' + calls.length;
-    if (call.name === 'grep') return 'grep · ' + (operation?.search?.total ?? operation?.search?.shown ?? '?') + ' 处匹配';
-    if (call.name === 'glob') return 'glob · 发现路径';
-    if (operation?.family === 'read') return 'read · ' + (operation.metrics.find(([key]) => key === '返回行数')?.[1] || '取回内容');
-    if (operation?.family === 'write') return call.name + ' · ' + (paths[0]?.split(/[\\/]/).at(-1) || '文件修改');
+    if (call.name === 'grep') return 'grep · ' + (operation?.search?.total ?? operation?.search?.shown ?? '?') + ui(' 处匹配');
+    if (call.name === 'glob') return ui('glob · 发现路径');
+    if (operation?.family === 'read') return 'read · ' + (operation.metrics.find(([key]) => key === '返回行数')?.[1] || ui('取回内容'));
+    if (operation?.family === 'write') return call.name + ' · ' + (paths[0]?.split(/[\\/]/).at(-1) || ui('文件修改'));
     if (operation?.family === 'command') {
       const program = operation.subject.match(/\b(?:node|python3?|lean|lake|git|rg|pnpm|npm|Get-Content|Select-String)\b/)?.[0];
-      return call.name + ' · ' + (program || '命令输出');
+      return call.name + ' · ' + (program || ui('命令输出'));
     }
-    return call.name + ' · ' + ({ process: '后台输出', web: '网页返回', coordination: '协作返回' }[operation?.family] || '工具返回');
+    return call.name + ' · ' + ({ process: ui('后台输出'), web: ui('网页返回'), coordination: ui('协作返回') }[operation?.family] || ui('工具返回'));
   }
-  if (result.kind === 'error') return calls.length > 1 ? calls.length + ' 次受阻' : '操作受阻';
+  if (result.kind === 'error') return calls.length > 1 ? calls.length + ui(' 次受阻') : ui('操作受阻');
   if (result.kind === 'read') {
     const range = calls.length === 1 && calls[0].fact?.outcome?.match(/返回第 (\d+)–(\d+) 行/);
-    return range ? '取回 ' + (Number(range[2]) - Number(range[1]) + 1) + ' 行' : paths.length === 1 ? '取回文件内容' : '取回 ' + paths.length + ' 个文件';
+    return range ? ui('取回 ') + (Number(range[2]) - Number(range[1]) + 1) + ui(' 行') : paths.length === 1 ? ui('取回文件内容') : ui('取回 ') + paths.length + ui(' 个文件');
   }
   if (result.kind === 'change') {
     const preview = calls.length === 1 && calls[0].fact?.preview;
-    if (preview && !preview.partial && preview.before === '' && (calls[0].nativeName === 'write' || calls[0].name === 'write')) return '写入 ' + preview.after.split(/\r?\n/).length + ' 行';
-    return preview && !preview.partial ? '替换 ' + preview.before.split(/\r?\n/).length + '→' + preview.after.split(/\r?\n/).length + ' 行' : paths.length > 1 ? '修改 ' + paths.length + ' 个文件' : '写入修改已返回';
+    if (preview && !preview.partial && preview.before === '' && (calls[0].nativeName === 'write' || calls[0].name === 'write')) return ui('写入 ') + preview.after.split(/\r?\n/).length + ui(' 行');
+    return preview && !preview.partial ? ui('替换 ') + preview.before.split(/\r?\n/).length + '→' + preview.after.split(/\r?\n/).length + ui(' 行') : paths.length > 1 ? ui('修改 ') + paths.length + ui(' 个文件') : ui('写入修改已返回');
   }
   if (result.kind === 'check') {
-    if (calls.some(c => /^命令输出报告：FAIL\b/i.test(c.fact?.outcome || '') || /^\s*FAIL\b/im.test(c.result?.text || ''))) return '检查报告未过';
-    if (calls.every(c => /^命令输出报告：PASS\b/i.test(c.fact?.outcome || ''))) return '检查有通过项';
-    return '取得检查输出';
+    if (calls.some(c => /^命令输出报告：FAIL\b/i.test(c.fact?.outcome || '') || /^\s*FAIL\b/im.test(c.result?.text || ''))) return ui('检查报告未过');
+    if (calls.every(c => /^命令输出报告：PASS\b/i.test(c.fact?.outcome || ''))) return ui('检查有通过项');
+    return ui('取得检查输出');
   }
   if (calls.length === 1) {
     const outcome = calls[0].fact?.outcome || '';
-    if (/^(?:返回|命中) 0 条/.test(outcome)) return '没有匹配结果';
-    return outcome.match(/(?:返回|命中) \d+ 条(?:事件记录|记录)?/)?.[0] || '取回查询结果';
+    if (/^(?:返回|命中) 0 条/.test(outcome)) return ui('没有匹配结果');
+    return outcome.match(/(?:返回|命中) \d+ 条(?:事件记录|记录)?/)?.[0] || ui('取回查询结果');
   }
-  return calls.length + ' 项查询结果';
+  return calls.length + ui(' 项查询结果');
 }
 
 function compactToolLabel(call) {
   const operation = call.fact?.operation;
-  if (call.name === 'grep') return 'grep ' + (operation?.search?.total ?? operation?.search?.shown ?? '?') + '处';
-  if (operation?.family === 'read') return 'read ' + (operation.metrics.find(([key]) => key === '返回行数')?.[1] || '内容').replace(/\s+/g, '');
+  if (call.name === 'grep') return 'grep ' + (operation?.search?.total ?? operation?.search?.shown ?? '?') + ui('处');
+  if (operation?.family === 'read') return 'read ' + (operation.metrics.find(([key]) => key === '返回行数')?.[1] || ui('内容')).replace(/\s+/g, '');
   if (operation?.family === 'command') { const program = operation.subject.match(/\b(?:node|python3?|lean|lake|git|rg|pnpm|npm)\b/)?.[0]; return program ? call.name + '/' + program : call.name; }
-  return call.name === 'job_output' ? '后台输出' : call.name;
+  return call.name === 'job_output' ? ui('后台输出') : call.name;
 }
 
 function toolResultEndpoint(members) {
@@ -2578,7 +2824,7 @@ function actorRecords(data) {
     (context.collaborationEvents || []).filter(e => e.tool === 'spawn_agent').map((e, i) => {
       const events = context.collaborationEvents.filter(x => x.taskName === e.taskName && x.start >= e.start);
       const location = locate(e);
-      return { id: e.taskPath || 'agent:' + i, name: e.taskName || '子代理', title: e.taskName || '子任务', start: e.start, end: null, returnTime: null,
+      return { id: e.taskPath || 'agent:' + i, name: e.taskName || ui('子代理'), title: e.taskName || ui('子任务'), start: Number.isFinite(e.start) ? e.start : location.time, end: null, returnTime: null,
         turn: location.turn, step: location.step, seq: e.seq, status: 'unknown', steps: [], reports: [], communications: events, source: e.source };
     });
   return { skills, branches };
@@ -2614,7 +2860,7 @@ function skillUseEvents(skill) {
   return skill.events.filter(e => e.kind !== 'catalog' && e.status !== 'error' && e.status !== 'unknown');
 }
 function skillEvidenceLabel(event) {
-  return event.kind === 'catalog' ? '出现在可用目录' : event.kind === 'skill-tool-load' ? '读入技能正文' : event.kind === 'skill-file-read' ? '读取技能材料' : '显式引用';
+  return event.kind === 'catalog' ? ui('出现在可用目录') : event.kind === 'skill-tool-load' ? ui('读入技能正文') : event.kind === 'skill-file-read' ? ui('读取技能材料') : ui('显式引用');
 }
 
 // The action view keeps the parent's ordered step axis. Child results use their
@@ -2661,41 +2907,106 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   }
 }
 
-  // A single inspector: action and observed result first, evidence on demand.
+  // 一步的读数与证据:标题一行、操作一段、依据收进一个折叠区,原文只在最深处。
   reviewRenderStepSummary = function(t, step) {
     const panel = $('step-panel');
     const identity = [session.id, t.number, step.number, overviewLayers.has('duration'), overviewLayers.has('context'), 'inspector'].join(':');
     if (panel.dataset.detailKey === identity) return;
     panel.dataset.detailKey = identity;
-    const info = reviewStepContext(t, step), insight = stepInsight(t, step, session.overview.episodes, reviewContextData.callFacts);
+    const insight = stepInsight(t, step, session.overview.episodes, reviewContextData.callFacts);
     const index = t.steps.indexOf(step);
     panel.className = 'step-panel on geist-step'; panel.style.display = '';
-    panel.setAttribute('aria-label', '所选步骤详情');
-    const render = fact => {
-      const lines = value => value ? String(value).split(/\r?\n/).length : 0;
-      const size = fact.preview && !fact.preview.partial
-        ? (fact.preview.before ? '替换片段 ' + lines(fact.preview.before) + ' → ' + lines(fact.preview.after) + ' 行' : '写入内容 ' + lines(fact.preview.after) + ' 行') : '';
-      return '<article class="geist-operation" data-tone="' + fact.tone + '"><div class="geist-operation-copy"><h3>' + esc(fact.title) + '</h3>' +
-        '<p>' + esc(fact.outcome) + '</p>' + (size ? '<span class="geist-operation-size">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? '原计划 · ' : '') + size + '</span>' : '') + '</div>' +
-        (fact.preview ? '<button class="geist-diff-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? '查看原计划' : '查看差异') + ' <span aria-hidden="true">↗</span></button>' : '') + '</article>';
+    panel.setAttribute('aria-label', ui('所选步骤详情'));
+    const turnIndex = session.turns.indexOf(t);
+    const stepNeighbour = direction => {
+      const within = t.steps[index + direction];
+      if (within) return { turn: t, step: within, within: true };
+      const row = session.turns[turnIndex + direction];
+      if (!row || !row.steps.length) return null;
+      return { turn: row, step: direction > 0 ? row.steps[0] : row.steps.at(-1), within: false };
     };
-    panel.innerHTML = '<header class="geist-step-meta"><span><b>第 ' + step.number + ' 步</b>' +
-      (overviewLayers.has('duration') ? '<span>' + preciseTime(step.end - step.start) + '</span>' : '') +
-      (insight.calls.length > 1 ? '<span>' + insight.calls.length + ' 项操作</span>' : '') + '</span>' +
-      '<nav class="geist-step-navigation" aria-label="逐步浏览"><button data-inspector-nav="-1" aria-label="上一步"' + (index === 0 ? ' disabled' : '') + '>←</button><button data-inspector-nav="1" aria-label="下一步" title="' + esc(insight.following ? '下一步 · ' + insight.following.text : '已到本轮末步') + '"' + (index === t.steps.length - 1 ? ' disabled' : '') + '>→</button></nav></header>' +
-      '<div class="geist-operations">' + (insight.calls.length ? insight.calls.map(render).join('') :
-        '<article class="geist-operation"><div class="geist-operation-copy"><h3>回复</h3><p>' + esc(insight.reply || '没有记录到本步的文字回复。') + '</p></div></article>') + '</div>' +
-      (insight.links.length ? '<div class="geist-step-recovery">' + insight.links.map(link => '<button class="geist-text-action recovery" data-insight-step="' + link.step + '">' + esc(link.text) + ' ↗</button>').join('') + '</div>' : '') +
-      '<footer class="geist-step-evidence"><button class="geist-text-action quiet" id="review-panel-details">输入与依据 ↗</button><button class="geist-text-action quiet" id="panel-record">原始记录 ↗</button></footer>';
-    $('panel-record').onclick = () => showStep(index);
-    $('review-panel-details').onclick = () => reviewOpenStepDetail(t, step, insight, info);
+    const forward = stepNeighbour(1), backward = stepNeighbour(-1);
+    const navTitle = (target, direction) => {
+      if (!target) return direction > 0 ? ui('已是最后一步') : ui('已是第一步');
+      if (!target.within) return direction > 0 ? ui('下一轮第 1 步') : ui('上一轮末步');
+      return direction > 0 ? (insight.following ? ui('下一步 · ') + insight.following.text : ui('下一步')) : ui('上一步');
+    };
+    const callOf = fact => step.calls.find(call => call.seq === fact.seq) || null;
+    // 展开沿用 Geist 的 Show code 行:16px chevron 收起时指右、打开后指下,文字只留标签。
+    const chevron = '<span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span>';
+    // 跳转箭头用图标,不用 ↗ 字符:字符随字体变形,这是 Geist 图标的同一套几何。
+    const arrow = '<svg class="geist-arrow" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M5.5 10.5 10.5 5.5M6.5 5.5h4v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const disclosure = (label, body) => '<details class="geist-result"><summary>' + label + chevron + '</summary>' + body + '</details>';
+    const excerpt = value => value && typeof value.text === 'string' && value.text.trim()
+      ? { text: value.text.replace(/\r\n/g, '\n'), omitted: Number(value.omitted) || 0 } : null;
+    // 原始记录的内容并进面板:调用参数、返回原文、错误类型和 seq 都在这一步里看全。
+    const rawEntry = fact => {
+      const call = callOf(fact);
+      if (!call) return '';
+      const args = excerpt(call.args), result = fact.preview ? null : excerpt(call.result);
+      const error = call.error ? String(call.error.code || call.error.name || '') : '';
+      if (!args && !result && !error) return '';
+      const block = (label, value) => '<span class="geist-result-label">' + label + '</span><pre class="geist-result-text">' + esc(value.text) + '</pre>' +
+        (value.omitted ? '<span class="geist-result-note">' + ui('节选 · 另有 ') + value.omitted + ui(' 个字符未载入') + '</span>' : '');
+      return disclosure(ui('调用参数与原文'),
+        (error ? '<span class="geist-result-label">' + ui('错误类型') + '</span><pre class="geist-result-text">' + esc(error) + '</pre>' : '') +
+        (args ? block(ui('调用参数'), args) : '') + (result ? block(ui('返回原文'), result) : ''));
+    };
+    const callMeta = fact => {
+      const call = callOf(fact), bits = [];
+      if (call && call.seq != null) bits.push('seq ' + call.seq + (call.resultSeq != null ? ' → ' + call.resultSeq : ''));
+      if (call && call.start != null && call.end != null) bits.push(dur(call.end - call.start));
+      return bits.join(' · ');
+    };
+    const operation = fact => {
+      const meta = [fact.detail, callMeta(fact)].filter(Boolean).join(' · ');
+      const raw = rawEntry(fact);
+      const diff = reviewHasChange(fact) ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + arrow + '</button>' : '';
+      return '<article class="geist-operation" data-tone="' + fact.tone + '">' +
+        '<h3>' + esc(fact.title) + '</h3>' +
+        '<p>' + esc(fact.outcome) + (diff ? ' ' + diff : '') + '</p>' +
+        (meta ? '<span class="geist-operation-size">' + esc(meta) + '</span>' : '') +
+        (raw ? '<div class="geist-operation-actions">' + raw + '</div>' : '') +
+        '</article>';
+    };
+    // 展开原文时不改变面板外框高度:锁住当前高度,内容在面板内滚动,图区不会被挤压。
+    panel.style.height = '';
+    panel.scrollTop = 0;
+    panel.innerHTML = '<header class="geist-step-meta"><span><b>' + ui`第 ${step.number} 步` + '</b>' +
+      (overviewLayers.has('duration') ? '<span>' + preciseTime(recordDuration(step)) + '</span>' : '') +
+      (insight.calls.length > 1 ? '<span>' + insight.calls.length + ui(' 项操作</span>') : '') + '</span>' +
+      ui('<nav class="geist-step-navigation" aria-label="逐步浏览"><button data-inspector-nav="-1" aria-label="上一步" title="') + esc(navTitle(backward, -1)) + '"' + (backward ? '' : ' disabled') + ui('>←</button><button data-inspector-nav="1" aria-label="下一步" title="') + esc(navTitle(forward, 1)) + '"' + (forward ? '' : ' disabled') + '>→</button></nav></header>' +
+      '<p class="geist-step-context"><span>' + esc(insight.input.label) + '</span><span class="geist-step-context-text" title="' + esc(insight.input.text) + '">' + esc(insight.input.text) + '</span></p>' +
+      '<div class="geist-operations">' +
+        insight.calls.map(operation).join('') +
+        (insight.reply ? '<p class="geist-step-reply">' + esc(insight.reply) + '</p>' : '') +
+        (step.reply && step.reply.text && step.reply.text.length > (insight.reply || '').length
+          ? disclosure(ui('回复原文'), '<pre class="geist-result-text">' + esc(step.reply.text) + '</pre>') : '') +
+        (!insight.calls.length && !insight.reply ? ui('<p class="review-quiet">没有记录到本步的文字回复或工具操作。</p>') : '') +
+      '</div>' +
+      (insight.links.length ? '<p class="geist-step-next"><span>' + ui('后续记录') + '</span>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + arrow + '</button>').join('') + '</p>' : '') +
+      (insight.following ? '<p class="geist-step-next"><span>' + ui('接下来') + '</span><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + arrow + '</button></p>' : '');
     panel.querySelectorAll('[data-insight-change]').forEach(el => el.onclick = () => reviewOpenChange(t, step, insight.calls.find(f => f.seq === Number(el.dataset.insightChange))));
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
+    // 展开前把面板高度钉住:内容在里面滚,画布和图区保持原样。
+    const panelDetails = () => [...panel.querySelectorAll('details.geist-result')];
+    panelDetails().forEach(details => {
+      details.querySelector('summary').addEventListener('click', () => {
+        if (details.open) return;
+        panel.style.height = panel.getBoundingClientRect().height + 'px';
+      });
+      details.addEventListener('toggle', () => {
+        if (!details.open && !panelDetails().some(row => row.open)) panel.style.height = '';
+      });
+    });
     panel.querySelectorAll('[data-inspector-nav]').forEach(el => el.onclick = () => {
-      const direction = Number(el.dataset.inspectorNav), next = t.steps[index + direction];
-      if (!next) return;
-      reviewJumpToStep(t, next.number);
-      panel.querySelector('[data-inspector-nav="' + direction + '"]:not(:disabled)')?.focus({ preventScroll: true });
+      const direction = Number(el.dataset.inspectorNav), target = stepNeighbour(direction);
+      if (!target) return;
+      if (target.within) reviewJumpToStep(t, target.step.number);
+      else reviewEnterPath(target.turn.number, target.step.number);
+      requestAnimationFrame(() => {
+        $('step-panel')?.querySelector('[data-inspector-nav="' + direction + '"]:not(:disabled)')?.focus({ preventScroll: true });
+      });
     });
   };
 
@@ -2706,7 +3017,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const status = $('review-file-status');
     if (!status) return;
     status.classList.add('geist-file-selection-bar');
-    status.setAttribute('aria-label', '当前文件选择');
+    status.setAttribute('aria-label', ui('当前文件选择'));
     status.classList.toggle('is-selected', Boolean($('review-file-clear')));
     geistPlaceFileStatus();
   };
@@ -2717,7 +3028,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     if (selected) row.after(status);
     else row.insertBefore(status, $('geist-legend-toggle'));
     const fileButton = $('review-file-all');
-    if (fileButton) fileButton.title = '查看文件记录 · 上方读取，下方写入/修改';
+    if (fileButton) fileButton.title = ui('查看文件记录 · 上方读取，下方写入/修改');
   }
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape' || e.defaultPrevented || !reviewFileSelection || geistCanvasGesture) return;
@@ -2734,14 +3045,14 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const hasChanges = history.changeRounds.length > 0;
     const state = { reads: !hasChanges, open: new Set(originTurn ? [originTurn] : []) };
     const factFor = op => reviewContextData.callFacts?.[op.seq];
-    const changeName = op => op.tool === 'write' ? '写入' : '修改';
+    const changeName = op => op.tool === 'write' ? ui('写入') : ui('修改');
     const operationsOf = round => round.operations.filter(op => state.reads || op.kind === 'change');
     const visibleRounds = () => history.rounds.filter(round => operationsOf(round).length);
     const counts = round => {
       const operations = operationsOf(round), failed = operations.filter(op => op.status === 'error').length, pending = operations.filter(op => op.status !== 'returned' && op.status !== 'error').length;
       const direct = operations.filter(op => op.kind === 'read' && op.access !== 'match' && op.status === 'returned').length;
       const matches = operations.filter(op => op.access === 'match' && op.status === 'returned').length;
-      return [round.changes ? round.changes + ' 次写入/修改' : '', failed ? failed + ' 次受阻' : '', state.reads && direct ? direct + ' 次直接读取' : '', state.reads && matches ? matches + ' 次匹配片段' : '', pending ? pending + ' 次待确认' : ''].filter(Boolean).join(' · ');
+      return [round.changes ? round.changes + ui(' 次写入/修改') : '', failed ? failed + ui(' 次受阻') : '', state.reads && direct ? direct + ui(' 次直接读取') : '', state.reads && matches ? matches + ui(' 次匹配片段') : '', pending ? pending + ui(' 次待确认') : ''].filter(Boolean).join(' · ');
     };
     const excerpt = fact => {
       if (!fact?.preview) return '';
@@ -2751,24 +3062,24 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     };
     const renderOperation = op => {
       const fact = factFor(op), planned = op.status !== 'returned' || fact?.tone === 'bad' || fact?.tone === 'unknown';
-      const outcome = fact?.outcome || (op.status === 'returned' ? '工具已返回' : op.status === 'error' ? '操作受阻' : '结果未记录');
-      return '<div class="geist-history-operation" data-history-operation="' + op.seq + '"><div class="geist-history-operation-title"><strong class="' + (op.kind === 'read' ? 'read' : op.status === 'error' ? 'failed' : 'change') + '">' + (op.access === 'match' ? '匹配片段' : op.kind === 'read' ? '读取' : changeName(op)) + '</strong><span>第 ' + op.step + ' 步</span>' + (op.status === 'error' ? '<span class="failed">受阻</span>' : '') + '</div><p>' + esc(outcome) + '</p>' +
+      const outcome = fact?.outcome || (op.status === 'returned' ? ui('工具已返回') : op.status === 'error' ? ui('操作受阻') : ui('结果未记录'));
+      return '<div class="geist-history-operation" data-history-operation="' + op.seq + '"><div class="geist-history-operation-title"><strong class="' + (op.kind === 'read' ? 'read' : op.status === 'error' ? 'failed' : 'change') + '">' + (op.access === 'match' ? ui('匹配片段') : op.kind === 'read' ? ui('读取') : changeName(op)) + ui('</strong><span>第 ') + op.step + ui(' 步</span>') + (op.status === 'error' ? ui('<span class="failed">受阻</span>') : '') + '</div><p>' + esc(outcome) + '</p>' +
         (!planned ? excerpt(fact) : '') + '<div class="geist-history-operation-links">' +
-        (fact?.preview ? '<button class="geist-text-action" data-history-diff="' + op.seq + '">' + (planned ? '查看原计划' : '查看改动片段') + ' ↗</button>' : '') +
-        '<button class="geist-text-action quiet" data-history-step="' + op.seq + '">定位到这一步 ↗</button></div></div>';
+        (reviewHasChange(fact) ? '<button class="geist-text-action" data-history-diff="' + op.seq + '">' + (planned ? ui('查看原计划') : fact.preview ? ui('查看改动片段') : ui('查看文件差异')) + ' ↗</button>' : '') +
+        '<button class="geist-text-action quiet" data-history-step="' + op.seq + ui('">定位到这一步 ↗</button></div></div>');
     };
     const render = () => {
       const rounds = visibleRounds(), x = i => rounds.length < 2 ? 24 : 24 + i / (rounds.length - 1) * 572;
       const hitRadius = Math.min(9, rounds.length < 2 ? 9 : 286 / (rounds.length - 1));
-      const line = '<svg class="geist-history-map" viewBox="0 0 620 52" role="group" aria-label="文件全程记录，按轮次顺序排列"><path d="M24 17H596" class="geist-history-rail"/>' +
-        rounds.map((round, i) => '<g role="button" tabindex="0" data-history-jump="' + round.turn + '" aria-label="第 ' + round.turn + ' 轮，' + counts(round) + '"><title>第 ' + round.turn + ' 轮 · ' + counts(round) + '</title><circle cx="' + x(i) + '" cy="17" r="' + hitRadius + '" fill="transparent"/><circle cx="' + x(i) + '" cy="17" r="' + Math.min(hitRadius, round.turn === originTurn ? 4 : 3) + '" class="geist-history-dot ' + (round.failed ? 'failed' : round.changes ? 'change' : 'read') + (round.turn === originTurn ? ' current' : '') + '"/></g>').join('') +
-        '<text x="24" y="43">第 ' + rounds[0].turn + ' 轮</text>' + (rounds.length > 1 ? '<text x="596" y="43" text-anchor="end">第 ' + rounds.at(-1).turn + ' 轮</text>' : '') + '</svg>';
+      const line = ui('<svg class="geist-history-map" viewBox="0 0 620 52" role="group" aria-label="文件全程记录，按轮次顺序排列"><path d="M24 17H596" class="geist-history-rail"/>') +
+        rounds.map((round, i) => '<g role="button" tabindex="0" data-history-jump="' + round.turn + ui('" aria-label="第 ') + round.turn + ui(' 轮，') + counts(round) + ui('"><title>第 ') + round.turn + ui(' 轮 · ') + counts(round) + '</title><circle cx="' + x(i) + '" cy="17" r="' + hitRadius + '" fill="transparent"/><circle cx="' + x(i) + '" cy="17" r="' + Math.min(hitRadius, round.turn === originTurn ? 4 : 3) + '" class="geist-history-dot ' + (round.failed ? 'failed' : round.changes ? 'change' : 'read') + (round.turn === originTurn ? ' current' : '') + '"/></g>').join('') +
+        ui('<text x="24" y="43">第 ') + rounds[0].turn + ui(' 轮</text>') + (rounds.length > 1 ? ui('<text x="596" y="43" text-anchor="end">第 ') + rounds.at(-1).turn + ui(' 轮</text>') : '') + '</svg>';
       const matches = history.reads.filter(op => op.access === 'match').length;
-      return '<div class="geist-history-overview"><p><strong>' + (hasChanges ? history.changeRounds.length + ' 轮涉及写入/修改' : history.rounds.length + ' 轮有文件记录') + '</strong><span>' + (history.changes.length ? '修改已返回 ' + history.changes.length + ' 次 · ' : '') + '直接读取 ' + (history.reads.length - matches) + ' 次' + (matches ? ' · 搜索片段 ' + matches + ' 次' : '') + (history.failed.length ? ' · 受阻 ' + history.failed.length + ' 次' : '') + '</span></p>' + line +
-        '<div class="geist-history-controls"><span>全程文件工具记录 · 按轮次顺序</span>' + (originTurn && rounds.some(r => r.turn === originTurn) ? '<button class="geist-text-action" data-history-jump="' + originTurn + '">定位第 ' + originTurn + ' 轮</button>' : '') +
-        '<button id="review-history-reads" class="geist-text-action"' + (!hasChanges ? ' disabled' : '') + ' aria-pressed="' + state.reads + '">' + (state.reads ? '✓ 包含读取' : '包含读取') + '</button></div></div>' +
-        '<div class="geist-history-rounds">' + rounds.map(round => '<details class="geist-history-round" data-history-tone="' + (operationsOf(round).some(op => op.status === 'error') ? 'failed' : round.changes ? 'change' : 'read') + '" data-history-round="' + round.turn + '"' + (state.open.has(round.turn) ? ' open' : '') + '><summary><strong>第 ' + round.turn + ' 轮</strong><span>' + counts(round) + '</span>' + (round.turn === originTurn ? '<em>图中位置</em>' : '') + '</summary><div class="geist-history-round-content">' + operationsOf(round).map(renderOperation).join('') + '</div></details>').join('') + '</div>' +
-        '<p class="review-file-evidence-note">按本会话中同一路径的文件工具记录串联。差异入口展示各次替换片段；整文件首尾对比仍需要历史文件快照。</p>';
+      return '<div class="geist-history-overview"><p><strong>' + (hasChanges ? history.changeRounds.length + ui(' 轮涉及写入/修改') : history.rounds.length + ui(' 轮有文件记录')) + '</strong><span>' + (history.changes.length ? ui('修改已返回 ') + history.changes.length + ui(' 次 · ') : '') + ui('直接读取 ') + (history.reads.length - matches) + ui(' 次') + (matches ? ui(' · 搜索片段 ') + matches + ui(' 次') : '') + (history.failed.length ? ui(' · 受阻 ') + history.failed.length + ui(' 次') : '') + '</span></p>' + line +
+        ui('<div class="geist-history-controls"><span>全程文件工具记录 · 按轮次顺序</span>') + (originTurn && rounds.some(r => r.turn === originTurn) ? '<button class="geist-text-action" data-history-jump="' + originTurn + ui('">定位第 ') + originTurn + ui(' 轮</button>') : '') +
+        '<button id="review-history-reads" class="geist-text-action"' + (!hasChanges ? ' disabled' : '') + ' aria-pressed="' + state.reads + '">' + (state.reads ? ui('✓ 包含读取') : ui('包含读取')) + '</button></div></div>' +
+        '<div class="geist-history-rounds">' + rounds.map(round => '<details class="geist-history-round" data-history-tone="' + (operationsOf(round).some(op => op.status === 'error') ? 'failed' : round.changes ? 'change' : 'read') + '" data-history-round="' + round.turn + '"' + (state.open.has(round.turn) ? ' open' : '') + ui('><summary>') + '<span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span>' + ui('<strong>第 ') + round.turn + ui(' 轮</strong><span>') + counts(round) + '</span>' + (round.turn === originTurn ? ui('<em>图中位置</em>') : '') + '</summary><div class="geist-history-round-content">' + operationsOf(round).map(renderOperation).join('') + '</div></details>').join('') + '</div>' +
+        ui('<p class="review-file-evidence-note">按本会话中同一路径的文件工具记录串联。差异入口展示各次替换片段；整文件首尾对比仍需要历史文件快照。</p>');
     };
     function jump(number) {
       const section = $('review-detail-body').querySelector('[data-history-round="' + number + '"]');
@@ -2777,7 +3088,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       section.scrollIntoView({ block: 'start', behavior: 'auto' });
       section.querySelector('summary').focus({ preventScroll: true });
     }
-    const detail = { title: history.label + ' · 全程变化', subtitle: history.path, html: '', bind: () => {
+    const detail = { title: history.label + ui(' · 全程变化'), subtitle: history.path, html: '', bind: () => {
       const body = $('review-detail-body');
       body.querySelectorAll('[data-history-round]').forEach(section => {
         const number = Number(section.dataset.historyRound); section.open = state.open.has(number);
@@ -2812,36 +3123,52 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   };
 
   let geistContextSnapshot = data.officialStats?.context;
-  const geistContextNumber = n => n == null ? '未记录' : n >= 1000000 ? (n / 1000000).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(Math.round(n));
+  const geistContextNumber = n => n == null ? ui('未记录') : n >= 1000000 ? (n / 1000000).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(Math.round(n));
   function geistContextCategory(key) {
-    return CONTEXT_CATEGORIES.find(c => c.key === key) || { key: 'messages', label: '对话内容', color: 'var(--chart-assistant)' };
+    return CONTEXT_CATEGORIES.find(c => c.key === key) || { key: 'messages', label: ui('对话内容'), color: 'var(--chart-assistant)' };
   }
   function geistShowCurrentSource(key, summary) {
     const category = geistContextCategory(key), item = summary.categories.find(c => c.key === key);
     const explanations = {
-      system: '模型运行所需的系统提示。', tools: '供模型选择和调用的工具说明与参数结构。',
-      user: '用户自己输入的文本；带来源标记的附件与宿主注入不算在这里。', inject: '开发者消息，以及带来源标记的内容：附件、环境说明、状态与通知。',
-      skill: '通过技能来源进入上下文的内容。', assistant: '仍保留在上下文中的助手回复与工具调用。',
-      tool: '工具返回后仍保留在上下文中的内容。', messages: '除系统提示和工具定义之外，当前保留的消息内容。',
+      system: ui('模型运行所需的系统提示。'), tools: ui('供模型选择和调用的工具说明与参数结构。'),
+      user: ui('用户自己输入的文本；带来源标记的附件与宿主注入不算在这里。'), inject: ui('开发者消息，以及带来源标记的内容：附件、环境说明、状态与通知。'),
+      skill: ui('通过技能来源进入上下文的内容。'), assistant: ui('仍保留在上下文中的助手回复与工具调用。'),
+      tool: ui('工具返回后仍保留在上下文中的内容。'), messages: ui('除系统提示和工具定义之外，当前保留的消息内容。'),
     };
-    openDrawer(category.label, '最新记录的上下文构成', '<div class="review-context-headline"><strong>≈' + geistContextNumber(item?.value) + '</strong><span>tokens · 约占构成 ' + (item?.share < .1 ? '不足 0.1' : item?.share.toFixed(1)) + '%</span></div><p class="review-explain">' + explanations[key] + '</p><p class="review-quiet">上方显示当前保留量；路径中的柱形显示每轮或每步的增减，使用相同颜色。</p><p class="review-quiet">总占用直接读取官方 contextPressure；来源是估算构成，不与总占用直接相加。' + (summary.detailed ? '细分沿用已安装 Context 插件的现有投影；未提供细分时展示官方的系统、工具、消息三类。' : '当前为官方 contextBreakdown 的三类构成。') + '</p>');
+    openDrawer(category.label, ui('最新记录的上下文构成'), '<div class="review-context-headline"><strong>≈' + geistContextNumber(item?.value) + ui('</strong><span>tokens · 约占构成 ') + (item?.share < .1 ? ui('不足 0.1') : item?.share.toFixed(1)) + '%</span></div><p class="review-explain">' + explanations[key] + ui('</p><p class="review-quiet">上方显示当前保留量；路径中的柱形显示每轮或每步的增减，使用相同颜色。</p><p class="review-quiet">总占用直接读取官方 contextPressure；来源是估算构成，不与总占用直接相加。') + (summary.detailed ? ui('细分沿用已安装 Context 插件的现有投影；未提供细分时展示官方的系统、工具、消息三类。') : ui('当前为官方 contextBreakdown 的三类构成。')) + '</p>');
+  }
+  // 增量只属于行动路径:总览看构成,不掺增减。路径页读当前打开的那一轮。
+  function geistRenderTurnDelta() {
+    const region = $('geist-context-overview');
+    if (!region) return;
+    const open = view === 'path' ? turn() : null;
+    const row = open ? reviewContextMap.get(open.number) : null;
+    region.querySelectorAll('[data-current-source]').forEach(button => {
+      const slot = button.querySelector('.geist-context-delta');
+      if (!slot) return;
+      const part = row && !row.isBaseline && row.parts ? row.parts[button.dataset.currentSource] : null;
+      const delta = part ? part.delta : 0;
+      slot.textContent = !delta ? '' : (delta > 0 ? '↑' + reviewTokens(delta) : '↓' + reviewTokens(-delta));
+      slot.hidden = !slot.textContent;
+    });
   }
   function geistRenderContextOverview() {
     let region = $('geist-context-overview');
-    if (!region) { region = document.createElement('section'); region.id = 'geist-context-overview'; region.className = 'geist-context-overview'; region.setAttribute('aria-label', '当前上下文总览'); $('graph-scroll').before(region); }
-    if (region.dataset.ready) return;
+    if (!region) { region = document.createElement('section'); region.id = 'geist-context-overview'; region.className = 'geist-context-overview'; region.setAttribute('aria-label', ui('当前上下文总览')); $('graph-scroll').before(region); }
+    if (region.dataset.ready) { geistRenderTurnDelta(); return; }
     region.dataset.ready = 'true';
     const summary = contextOverview(geistContextSnapshot?.pressure, geistContextSnapshot?.breakdown, reviewContextData.current);
     const route = reviewContextData.route;
     const model = route?.model ? (route.provider ? route.provider + ' · ' : '') + route.model + (route.reasoningEffort ? ' (' + route.reasoningEffort + ')' : '') : '';
     const share = value => value < .1 ? '<0.1%' : value.toFixed(1) + '%';
     const name = item => geistContextCategory(item.key).label;
-    region.innerHTML = '<header><h2>当前上下文 <small title="查看历史步骤不会改写当前总量">' + (session.turns.length ? '第 ' + session.turns.at(-1).number + ' 轮末' : '正在读取会话') + '</small></h2><span class="geist-context-model">' + esc(model) + '</span></header>' +
-      '<div class="geist-context-total"><div><strong>' + geistContextNumber(summary.used) + '</strong><span>' + (summary.capacity ? ' / ' + geistContextNumber(summary.capacity) + ' tokens' : ' tokens · 容量未记录') + '</span></div><span>' + (summary.percent == null ? '占用未记录' : '<b>' + summary.percent.toFixed(1) + '%</b> 已用') + '</span></div>' +
-      '<div class="geist-context-meter" role="img" aria-label="' + esc(summary.percent == null ? '上下文占用未记录' : '上下文已用 ' + summary.used + ' / ' + summary.capacity + ' tokens，分段按估算来源比例展示') + '">' +
+    region.innerHTML = ui('<header><h2>当前上下文 <small title="查看历史步骤不会改写当前总量">') + (session.turns.length ? ui('第 {turn} 轮末').replace('{turn}', session.turns.at(-1).number) : ui('正在读取会话')) + '</small></h2><span class="geist-context-model">' + esc(model) + '</span></header>' +
+      '<div class="geist-context-total"><div><strong>' + geistContextNumber(summary.used) + '</strong><span>' + (summary.capacity ? ' / ' + geistContextNumber(summary.capacity) + ' tokens' : ui(' tokens · 容量未记录')) + '</span></div><span>' + (summary.percent == null ? ui('占用未记录') : '<b>' + summary.percent.toFixed(1) + ui('%</b> 已用')) + '</span></div>' +
+      '<div class="geist-context-meter" role="img" aria-label="' + esc(summary.percent == null ? ui('上下文占用未记录') : ui('上下文已用 ') + summary.used + ' / ' + summary.capacity + ui(' tokens，分段按估算来源比例展示')) + '">' +
       '<div class="geist-context-occupied" style="width:' + (summary.fill ?? 0) + '%">' + summary.categories.map(item => '<span style="width:' + item.share + '%;background:' + geistContextCategory(item.key).color + '" title="' + esc(name(item) + ' ≈' + geistContextNumber(item.value) + ' tokens') + '"></span>').join('') + '</div></div>' +
-      '<div class="geist-context-sources" aria-label="估算来源构成，与路径颜色一致">' + summary.categories.map(item => '<button data-current-source="' + item.key + '" title="' + esc(name(item) + '，约占构成 ' + share(item.share) + '；点击查看说明') + '"><i style="background:' + geistContextCategory(item.key).color + '"></i><span>' + name(item) + '</span><b>≈' + geistContextNumber(item.value) + ' <span class="geist-context-share">' + esc(share(item.share)) + '</span></b></button>').join('') + '</div>';
+      ui('<div class="geist-context-sources" aria-label="估算来源构成，与路径颜色一致">') + summary.categories.map(item => '<button data-current-source="' + item.key + '" title="' + esc(name(item) + ui('，约占构成 ') + share(item.share) + ui('；点击查看说明')) + '"><i style="background:' + geistContextCategory(item.key).color + '"></i><span>' + name(item) + '</span><b>≈' + geistContextNumber(item.value) + ' <span class="geist-context-share">' + esc(share(item.share)) + '</span><span class="geist-context-delta" hidden></span></b></button>').join('') + '</div>';
     region.querySelectorAll('[data-current-source]').forEach(el => el.onclick = () => geistShowCurrentSource(el.dataset.currentSource, summary));
+    geistRenderTurnDelta();
   }
 
   // Spend the available height on the data ranges, not on centering a fixed SVG.
@@ -2852,10 +3179,12 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const controlsHeight = Math.max(48, caption.getBoundingClientRect().height);
     const actorReserve = typeof geistActorReserve === 'function' ? geistActorReserve() : 0;
     const available = canvas.clientHeight - header.getBoundingClientRect().height - controlsHeight - actorReserve - 12;
+    // 图区盒子的真实高度优先:它由 flex 决定,不受 SVG 自身高度影响。
+    const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
     const context = overviewLayers.has('context');
     // 页面的实际高度是对话区给的:先跟着可用高度走,不为了满高而把底部挤出视口。
-    const height = Math.round(Math.max(240, Math.min(context ? 620 : 410, available)));
-    const pixels = context ? Math.max(40, Math.min(actorReserve ? 84 : 108, (height - 204) / 2)) : 108;
+    const height = Math.round(Math.max(240, box > 120 ? box : available));
+    const pixels = context ? Math.max(36, Math.min(actorReserve ? 84 : 108, (height - 236) / 2)) : 108;
     reviewContextScale.pixels = pixels;
     return { height, base: context ? 124 + pixels : 208 };
   }
@@ -2866,14 +3195,17 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       cancelAnimationFrame(geistLayoutFrame);
       geistLayoutFrame = requestAnimationFrame(() => {
         if (view !== 'overview') return;
-        const signature = [$('canvas').clientWidth, $('canvas').clientHeight, $('geist-context-overview').getBoundingClientRect().height, $('graph-caption').getBoundingClientRect().height].map(n => Math.round(n)).join(':');
+        const signature = [$('canvas').clientWidth, $('canvas').clientHeight, $('geist-context-overview').getBoundingClientRect().height, $('graph-caption').getBoundingClientRect().height, $('graph-scroll') ? $('graph-scroll').clientHeight : 0, $('graph-scroll') ? $('graph-scroll').clientWidth : 0].map(n => Math.round(n)).join(':');
         if (signature === geistLayoutMeasure) return;
         geistLayoutMeasure = signature;
         const geometry = geistOverviewGeometry();
-        if (Math.abs((overviewProjection?.mainY || 0) - geometry.base) > 1) renderOverview({ plotOnly: true });
+        const baseMoved = Math.abs((overviewProjection?.mainY || 0) - geometry.base) > 1;
+        const heightMoved = Math.abs((geistOverviewFrame?.height || 0) - geometry.height) > 1;
+        const widthMoved = Math.abs((overviewProjection?.viewportWidth || 0) - Math.max(300, $('graph-scroll').clientWidth)) > 1;
+        if (baseMoved || heightMoved || widthMoved) renderOverview({ plotOnly: true });
       });
     });
-    for (const el of [$('canvas'), $('geist-context-overview'), $('graph-caption')]) if (el) geistLayoutObserver.observe(el);
+    for (const el of [$('canvas'), $('geist-context-overview'), $('graph-caption'), $('graph-scroll')]) if (el) geistLayoutObserver.observe(el);
   }
 
   // Visual adaptation only: semantic categories and recorded values remain unchanged.
@@ -2882,7 +3214,11 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   const geistMeasureWidths = new Map();
   function geistSyncMeasureFont() {
     const font = '12px ' + getComputedStyle(document.body).getPropertyValue('--sans');
-    if (font !== geistMeasureFont) { geistMeasureFont = font; geistMeasureWidths.clear(); }
+    if (font !== geistMeasureFont) {
+      geistMeasureFont = font;
+      geistMeasureWidths.clear();
+      reviewFileLayoutCache = null;
+    }
   }
   reviewMeasure = function(text) {
     if (!geistMeasureFont) geistSyncMeasureFont();
@@ -2912,13 +3248,13 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const switches = caption.querySelector('.br-layers');
       if (switches) {
         const row = document.createElement('div'); row.className = 'geist-observe-row';
-        const label = document.createElement('span'); label.className = 'geist-section-label'; label.textContent = '观察';
+        const label = document.createElement('span'); label.className = 'geist-section-label'; label.textContent = ui('观察');
         row.append(label, switches); caption.prepend(row);
       }
       legend = document.createElement('div'); legend.id = 'geist-legend'; legend.className = 'geist-legend';
       caption.append(legend);
       const toggle = document.createElement('button'); toggle.id = 'geist-legend-toggle'; toggle.className = 'geist-text-action quiet';
-      toggle.textContent = '符号说明'; toggle.setAttribute('aria-controls', legend.id);
+      toggle.innerHTML = '<span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span>' + ui('符号说明'); toggle.setAttribute('aria-controls', legend.id);
       toggle.onclick = () => { geistLegendOpen = !geistLegendOpen; geistSyncLegend(); };
       caption.querySelector('.geist-observe-row')?.append(toggle);
       // Controls belong to the canvas; the inspector follows without another card.
@@ -2934,7 +3270,20 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     geistSyncLegend();
   }
   const geistOverviewBase = renderOverview;
-  renderOverview = function(...args) { window.__geistView = 'overview'; geistSyncMeasureFont(); const value = geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); return value; };
+  let geistFitPass = false;
+  renderOverview = function(...args) {
+    geistSyncMeasureFont();
+    const value = geistOverviewBase(...args);
+    geistArrangeCaption(); geistGoalChip();
+    // Fit again if arranging the caption changed the available box. The SVG
+    // itself can legitimately be taller when the goal or branch lanes overflow.
+    const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
+    if (!geistFitPass && box > 120 && Math.abs((geistOverviewFrame?.height || 0) - Math.max(240, box)) > 14) {
+      geistFitPass = true;
+      try { geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); } finally { geistFitPass = false; }
+    }
+    return value;
+  };
   // 目标入口放在观察行:caption 每次重排都会重建子节点,所以放在重排之后补。
   function geistGoalChip() {
     const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
@@ -2942,7 +3291,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const caption = $('graph-caption');
     const layers = caption && caption.querySelector('.br-layers');
     if (layers && !layers.querySelector('[data-br-layer="goal"]')) {
-      layers.insertAdjacentHTML('beforeend', '<label class="br-layer"><input type="checkbox" data-br-layer="goal"' + (overviewLayers.has('goal') ? ' checked' : '') + '>目标</label>');
+      layers.insertAdjacentHTML('beforeend', '<label class="br-layer"><input type="checkbox" data-br-layer="goal"' + (overviewLayers.has('goal') ? ' checked' : '') + ui('>目标</label>'));
       layers.querySelector('[data-br-layer="goal"]').onchange = event => {
         event.target.checked ? overviewLayers.add('goal') : overviewLayers.delete('goal');
         renderOverview();
@@ -2950,10 +3299,11 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     }
   }
   const geistActionBase = renderActionPath;
-  renderActionPath = function(...args) { window.__geistView = 'path'; geistSyncMeasureFont(); const value = geistActionBase(...args); geistArrangeCaption(); return value; };
+  renderActionPath = function(...args) { geistSyncMeasureFont(); const value = geistActionBase(...args); geistArrangeCaption(); return value; };
   // Re-measure labels once the self-hosted font is ready; preserve the viewport.
   document.fonts.ready.then(() => {
     geistMeasureWidths.clear();
+    reviewFileLayoutCache = null;
     const vp = $('graph-scroll'), left = vp.scrollLeft, top = vp.scrollTop;
     if (view === 'path') renderActionPath(); else renderOverview({ plotOnly: true });
     vp.scrollLeft = left; vp.scrollTop = top;
@@ -2973,7 +3323,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   reviewActionStepLabel = function(step) {
     if (!step.calls.some(call => reviewContextData.callFacts?.[call.seq]?.operation)) return geistOperationStepLabelBase(step);
     const names = [...new Set(step.calls.map(call => call.name))];
-    return names.slice(0, 2).join(' / ') + (names.length > 2 ? ' 等' : '');
+    return names.slice(0, 2).join(' / ') + (names.length > 2 ? ui(' 等') : '');
   };
   function geistOutcomeText(members) {
     if (members.length === 1) {
@@ -2987,13 +3337,13 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const calls = members.flatMap(m => m.result.calls), counts = new Map();
       for (const call of calls) counts.set(call.name, (counts.get(call.name) || 0) + 1);
       const labels = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name, n]) => n === 1 ? compactToolLabel(calls.find(c => c.name === name)) : name + ' ×' + n);
-      if (errors) labels.push(errors + (recovered === errors ? ' 处已恢复' : ' 处受阻'));
-      if (members.some(m => m.result.kind === 'pending')) labels.push('有待返回');
+      if (errors) labels.push(errors + (recovered === errors ? ui(' 处已恢复') : ui(' 处受阻')));
+      if (members.some(m => m.result.kind === 'pending')) labels.push(ui('有待返回'));
       return labels.join(' · ');
     }
-    const names = { read: '取回内容', change: '文件改动', check: '检查输出', query: '查询结果' };
+    const names = { read: ui('取回内容'), change: ui('文件改动'), check: ui('检查输出'), query: ui('查询结果') };
     const kinds = ['check', 'change', 'read', 'query'].filter(kind => members.some(m => m.result.kind === kind)).slice(0, errors ? 1 : 2);
-    return kinds.map(kind => names[kind]).join(' · ') + (errors ? (kinds.length ? ' · ' : '') + errors + (recovered === errors ? ' 处已恢复' : ' 处受阻') : '');
+    return kinds.map(kind => names[kind]).join(' · ') + (errors ? (kinds.length ? ' · ' : '') + errors + (recovered === errors ? ui(' 处已恢复') : ui(' 处受阻')) : '');
   }
   function geistOutcomeGlyph(result, x, y) {
     if (result.kind === 'incident') {
@@ -3014,50 +3364,70 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   }
   function geistResultBranchBody(p, base) {
     const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;
-    const twig = 'M' + p.x + ' ' + (base + sign * 2) + 'V' + (y - sign * 10) + 'Q' + p.x + ' ' + y + ' ' + (p.x + 10) + ' ' + y + 'H' + (p.x + 14);
+    // 只有报错类枝条朝左;普通结果枝条仍朝右,标签位置由布局按 side 给出。
+    const dir = p.side < 0 ? -1 : 1;
+    const twig = 'M' + p.x + ' ' + (base + sign * 2) + 'V' + (y - sign * 10) + 'Q' + p.x + ' ' + y + ' ' + (p.x + dir * 10) + ' ' + y + 'H' + (p.x + dir * 14);
     const endpoint = toolResultEndpoint(p.members);
-    const glyph = '<g class="geist-branch-tip" data-endpoint-kind="' + endpoint.kind + '" aria-hidden="true">' + geistOutcomeGlyph(endpoint, p.x + 20, y) + '</g>';
+    const glyph = '<g class="geist-branch-tip" data-endpoint-kind="' + endpoint.kind + '" aria-hidden="true">' + geistOutcomeGlyph(endpoint, p.x + dir * 20, y) + '</g>';
     const body = '<rect class="br-hit" x="' + (p.left - 4) + '" y="' + (base + p.top - 3) + '" width="' + (p.right - p.left + 8) + '" height="' + (p.bottom - p.top + 6) + '"/>' +
       '<path d="' + twig + '" class="br-connector"/>' + glyph + brText(p.cx, p.dy > 0 ? y + 21 : y - 14, p.label, 'br-label');
     return body;
   }
+  // 报错类枝条(含合并后仍带着报错成员的)朝左,其他结果枝条保持朝右。
+  const geistErrorBranchSide = members => members.some(m => m.result.kind === 'incident' || m.result.kind === 'error') ? 'left' : 'right';
   function geistDrawResultBranches(items, base, left, right, visible, options = {}) {
     if (!items.length) { geistOutcomeBranches = []; return { html: '', bottom: base + 42 }; }
-    const key = [view, view === 'path' ? turn().number : overviewScale, right, overviewLayers.has('context'), reviewStress, document.fonts.status, options.reservedKey || ''].join(':');
+    // 目标带/文件行/时间轴要占一块固定高度;枝条行距在这块之上伸缩,图正好铺满可用高度。
+    const goalRows = (typeof data !== 'undefined' && data.context && data.context.goal && (data.context.goal.markers || []).length) ? 84 : 0;
+    const boxHeight = (typeof geistOverviewFrame !== 'undefined' && geistOverviewFrame) ? geistOverviewFrame.height : ($('graph-scroll') ? $('graph-scroll').clientHeight : 620);
+    const limit = Math.max(base + 56, boxHeight - 72 - goalRows);
+    const key = [view, view === 'path' ? turn().number : overviewScale, right, overviewLayers.has('context'), reviewStress, document.fonts.status, options.reservedKey || '', Math.round(boxHeight), Math.round(base)].join(':');
     let packed = geistOutcomeLayoutCache.get(key);
     if (!packed) {
-      const reserved = options.reserved || [], obstacles = [...reserved, ...(options.obstacles || [])];
-      try { packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles }); }
+      const reserved = options.reserved || [];
+      // 读取/修改泳道是后画的,枝条标签不许落在它们身上,否则文字会被文件块盖住。
+      const lanes = [62, 116].map(v => v - base);
+      const obstacles = [...reserved, ...(options.obstacles || []),
+        { left: left - 8, right: right + 8, top: lanes[0], bottom: lanes[1] },
+        { left: left - 8, right: right + 8, top: limit + 18 - base, bottom: limit + 74 - base }];
+      try { packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles, labelSide: geistErrorBranchSide }); }
       catch (error) {
         if (!options.obstacles?.length) throw error;
-        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved });
+        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
       }
       if (view === 'path' && options.obstacles?.length && packed.some(p => new Set(p.members.map(m => m.result.step)).size > 1)) {
-        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved });
+        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
+      }
+      // 行距一次性拉伸/压缩:不重新打包,只把 dy 映射到 [trunk, 底部保留区] 之间。
+      const positive = packed.map(p => p.dy).filter(dy => dy > 0);
+      const maxPositive = positive.length ? Math.max(...positive) : 0;
+      const contentBottom = packed.reduce((m, p) => Math.max(m, base + p.dy + 25), base + 42);
+      if (view === 'overview' && maxPositive > 0 && Number.isFinite(limit)) {
+        const target = limit - base;
+        const k = Math.max(0.62, Math.min(1.7, (target - 25) / Math.max(60, maxPositive)));
+        if (Number.isFinite(k) && Math.abs(k - 1) > 0.04) packed = packed.map(p => ({ ...p, dy: Math.round(p.dy * (p.dy > 0 ? k : Math.min(1.3, k))) }));
       }
       if (geistOutcomeLayoutCache.size > 20) geistOutcomeLayoutCache.clear();
       geistOutcomeLayoutCache.set(key, packed);
-    }
-    geistOutcomeBranches = packed;
+    }    geistOutcomeBranches = packed;
     let html = '', bottom = base + 42;
     packed.forEach((p, index) => {
       const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;
       bottom = Math.max(bottom, y + 25);
       if (!visible(p.left, p.right)) return;
       const body = geistResultBranchBody(p, base);
-      html += brGroup('class="br-incident geist-result-branch" data-tool-result="' + index + '"', body, p.label + '；点击查看执行结果及关联对象');
+      html += brGroup('class="br-incident geist-result-branch" data-tool-result="' + index + '"', body, p.label + ui('；点击查看执行结果及关联对象'));
     });
     return { html, bottom };
   }
   reviewBranches = function(mapTime, base, visible, left, right, width) {
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
     const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    // 行动路径不画结果支线:由渲染入口设置的视图标记决定,不动概览。
-    const result = geistDrawResultBranches(window.__geistView === 'path' ? [] : items, base, 20, width - 20, visible);
+    const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
     reviewBranchesNow = geistOutcomeBranches;
     return result;
   };
-  reviewOverviewSummary = () => session.turns.length + ' 轮执行记录';
+  reviewOverviewSummary = () => session.turns.length + ui(' 轮执行记录');
   function geistOutcomeFocus() {
     const relevant = new Set(reviewFileSelection ? reviewFileOperations.filter(o => fileIdentity(o.path) === reviewFileSelection).map(o => o.seq) : []);
     $('graph').querySelectorAll('[data-tool-result]').forEach(el => {
@@ -3067,7 +3437,35 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   }
   const geistFileFocusBase = reviewApplyFileFocus;
   reviewApplyFileFocus = function() { geistFileFocusBase(); geistOutcomeFocus(); };
-  function geistOpenResult(result) {
+  // 失败与恢复的配对来自会话里的 episode:抽屉里把"哪一步补上的"落到具体一步。
+  function geistRecovery(seq) {
+    for (const episode of session.overview.episodes || []) for (const pair of episode.pairs || []) {
+      if (pair.failedSeq !== seq || pair.successSeq == null) continue;
+      for (const t of session.turns) for (const step of t.steps) if (step.calls.some(call => call.seq === pair.successSeq)) return { turn: t.number, step: step.number };
+    }
+    return null;
+  }
+  // 参数摘要:工具名 + 目标或关键参数,一行等宽。路径只留末两段,纯工具名不单独占一行。
+  function geistCallSubject(call) {
+    let args = call.args;
+    if (typeof args === 'string') { try { args = JSON.parse(args); } catch { args = null; } }
+    const hint = args && typeof args === 'object'
+      ? [args.file_path, args.path, args.command, args.query, args.pattern, args.url, args.description].find(value => typeof value === 'string' && value.trim())
+      : '';
+    let subject = String(call.target || hint || (call.files?.length ? call.files[0].path : '') || '').replace(/\s+/g, ' ').trim();
+    if (!subject) return '';
+    if (/[\\/]/.test(subject)) subject = subject.split(/[\\/]/).filter(Boolean).slice(-2).join('/');
+    if (subject.length > 64) subject = subject.slice(0, 64) + '…';
+    return [call.name, subject].filter(Boolean).join(' · ');
+  }
+  // 组抽屉与单条抽屉共用同一套状态词:只在异常时出现,正常项不加标记。
+  function geistResultState(result) {
+    if (result.kind === 'incident') return result.incident?.complete ? [ui('已恢复'), 'good'] : [ui('受阻'), 'bad'];
+    if (result.kind === 'pending') return [ui('等待返回'), 'warn'];
+    if (result.kind === 'error') return [ui('受阻'), 'bad'];
+    return ['', 'quiet'];
+  }
+  function geistOpenResult(result, back) {
     if (view === 'path' && turn().number === result.turn) {
       const index = turn().steps.findIndex(step => step.number === result.step);
       if (index >= 0) selectStep(index);
@@ -3077,23 +3475,37 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const group = reviewFileGroups[Number(el.dataset.fileGroup)];
       el.classList.toggle('branch-related', group.members.some(m => m.file.operations.some(op => seqs.has(op.seq))));
     });
-    if (result.kind === 'incident') { reviewOpenBranch([result.incident]); return; }
-    const names = { read: '取回文件内容', change: '文件修改', query: '查询结果', check: '检查输出', error: '操作受阻', command: '命令输出', process: '后台任务', web: '网页返回', coordination: '协作返回', pending: '等待工具返回', other: '工具返回' };
+    // 报错类条目直接落到原始记录:中间那层摘要信息量太低,不值得多点一次。
+    if (result.kind === 'incident') {
+      const episode = (session.overview.episodes || []).find(item => item.id === result.incident.id);
+      if (episode) { openOverviewEpisode(episode.id, back); return; }
+      reviewOpenBranch([result.incident]); return;
+    }
+    const names = { read: ui('取回文件内容'), change: ui('文件修改'), query: ui('查询结果'), check: ui('检查输出'), error: ui('操作受阻'), command: ui('命令输出'), process: ui('后台任务'), web: ui('网页返回'), coordination: ui('协作返回'), pending: ui('等待工具返回'), other: ui('工具返回') };
     const paths = [...new Set(result.calls.flatMap(c => c.files?.length ? c.files.map(file => file.path) : [c.file]).filter(Boolean))];
-    let html = result.calls.map(call => '<div class="geist-outcome-record"><strong>' + esc(call.fact?.title || call.name) + '</strong><p>' + esc(call.fact?.outcome || '工具结果已记录') + '</p>' +
-      (call.fact?.preview ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? '查看原计划' : '查看改动片段') + ' ↗</button>' : '') +
-      (result.recorded ? '<p class="review-quiet">' + (call.inner ? '内部工具 · ' : '') + 'seq ' + call.seq + (call.rootSeq != null ? ' · 外层调用 #' + call.rootSeq : '') + '</p>' + callEntry(call) : '') + '</div>').join('');
-    if (paths.length) html += '<div class="geist-outcome-files">' + paths.map((path, i) => '<button class="geist-text-action" data-result-file="' + i + '">' + esc(path.split(/[\\/]/).at(-1)) + ' · 全程记录 ↗</button>').join('') + '</div>';
-    const embedded = window.parent !== window;
-    html += '<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button>' +
-      (embedded ? '<button class="action-button" id="geist-result-chat">跳到第 ' + result.turn + ' 轮对话 ↗</button>' : '') + '</div>';
-    if (result.kind === 'check') html += '<p class="review-quiet">按检查命令实际输出展示，不代表整个任务已经完成。</p>';
-    if (result.calls.some(call => call.name === 'grep')) html += '<p class="review-quiet">搜索记录关联实际返回的匹配片段，不表示读入了整份文件。</p>';
-    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], '第 ' + result.turn + ' 轮 · 第 ' + result.step + ' 步 · ' + result.calls.length + ' 项操作', html);
+    const blocked = result.calls.filter(call => call.fact?.tone === 'bad').length;
+    const recovered = result.calls.filter(call => call.fact?.tone === 'bad' && geistRecovery(call.seq)).length;
+    let html = result.calls.map(call => {
+      const tone = call.fact?.tone === 'bad' ? 'bad' : call.fact?.tone === 'unknown' ? 'warn' : 'quiet';
+      const state = tone === 'bad' ? ui('受阻 · ') : tone === 'warn' ? ui('未确认 · ') : '';
+      const recovery = tone === 'bad' ? geistRecovery(call.seq) : null, subject = geistCallSubject(call);
+      return '<div class="geist-outcome-record" data-tone="' + tone + '"><div class="geist-outcome-head">' +
+        (state ? '<span class="geist-outcome-state">' + esc(state) + '</span>' : '') +
+        '<strong>' + esc(call.fact?.title || call.name) + '</strong></div>' +
+        '<p>' + esc(call.fact?.outcome || ui('工具结果已记录')) + '</p>' +
+        (subject ? '<p class="geist-outcome-meta">' + esc(subject) + '</p>' : '') +
+        (recovery ? '<button class="geist-text-action recovery" data-result-recovery="' + call.seq + '">' + ui('第 ') + recovery.step + ui(' 步恢复 ↗') + '</button>' : '') +
+        (reviewHasChange(call.fact) ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : call.fact.preview ? ui('查看改动片段') : ui('查看文件差异')) + ' ↗</button>' : '') +
+        (result.recorded ? '<p class="review-quiet">' + (call.inner ? ui('内部工具 · ') : '') + 'seq ' + call.seq + (call.rootSeq != null ? ui(' · 外层调用 #') + call.rootSeq : '') + '</p>' + callEntry(call) : '') + '</div>';
+    }).join('');
+    if (paths.length) html += '<div class="geist-outcome-files">' + paths.map((path, i) => '<button class="geist-text-action" data-result-file="' + i + '">' + esc(path.split(/[\\/]/).at(-1)) + ui(' · 全程记录 ↗</button>')).join('') + '</div>';
+    html += ui('<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button></div>');
+    if (result.kind === 'check') html += ui('<p class="review-quiet">按检查命令实际输出展示，不代表整个任务已经完成。</p>');
+    if (result.calls.some(call => call.name === 'grep')) html += ui('<p class="review-quiet">搜索记录关联实际返回的匹配片段，不表示读入了整份文件。</p>');
+    const counts = [result.calls.length + ui(' 项操作'), blocked ? blocked + ui(' 处受阻') : '', recovered ? recovered + ui(' 处已恢复') : ''].filter(Boolean).join(' · ');
+    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], ui`第 ${result.turn} 轮 · 第 ${result.step} 步` + ' · ' + counts, html, back, result.turn);
     $('geist-result-step').onclick = () => { closeDrawer(); reviewEnterPath(result.turn, result.step); };
     $('geist-result-context').onclick = () => reviewOpenContext(result.turn);
-    // 跳到对话由宿主视图完成(切到对话并滚到该轮),页面只把轮次交出去。
-    $('geist-result-chat')?.addEventListener('click', () => window.parent.postMessage({ type: 'analysis-trace-jump', turn: result.turn }, location.origin));
     $('drawer-body').querySelectorAll('[data-result-file]').forEach(el => el.onclick = () => {
       const file = fileObjects(reviewFileOperations).find(f => f.id === fileIdentity(paths[Number(el.dataset.resultFile)]));
       if (file) { reviewSelectFile(file.id); closeDrawer(); reviewOpenFileHistory(file); }
@@ -3102,11 +3514,38 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const call = result.calls.find(c => c.seq === Number(el.dataset.resultDiff)), t = brRound(result.turn), step = t.steps.find(s => s.number === result.step);
       reviewOpenChange(t, step, call.fact);
     });
+    $('drawer-body').querySelectorAll('[data-result-recovery]').forEach(el => el.onclick = () => {
+      const recovery = geistRecovery(Number(el.dataset.resultRecovery));
+      if (!recovery) return;
+      closeDrawer(); reviewEnterPath(recovery.turn, recovery.step);
+    });
+  }
+  // 出错条目没有 calls:工具名从它所在那一步的调用里取,列表里就能看见是哪个工具。
+  function geistMemberTools(member) {
+    const names = (member.result.calls || []).map(call => call.name).filter(Boolean);
+    if (!names.length) {
+      const turn = session.turns.find(row => row.number === member.result.turn);
+      const step = turn && turn.steps.find(row => row.number === member.result.step);
+      if (step) names.push(...step.calls.map(call => call.name));
+    }
+    return [...new Set(names)].slice(0, 2).join(' / ');
   }
   function geistOpenResultGroup(members) {
     if (members.length === 1) { geistOpenResult(members[0].result); return; }
-    openDrawer('这段执行的工具结果', members.length + ' 项结果 · 同一主干上的不同返回', '<div class="review-list">' + members.map((m, i) => '<button data-result-item="' + i + '">' + esc(m.result.kind === 'incident' ? episodeMeaning(m.result.incident).short : toolResultLabel(m.result)) + '<small>第 ' + m.result.turn + ' 轮 · 第 ' + m.result.step + ' 步</small></button>').join('') + '</div>');
-    $('drawer-body').querySelectorAll('[data-result-item]').forEach(el => el.onclick = () => geistOpenResult(members[Number(el.dataset.resultItem)].result));
+    const states = members.map(member => geistResultState(member.result));
+    const blocked = states.filter(state => state[1] === 'bad').length;
+    const recovered = states.filter(state => state[1] === 'good').length;
+    const counts = [members.length + ui(' 项结果'), blocked ? blocked + ui(' 处受阻') : '', recovered ? recovered + ui(' 处已恢复') : ''].filter(Boolean).join(' · ');
+    openDrawer(ui('这段执行的工具结果'), counts + ui(' · 同一主干上的不同返回'), '<div class="review-list">' + members.map((member, i) => {
+      const state = states[i];
+      const label = member.result.kind === 'incident' ? episodeMeaning(member.result.incident).short : toolResultLabel(member.result);
+      const tools = geistMemberTools(member);
+      return '<button data-result-item="' + i + '" data-tone="' + state[1] + '">' +
+        (state[0] ? '<span class="geist-outcome-state">' + esc(state[0]) + ' · </span>' : '') +
+        '<span class="geist-outcome-name">' + esc(label) + '</span>' +
+        '<small>' + ui('第 ') + member.result.turn + ui(' 轮 · 第 ') + member.result.step + ui(' 步') + (tools ? ' · ' + esc(tools) : '') + '</small></button>';
+    }).join('') + '</div>');
+    $('drawer-body').querySelectorAll('[data-result-item]').forEach(el => el.onclick = () => geistOpenResult(members[Number(el.dataset.resultItem)].result, { label: ui('这段执行的工具结果'), open: () => geistOpenResultGroup(members) }));
   }
   function geistBindResults() {
     $('graph').querySelectorAll('[data-tool-result]').forEach(el => {
@@ -3132,7 +3571,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     }
     const a = mapTime(step.start), b = mapTime(step.end);
     if (interactive) body += '<rect x="' + a + '" y="' + (base + 1) + '" width="' + Math.max(1, b - a) + '" height="6" fill="transparent"/>';
-    return brGroup('class="geist-tool-timing"' + (interactive ? ' data-tool-timing="' + t.number + ':' + step.number + '"' : ' style="pointer-events:none" tabindex="-1"'), body, '工具执行覆盖 ' + preciseTime(timing.coverage) + '；各调用累计 ' + preciseTime(timing.cumulative) + (timing.partial ? '；图中只展示已列出的调用区间' : ''));
+    return brGroup('class="geist-tool-timing"' + (interactive ? ' data-tool-timing="' + t.number + ':' + step.number + '"' : ' style="pointer-events:none" tabindex="-1"'), body, ui('工具执行覆盖 ') + preciseTime(timing.coverage) + ui('；各调用累计 ') + preciseTime(timing.cumulative) + (timing.partial ? ui('；图中只展示已列出的调用区间') : ''));
   }
   function geistOpenTiming(number, stepNumber) {
     const t = brRound(number), step = t.steps.find(s => s.number === stepNumber);
@@ -3142,14 +3581,14 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const ttft = Number.isFinite(stats.ttft) ? stats.ttft : null;
     const decode = Number.isFinite(stats.decode) ? stats.decode : null;
     const model = ttft !== null && decode !== null ? Math.min(total, ttft + decode) : null;
-    const rest = model !== null && tool !== null ? Math.max(0, total - model - tool) : tool !== null ? Math.max(0, total - tool) : null;
-    const rows = [['首字', ttft, 'wait'], ['解码', decode, 'model'], ['工具', tool, 'tool'], ['其它', rest, 'rest']]
+    const rest = model !== null && tool !== null ? Math.max(0, total - model - tool) : null;
+    const rows = [[ui('首字'), ttft, 'wait'], [ui('解码'), decode, 'model'], [ui('工具'), tool, 'tool'], [ui('其它'), rest, 'rest']]
       .filter(([, value]) => value !== null && value >= 0)
       .map(([name, value, kind]) => '<div class="geist-timing-row ' + kind + '"><dt><i></i>' + name + '</dt><dd>' + preciseTime(value) + '</dd></div>');
-    let html = '<dl class="geist-timing-facts"><div class="geist-timing-row total"><dt>这一步</dt><dd>' + preciseTime(total) + '</dd></div>' + rows.join('') + '</dl>';
-    html += '<p class="review-quiet">覆盖时间把重叠执行的区间只算一次' + (timing.cumulative != null && timing.coverage != null && Math.abs(timing.cumulative - timing.coverage) > 1 ? '；累计时间把每次调用分别相加,重叠部分会重复计入' : '；本步调用之间没有重叠,累计与覆盖相同') + '。全部直接读取官方统计结果。</p>';
-    html += '<div class="drawer-actions"><button class="action-button" id="geist-timing-path">查看这一步 ↗</button></div>';
-    openDrawer('工具执行时间', '第 ' + number + ' 轮 · ' + stepNumber + ' 步', html);
+    let html = ui('<dl class="geist-timing-facts"><div class="geist-timing-row total"><dt>这一步</dt><dd>') + preciseTime(total) + '</dd></div>' + rows.join('') + '</dl>';
+    html += ui('<p class="review-quiet">覆盖时间把重叠执行的区间只算一次') + (timing.cumulative != null && timing.coverage != null && Math.abs(timing.cumulative - timing.coverage) > 1 ? ui('；累计时间把每次调用分别相加,重叠部分会重复计入') : ui('；本步调用之间没有重叠,累计与覆盖相同')) + ui('。全部直接读取官方统计结果。</p>');
+    html += ui('<div class="drawer-actions"><button class="action-button" id="geist-timing-path">查看这一步 ↗</button></div>');
+    openDrawer(ui('工具执行时间'), ui('第 ') + number + ui(' 轮 · ') + stepNumber + ui(' 步'), html);
     $('geist-timing-path').onclick = () => { closeDrawer(); reviewEnterPath(number, stepNumber); };
   }
   function geistBindTiming() {
@@ -3170,21 +3609,15 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   };
   const geistActionResultsBase = renderActionPath;
   renderActionPath = function(...args) {
+    // 概览的结果布局不能留给行动路径充当障碍物;步骤结果由节点与详情承载。
+    geistOutcomeBranches = [];
+    reviewBranchesNow = [];
     const value = geistActionResultsBase(...args), frame = reviewActionFileFrame;
     if (!frame) return value;
     const { t, x, base } = frame, halfGap = t.steps.length > 1 ? (x(1) - x(0)) / 2 : 56;
-    if (overviewLayers.has('failures')) {
-      const records = geistOutcomes.filter(r => r.turn === t.number);
-      const indices = new Map(t.steps.map((s, i) => [s.number, i]));
-      const items = records.map(result => ({ id: result.id, at: result.time, x: x(indices.get(result.step) ?? 0) + Math.min(36, halfGap - 18), result }))
-        // 步骤已原子化,普通工具结果的支线与柱、图标、下方面板重复;只保留子代理这类协作支线。
-        .filter(item => /subagent|子代理|协作/i.test(geistOutcomeText([item])));
+    {
       const contextLabels = [...$('graph').querySelectorAll('.review-context-overflow-label')];
-      const obstacles = contextLabels.map(el => { const b = el.getBBox(); return { left: b.x - 1, right: b.x + b.width + 1, top: b.y - base - 1, bottom: b.y + b.height - base + 1 }; });
-      const result = geistDrawResultBranches(items, base, frame.gutter, x(t.steps.length - 1) + halfGap, () => true, { slots: [-42, -64, -86, -104], aggregateSpan: 25, obstacles });
-      $('graph').insertAdjacentHTML('beforeend', '<g class="geist-action-results">' + result.html + '</g>'); geistBindResults();
-      // Numeric annotations keep their value and size; shift beside their own bar
-      // when a result label needs the same space, rather than dropping the number.
+      // 数值仍避让独立的子代理线路,不依赖概览的工具结果开关。
       const occupiedNumbers = [];
       const childLines = typeof geistPlanAgentForks === 'function' ? geistPlanAgentForks() : [];
       for (const el of contextLabels) {
@@ -3194,10 +3627,9 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
         for (const [nx, ny, align] of choices) {
           el.setAttribute('x', nx); el.setAttribute('y', ny); el.setAttribute('text-anchor', align);
           const b = el.getBBox();
-          const hitsBranch = geistOutcomeBranches.some(p => b.x < p.right + 3 && b.x + b.width > p.left - 3 && b.y < base + p.bottom + 3 && b.y + b.height > base + p.top - 3);
           const hitsNumber = occupiedNumbers.some(q => b.x < q.x + q.width + 4 && b.x + b.width > q.x - 4 && b.y < q.y + q.height + 3 && b.y + b.height > q.y - 3);
           const hitsChildLine = childLines.some(p => b.x < p.end + 3 && b.x + b.width > p.x - 3 && b.y < base + p.dy + 6 && b.y + b.height > base + p.dy - 6);
-          if (!hitsBranch && !hitsNumber && !hitsChildLine && b.x >= 2 && b.y >= 95) { occupiedNumbers.push(b); fit = true; break; }
+          if (!hitsNumber && !hitsChildLine && b.x >= 2 && b.y >= 95) { occupiedNumbers.push(b); fit = true; break; }
         }
         if (!fit) { el.setAttribute('x', ox); el.setAttribute('y', oy); el.setAttribute('text-anchor', anchor); occupiedNumbers.push(el.getBBox()); }
       }
@@ -3223,11 +3655,11 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const ttft = Number.isFinite(stats.ttft) ? stats.ttft : null;
       const decode = Number.isFinite(stats.decode) ? stats.decode : null;
       const model = ttft !== null && decode !== null ? Math.min(total, ttft + decode) : null;
-      const rest = model !== null && tool !== null ? Math.max(0, total - model - tool) : tool !== null ? Math.max(0, total - tool) : null;
-      const parts = [['首字', ttft, 'wait'], ['解码', decode, 'model'], ['工具', tool, 'tool'], ['其它', rest, 'rest']].filter(([, value]) => value !== null && value >= 0);
+      const rest = model !== null && tool !== null ? Math.max(0, total - model - tool) : null;
+      const parts = [[ui('首字'), ttft, 'wait'], [ui('解码'), decode, 'model'], [ui('工具'), tool, 'tool'], [ui('其它'), rest, 'rest']].filter(([, value]) => value !== null && value >= 0);
       button.innerHTML = parts.length
         ? parts.map(([name, value, kind]) => '<span class="geist-time-part ' + kind + '"><i></i>' + name + ' ' + preciseTime(value) + '</span>').join('')
-        : '耗时未记录';
+        : ui('耗时未记录');
       button.onclick = () => geistOpenTiming(t.number, step.number); meta.append(button);
     }
   }
@@ -3236,22 +3668,16 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     geistCaptionResultsBase();
     const caption = $('graph-caption'), layers = caption.querySelector('.br-layers');
     const existing = layers?.querySelector('[data-br-layer="failures"],[data-action-layer="failures"]');
-    if (existing) existing.parentElement.lastChild.textContent = '工具结果';
-    else if (layers && view === 'path') {
-      const label = document.createElement('label'); label.className = 'br-layer';
-      label.innerHTML = '<input type="checkbox" data-action-layer="failures"' + (overviewLayers.has('failures') ? ' checked' : '') + '>工具结果';
-      const input = label.querySelector('input'); input.onchange = () => { input.checked ? overviewLayers.add('failures') : overviewLayers.delete('failures'); renderActionPath(); };
-      layers.prepend(label);
-    }
+    if (existing) existing.parentElement.lastChild.textContent = ui('工具结果');
     const key = caption.querySelector('.br-key');
     key?.querySelectorAll('.br-key-item').forEach(item => {
-      if (item.querySelector('.br-check') || /结果还不清楚|结果未确认/.test(item.textContent)) item.remove();
+      if (item.querySelector('.br-check') || [ui('结果还不清楚'), ui('结果未确认')].some(label => item.textContent.includes(label))) item.remove();
     });
     if (key && !key.querySelector('.geist-result-key')) {
-      key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + STEP_ICON.read + '</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">' + STEP_ICON.write + '</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">' + geistReportIcon + '</svg>检查输出</span>');
+      key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + STEP_ICON.read + ui('</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">') + STEP_ICON.write + ui('</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">') + geistReportIcon + ui('</svg>检查输出</span>'));
     }
     if (key && overviewLayers.has('duration') && view !== 'path' && !key.querySelector('.geist-tool-time-key')) {
-      key.insertAdjacentHTML('beforeend', '<span class="geist-tool-time-key" title="官方记录中工具从调用到返回的时间区间；点击本步工具时间查看覆盖与累计口径"><i></i>' + (view === 'path' ? '步内工具时段' : '工具执行区间') + '</span>');
+      key.insertAdjacentHTML('beforeend', ui('<span class="geist-tool-time-key" title="官方记录中工具从调用到返回的时间区间；点击本步工具时间查看覆盖与累计口径"><i></i>') + (view === 'path' ? ui('步内工具时段') : ui('工具执行区间')) + '</span>');
     }
   };
 
@@ -3275,30 +3701,30 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   }
   function geistOpenSkillLibrary(events = geistActors.skills) {
     const objects = skillObjects(events);
-    openDrawer('Skill', objects.some(s => skillUseEvents(s).length) ? '读取或引用过的技能显示在上方材料中' : '仅记录了可用目录，未见实际读取或调用', '<div class="actor-skill-list">' + objects.map(s => {
+    openDrawer('Skill', objects.some(s => skillUseEvents(s).length) ? ui('读取或引用过的技能显示在上方材料中') : ui('仅记录了可用目录，未见实际读取或调用'), '<div class="actor-skill-list">' + objects.map(s => {
       const reads = skillUseEvents(s);
-      return '<button data-actor-skill="' + esc(s.id) + '"><strong>' + esc(s.name) + '</strong><span>' + (reads.length ? reads.length + ' 次引用或读取' : s.events.length + ' 次目录记录 · 未见实际读取') + '</span></button>';
+      return '<button data-actor-skill="' + esc(s.id) + '"><strong>' + esc(s.name) + '</strong><span>' + (reads.length ? reads.length + ui(' 次引用或读取') : s.events.length + ui(' 次目录记录 · 未见实际读取')) + '</span></button>';
     }).join('') + '</div>');
     $('drawer-body').querySelectorAll('[data-actor-skill]').forEach(el => el.onclick = () => geistSkillChoose(el.dataset.actorSkill));
   }
   function geistOpenSkillEvidence(id = geistSkillSelected) {
     const skill = geistSkills.find(s => s.id === id); if (!skill) return;
-    openDrawer(skill.name, skillUseEvents(skill).length ? '上方材料对象对应这些读取与引用记录' : '可用目录中的技能 · 未见实际读取或调用', (skill.description ? '<p class="review-explain">' + esc(skill.description) + '</p>' : '') +
-      '<div class="actor-skill-list">' + skill.events.map((e, i) => '<button data-actor-skill-event="' + i + '"><strong>第 ' + e.turn + ' 轮' + (e.step ? ' · 第 ' + e.step + ' 步' : '') + '</strong><span>' + skillEvidenceLabel(e) + '</span></button>').join('') + '</div><p class="review-quiet">目录出现表示当时可用；读取表示取得了材料。后续是否仍保留、是否遵循，不由这些记录自动推断。</p>');
+    openDrawer(skill.name, skillUseEvents(skill).length ? ui('上方材料对象对应这些读取与引用记录') : ui('可用目录中的技能 · 未见实际读取或调用'), (skill.description ? '<p class="review-explain">' + esc(skill.description) + '</p>' : '') +
+      '<div class="actor-skill-list">' + skill.events.map((e, i) => '<button data-actor-skill-event="' + i + ui('"><strong>第 ') + e.turn + ui(' 轮') + (e.step ? ui(' · 第 ') + e.step + ui(' 步') : '') + '</strong><span>' + skillEvidenceLabel(e) + '</span></button>').join('') + ui('</div><p class="review-quiet">目录出现表示当时可用；读取表示取得了材料。后续是否仍保留、是否遵循，不由这些记录自动推断。</p>'));
     $('drawer-body').querySelectorAll('[data-actor-skill-event]').forEach(el => el.onclick = () => {
       const event = skill.events[Number(el.dataset.actorSkillEvent)]; closeDrawer(); reviewEnterPath(event.turn, event.step);
     });
   }
   function geistOpenAgent(branch) {
     const extent = agentExtent(branch);
-    openDrawer(branch.name, branch.title, '<div class="actor-agent-summary"><span>' + (branch.steps.length ? branch.steps.length + ' 个内部步骤' : '内部步骤尚未关联') + '</span><span>' + (extent.hasEnd ? reviewDuration(extent.end - extent.start) : '结束时间未记录') + '</span></div>' +
-      '<div class="drawer-actions"><button class="action-button" id="actor-agent-toggle">' + '定位子任务' + '</button><button class="action-button" id="actor-agent-parent">定位主干 ↗</button></div>' +
-      (branch.reports.length ? '<h3>回到主干的消息</h3>' + branch.reports.map(r => '<details class="actor-report"><summary>' + (r.kind === 'completed' ? '任务结束回报' : '过程回报') + '</summary><p>' + esc(r.text) + '</p></details>').join('') : '<p class="review-quiet">已记录委派关系；尚未关联子任务回报，不把调用返回当作任务完成。</p>'));
+    openDrawer(branch.name, branch.title, '<div class="actor-agent-summary"><span>' + (branch.steps.length ? branch.steps.length + ui(' 个内部步骤') : ui('内部步骤尚未关联')) + '</span><span>' + (extent.hasEnd ? reviewDuration(extent.end - extent.start) : ui('结束时间未记录')) + '</span></div>' +
+      '<div class="drawer-actions"><button class="action-button" id="actor-agent-toggle">' + ui('定位子任务') + ui('</button><button class="action-button" id="actor-agent-parent">定位主干 ↗</button></div>') +
+      (branch.reports.length ? ui('<h3>回到主干的消息</h3>') + branch.reports.map(r => '<details class="actor-report"><summary>' + (r.kind === 'completed' ? ui('任务结束回报') : ui('过程回报')) + '</summary><p>' + esc(r.text) + '</p></details>').join('') : ui('<p class="review-quiet">已记录委派关系；尚未关联子任务回报，不把调用返回当作任务完成。</p>')));
     $('actor-agent-toggle').onclick = () => { closeDrawer(); if (view === 'path') { view = 'overview'; zoom = null; render(); } geistToggleAgent(branch.id); };
     $('actor-agent-parent').onclick = () => { closeDrawer(); reviewEnterPath(branch.turn, branch.step); };
   }
   function geistOpenAgents() {
-    openDrawer('子代理支线', geistActors.branches.length + ' 个任务', '<div class="actor-skill-list">' + geistActors.branches.map((b, i) => '<button data-actor-pick-agent="' + i + '"><strong>' + esc(b.name) + '</strong><span>第 ' + b.turn + ' 轮委派 · ' + (b.steps.length ? b.steps.length + ' 个内部步骤' : '内部路径未关联') + '</span></button>').join('') + '</div>');
+    openDrawer(ui('子代理支线'), geistActors.branches.length + ui(' 个任务'), '<div class="actor-skill-list">' + geistActors.branches.map((b, i) => '<button data-actor-pick-agent="' + i + '"><strong>' + esc(b.name) + ui('</strong><span>第 ') + b.turn + ui(' 轮委派 · ') + (b.steps.length ? b.steps.length + ui(' 个内部步骤') : ui('内部路径未关联')) + '</span></button>').join('') + '</div>');
     $('drawer-body').querySelectorAll('[data-actor-pick-agent]').forEach(el => el.onclick = () => { closeDrawer(); geistToggleAgent(geistActors.branches[Number(el.dataset.actorPickAgent)].id); });
   }
   function geistToggleAgent(id) {
@@ -3323,7 +3749,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   }
   function geistActorControls() {
     const caption = $('graph-caption'), layers = caption.querySelector('.br-layers'); if (!layers) return;
-    for (const [key, label] of [['skills', 'Skill'], ['agents', '子代理']]) if (!layers.querySelector('[data-actor-layer="' + key + '"]')) {
+    for (const [key, label] of [['skills', 'Skill'], ['agents', ui('子代理')]]) if (!layers.querySelector('[data-actor-layer="' + key + '"]')) {
       if (key === 'agents' && !geistActors.branches.length || key === 'skills' && !geistActors.skills.length) continue;
       const element = document.createElement('label'); element.className = 'br-layer';
       element.innerHTML = '<input type="checkbox" data-actor-layer="' + key + '"' + (geistActorLayers[key] ? ' checked' : '') + '>' + label;
@@ -3332,19 +3758,19 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     }
     let selection = $('actor-selection');
     if (!selection) { selection = document.createElement('div'); selection.id = 'actor-selection'; }
-    const top = $('geist-context-overview'); if (top && selection.parentElement !== top) top.append(selection);
+    const top = $('graph-caption'); if (top && selection.parentElement !== top) top.append(selection);
     const skill = geistSkills.find(s => s.id === geistSkillSelected);
     selection.hidden = !skill || !geistActorLayers.skills;
     if (skill && !(typeof geistSkillScope === 'function' && geistSkillScope(skill.id))) {
-      selection.innerHTML = '<span>Skill · <strong>' + esc(skill.name) + '</strong></span><button id="actor-skill-evidence">' + skillUseEvents(skill).length + ' 次读取／引用 ↗</button><button id="actor-skill-clear" aria-label="取消 Skill 选择">× 取消</button>';
+      selection.innerHTML = '<span>Skill · <strong>' + esc(skill.name) + '</strong></span><button id="actor-skill-evidence">' + skillUseEvents(skill).length + ui(' 次读取／引用 ↗</button><button id="actor-skill-clear" aria-label="取消 Skill 选择">× 取消</button>');
       $('actor-skill-clear').onclick = () => geistSkillChoose(null); $('actor-skill-evidence').onclick = () => geistOpenSkillEvidence();
     }
     layers.querySelectorAll('[data-actor-layer]').forEach(input => { input.checked = geistActorLayers[input.dataset.actorLayer]; });
     const source = top?.querySelector('[data-current-source="skill"]');
     if (source) {
       const used = geistSkills.some(s => skillUseEvents(s).length);
-      source.querySelector('span').textContent = used ? '技能内容' : '技能目录';
-      source.title = used ? '查看技能材料与引用记录' : '只有可用目录记录，未见实际读取或调用';
+      source.querySelector('span').textContent = used ? ui('技能内容') : ui('技能目录');
+      source.title = used ? ui('查看技能材料与引用记录') : ui('只有可用目录记录，未见实际读取或调用');
       source.onclick = () => geistOpenSkillLibrary();
     }
   }
@@ -3369,7 +3795,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     });
     return layoutAgentForks(items, { left: 20, right: frame.width - 20, measure: reviewMeasure,
       ...(view === 'path' ? { slots: [-112, -146, -78], obstacles: (typeof reviewBranchesNow === 'object' && Array.isArray(reviewBranchesNow) ? reviewBranchesNow : []) } : {}),
-      labelOf: members => members.length > 1 ? members.length + ' 个子代理' : geistActorLabel(members[0].branch.name, Math.min(160, frame.width - 120)),
+      labelOf: members => members.length > 1 ? members.length + ui(' 个子代理') : geistActorLabel(members[0].branch.name, Math.min(160, frame.width - 120)),
     });
   }
   const geistForkResultsBase = geistDrawResultBranches;
@@ -3403,7 +3829,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const labelX = Math.max(frame.left + labelHalf, Math.min(frame.right - labelHalf, plan.cx));
       const body = route + '<rect x="' + (labelX - labelHalf) + '" y="' + (labelY - 15) + '" width="' + (labelHalf * 2) + '" height="22" class="br-hit"/>' + brText(labelX, labelY, label, 'actor-agent-label');
       html += brGroup('class="actor-agent" data-actor-fork="' + planIndex + '" aria-expanded="' + plan.open + '"', body,
-        single ? branch.name + ' · ' + (extent.hasEnd ? reviewDuration(extent.end - extent.start) : '结束时间未记录') + '；' + (plan.open ? '结果随缩放展开；点击查看任务' : '点击放大查看结果') : plan.members.length + ' 个子代理；点击选择');
+        single ? branch.name + ' · ' + (extent.hasEnd ? reviewDuration(extent.end - extent.start) : ui('结束时间未记录')) + '；' + (plan.open ? ui('结果随缩放展开；点击查看任务') : ui('点击放大查看结果')) : plan.members.length + ui(' 个子代理；点击选择'));
       if (!single) return;
       if (!plan.open) return;
       if (branch.results?.length && overviewLayers.has('failures')) {
@@ -3414,12 +3840,12 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
           if (p.right < frame.left - 80 || p.left > frame.right + 80) continue;
           const index = geistActorResultGroups.length; geistActorResultGroups.push({ branch, members: p.members });
           html += brGroup('class="br-incident geist-result-branch actor-child-result" data-actor-child-result="' + index + '"',
-            geistResultBranchBody(p, y), branch.name + ' · ' + p.label + '；查看子任务执行结果');
+            geistResultBranchBody(p, y), branch.name + ' · ' + p.label + ui('；查看子任务执行结果'));
         }
       }
-      const details = branch.steps.length ? branch.steps.length + ' 步 · ' + branch.reports.length + ' 条回报 ↗' : '查看委派记录 ↗';
+      const details = branch.steps.length ? branch.steps.length + ui(' 步 · ') + branch.reports.length + ui(' 条回报 ↗') : ui('查看委派记录 ↗');
       const dx = Math.max(54, Math.min(frame.width - 54 - reviewMeasure(details), labelX - reviewMeasure(details) / 2));
-      html += brGroup('class="actor-agent-details" data-actor-agent-details="' + esc(branch.id) + '"', '<rect x="' + dx + '" y="' + (y + 20) + '" width="' + (reviewMeasure(details) + 8) + '" height="20" class="br-hit"/>' + brText(dx, y + 33, details, 'actor-agent-meta', 'start'), '查看子代理任务与回报');
+      html += brGroup('class="actor-agent-details" data-actor-agent-details="' + esc(branch.id) + '"', '<rect x="' + dx + '" y="' + (y + 20) + '" width="' + (reviewMeasure(details) + 8) + '" height="20" class="br-hit"/>' + brText(dx, y + 33, details, 'actor-agent-meta', 'start'), ui('查看子代理任务与回报'));
     });
     if (html) graph.insertAdjacentHTML('beforeend', '<g class="actor-layer">' + html + '</g>');
     geistBindSkillMaterials();
@@ -3437,7 +3863,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       openDrawer(group.branch.name, geistOutcomeText(group.members), group.members.map(m => {
         const result = m.result;
         const calls = result.kind === 'incident' ? group.branch.steps.flatMap(s => s.detail).filter(c => result.seqs.includes(c.seq)) : result.calls;
-        return '<section class="actor-child-detail"><h3>第 ' + result.step + ' 步 · ' + esc(result.kind === 'incident' ? reviewBranchLabel([{ e: result.incident }]) : toolResultLabel(result)) + '</h3>' + calls.map(c => '<p>' + esc(c.fact?.outcome || c.outcome || '执行结果已记录') + '</p>' + (c.file || c.target ? '<p class="review-quiet">' + esc(c.file || c.target) + '</p>' : '')).join('') + '</section>';
+        return ui('<section class="actor-child-detail"><h3>第 ') + result.step + ui(' 步 · ') + esc(result.kind === 'incident' ? reviewBranchLabel([{ e: result.incident }]) : toolResultLabel(result)) + '</h3>' + calls.map(c => '<p>' + esc(c.fact?.outcome || c.outcome || ui('执行结果已记录')) + '</p>' + (c.file || c.target ? '<p class="review-quiet">' + esc(c.file || c.target) + '</p>' : '')).join('') + '</section>';
       }).join(''));
     });
     graph.querySelectorAll('[data-actor-fork],[data-actor-agent-details],[data-actor-child-result],[data-actor-skill-event-id]').forEach(el => el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.onclick(e); } });
@@ -3479,11 +3905,11 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const skills = members.filter(m => m.file.skillId);
     if (!skills.length) return null;
     const ids = [...new Set(skills.map(m => m.file.skillId))];
-    if (skills.length === members.length) return ids.length === 1 ? 'Skill · ' + skills[0].file.skillName : ids.length + ' 项 Skill';
-    return members.length + ' 份材料 · 含 Skill';
+    if (skills.length === members.length) return ids.length === 1 ? 'Skill · ' + skills[0].file.skillName : ids.length + ui(' 项 Skill');
+    return members.length + ui(' 份材料 · 含 Skill');
   }
   function geistOpenMaterials(files) {
-    openDrawer('这段工作读到的材料', '选择材料，查看读取与引用记录', '<div class="actor-skill-list">' + files.map((f, i) => '<button data-actor-material="' + i + '"><strong>' + esc(f.skillId ? 'Skill · ' + f.skillName : f.label) + '</strong><span>' + esc(f.path) + '</span></button>').join('') + '</div>');
+    openDrawer(ui('这段工作读到的材料'), ui('选择材料，查看读取与引用记录'), '<div class="actor-skill-list">' + files.map((f, i) => '<button data-actor-material="' + i + '"><strong>' + esc(f.skillId ? 'Skill · ' + f.skillName : f.label) + '</strong><span>' + esc(f.path) + '</span></button>').join('') + '</div>');
     $('drawer-body').querySelectorAll('[data-actor-material]').forEach(el => el.onclick = () => {
       const file = files[Number(el.dataset.actorMaterial)];
       if (file.skillId) { geistSkillChoose(file.skillId); geistOpenSkillEvidence(); }
@@ -3499,7 +3925,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       el.classList.toggle('actor-skill-selected', selected);
       if (selected) el.setAttribute('aria-pressed', 'true');
       el.querySelector('.review-file-name').textContent = reviewTrimFileLabel(geistSkillMaterialLabel(group.members), group.width);
-      el.querySelector('title').textContent = files.length === 1 ? 'Skill · ' + skillFiles[0].skillName + '；查看读取与引用记录' : files.length + ' 份材料，包含 Skill；点击选择';
+      el.querySelector('title').textContent = files.length === 1 ? 'Skill · ' + skillFiles[0].skillName + ui('；查看读取与引用记录') : files.length + ui(' 份材料，包含 Skill；点击选择');
       const open = () => {
         if (files.length > 1) { geistOpenMaterials(files); return; }
         geistSkillChoose(skillFiles[0].skillId); geistOpenSkillEvidence();
@@ -3516,7 +3942,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       if (x < frame.left - 20 || x > frame.right + 20) return '';
       return brGroup('class="actor-skill-touch" data-actor-skill-event-id="' + esc(e.id) + '"',
         '<rect x="' + (x - 7) + '" y="' + (frame.base - 22) + '" width="14" height="24" class="br-hit"/><path d="M' + x + ' ' + frame.base + 'v-14" class="actor-skill-link"/><circle cx="' + x + '" cy="' + (frame.base - 14) + '" r="4" class="actor-skill-anchor"/>',
-        skill.name + ' · 第 ' + e.turn + ' 轮 · ' + skillEvidenceLabel(e));
+        skill.name + ui(' · 第 ') + e.turn + ui(' 轮 · ') + skillEvidenceLabel(e));
     }).join('');
   }
 
@@ -3542,22 +3968,26 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     geistSkillScopeCache.set(name, result); return result;
   }
   function geistSkillScopeControls() {
-    if (!geistSkillAnalysis || !$('geist-context-overview')) return;
+    const caption = $('graph-caption'), layers = caption && caption.querySelector('.br-layers');
+    if (!geistSkillAnalysis || !caption) return;
     let choices = $('skill-trace-choices');
-    if (!choices) { choices = document.createElement('div'); choices.id = 'skill-trace-choices'; choices.className = 'skill-trace-choices'; $('geist-context-overview').append(choices); }
+    if (!choices) { choices = document.createElement('div'); choices.id = 'skill-trace-choices'; choices.className = 'skill-trace-choices'; }
+    // 追踪 Skill 是会话级筛选器,跟着管它的 Skill 开关走:开关在底部图层行,控件就贴着它。
+    if (layers) { if (choices.previousElementSibling !== layers) layers.after(choices); }
+    else if (choices.parentElement !== caption) caption.append(choices);
     choices.hidden = !geistActorLayers.skills;
     const names = [...new Set(geistSkillAnalysis.records.map(r => r.name))];
     const key = names.join('|') + ':' + geistSkillSelected;
     if (choices.dataset.key !== key) {
       choices.dataset.key = key;
-      choices.innerHTML = '<span>追踪 Skill</span>' + names.map(name => '<button data-real-skill="' + esc(name) + '" aria-pressed="' + (geistSkillSelected === name) + '">' + esc(name) + '</button>').join('');
+      choices.innerHTML = ui('<span>追踪 Skill</span>') + names.map(name => '<button data-real-skill="' + esc(name) + '" aria-pressed="' + (geistSkillSelected === name) + '">' + esc(name) + '</button>').join('');
       choices.querySelectorAll('[data-real-skill]').forEach(el => el.onclick = () => geistSkillChoose(geistSkillSelected === el.dataset.realSkill ? null : el.dataset.realSkill));
     }
     const scope = geistSkillScope(), selection = $('actor-selection');
-    if (selection && choices.nextElementSibling !== selection) selection.before(choices);
+    if (selection && choices.nextElementSibling !== selection) choices.after(selection);
     if (scope && selection && geistActorLayers.skills && selection.dataset.scopeKey !== geistSkillSelected) {
       selection.dataset.scopeKey = geistSkillSelected;
-      selection.innerHTML = '<span>观察第 ' + scope.firstTurn + '–' + scope.lastTurn + ' 轮 · ' + scope.calls.length + ' 次工具调用 · ' + scope.changes.size + ' 个文件有改动</span><button id="actor-skill-evidence">范围与工具线索 ↗</button><button id="actor-skill-clear" aria-label="取消 Skill 选择">× 取消</button>';
+      selection.innerHTML = ui('<span>观察第 ') + scope.firstTurn + '–' + scope.lastTurn + ui(' 轮 · ') + scope.calls.length + ui(' 次工具调用 · ') + scope.changes.size + ui(' 个文件有改动</span><button id="actor-skill-evidence">范围与工具线索 ↗</button><button id="actor-skill-clear" aria-label="取消 Skill 选择">× 取消</button>');
       $('actor-skill-evidence').onclick = () => geistOpenSkillEvidence();
       $('actor-skill-clear').onclick = () => geistSkillChoose(null);
     }
@@ -3572,13 +4002,13 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const common = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
     const records = scope.records, scripts = records.flatMap(r => r.scripts), tools = records.flatMap(r => r.tools), mentions = records.flatMap(r => r.mentions);
     const requests = scope.intervals.reduce((n, i) => n + i.requests, 0);
-    openDrawer(id, '读取后的执行观察范围', '<div class="skill-scope-intro"><strong>第 ' + scope.firstTurn + ' 轮读入 → 第 ' + scope.lastTurn + ' 轮正文移出</strong><p>先看这段执行发生了什么，再沿工具、文件和引用检查具体联系。</p></div>' +
-      '<p class="review-explain">这段里调用了 ' + scope.calls.length + ' 次工具，修改了 ' + scope.changes.size + ' 个文件；' + scope.calls.filter(c => c.status === 'error').length + ' 次调用返回错误。</p>' +
+    openDrawer(id, ui('读取后的执行观察范围'), ui('<div class="skill-scope-intro"><strong>第 ') + scope.firstTurn + ui(' 轮读入 → 第 ') + scope.lastTurn + ui(' 轮正文移出</strong><p>先看这段执行发生了什么，再沿工具、文件和引用检查具体联系。</p></div>') +
+      ui('<p class="review-explain">这段里调用了 ') + scope.calls.length + ui(' 次工具，修改了 ') + scope.changes.size + ui(' 个文件；') + scope.calls.filter(c => c.status === 'error').length + ui(' 次调用返回错误。</p>') +
       '<div class="skill-scope-tools">' + common.map(([name, count]) => '<span>' + esc(name) + ' <b>' + count + '</b></span>').join('') + '</div>' +
-      '<h3>这份 Skill 提供了哪些执行线索</h3>' +
-      (tools.length || scripts.length ? [...tools.map(t => ({ label: '提到工具 ' + t.name, quote: t.quote })), ...scripts.map(s => ({ label: '脚本 ' + s.path, quote: s.quote }))].map(item => '<section class="skill-scope-source"><strong>' + esc(item.label) + '</strong><p>' + esc(item.quote) + '</p></section>').join('') : '<p>正文主要描述行为与设计规则，没有识别到具名工具或脚本命令。仍可在上面的执行范围内观察改动。</p>') +
-      (mentions.length ? '<h3>记录中的明确提及</h3>' + mentions.map((m, i) => '<section class="skill-scope-source"><p>' + esc(m.quote) + '</p><button class="geist-text-action" data-skill-mention="' + i + '">第 ' + m.turn + ' 轮 · 第 ' + m.step + ' 步 ↗</button></section>').join('') : '') +
-      '<details class="skill-scope-source"><summary>范围依据</summary><p>复用 DSH 官方 SurfaceManager 重放模型可见历史，正文覆盖 ' + requests + ' 个已记录请求。第 ' + scope.lastTurn + ' 轮的上下文替换移除了原文；摘要或后续改动仍可能保留它的影响。</p><p>范围内活动是观察对象；工具名和命令匹配是进一步的关联线索。</p></details>');
+      ui('<h3>这份 Skill 提供了哪些执行线索</h3>') +
+      (tools.length || scripts.length ? [...tools.map(t => ({ label: ui('提到工具 ') + t.name, quote: t.quote })), ...scripts.map(s => ({ label: ui('脚本 ') + s.path, quote: s.quote }))].map(item => '<section class="skill-scope-source"><strong>' + esc(item.label) + '</strong><p>' + esc(item.quote) + '</p></section>').join('') : ui('<p>正文主要描述行为与设计规则，没有识别到具名工具或脚本命令。仍可在上面的执行范围内观察改动。</p>')) +
+      (mentions.length ? ui('<h3>记录中的明确提及</h3>') + mentions.map((m, i) => '<section class="skill-scope-source"><p>' + esc(m.quote) + '</p><button class="geist-text-action" data-skill-mention="' + i + ui('">第 ') + m.turn + ui(' 轮 · 第 ') + m.step + ui(' 步 ↗</button></section>')).join('') : '') +
+      ui('<details class="skill-scope-source"><summary>范围依据</summary><p>复用 DSH 官方 SurfaceManager 重放模型可见历史，正文覆盖 ') + requests + ui(' 个已记录请求。第 ') + scope.lastTurn + ui(' 轮的上下文替换移除了原文；摘要或后续改动仍可能保留它的影响。</p><p>范围内活动是观察对象；工具名和命令匹配是进一步的关联线索。</p></details>'));
     $('drawer-body').querySelectorAll('[data-skill-mention]').forEach(el => el.onclick = () => { const m = mentions[Number(el.dataset.skillMention)]; closeDrawer(); reviewEnterPath(m.turn, m.step); });
   };
   const geistSkillTouchesBase = geistRenderSkillTouches;
@@ -3600,7 +4030,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
         const x = frame.map({ time: from }), end = frame.map({ time: to });
         svg += '<rect x="' + x + '" y="' + (frame.base - 12) + '" width="' + Math.max(2, end - x) + '" height="24" rx="3"/>';
       }
-      graph.insertAdjacentHTML('afterbegin', '<g class="real-skill-range" aria-label="所选 Skill 读取后的观察区间">' + svg + '</g>');
+      graph.insertAdjacentHTML('afterbegin', ui('<g class="real-skill-range" aria-label="所选 Skill 读取后的观察区间">') + svg + '</g>');
     }
     graph.querySelectorAll('[data-tool-result]').forEach(el => {
       const group = geistOutcomeBranches[Number(el.dataset.toolResult)], hit = scope && group.members.some(m => m.result.seqs.some(seq => scope.seqs.has(seq)));
@@ -3650,33 +4080,6 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     }, true);
   })();
 
-﻿  // 左边抽屉里凡是能"查看本轮行动路径"的地方,都配一个"跳到该轮对话"。
-  // 统一在 openDrawer 出口补一个按钮,不在每个调用点重复写。
-  (function () {
-    if (window.parent === window) return;
-    const base = openDrawer;
-    openDrawer = function (title, description, html) {
-      base(title, description, html);
-      const body = $('drawer-body');
-      if (!body || body.querySelector('[data-chat-jump]') || body.querySelector('#geist-result-chat')) return;
-      const text = String(title || '') + ' ' + String(description || '');
-      const match = text.match(/第\s*(\d+)\s*轮/);
-      if (!match) return;
-      const turn = Number(match[1]);
-      if (!Number.isInteger(turn) || turn < 1) return;
-      const row = document.createElement('div');
-      row.className = 'drawer-actions';
-      const button = document.createElement('button');
-      button.className = 'action-button';
-      button.dataset.chatJump = String(turn);
-      button.textContent = '跳到第 ' + turn + ' 轮对话 ↗';
-      button.onclick = () => window.parent.postMessage({ type: 'analysis-trace-jump', turn }, location.origin);
-      // 并到已有动作行里,不要另起一列。
-      const existing = body.querySelector('.drawer-actions');
-      if (existing) existing.append(button); else { row.append(button); body.append(row); }
-    };
-  })();
-
   // Keep one renderer and one set of interaction state while data arrives.
   // The demo and legacy standalone page still start with complete data.
   let geistUpdateFrame = 0, geistDetailIntent = 0, geistHeaderDirty = false;
@@ -3703,15 +4106,15 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
       document.querySelector('.canvas-bar').append(status);
     }
-    const names = { core: '主干', details: '原文与文件', actors: '子代理', context: '上下文', history: '早期增量', refresh: '记录校验' }, states = { ...data.traceStage, ...data.traceStatus };
+    const names = { core: ui('主干'), details: ui('原文与文件'), actors: ui('子代理'), context: ui('上下文'), history: ui('早期增量'), refresh: ui('记录校验') }, states = { ...data.traceStage, ...data.traceStatus };
     if (reviewContextRows.length) states.context = 'ready';
     const pending = Object.keys(names).filter(key => states[key] === 'loading');
     const failed = Object.keys(names).filter(key => ['error', 'unavailable', 'partial'].includes(states[key]));
     status.hidden = !pending.length && !failed.length;
     status.classList.toggle('is-loading', !!pending.length);
-    status.replaceChildren(document.createTextNode(pending.length ? '正在补齐 · ' + pending.map(key => names[key]).join(' / ') : states.actors === 'partial' ? '部分子代理记录未完成' : failed.map(key => names[key]).join(' / ') + '暂不可用'));
+    status.replaceChildren(document.createTextNode(pending.length ? ui('正在补齐 · ') + pending.map(key => names[key]).join(' / ') : states.actors === 'partial' ? ui('部分子代理记录未完成') : failed.map(key => names[key]).join(' / ') + ui('暂不可用')));
     if (failed.some(key => key !== 'context')) {
-      const retry = document.createElement('button'); retry.textContent = '重新加载';
+      const retry = document.createElement('button'); retry.textContent = ui('重新加载');
       retry.onclick = () => window.dispatchEvent(new Event('analysis-trace-retry'));
       status.append(retry);
     }
@@ -3730,12 +4133,12 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   function geistWithTurn(number, action) {
     if (!window.__traceEnsureTurn || window.__traceTurnReady(number)) return action();
     const intent = ++geistDetailIntent;
-    openDrawer('正在载入原始记录', '第 ' + number + ' 轮', '<p class="trace-detail-loading">正在优先读取这一轮的参数与结果…</p>');
+    openDrawer(ui('正在载入原始记录'), ui('第 ') + number + ui(' 轮'), ui('<p class="trace-detail-loading">正在优先读取这一轮的参数与结果…</p>'));
     window.__traceEnsureTurn(number).then(() => {
       if (intent === geistDetailIntent && turn().number === number && $('canvas').classList.contains('drawer-open')) action();
     }).catch(() => {
       if (intent !== geistDetailIntent) return;
-      $('drawer-body').innerHTML = '<p>这一轮的记录读取失败。</p><button class="action-button" id="trace-turn-retry">重试</button>';
+      $('drawer-body').innerHTML = ui('<p>这一轮的记录读取失败。</p><button class="action-button" id="trace-turn-retry">重试</button>');
       $('trace-turn-retry').onclick = () => geistWithTurn(number, action);
     });
   }
@@ -3755,6 +4158,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   const geistProgressSummary = reviewRenderStepSummary;
   reviewRenderStepSummary = function(t, step) {
     const value = geistProgressSummary(t, step);
+    geistRenderTurnDelta();
     if (window.__traceEnsureTurn && !window.__traceTurnReady(t.number)) window.__traceEnsureTurn(t.number).catch(() => {});
     return value;
   };
@@ -3767,19 +4171,19 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const oldFirst = history.length ? Math.min(...history.map(row => row.turn)) : first;
     note.hidden = !recent.length || first <= session.turns[0].number;
     if (note.hidden) return;
-    note.replaceChildren(document.createTextNode((history.length ? '已补充历史 ' + oldFirst + '–' + Math.max(...history.map(row => row.turn)) + ' 轮；' : '') + '当前增量记录从第 ' + first + ' 轮开始。'));
+    note.replaceChildren(document.createTextNode((history.length ? ui('已补充历史 ') + oldFirst + '–' + Math.max(...history.map(row => row.turn)) + ui(' 轮；') : '') + ui('当前增量记录从第 ') + first + ui(' 轮开始。')));
     if (oldFirst > session.turns[0].number && data.traceCapabilities?.history) {
-      const button = document.createElement('button'); button.textContent = data.traceStatus?.history === 'loading' ? '正在读取更早增量…' : '读取更早增量';
+      const button = document.createElement('button'); button.textContent = data.traceStatus?.history === 'loading' ? ui('正在读取更早增量…') : ui('读取更早增量');
       button.disabled = data.traceStatus?.history === 'loading';
       button.onclick = () => window.__traceLoadHistory(oldFirst); note.append(button);
-    } else if (!history.length) note.append(document.createTextNode('更早记录超出当前返回范围。'));
-    if (data.traceStatus?.history === 'error') note.append(document.createTextNode(' 历史回补暂不可用。'));
+    } else if (!history.length) note.append(document.createTextNode(ui('更早记录超出当前返回范围。')));
+    if (data.traceStatus?.history === 'error') note.append(document.createTextNode(ui(' 历史回补暂不可用。')));
   }
   // The actual page stays present while the first log is read. No separate
   // illustration or synthetic branch stands in for recorded execution.
   window.__geistShell = function() {
     header(); geistRenderContextOverview(); geistProgressStatus();
-    $('turn-heading').textContent = '正在读取主干，已有上下文会先显示';
+    $('turn-heading').textContent = ui('正在读取主干，已有上下文会先显示');
   };
   const geistPendingOverview = renderOverview, geistPendingPath = renderActionPath;
   renderOverview = function(...args) { if (!session.turns.length) return window.__geistShell(); return geistPendingOverview(...args); };
@@ -3818,7 +4222,15 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       }
       geistDirty.add('session'); geistHeaderDirty = true;
     }
-    const rest = { ...patch }; delete rest.sessions; geistMerge(data, rest);
+    const rest = { ...patch }; delete rest.sessions;
+    // 空列表不是「没有上下文」:阶段刷新若读不到时间线,会带一个空数组回来,
+    // 不能让它盖掉已经到达的累计量(客户端补丁与历史分页各自补的是同一份数据)。
+    if (rest.context) {
+      rest.context = { ...rest.context };
+      if (Array.isArray(rest.context.requests) && !rest.context.requests.length) delete rest.context.requests;
+      if (Array.isArray(rest.context.historyRequests) && !rest.context.historyRequests.length) delete rest.context.historyRequests;
+    }
+    geistMerge(data, rest);
     if (options.stage && options.stage !== 'turn' && data.traceStage) data.traceStage[options.stage] = 'ready';
     Object.assign(reviewContextData, data.context || {});
     if (reviewContextData.requests !== before.requests || reviewContextData.historyRequests !== before.history) geistDirty.add('context');
@@ -3848,6 +4260,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
         reviewContextScale = contextDisplayScale(reviewContextRows);
         reviewContextSelected ??= reviewContextRows.at(-1)?.turn ?? null;
         geistUpdateCounts.context++;
+        geistRenderTurnDelta();
       }
       if (changed('files')) reviewFileOperations = reviewContextData.fileOperations || [];
       if (sessionChanged || changed('facts') || changed('files')) {
@@ -3877,7 +4290,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
         const p = overviewProjection, visible = (a, b = a) => b >= p.visibleLeft - 90 && a <= p.visibleRight + 90;
         $('trace-context-layer').innerHTML = reviewContextLayer(p.layout, p.mainY, p.visibleLeft, p.visibleRight, visible);
         reviewContextBind();
-        if ($('review-context-scale-note')) $('review-context-scale-note').textContent = '柱高至 ±' + reviewTokens(reviewContextScale.limit) + ' · …收起更大量';
+        if ($('review-context-scale-note')) $('review-context-scale-note').textContent = ui('柱高至 ±') + reviewTokens(reviewContextScale.limit) + ui(' · …收起更大量');
         geistUpdateCounts.contextLayer++;
       } else if (graph && session.turns.length) {
         geistOutcomeLayoutCache.clear();
@@ -3905,12 +4318,13 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       }
       geistProgressStatus(); geistContextCoverage();
       const selected = Number($('drawer').dataset.contextTurn);
-      if (changed('context') && selected && $('canvas').classList.contains('drawer-open')) reviewOpenContext(selected);
+      if (changed('context') && reviewContextDrawer && $('canvas').classList.contains('drawer-open')) reviewOpenContext(reviewContextDrawer.turn, reviewContextDrawer.step);
     });
   };
   const geistCoverageArrange = geistArrangeCaption;
   geistArrangeCaption = function(...args) { const value = geistCoverageArrange(...args); geistContextCoverage(); return value; };
 
+/*__TRACE_EXTENSIONS__*/
   $('review-return').onclick=reviewReturnOverview;$('review-path').onclick=()=>reviewEnterPath(turn().number);$('review-rounds').onclick=()=>reviewOpenDurations();$('review-stress').onclick=reviewToggleStress;$('review-fit').onclick=reviewFitAll;$('review-in').onclick=()=>setOverviewScale(overviewScale*2);$('review-out').onclick=reviewZoomOut;reviewBindPathZoom();
   render();$('turn-list').querySelector('[aria-current=true]')?.scrollIntoView({block:'nearest'});
 };

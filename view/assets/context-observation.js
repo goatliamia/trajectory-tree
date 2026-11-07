@@ -1,9 +1,9 @@
   // Shared host study: independent overlay switches and source multi-selection.
-  const studyMeaning = ['codex','claude'].includes(data.host) ? { delta: '可见文本变化', total: '文本趋势', title: '可见文本趋势', quantity: '可见文本估算' } : data.host === 'pi' ? { delta: '上下文增量', total: '总趋势', title: '上下文估算趋势', quantity: '可见上下文估算' } : { delta: '上下文增量', total: '总趋势', title: '上下文总趋势', quantity: '上下文构成估算' };
+  const studyMeaning = ['codex','claude'].includes(data.host) ? { delta: ui('可见文本变化'), total: ui('文本趋势'), title: ui('可见文本趋势'), quantity: ui('可见文本估算') } : data.host === 'pi' ? { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文估算趋势'), quantity: ui('可见上下文估算') } : { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文总趋势'), quantity: ui('上下文构成估算') };
   const studySources = new Set(CONTEXT_CATEGORIES.map(c => c.key));
   let studyShowTotal = false;
   const studyCategories = () => CONTEXT_CATEGORIES.filter(c => studySources.has(c.key));
-  const studyLabel = () => studySources.size === CONTEXT_CATEGORIES.length ? '全部构成' : studySources.size ? studyCategories().map(c => c.label).join(' + ') : '未选择构成';
+  const studyLabel = () => studySources.size === CONTEXT_CATEGORIES.length ? ui('全部构成') : studySources.size ? studyCategories().map(c => c.label).join(' + ') : ui('未选择构成');
   const studySum = row => studyCategories().reduce((sum, c) => sum + Number(row?.[c.key] || 0), 0);
   function studyAmounts(row) {
     const values = Object.fromEntries(CONTEXT_CATEGORIES.map(c => [c.key, row && studySources.has(c.key) ? row.parts[c.key][row.isBaseline ? 'after' : 'delta'] : 0]));
@@ -20,15 +20,25 @@
   reviewContextNote = function(row, number) {
     if (!row) return studyOriginalNote(row, number);
     const amount = studyCategories().reduce((n, c) => n + row.parts[c.key][row.isBaseline ? 'after' : 'delta'], 0);
-    return '第 ' + row.turn + ' 轮 · ' + studyLabel() + (row.isBaseline ? ' ≈' + reviewTokens(amount) : ' ' + reviewSigned(amount));
+    return ui('第 ') + row.turn + ui(' 轮 · ') + studyLabel() + (row.isBaseline ? ' ≈' + reviewTokens(amount) : ' ' + reviewSigned(amount));
   };
   geistOverviewGeometry = function() {
     geistRenderContextOverview();
     const total = studyShowTotal && view === 'overview';
-    reviewContextScale.pixels = 76;
-    // 不开总趋势时也用开着那套比例:上方不再挤在顶部,基线下移,留出柱子的高度。
+    // 高度跟随图区盒子:固定 430/350 会在高窗口留一截白、矮窗口把底部顶出画布。
     const context = overviewLayers.has('context');
-    return { height: context ? 430 : 350, base: context ? 282 : 208 };
+    const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
+    const height = Math.round(Math.max(240, box > 120 ? box : (context ? 430 : 350)));
+    // 柱带、主干、枝条按盒子等比放大(有上限),再按上下留白平衡把主干放进去:
+    // 上方放柱带 + 留白,下方放枝条 + 文件行/时间轴,两侧余量接近。
+    const scale = Math.max(1, Math.min(1.95, height / 430));
+    const pixels = Math.round(76 * scale);
+    reviewContextScale.pixels = pixels;
+    reviewContextScale.trendScale = scale;
+    const below = Math.round(150 * scale), reserve = 72, topInset = 162;
+    const slack = height - pixels - topInset - below - reserve;
+    const base = Math.round(pixels + topInset + Math.max(0, slack) * 0.45);
+    return { height, base };
   };
   function studySyncSources() {
     const region = $('geist-context-overview'); if (!region) return;
@@ -36,7 +46,7 @@
       const key = button.dataset.currentSource, category = geistContextCategory(key), selected = studySources.has(key);
       button.style.setProperty('--source-color', category.color);
       button.setAttribute('aria-pressed', String(selected)); button.dataset.muted = String(!selected);
-      button.title = (selected ? '取消' : '选上') + category.label + '；可同时选择多类';
+      button.title = ui(selected ? '取消{category}' : '选上{category}').replace('{category}', category.label) + ui('；可同时选择多类');
       button.onclick = () => studyToggle(key);
     }
     for (const [index, segment] of [...region.querySelectorAll('.geist-context-occupied > span')].entries()) {
@@ -59,7 +69,7 @@
       const p = overviewProjection, visible = (a, b = a) => b >= p.visibleLeft - 90 && a <= p.visibleRight + 90;
       $('trace-context-layer').innerHTML = reviewContextLayer(p.layout, p.mainY, p.visibleLeft, p.visibleRight, visible);
       reviewContextBind(); studyBindStock();
-      if ($('review-context-scale-note')) $('review-context-scale-note').textContent = '柱高至 ±' + reviewTokens(reviewContextScale.limit) + ' · …收起更大量';
+      if ($('review-context-scale-note')) $('review-context-scale-note').textContent = ui('柱高至 ±') + reviewTokens(reviewContextScale.limit) + ui(' · …收起更大量');
     } else renderOverview({ plotOnly: true });
     studySyncSources();
   }
@@ -82,7 +92,7 @@
   }
   function studyStockLayer(layout, base, left, right, visible) {
     if (!studyShowTotal || view !== 'overview') return '';
-    if (!studySources.size) return brText(left + 8, base - 54, '点选上方构成项，选择要追踪的类型', 'br-note', 'start');
+    if (!studySources.size) return brText(left + 8, base - 54, ui('点选上方构成项，选择要追踪的类型'), 'br-note', 'start');
     const projection = overviewProjection;
     const series = studySeries();
     const axis = projection.layout.map(l => [l.turn.number, l.turn.start, endOf(l.turn), l.x, l.end].join(':')).join('|');
@@ -115,7 +125,7 @@
     for (const entry of layout) {
       if (!visible(entry.x, entry.end)) continue;
       const row = reviewContextMap.get(entry.turn.number); if (!row) continue;
-      html += brGroup('class="study-stock-turn" data-stock-turn="' + row.turn + '"', '<rect class="br-hit" x="' + entry.x + '" y="' + (stockBase - pixels) + '" width="' + Math.max(1, entry.end - entry.x) + '" height="' + pixels + '"/>', studyStockNote(row) + '；点击查看保留量');
+      html += brGroup('class="study-stock-turn" data-stock-turn="' + row.turn + '"', '<rect class="br-hit" x="' + entry.x + '" y="' + (stockBase - pixels) + '" width="' + Math.max(1, entry.end - entry.x) + '" height="' + pixels + '"/>', studyStockNote(row) + ui('；点击查看保留量'));
     }
     return html;
   }
@@ -130,15 +140,15 @@
   };
   function studyStockNote(row) {
     const amount = studyCategories().reduce((n, c) => n + row.parts[c.key].after, 0);
-    return '第 ' + row.turn + ' 轮 · ' + studyLabel() + ' 保留 ≈' + reviewTokens(amount);
+    return ui('第 ') + row.turn + ui(' 轮 · ') + studyLabel() + ui(' 保留 ≈') + reviewTokens(amount);
   }
   function studyOpenStock(number) {
     const row = reviewContextMap.get(number); if (!row) return;
     const total = studyCategories().reduce((n, c) => n + row.parts[c.key].after, 0);
     const all = CONTEXT_CATEGORIES.reduce((n, c) => n + row.parts[c.key].after, 0);
-    let html = '<div class="review-context-headline"><strong>≈' + reviewTokens(total) + '</strong><span>tokens · 选中构成保留量</span></div>';
-    html += '<div class="review-context-breakdown">' + studyCategories().map(c => '<div class="review-context-category"><div><i style="background:' + c.color + '"></i><span>' + c.label + '</span><b>≈' + reviewTokens(row.parts[c.key].after) + '</b></div><small>占完整构成 ' + (all ? row.parts[c.key].after / all * 100 : 0).toFixed(1) + '%</small></div>').join('') + '</div>';
-    openDrawer('第 ' + number + ' 轮 · ' + studyMeaning.title, studyMeaning.quantity + ' · ' + studyLabel(), html);
+    let html = '<div class="review-context-headline"><strong>≈' + reviewTokens(total) + ui('</strong><span>tokens · 选中构成保留量</span></div>');
+    html += '<div class="review-context-breakdown">' + studyCategories().map(c => '<div class="review-context-category"><div><i style="background:' + c.color + '"></i><span>' + c.label + '</span><b>≈' + reviewTokens(row.parts[c.key].after) + ui('</b></div><small>占完整构成 ') + (all ? row.parts[c.key].after / all * 100 : 0).toFixed(1) + '%</small></div>').join('') + '</div>';
+    openDrawer(ui('第 ') + number + ui(' 轮 · ') + studyMeaning.title, studyMeaning.quantity + ' · ' + studyLabel(), html);
   }
   const studyArrange = geistArrangeCaption;
   geistArrangeCaption = function(...args) {
@@ -149,7 +159,7 @@
     const label = input.parentElement;
     const text = [...label.childNodes].find(node => node.nodeType === 3); if (text) text.textContent = studyMeaning.delta;
     const span = label.querySelector('span'); if (span) span.textContent = studyMeaning.delta;
-    label.title = '显示每轮或每步的上下文增减，可与总趋势同时开启';
+    label.title = ui('显示每轮或每步的上下文增减，可与总趋势同时开启');
     let totalToggle = $('study-total-toggle');
     if (!totalToggle) { totalToggle = document.createElement('label'); totalToggle.id = 'study-total-toggle'; totalToggle.className = 'br-layer'; }
     label.after(totalToggle);
@@ -157,7 +167,7 @@
     // 总趋势只在总览成立:行动路径按步排列、没有连续时间轴,叠存量带会与步布局打架。
     totalToggle.style.display = view === 'path' ? 'none' : '';
     totalToggle.innerHTML = '<input type="checkbox" data-study-total' + (total ? ' checked' : '') + '>' + studyMeaning.total;
-    totalToggle.title = '把保留量叠加在原图上，与增量共用主干和时间轴，可同时开启';
+    totalToggle.title = ui('把保留量叠加在原图上，与增量共用主干和时间轴，可同时开启');
     totalToggle.querySelector('input').onchange = event => { studyShowTotal = event.target.checked; if (studyShowTotal && view !== 'overview') reviewReturnOverview(); studyRefresh({ geometryChanged: true }); };
     $('canvas').dataset.contextTotal = String(total);
     studyBindStock();

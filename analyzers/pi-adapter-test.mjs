@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createPiSample, PI_SOURCE_REVISION } from './pi-sample.mjs';
 import { adaptPiSession, piSessionPath, piVisibleComposition } from './pi-adapter.mjs';
@@ -28,6 +28,22 @@ assert.ok(collectToolResults(session, graph.context.callFacts, graph.context.fil
 assert.ok(contextByTurn(graph.context.requests).some(r => r.decrease > 0), 'compaction produces a source-estimate reduction');
 const noCapture = adaptPiSession({ ...input, capture: [] });
 assert.ok(noCapture.sessions[0].turns.flatMap(t => t.steps).flatMap(s => s.calls).every(c => c.timingSource === 'unrecorded-start'));
+const latestMissingUsage = structuredClone(input);
+const lastMessage = latestMissingUsage.entries.findLast(e => e.type === 'message' && e.message.role === 'assistant').message;
+delete lastMessage.usage;
+assert.equal(adaptPiSession(latestMissingUsage).officialStats.context.pressure.pressureTokens, null, 'missing latest usage does not reuse an earlier request');
+const latestAssistantModel = structuredClone(input);
+const assistantAfterChange = latestAssistantModel.entries.findLast(e => e.type === 'message' && e.message.role === 'assistant').message;
+assistantAfterChange.model = 'later-model'; assistantAfterChange.provider = 'later-provider';
+assert.deepEqual(adaptPiSession(latestAssistantModel).context.route, { model: 'later-model', provider: 'later-provider' }, 'a later assistant updates the native model route');
+const missingContent = structuredClone(input);
+missingContent.entries.find(e => e.type === 'message' && e.message.role === 'assistant').message.content = null;
+assert.doesNotThrow(() => adaptPiSession(missingContent), 'native Pi tolerates assistant messages with missing content');
+const mismatchedCapture = structuredClone(input);
+const capturedStart = mismatchedCapture.capture.find(row => row.event.type === 'tool_execution_start');
+capturedStart.event.toolName = 'different-tool';
+const capturedCall = adaptPiSession(mismatchedCapture).sessions[0].turns.flatMap(t => t.steps).flatMap(s => s.calls).find(c => c.id === capturedStart.event.toolCallId);
+assert.equal(capturedCall.timingSource, 'unrecorded-start', 'capture for a different tool cannot supply a start');
 const changed = structuredClone(input), later = changed.entries.filter(e => e.type === 'message' && e.message.role === 'assistant').flatMap(e => e.message.content).filter(c => c.type === 'toolCall' && c.name === 'bash');
 later[1].arguments.command += ' --changed';
 assert.equal(adaptPiSession(changed).sessions[0].overview.episodes.find(e => e.turn === 2).complete, false, 'different command is not exact-operation recovery');
@@ -37,8 +53,8 @@ const prompt = [{ type: 'message', id: 'a', parentId: null, message: { role: 'sy
 assert.equal(piVisibleComposition(prompt).tools, 0, 'tool removal replays native transcript state');
 assert.equal(piVisibleComposition(prompt).inject, 0, 'plain custom state is not LLM context');
 assert.equal(piVisibleComposition(prompt).system, 1);
-const nativeRepo = 'D:/projects/new loop/pi';
-if (existsSync(nativeRepo)) {
+const nativeRepo = process.env.TRAJECTORY_PI_TEST_REPO;
+if (nativeRepo) {
   const get = path => execFileSync('git', ['-C', nativeRepo, 'show', PI_SOURCE_REVISION + ':' + path], { encoding: 'utf8', windowsHide: true });
   assert.match(get('packages/coding-agent/src/core/session-manager.ts'), /CURRENT_SESSION_VERSION = 3/);
   assert.match(get('packages/coding-agent/src/core/session-manager.ts'), /firstKeptEntryId: string/);
@@ -47,8 +63,8 @@ if (existsSync(nativeRepo)) {
   assert.match(get('packages/ai/src/types.ts'), /toolsRemoved\?: ToolReference\[\]/);
   assert.match(get('packages/coding-agent/README.md'), /skips features like sub-agents/);
 }
-if (existsSync('.dsh/pi-review/current-thread.html')) {
-  const html = readFileSync('.dsh/pi-review/current-thread.html', 'utf8');
+if (process.env.TRAJECTORY_PI_TEST_VIEW) {
+  const html = readFileSync(process.env.TRAJECTORY_PI_TEST_VIEW, 'utf8');
   assert.match(html, /Pi · 模拟会话/); assert.match(html, /全部内容、时长、用量与结果均为模拟/);
   const payload = JSON.parse(html.match(/<script id="trace-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
   assert.equal(payload.host, 'pi'); assert.equal(payload.synthetic, true);

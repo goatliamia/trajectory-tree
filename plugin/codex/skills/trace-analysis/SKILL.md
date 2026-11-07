@@ -5,6 +5,8 @@ description: Codex：分析会话推进、耗时、用量、反复尝试、工�
 
 诊断这次工作怎样取得结果、哪些投入有价值、哪些做法拖累了推进，以及下次先改什么。使用全部可取得的运行证据；用户指定问题时直接深入，不必遍历所有主题。
 
+Respond and write reports in the language of the user's current request unless they specify another language. Keep source quotations, paths, identifiers and tool arguments verbatim; the language of this skill or the logs does not set the report language.
+
 ## 综合诊断
 
 **把任务、过程和结果放在一起。** 先确认用户要求的产物、关键约束和验收条件，再看实际交付及验证。按工作目的或关键状态变化划分阶段，例如定位、实现、验证、恢复；同一阶段可以跨多轮或包含子任务。区分需求变化带来的新增工作、任务本身的难度和可以避免的返工。模型说“已完成”与已有产物、验证结果分别核对。

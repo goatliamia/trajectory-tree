@@ -2,7 +2,7 @@
 // 通过 /analysis-view 的只读路由给出。
 
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { gzip, gunzip } from "node:zlib";
 import { promisify } from "node:util";
 import { incident } from "./incident-shape.js";
@@ -11,6 +11,8 @@ import { readContextTimeline, traceActors, traceContext } from "./trace-context.
 import { TraceCache, traceSource, observationSource } from "./trace-cache.js";
 import { TraceStages } from "./trace-stages.js";
 import { TraceResources, abortable, abortError } from "./trace-resources.js";
+import { hostCapabilities } from './trace/shared/host-capabilities.mjs';
+import { readTracePresentation, renderTraceDocument, traceAssetVersion } from './trace/presentation.mjs';
 
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
@@ -19,31 +21,22 @@ const ROUTE_PATH = "/analysis-view";
 const TRACE_FONTS = { "Geist-Variable.woff2": "font/woff2", "GeistMono-Variable.woff2": "font/woff2" };
 
 let traceAssets;
+const dshAssets = ['dsh-bridge.js', 'dsh-presentation.js'].map(name => new URL('./trace/' + name, import.meta.url));
 function readTraceAssets() {
-  const files = ["page.html", "page.js", "shared/context-observation.js", "shared/context-observation.css", "shared/context-trend-geometry.js", "shared/visual-tokens.css"].map(name => new URL("./trace/" + name, import.meta.url));
-  const version = files.map(file => { const s = statSync(file); return [s.mtimeMs, s.ctimeMs, s.size].join(":"); }).join("|");
+  const presentation = readTracePresentation();
+  const version = presentation.version + '|' + traceAssetVersion(dshAssets);
   if (traceAssets?.version !== version) {
-    const seam = "  $('review-return').onclick=reviewReturnOverview;";
-    const base = readFileSync(files[1], "utf8");
-    if (base.split(seam).length !== 2) throw Error('Trace presentation boot seam changed');
-    traceAssets = { version,
-      template: readFileSync(files[0], "utf8")
-        // 正式「路径」页不挂研究页的布局类:那套样式会把 #graph-scroll 钉死在 386/466px,
-    // 并把 body 改成可滚,底部于是出现一块不参与排版的空白。
-        .replace('</head>', '<style>'+readFileSync(files[5], "utf8")+readFileSync(files[3], "utf8")+'</style></head>'),
-      renderer: base.replace(seam, () => readFileSync(files[4], "utf8")+'\n'+readFileSync(files[2], "utf8")+'\n'+seam),
-    };
+    const [boot, extension] = dshAssets.map(file => readFileSync(file, 'utf8'));
+    traceAssets = { ...presentation, version, boot, extension };
   }
   return traceAssets;
 }
 
 /** 模板与渲染器按文件版本复用,仍支持改样式后直接刷新。 */
 export function renderTracePage(payload, assets = readTraceAssets()) {
-  const json = JSON.stringify(payload).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
-  // 一次性替换两个占位符:会话正文里可能出现同样的字符串,分批替换会把它替换进数据里。
+  payload = { ...payload, traceCapabilities: hostCapabilities(payload) };
   const template = payload.traceLoad ? assets.template.replace('<body class="geist-review', '<body class="geist-review trace-pending') : assets.template;
-  return template.replace(/\/\*__TRACE_DATA__\*\/|\/\*__TRACE_RENDERER__\*\//g,
-    token => (token === "/*__TRACE_DATA__*/" ? json : assets.renderer));
+  return renderTraceDocument(payload, assets, { template, boot: assets.boot, extension: assets.extension });
 }
 
 /**

@@ -22,9 +22,9 @@
 
 ## 追踪上下文怎样变化
 
-点选一种或多种来源，追踪它们的保留量和增减。路径页的增量与总趋势可以同时显示；**总趋势默认关闭，按需开启**。
+点选一种或多种来源，追踪它们的保留量和增减。路径页只显示每轮的增量。
 
-![上下文趋势组件：按来源查看保留量与每轮增减](docs/media/context-trend.jpg)
+![上下文层：按来源查看保留量与每轮增减](docs/media/context-trend.jpg)
 
 ## 看见上下文逐轮装配
 
@@ -40,7 +40,7 @@
 
 ## 快速开始
 
-从仓库根目录操作。DSH 插件需要 Node.js 18+；其他宿主的工具与独立视图需要 Node.js 20+。
+从仓库根目录操作。插件包自身声明 Node.js 18+，但 DSH 0.2.2 起的宿主需要 Node.js 24.9+；其他宿主的工具与独立视图需要 Node.js 20+。
 
 <details>
 <summary><strong>DSH · 原生插件与分析面板</strong></summary>
@@ -48,10 +48,10 @@
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.0.tgz ./dsh-analysis-view-0.10.32.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.4.tgz ./dsh-analysis-view-0.10.142.tgz
 ```
 
-重启 `dsh web`，在「分析」中查看统计，或用 `/trajectory` 打开当前会话路径。已运行的实例先退出，避免端口冲突。
+重启 `dsh web`，在「分析」中查看统计，或用 `/trajectory` 打开当前会话路径。已运行的实例先退出，避免端口冲突。插件面向 DSH 0.2.2 系列，逐包核对见[兼容与语言说明](docs/host-compatibility.md#dsh-version)。
 
 可另装 [对话搜索](plugin/conversation-search/README.md)，在右侧栏搜索并跳转到消息。DSH 的按需解读会调用当前模型；压缩后对账默认开启，可设 `config.reconcile: false` 关闭。
 
@@ -118,6 +118,8 @@ node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl
 ```
 
 生成过程不调用模型。命令返回独立 HTML 文件和本地预览地址；页面包含字体，可离线保存。
+
+界面默认自动跟随宿主或浏览器语言，可在“自动 / 中文 / English”中选择，也可加 `--lang en` 或 `--lang zh-CN` 固定语言。报告正文跟随用户的沟通语言，日志原文、路径和参数保持原样。各宿主的功能与证据边界见[兼容与语言说明](docs/host-compatibility.md)。
 
 ## 同一组取证工具
 

@@ -5,6 +5,8 @@ description: Claude Code：分析当前上下文和工具配置，结合实际�
 
 选择一个可确认的切点，解释模型此刻获得了哪些材料和能力，它们怎样支持当前任务，以及哪些供给方式值得调整。
 
+Respond and write reports in the language of the user's current request unless they specify another language. Preserve native evidence, paths, identifiers and arguments verbatim.
+
 **还原当前有效状态。** 对照系统与任务指令、工具声明或能力目录、注入材料、skill、助手历史和工具结果。把已安装、可发现、已经展开、实际可用的能力分开；使用历史记录时选与当前配置相符的范围，不将全会话所有声明合并成当前工具面。
 
 **将占用对应到用途。** 对主要材料检查其承担的约束、事实、操作说明或原文依据，当前是否仍有效，是否与别处重复，以及能否可靠取回。对工具配置检查它支持的任务、发现路径、常用调用和关键低频用途。

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { adaptCodexThread, classifyCodexItem, commandReadEvidence, parseCodexRollout } from './codex-adapter.mjs';
 import { fileObjects } from '../docs/demo/layout-review/file-model.mjs';
 import { contextByTurn } from '../docs/demo/layout-review/context-model.mjs';
 import { collectToolResults } from '../docs/demo/layout-review/tool-result-model.mjs';
+import { actorRecords, agentExtent } from '../docs/demo/layout-review/actor-model.mjs';
 
 const command = (id, command, exitCode = 0) => ({ type: 'commandExecution', id, command, commandActions: [{ type: 'unknown', command }], aggregatedOutput: exitCode ? 'file not found' : 'recorded output', status: 'completed', exitCode, durationMs: 3 });
 assert.equal(classifyCodexItem(command('1', 'Get-Content src/main.js')).kind, 'read');
@@ -44,8 +45,25 @@ assert.ok(mixedParsed.current.skill > 0 && mixedParsed.current.tool < 100, 'only
 const stableFixture = structuredClone(fixture); stableFixture.thread.turns[0].items.push(command('unmeasured-after', 'echo after'));
 const stable = adaptCodexThread(stableFixture, { rollout: raw });
 assert.deepEqual(stable.sessions[0].turns[0].steps.flatMap(s => s.calls.map(c => c.id)), ['c1', 'c2', 'f1', 'unmeasured-after'], 'missing timestamps never reorder native items to the turn start');
-if (existsSync('.dsh/codex-review/current-thread.json')) {
-  const snapshot = JSON.parse(readFileSync('.dsh/codex-review/current-thread.json', 'utf8'));
+const collaborationFixture = structuredClone(fixture);
+collaborationFixture.thread.turns[0].items.push({id:'spawn-call',type:'collabAgentToolCall',tool:'spawnAgent',status:'completed',receiverThreadIds:['child-thread']});
+const collaborationRaw = raw + '\n' + [
+  {timestamp:'2026-01-01T00:00:04Z',type:'response_item',payload:{type:'function_call',namespace:'collaboration',name:'spawn_agent',call_id:'spawn-call',arguments:JSON.stringify({task_name:'inspect'})}},
+  {timestamp:'2026-01-01T00:00:05Z',type:'response_item',payload:{type:'function_call_output',call_id:'spawn-call',output:JSON.stringify({task_name:'/root/inspect'})}},
+].map(JSON.stringify).join('\n');
+const collaboration = adaptCodexThread(collaborationFixture,{rollout:collaborationRaw});
+assert.equal(collaboration.context.collaborationEvents.length,1,'Official and local records of one spawn are not counted twice');
+const branch = actorRecords(collaboration).branches[0];
+assert.equal(branch.turn,1);assert.ok(branch.step > 0);assert.equal(branch.name,'inspect');
+assert.equal(agentExtent(branch).hasEnd,false,'A successful spawn return is not evidence that the child finished');
+const apiBranch = actorRecords(adaptCodexThread(collaborationFixture)).branches[0];
+assert.ok(Number.isFinite(apiBranch.start),'API-only delegation retains an ordinal anchor');
+assert.equal(agentExtent(apiBranch).hasEnd,false);
+const invalidTiming = structuredClone(fixture);
+invalidTiming.thread.turns[0].items[1].localTiming={start:20,end:10};
+assert.equal(adaptCodexThread(invalidTiming).sessions[0].turns[0].steps[0].endObserved,false,'Reversed timestamps are not a measured interval');
+if (process.env.TRAJECTORY_CODEX_TEST_SNAPSHOT) {
+  const snapshot = JSON.parse(readFileSync(process.env.TRAJECTORY_CODEX_TEST_SNAPSHOT, 'utf8'));
   const real = adaptCodexThread(snapshot, { rollout: readFileSync(snapshot.thread.path, 'utf8') });
   assert.equal(real.sessions[0].totals.turns, snapshot.thread.turns.length);
   assert.ok(real.evidence.timingMatched > 700);
