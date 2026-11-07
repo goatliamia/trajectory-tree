@@ -29,11 +29,15 @@
     const context = overviewLayers.has('context');
     const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
     const height = Math.round(Math.max(240, box > 120 ? box : (context ? 430 : 350)));
-    // 图保持自然高度(430/350),多出来的高度上下均分:主干不焊死在顶部,
-    // 枝条也不会被拉成长垂线,比例和矮窗口一致。
-    reviewContextScale.pixels = 76;
-    const surplus = Math.max(0, height - (context ? 430 : 350));
-    const base = (context ? 282 : 208) + Math.round(surplus / 2);
+    // 柱带、主干、枝条按盒子等比放大(有上限),再按上下留白平衡把主干放进去:
+    // 上方放柱带 + 留白,下方放枝条 + 文件行/时间轴,两侧余量接近。
+    const scale = Math.max(1, Math.min(1.95, height / 430));
+    const pixels = Math.round(76 * scale);
+    reviewContextScale.pixels = pixels;
+    reviewContextScale.trendScale = scale;
+    const below = Math.round(150 * scale), reserve = 72, topInset = 120;
+    const slack = height - pixels - topInset - below - reserve;
+    const base = Math.round(pixels + topInset + Math.max(0, slack) * 0.45);
     return { height, base };
   };
   function studySyncSources() {

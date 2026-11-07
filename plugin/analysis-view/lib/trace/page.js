@@ -3388,8 +3388,8 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const contentBottom = packed.reduce((m, p) => Math.max(m, base + p.dy + 25), base + 42);
       if (view === 'overview' && maxPositive > 0 && Number.isFinite(limit)) {
         const target = limit - base;
-        const k = Math.max(0.62, (target - 25) / Math.max(60, maxPositive));
-        if (Number.isFinite(k) && k < 0.96) packed = packed.map(p => ({ ...p, dy: p.dy > 0 ? Math.round(p.dy * k) : p.dy }));
+        const k = Math.max(0.62, Math.min(1.7, (target - 25) / Math.max(60, maxPositive)));
+        if (Number.isFinite(k) && Math.abs(k - 1) > 0.04) packed = packed.map(p => ({ ...p, dy: Math.round(p.dy * (p.dy > 0 ? k : Math.min(1.3, k))) }));
       }
       if (geistOutcomeLayoutCache.size > 20) geistOutcomeLayoutCache.clear();
       geistOutcomeLayoutCache.set(key, packed);
