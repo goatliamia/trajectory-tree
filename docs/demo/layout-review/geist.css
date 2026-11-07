@@ -8,7 +8,7 @@
   --accent:#0068d6;--error:#c72b31;--error-bg:#fff0f0;--tool:#087f5b;--path:#1f4567;--warm:#a66b00;
   --branch-ink:#1c2938;--branch-muted:#5b6470;--branch-model:#2684ff;--branch-good:#087b58;--branch-bad:#c72b31;--branch-link:#64748b;--branch-child:#7c3aed;
   --review-action:#0068d6;--review-action-tint:#edf5ff;--review-rule:#a4acb5;
-  --review-retry:#8745d9;--review-compact:#b87800;--review-stop:#bb660d;--review-unknown:#a56b00;--review-gap:#297ead;
+  --review-retry:#8745d9;--review-compact:#4f46e5;--review-stop:#bb660d;--review-unknown:#a56b00;--review-gap:#297ead;
   --file-read:#0069c2;--file-change:#ae5a09;--file-read-soft:#edf6ff;--file-change-soft:#fff5e9;
   --chart-system:#8053e3;--chart-tools:#d49b00;--chart-user:#44a56b;--chart-inject:#c442a7;--chart-skill:#e66d26;--chart-assistant:#5b9fe8;--chart-tool:#3ab4a4;
   --shadow:0 12px 40px #0000000f;
@@ -77,7 +77,7 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-review .review-context-capped{stroke:#6388b5;stroke-width:.8}
 .geist-review .review-context-capped-dot{fill:#1763ac}
 .geist-review .review-compaction-divider{stroke:var(--review-compact);stroke-width:1.7;stroke-dasharray:7 5;opacity:1}
-.geist-review .review-compaction-hit{fill:#fff9df;stroke:#e3c46b}
+.geist-review .review-compaction-hit{fill:#eef0ff;stroke:#c7cbf5}
 .geist-review .review-file-body{stroke-opacity:1;stroke-width:.9}
 .geist-review .review-file-object.read .review-file-body{fill:var(--file-read-soft)}
 .geist-review .review-file-object.change .review-file-body{fill:var(--file-change-soft)}

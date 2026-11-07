@@ -50,7 +50,7 @@
   reviewOpenContextSources = function(key = 'system') { const summary = contextOverview(geistContextSnapshot?.pressure, null, reviewContextData.current); geistShowCurrentSource(key, summary); };
   reviewOpenCompaction = function(seqs) {
     const entries = reviewContextData.boundaries.filter(e => seqs.includes(e.seq));
-    openDrawer('Codex 上下文压缩', 'official-api + local-rollout', '<p class="review-explain">黄色虚线标出 Codex 记录的压缩完成位置。本机 replacement_history 可用于重建可见保留文本；加密摘要无法读取，不计入文本估算，也不当作零 token。</p>' + entries.map(e => '<div class="source-row"><span>第 ' + e.turn + ' 轮 · seq ' + e.seq + '</span>此轮保留文本估算净变化 ' + reviewSigned(reviewContextMap.get(e.turn)?.net || 0) + '；包含轮内新增内容，并非此次压缩单独减少的实际 tokens。<br><button class="geist-text-action" data-codex-compaction-turn="' + e.turn + '">查看本轮来源估算 ↗</button></div>').join(''));
+    openDrawer('Codex 上下文压缩', 'official-api + local-rollout', '<p class="review-explain">虚线标出 Codex 记录的压缩完成位置。本机 replacement_history 可用于重建可见保留文本；加密摘要无法读取，不计入文本估算，也不当作零 token。</p>' + entries.map(e => '<div class="source-row"><span>第 ' + e.turn + ' 轮 · seq ' + e.seq + '</span>此轮保留文本估算净变化 ' + reviewSigned(reviewContextMap.get(e.turn)?.net || 0) + '；包含轮内新增内容，并非此次压缩单独减少的实际 tokens。<br><button class="geist-text-action" data-codex-compaction-turn="' + e.turn + '">查看本轮来源估算 ↗</button></div>').join(''));
     $('drawer-body').querySelectorAll('[data-codex-compaction-turn]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.codexCompactionTurn)));
   };
   const codexStepDetailBase = reviewOpenStepDetail;

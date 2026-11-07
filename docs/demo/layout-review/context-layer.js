@@ -125,7 +125,7 @@
       html += '<path d="M' + x + ' 96V' + (mainHeight - 38) + '" class="review-compaction-divider"/>';
       html += brGroup('class="review-compaction-marker" data-context-compaction="' + events.map(e => e.seq).join(',') + '"',
         '<rect x="' + (x - 12) + '" y="68" width="24" height="24" rx="5" class="review-compaction-hit"/>' +
-        '<g transform="translate(' + (x - 8) + ' 71)" class="review-scissors"><circle cx="3" cy="4" r="2.4"/><circle cx="3" cy="13" r="2.4"/><path d="M5 5.3L14.5 14M5 11.6L14.5 3"/></g>' +
+        '<g transform="translate(' + (x - 8) + ' 71)" class="review-compact-fold"><path d="M2.5 5.5 6 8l-3.5 2.5"/><path d="M13.5 5.5 10 8l3.5 2.5"/></g>' +
         (events.length > 1 ? brText(x + 15, 83, String(events.length), 'review-compaction-count') : ''), caption);
     }
     return html;
@@ -133,7 +133,7 @@
   function reviewOpenCompaction(seqs) {
     const events = reviewContextData.boundaries.filter(e => seqs.includes(e.seq));
     const event = events[0], row = reviewContextMap.get(event.turn);
-    let html = ui('<p class="review-explain">系统把较早的一段对话整理成摘要，再带着摘要继续。黄色虚线标出摘要实际写入上下文的位置；原会话日志仍然保留。</p>');
+    let html = ui('<p class="review-explain">系统把较早的一段对话整理成摘要，再带着摘要继续。靛蓝虚线标出摘要实际写入上下文的位置；原会话日志仍然保留。</p>');
     if (row) html += ui('<p class="review-context-change-note">第 ') + row.turn + ui(' 轮净变化 ') + reviewSigned(row.net) + ui(' tokens。这个数还包含本轮新增内容，不等于这次压缩单独减少的量。</p>');
     html += '<div class="review-list">' + events.map(e => '<button data-compaction-turn="' + e.turn + ui('">第 ') + e.turn + ui(' 轮 · 查看上下文来源变化<small>压缩记录 seq ') + e.seq + '</small></button>').join('') + '</div>';
     html += ui('<div class="drawer-actions"><button class="action-button primary" id="review-compaction-path">查看本轮行动路径 ↗</button></div>');
@@ -286,7 +286,7 @@
       const seqs = el.dataset.contextCompaction.split(',').map(Number);
       el.onclick = e => { e.stopPropagation(); reviewOpenCompaction(seqs); };
       el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reviewOpenCompaction(seqs); } };
-      el.onmouseenter = () => tlReadout(ui('剪刀与黄色虚线：较早的对话在这里被整理成摘要。点击看详情。'));
+      el.onmouseenter = () => tlReadout(ui('折叠标记与靛蓝虚线：较早的对话在这里被整理成摘要。点击看详情。'));
     });
     $('canvas').querySelectorAll('[data-context-category]').forEach(el => {
       el.onclick = () => reviewOpenContextSources(el.dataset.contextCategory);
