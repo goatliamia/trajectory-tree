@@ -66,7 +66,11 @@
   const geistErrorBranchSide = members => members.some(m => m.result.kind === 'incident' || m.result.kind === 'error') ? 'left' : 'right';
   function geistDrawResultBranches(items, base, left, right, visible, options = {}) {
     if (!items.length) { geistOutcomeBranches = []; return { html: '', bottom: base + 42 }; }
-    const key = [view, view === 'path' ? turn().number : overviewScale, right, overviewLayers.has('context'), reviewStress, document.fonts.status, options.reservedKey || ''].join(':');
+    // 目标带/文件行/时间轴要占一块固定高度;枝条行距在这块之上伸缩,图正好铺满可用高度。
+    const goalRows = (typeof data !== 'undefined' && data.context && data.context.goal && (data.context.goal.markers || []).length) ? 84 : 0;
+    const boxHeight = (typeof geistOverviewFrame !== 'undefined' && geistOverviewFrame) ? geistOverviewFrame.height : ($('graph-scroll') ? $('graph-scroll').clientHeight : 620);
+    const limit = Math.max(base + 56, boxHeight - 72 - goalRows);
+    const key = [view, view === 'path' ? turn().number : overviewScale, right, overviewLayers.has('context'), reviewStress, document.fonts.status, options.reservedKey || '', Math.round(boxHeight), Math.round(base)].join(':');
     let packed = geistOutcomeLayoutCache.get(key);
     if (!packed) {
       const reserved = options.reserved || [], obstacles = [...reserved, ...(options.obstacles || [])];
@@ -78,10 +82,20 @@
       if (view === 'path' && options.obstacles?.length && packed.some(p => new Set(p.members.map(m => m.result.step)).size > 1)) {
         packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
       }
+      // 行距一次性拉伸/压缩:不重新打包,只把 dy 映射到 [trunk, 底部保留区] 之间。
+      const positive = packed.map(p => p.dy).filter(dy => dy > 0);
+      const maxPositive = positive.length ? Math.max(...positive) : 0;
+      const contentBottom = packed.reduce((m, p) => Math.max(m, base + p.dy + 25), base + 42);
+      if (view === 'overview' && maxPositive > 0 && Number.isFinite(limit)) {
+        const target = limit - base;
+        const k = contentBottom > limit
+          ? Math.max(0.62, (target - 25) / Math.max(60, maxPositive))
+          : Math.min(2.6, target / Math.max(60, maxPositive));
+        if (Number.isFinite(k) && Math.abs(k - 1) > 0.04) packed = packed.map(p => ({ ...p, dy: p.dy > 0 ? Math.round(p.dy * k) : p.dy }));
+      }
       if (geistOutcomeLayoutCache.size > 20) geistOutcomeLayoutCache.clear();
       geistOutcomeLayoutCache.set(key, packed);
-    }
-    geistOutcomeBranches = packed;
+    }    geistOutcomeBranches = packed;
     let html = '', bottom = base + 42;
     packed.forEach((p, index) => {
       const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;

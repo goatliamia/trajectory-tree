@@ -1614,9 +1614,10 @@ function fileChangeHistory(operations, path) {
       // 宽度不够时退到短标签,再不够就只留时长;都放不下就整条不画,避免只剩一个空框。
       const span = end - start - 8;
       const shortLabel = first === last ? ui('第 ') + first + ui(' 轮') : first + '–' + last;
-      const full = span >= Math.max(reviewMeasure(label), reviewMeasure(duration));
-      const single = !full && span >= reviewMeasure(shortLabel) ? shortLabel
-        : !full && duration && span >= reviewMeasure(duration) ? duration : '';
+      const fitWidth = value => reviewMeasure(value) * 1.08 + 6;
+      const full = span >= Math.max(fitWidth(label), fitWidth(duration));
+      const single = !full && span >= fitWidth(shortLabel) ? shortLabel
+        : !full && duration && span >= fitWidth(duration) ? duration : '';
       if (!full && !single) continue;
       let body = '<rect x="' + start + '" y="28" width="' + Math.max(1, end - start - 3) + '" height="38" rx="4" class="review-duration-band"/>';
       body += '<path d="M' + (start + 4) + ' 62v4H' + Math.max(start + 4, end - 7) + 'v-4" class="review-interval-guide"/>';
@@ -3169,8 +3170,8 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const available = canvas.clientHeight - header.getBoundingClientRect().height - controlsHeight - actorReserve - 12;
     const context = overviewLayers.has('context');
     // 页面的实际高度是对话区给的:先跟着可用高度走,不为了满高而把底部挤出视口。
-    const height = Math.round(Math.max(240, Math.min(context ? 620 : 410, available)));
-    const pixels = context ? Math.max(40, Math.min(actorReserve ? 84 : 108, (height - 204) / 2)) : 108;
+    const height = Math.round(Math.max(240, available));
+    const pixels = context ? Math.max(36, Math.min(actorReserve ? 84 : 108, (height - 236) / 2)) : 108;
     reviewContextScale.pixels = pixels;
     return { height, base: context ? 124 + pixels : 208 };
   }
@@ -3347,7 +3348,11 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   const geistErrorBranchSide = members => members.some(m => m.result.kind === 'incident' || m.result.kind === 'error') ? 'left' : 'right';
   function geistDrawResultBranches(items, base, left, right, visible, options = {}) {
     if (!items.length) { geistOutcomeBranches = []; return { html: '', bottom: base + 42 }; }
-    const key = [view, view === 'path' ? turn().number : overviewScale, right, overviewLayers.has('context'), reviewStress, document.fonts.status, options.reservedKey || ''].join(':');
+    // 目标带/文件行/时间轴要占一块固定高度;枝条行距在这块之上伸缩,图正好铺满可用高度。
+    const goalRows = (typeof data !== 'undefined' && data.context && data.context.goal && (data.context.goal.markers || []).length) ? 84 : 0;
+    const boxHeight = (typeof geistOverviewFrame !== 'undefined' && geistOverviewFrame) ? geistOverviewFrame.height : ($('graph-scroll') ? $('graph-scroll').clientHeight : 620);
+    const limit = Math.max(base + 56, boxHeight - 72 - goalRows);
+    const key = [view, view === 'path' ? turn().number : overviewScale, right, overviewLayers.has('context'), reviewStress, document.fonts.status, options.reservedKey || '', Math.round(boxHeight), Math.round(base)].join(':');
     let packed = geistOutcomeLayoutCache.get(key);
     if (!packed) {
       const reserved = options.reserved || [], obstacles = [...reserved, ...(options.obstacles || [])];
@@ -3359,10 +3364,20 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       if (view === 'path' && options.obstacles?.length && packed.some(p => new Set(p.members.map(m => m.result.step)).size > 1)) {
         packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
       }
+      // 行距一次性拉伸/压缩:不重新打包,只把 dy 映射到 [trunk, 底部保留区] 之间。
+      const positive = packed.map(p => p.dy).filter(dy => dy > 0);
+      const maxPositive = positive.length ? Math.max(...positive) : 0;
+      const contentBottom = packed.reduce((m, p) => Math.max(m, base + p.dy + 25), base + 42);
+      if (view === 'overview' && maxPositive > 0 && Number.isFinite(limit)) {
+        const target = limit - base;
+        const k = contentBottom > limit
+          ? Math.max(0.62, (target - 25) / Math.max(60, maxPositive))
+          : Math.min(2.6, target / Math.max(60, maxPositive));
+        if (Number.isFinite(k) && Math.abs(k - 1) > 0.04) packed = packed.map(p => ({ ...p, dy: p.dy > 0 ? Math.round(p.dy * k) : p.dy }));
+      }
       if (geistOutcomeLayoutCache.size > 20) geistOutcomeLayoutCache.clear();
       geistOutcomeLayoutCache.set(key, packed);
-    }
-    geistOutcomeBranches = packed;
+    }    geistOutcomeBranches = packed;
     let html = '', bottom = base + 42;
     packed.forEach((p, index) => {
       const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;

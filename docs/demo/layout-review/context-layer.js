@@ -37,9 +37,10 @@
       // 宽度不够时退到短标签,再不够就只留时长;都放不下就整条不画,避免只剩一个空框。
       const span = end - start - 8;
       const shortLabel = first === last ? ui('第 ') + first + ui(' 轮') : first + '–' + last;
-      const full = span >= Math.max(reviewMeasure(label), reviewMeasure(duration));
-      const single = !full && span >= reviewMeasure(shortLabel) ? shortLabel
-        : !full && duration && span >= reviewMeasure(duration) ? duration : '';
+      const fitWidth = value => reviewMeasure(value) * 1.08 + 6;
+      const full = span >= Math.max(fitWidth(label), fitWidth(duration));
+      const single = !full && span >= fitWidth(shortLabel) ? shortLabel
+        : !full && duration && span >= fitWidth(duration) ? duration : '';
       if (!full && !single) continue;
       let body = '<rect x="' + start + '" y="28" width="' + Math.max(1, end - start - 3) + '" height="38" rx="4" class="review-duration-band"/>';
       body += '<path d="M' + (start + 4) + ' 62v4H' + Math.max(start + 4, end - 7) + 'v-4" class="review-interval-guide"/>';

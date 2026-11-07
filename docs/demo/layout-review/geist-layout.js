@@ -8,8 +8,8 @@
     const available = canvas.clientHeight - header.getBoundingClientRect().height - controlsHeight - actorReserve - 12;
     const context = overviewLayers.has('context');
     // 页面的实际高度是对话区给的:先跟着可用高度走,不为了满高而把底部挤出视口。
-    const height = Math.round(Math.max(240, Math.min(context ? 620 : 410, available)));
-    const pixels = context ? Math.max(40, Math.min(actorReserve ? 84 : 108, (height - 204) / 2)) : 108;
+    const height = Math.round(Math.max(240, available));
+    const pixels = context ? Math.max(36, Math.min(actorReserve ? 84 : 108, (height - 236) / 2)) : 108;
     reviewContextScale.pixels = pixels;
     return { height, base: context ? 124 + pixels : 208 };
   }
