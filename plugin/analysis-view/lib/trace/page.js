@@ -3458,7 +3458,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const tools = geistMemberTools(member);
       return '<button data-result-item="' + i + '" data-tone="' + state[1] + '">' +
         (state[0] ? '<span class="geist-outcome-state">' + esc(state[0]) + ' · </span>' : '') +
-        esc(label) +
+        '<span class="geist-outcome-name">' + esc(label) + '</span>' +
         '<small>' + ui('第 ') + member.result.turn + ui(' 轮 · 第 ') + member.result.step + ui(' 步') + (tools ? ' · ' + esc(tools) : '') + '</small></button>';
     }).join('') + '</div>');
     $('drawer-body').querySelectorAll('[data-result-item]').forEach(el => el.onclick = () => geistOpenResult(members[Number(el.dataset.resultItem)].result));

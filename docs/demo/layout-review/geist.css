@@ -125,7 +125,8 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 /* 组抽屉:一行一条,状态词只在异常时出现,位置与工具名靠右次级排。 */
 #drawer-body [data-result-item]{display:flex;align-items:baseline;gap:8px;width:100%;padding:7px 0;border:0;border-bottom:1px solid var(--line);background:none;font:13px/22px var(--sans);color:var(--ink);text-align:left;cursor:pointer}
 #drawer-body [data-result-item]:hover{color:var(--review-action)}
-#drawer-body [data-result-item]>small{margin-left:auto;flex:none;font:11px/18px var(--mono);color:var(--muted);white-space:nowrap}
+#drawer-body [data-result-item] .geist-outcome-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#drawer-body [data-result-item]>small{margin-left:auto;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font:11px/18px var(--mono);color:var(--muted);white-space:nowrap}
 #drawer-body [data-result-item] .geist-outcome-state{flex:none}
 #drawer-body [data-result-item][data-tone=bad] .geist-outcome-state{color:var(--branch-bad)}
 #drawer-body [data-result-item][data-tone=good] .geist-outcome-state{color:var(--branch-good)}
