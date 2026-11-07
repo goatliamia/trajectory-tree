@@ -91,7 +91,7 @@
     let html = '<g class="review-file-object-layer">';
     for (const { lane, groups, visible } of layout.lanes) {
       const y = lane === 'read' ? 84 : lowerY;
-      if (visible) html += brText(laneX, y + 4, lane === 'read' ? ui('材料') : ui('修改'), 'review-file-lane-label ' + lane, 'end');
+      if (visible) html += brText(laneX, y + 4, lane === 'read' ? ui('读取') : ui('修改'), 'review-file-lane-label ' + lane, 'end');
       for (const p of groups) {
         if (p.hidden || p.right < left - 60 || p.left > right + 60) continue;
         const index = reviewFileGroups.length; reviewFileGroups.push({ ...p, y, lane });
