@@ -23,19 +23,34 @@
       return direction > 0 ? (insight.following ? ui('下一步 · ') + insight.following.text : ui('下一步')) : ui('上一步');
     };
     const callOf = fact => step.calls.find(call => call.seq === fact.seq) || null;
-    const rawResult = fact => {
-      const call = callOf(fact), text = call && call.result && typeof call.result.text === 'string' ? call.result.text : '';
-      if (!text.trim() || fact.preview) return null;
-      const lines = text.replace(/\r\n/g, '\n').split('\n');
-      return { shown: lines.slice(0, 10).join('\n'), clipped: Boolean(call.result.omitted) || lines.length > 10 };
+    const excerpt = value => value && typeof value.text === 'string' && value.text.trim()
+      ? { text: value.text.replace(/\r\n/g, '\n'), omitted: Number(value.omitted) || 0 } : null;
+    // 原始记录的内容并进面板:调用参数、返回原文、错误类型和 seq 都在这一步里看全。
+    const rawEntry = fact => {
+      const call = callOf(fact);
+      if (!call) return '';
+      const args = excerpt(call.args), result = fact.preview ? null : excerpt(call.result);
+      const error = call.error ? String(call.error.code || call.error.name || '') : '';
+      if (!args && !result && !error) return '';
+      const block = (label, value) => '<span class="geist-result-label">' + label + '</span><pre class="geist-result-text">' + esc(value.text) + '</pre>' +
+        (value.omitted ? '<span class="geist-result-note">' + ui('节选 · 另有 ') + value.omitted + ui(' 个字符未载入') + '</span>' : '');
+      return '<details class="geist-result"><summary>' + ui('调用参数与原文') + '</summary>' +
+        (error ? '<span class="geist-result-label">' + ui('错误类型') + '</span><pre class="geist-result-text">' + esc(error) + '</pre>' : '') +
+        (args ? block(ui('调用参数'), args) : '') + (result ? block(ui('返回原文'), result) : '') + '</details>';
+    };
+    const callMeta = fact => {
+      const call = callOf(fact), bits = [];
+      if (call && call.seq != null) bits.push('seq ' + call.seq + (call.resultSeq != null ? ' → ' + call.resultSeq : ''));
+      if (call && call.start != null && call.end != null) bits.push(dur(call.end - call.start));
+      return bits.join(' · ');
     };
     const operation = fact => {
-      const raw = rawResult(fact);
+      const meta = [fact.detail, callMeta(fact)].filter(Boolean).join(' · ');
       return '<article class="geist-operation" data-tone="' + fact.tone + '">' +
         '<h3>' + esc(fact.title) + '</h3>' +
         '<p>' + esc(fact.outcome) + '</p>' +
-        (fact.detail ? '<span class="geist-operation-size">' + esc(fact.detail) + '</span>' : '') +
-        (raw ? '<details class="geist-result"><summary>' + esc(raw.clipped ? ui('返回原文 · 前 10 行') : ui('返回原文')) + '</summary><pre class="geist-result-text">' + esc(raw.shown) + '</pre></details>' : '') +
+        (meta ? '<span class="geist-operation-size">' + esc(meta) + '</span>' : '') +
+        rawEntry(fact) +
         (fact.preview ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + ' ↗</button>' : '') +
         '</article>';
     };
@@ -47,15 +62,14 @@
       '<div class="geist-operations">' +
         insight.calls.map(operation).join('') +
         (insight.reply ? '<p class="geist-step-reply">' + esc(insight.reply) + '</p>' : '') +
+        (step.reply && step.reply.text && step.reply.text.length > (insight.reply || '').length
+          ? '<details class="geist-result"><summary>' + ui('回复原文') + '</summary><pre class="geist-result-text">' + esc(step.reply.text) + '</pre></details>' : '') +
         (!insight.calls.length && !insight.reply ? ui('<p class="review-quiet">没有记录到本步的文字回复或工具操作。</p>') : '') +
       '</div>' +
       (insight.links.length ? '<p class="geist-step-next"><span>' + ui('后续记录') + '</span>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('') + '</p>' : '') +
-      (insight.following ? '<p class="geist-step-next"><span>' + ui('接下来') + '</span><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + ' ↗</button></p>' : '') +
-      '<p class="geist-step-record"><button class="geist-text-action quiet" id="geist-step-record">' + ui('查看原始记录 ↗') + '</button></p>';
+      (insight.following ? '<p class="geist-step-next"><span>' + ui('接下来') + '</span><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + ' ↗</button></p>' : '');
     panel.querySelectorAll('[data-insight-change]').forEach(el => el.onclick = () => reviewOpenChange(t, step, insight.calls.find(f => f.seq === Number(el.dataset.insightChange))));
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
-    const record = $('geist-step-record');
-    if (record) record.onclick = () => showStep(index);
     panel.querySelectorAll('[data-inspector-nav]').forEach(el => el.onclick = () => {
       const direction = Number(el.dataset.inspectorNav), target = stepNeighbour(direction);
       if (!target) return;
