@@ -23,7 +23,8 @@ export function aggregateInScreen(items, maxSpan = 30) {
   return groups;
 }
 
-export function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48, 77, -94, 122], gap = 10, aggregateSpan = 30, obstacles = [] }) {
+export function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48, 77, -94, 122], gap = 10, aggregateSpan = 30, obstacles = [], labelSide = 'right' }) {
+  const side = labelSide === 'left' ? -1 : 1;
   let groups = aggregateInScreen(items, aggregateSpan);
   const intersects = (a, b) => a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + 5 && a.bottom + 5 > b.top;
   const stemHits = (anchor, dy, box) => anchor > box.left - 4 && anchor < box.right + 4 && Math.max(0, dy) > box.top - 4 && Math.min(0, dy) < box.bottom + 4;
@@ -33,8 +34,9 @@ export function layoutBranches(items, { left, right, measure, labelOf, slots = [
     for (let i = 0; i < groups.length; i++) {
       const members = groups[i], x = members[Math.floor((members.length - 1) / 2)].x;
       const label = labelOf(members), width = measure(label) + 6;
-      const cx = Math.max(left + width / 2, Math.min(right - width / 2, x + 20));
-      const occupiedLeft = Math.min(cx - width / 2, x + 9), occupiedRight = Math.max(cx + width / 2, x + 44);
+      const cx = Math.max(left + width / 2, Math.min(right - width / 2, side > 0 ? x + 20 : x - 24 - width / 2));
+      const occupiedLeft = side > 0 ? Math.min(cx - width / 2, x + 9) : Math.min(cx - width / 2, x - 44);
+      const occupiedRight = side > 0 ? Math.max(cx + width / 2, x + 44) : Math.max(cx + width / 2, x - 9);
       const candidate = slots.map(dy => ({
         x, cx, dy, label, members,
         left: occupiedLeft, right: occupiedRight,
