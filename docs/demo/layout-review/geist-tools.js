@@ -144,6 +144,12 @@
       el.classList.toggle('branch-related', group.members.some(m => m.file.operations.some(op => seqs.has(op.seq))));
     });
     if (result.kind === 'incident') { reviewOpenBranch([result.incident]); return; }
+    // 出错的文件改动:直接给原计划改动,不再先落一层记录抽屉(原来要点两次)。
+    const single = result.calls.length === 1 ? result.calls[0] : null;
+    if (single && single.fact?.preview && (single.fact.tone === 'bad' || single.fact.tone === 'unknown')) {
+      const t = brRound(result.turn), step = t && t.steps.find(row => row.number === result.step);
+      if (t && step) { closeDrawer(); reviewOpenChange(t, step, single.fact); return; }
+    }
     const names = { read: ui('取回文件内容'), change: ui('文件修改'), query: ui('查询结果'), check: ui('检查输出'), error: ui('操作受阻'), command: ui('命令输出'), process: ui('后台任务'), web: ui('网页返回'), coordination: ui('协作返回'), pending: ui('等待工具返回'), other: ui('工具返回') };
     const paths = [...new Set(result.calls.flatMap(c => c.files?.length ? c.files.map(file => file.path) : [c.file]).filter(Boolean))];
     const blocked = result.calls.filter(call => call.fact?.tone === 'bad').length;
