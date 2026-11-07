@@ -2517,7 +2517,11 @@ function fileChangeHistory(operations, path) {
       part+=`<rect class="br-hit" x="${Math.max(left,a)-5}" y="${y-28}" width="${Math.max(20,Math.min(right,b)-Math.max(left,a)+10)}" height="62"/>`;
       html+=brGroup(`class="br-child" data-br-child="${child.id}"`,part,ui`${m.label||ui('子 Agent')} · ${dur(endOf(child.turns.at(-1))-child.turns[0].start)} · ${reports.length} 条主动回报已送达`);
     }
-    const mainH=Math.max(geistOverviewFrame.height,bottom+72),h=mainH,axisY=mainH-24;html=reviewTimeLayer(layout,visible,left,right,mainH,mapTime)+'<g id="trace-context-layer">'+reviewContextLayer(layout,base,left,right,visible)+'</g>'+reviewCompactionLayer(mapTime,left,right,mainH)+html+reviewOverviewFiles(layout,mapTime,base,left,right,mainH);
+    // 目标带单独占一段高度:否则它会和下方文件行、时间刻度叠在一起。
+    const goalInfo = overviewLayers.has('goal') ? ((typeof data !== 'undefined' && data.context && data.context.goal) || null) : null;
+    const goalMarkers = goalInfo && Array.isArray(goalInfo.markers) ? goalInfo.markers : [];
+    const goalPad = goalMarkers.length ? 84 : 0;
+    const h=Math.max(geistOverviewFrame.height,bottom+73+goalPad),axisY=h-35;
     let axis=`<path d="M${left} ${axisY} H${right}" class="br-rule"/>`;
     const span=(right-left)/factor,step=[100,200,500,1000,2000,5000,10000,30000,60000,120000,300000,600000,1200000].find(v=>v>=span/7)||1200000;
     let lastTick=-Infinity;
@@ -2525,36 +2529,48 @@ function fileChangeHistory(operations, path) {
     const visibleTurns=layout.filter(l=>l.end>=left&&l.x<=right).map(l=>l.turn.number);
     const mode=overviewScale>1?'放大查看 · 点选细节':detail?ui`第 ${visibleTurns.join('、')} 轮 · 动作展开`:ui(reviewOverviewSummary());
     html=ui`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,ui(showTime?"总耗时 "+reviewDuration(active):"累计执行时间"),'br-note','end')}</g>`;
-    const goalData = overviewLayers.has('goal') ? ((typeof data !== 'undefined' && data.context && data.context.goal) || null) : null;
-    if (goalData && Array.isArray(goalData.markers) && goalData.markers.length) {
+    const goalData = goalInfo;
+    if (goalData && goalMarkers.length) {
       const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
       const reads = goalData.markers.filter(m => m.operation === 'read');
-      const gy = h - 46;
+      const goalState = { create: ui('创建'), resume: ui('恢复'), pause: ui('暂停'), edit: ui('编辑'), complete: ui('完成'), blocked: ui('受阻') };
       // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
       const byGoalAll = new Map();
       for (const m of goalData.markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
       const byGoalLife = new Map();
       for (const m of life) { const key = m.goalId || 'goal'; if (!byGoalLife.has(key)) byGoalLife.set(key, []); byGoalLife.get(key).push({ ...m, x: mapTime(m.time) }); }
-      let band = '<g class="goal-band" data-goal-band="1" style="cursor:pointer;pointer-events:all">';
-      let drawn = 0;
+      // 先把每条目标摊成一段,再按范围重叠错行;行长一致的区间才不会互相压。
+      const goals = [];
       for (const [id, list] of byGoalLife) {
         const pts = list.filter(m => Number.isFinite(m.x));
         if (!pts.length) continue;
-        drawn++;
         const all = (byGoalAll.get(id) || []).map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
-        const x0 = all.length ? all[0].x : pts[0].x, x1 = pts[pts.length - 1].x, w = Math.max(18, x1 - x0);
-        band += '<rect x="' + x0 + '" y="' + (gy - 7) + '" width="' + w + '" height="14" rx="4" class="goal-block"/>';
-        if (pts.length > 1) band += '<path d="M' + pts[0].x + ' ' + gy + 'H' + x1 + '" class="goal-line"/>';
-        for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="4" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ui(' · 第 ') + m.turn + ui(' 轮 · seq ') + m.seq + '</title></circle>';
+        goals.push({ id, pts, x0: all.length ? all[0].x : pts[0].x, x1: pts[pts.length - 1].x });
+      }
+      const goalLanes = [];
+      for (const goal of goals) {
+        const lane = goalLanes.findIndex(right => right < goal.x0 - 10);
+        const laneIndex = lane < 0 ? goalLanes.length : lane;
+        goalLanes[laneIndex] = goal.x1;
+        goal.lane = Math.min(laneIndex, 2);
+      }
+      let band = '<g class="goal-band" data-goal-band="1" style="cursor:pointer;pointer-events:all">';
+      for (const goal of goals) {
+        const { id, pts, x0, x1 } = goal, w = Math.max(18, x1 - x0), laneY = gy - goal.lane * 22;
         const last = pts[pts.length - 1];
         const own = (goalData.goals || []).find(x => x.id === id) || null;
         const objective = String(own?.objective || goalData.objective || ui('目标')).replace(/\s+/g, ' ');
-        const compact = objective.length > 26 ? objective.slice(0, 26) + '…' : objective;
-        band += '<text x="' + (x0 + w / 2) + '" y="' + (gy + 16) + '" text-anchor="middle" class="goal-label"><tspan class="goal-text">' + compact + '</tspan><tspan class="goal-state ' + (last.operation || 'active') + '" dx="6">' + (last.operation || '') + '</tspan></text>';
+        const maxChars = Math.max(3, Math.floor((w - 24) / 7));
+        const compact = objective.length > maxChars ? objective.slice(0, maxChars) + '…' : objective;
+        // 不用胶囊:一条实线加两端刻度就够,事件点是线上的刻度。
+        band += '<path d="M' + x0 + ' ' + laneY + 'H' + x1 + '" class="goal-line"/>';
+        band += '<path d="M' + x0 + ' ' + (laneY - 5) + 'v10M' + x1 + ' ' + (laneY - 5) + 'v10" class="goal-cap"/>';
+        for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + laneY + '" r="3.2" class="goal-dot ' + (m.operation || '') + '"><title>' + (goalState[m.operation] || m.operation || '') + ui(' · 第 ') + m.turn + ui(' 轮 · seq ') + m.seq + '</title></circle>';
+        band += '<text x="' + x0 + '" y="' + (laneY - 7) + '" class="goal-label"><tspan class="goal-text">' + compact + '</tspan><tspan class="goal-state ' + (last.operation || 'active') + '" dx="6">' + (goalState[last.operation] || last.operation || '') + '</tspan></text>';
       }
-      for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + ui('" r="1.8" class="goal-read"><title>读取目标 · 第 ') + m.turn + ui(' 轮</title></circle>'); }
+      for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + ui('" r="1.6" class="goal-read"><title>读取目标 · 第 ') + m.turn + ui(' 轮</title></circle>'); }
       band += '</g>';
-      if (drawn) html += band;
+      if (goals.length) html += band;
     }
     $('graph').setAttribute('viewBox',`0 0 ${w} ${h}`);$('graph').setAttribute('height',h);$('graph').style.width=w+'px';$('graph').innerHTML=html;
     const bind=(selector,enter,click,dbl)=>$('graph').querySelectorAll(selector).forEach(el=>{el.onmouseenter=()=>enter?.(el);el.onclick=ev=>{ev.stopPropagation();click?.(el);};el.ondblclick=ev=>{ev.preventDefault();ev.stopPropagation();(dbl||click)?.(el);};el.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();click?.(el);}};});
