@@ -2908,12 +2908,13 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     };
     const operation = fact => {
       const meta = [fact.detail, callMeta(fact)].filter(Boolean).join(' · ');
+      const raw = rawEntry(fact);
+      const diff = fact.preview ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + ' ↗</button>' : '';
       return '<article class="geist-operation" data-tone="' + fact.tone + '">' +
         '<h3>' + esc(fact.title) + '</h3>' +
         '<p>' + esc(fact.outcome) + '</p>' +
         (meta ? '<span class="geist-operation-size">' + esc(meta) + '</span>' : '') +
-        rawEntry(fact) +
-        (fact.preview ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + ' ↗</button>' : '') +
+        (raw || diff ? '<div class="geist-operation-actions">' + raw + diff + '</div>' : '') +
         '</article>';
     };
     panel.innerHTML = '<header class="geist-step-meta"><span><b>' + ui`第 ${step.number} 步` + '</b>' +
