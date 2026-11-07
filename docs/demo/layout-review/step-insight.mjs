@@ -4,6 +4,23 @@ const insightText = (value, limit = 120) => {
   return text.length > limit ? text.slice(0, limit) + '…' : text;
 };
 const insightFile = value => String(value || '').replace(/\\/g, '/').split('/').filter(Boolean).slice(-2).join('/');
+// 结果摘要:先读已知的计数字段,读不到再取返回正文的第一行。这里不猜语义,只把已有内容说清楚。
+function insightDigest(value, text) {
+  if (value && typeof value === 'object') {
+    const labels = [['turns', ui('轮')], ['steps', ui('步')], ['calls', ui('次调用')], ['returned', ui('条结果')],
+      ['hitCount', ui('条命中')], ['total', ui('条记录')], ['totalEntries', ui('条记录')], ['events', ui('条事件')],
+      ['sessions', ui('个会话')], ['nodes', ui('个节点')], ['edges', ui('条关系')]];
+    const source = value.summary && typeof value.summary === 'object' ? { ...value, ...value.summary } : value;
+    const parts = [];
+    for (const [key, label] of labels) {
+      const count = source?.[key];
+      if (Number.isFinite(count) && count > 0 && parts.length < 3) parts.push(count + ' ' + label);
+    }
+    if (parts.length) return ui('返回 ') + parts.join(' · ');
+  }
+  const line = String(text || '').split(/\r?\n/).map(row => row.trim()).find(Boolean) || '';
+  return line ? insightText(line, 110) : '';
+}
 function insightJSON(excerpt) {
   if (!excerpt || excerpt.omitted > 0) return null;
   try { const value = JSON.parse(excerpt.text); return value && typeof value === 'object' ? value : null; } catch { return null; }
@@ -72,11 +89,41 @@ export function describeCall(call) {
     if (!outcome && text.trim()) outcome = ui('命令返回了输出。');
   } else if (name === 'web_fetch') {
     try { const url = new URL(args.url); title = ui('读取网页 ') + url.hostname + url.pathname; } catch { title = ui('读取网页'); }
+  } else if (name === 'skill') {
+    const skillName = (text.match(/name="([^"]+)"/) || [])[1];
+    title = ui('读取 Skill') + (skillName ? ' · ' + insightText(skillName, 40) : '');
+    if (text.trim()) {
+      outcome = ui('返回了 Skill 正文。');
+      detail = ui('正文 ') + text.trim().length + ui(' 字符');
+    }
+  } else if (name === 'trajectory_inspect') {
+    const kind = String(args.view || 'overview');
+    title = ({ overview: ui('查看执行统计'), latency: ui('查看耗时分布'), cost: ui('查看用量与缓存'), repeats: ui('查看反复尝试'), io: ui('查看工具与文件'), context: ui('查看上下文构成') })[kind] || ui('查看执行统计');
+    const summary = result?.summary && typeof result.summary === 'object' ? result.summary : null;
+    if (summary) {
+      const parts = [];
+      if (Number.isFinite(summary.turns)) parts.push(summary.turns + ui(' 轮'));
+      if (Number.isFinite(summary.steps)) parts.push(summary.steps + ui(' 步'));
+      if (Number.isFinite(summary.calls)) parts.push(summary.calls + ui(' 次调用'));
+      if (parts.length) outcome = ui('覆盖 ') + parts.join(' · ');
+    }
+    if (!outcome && Number.isFinite(result?.totalEntries)) outcome = ui('返回 ') + result.totalEntries + ui(' 条记录。');
+  } else if (name === 'trajectory_graph') {
+    title = ui('查看记录关系');
+    outcome = insightDigest(result, text);
+  } else if (name === 'trajectory_trace') {
+    title = ui('查看会话谱系');
+    outcome = insightDigest(result, text);
   } else if (name === 'cordis_inspect_query') {
     title = ui('查询运行时状态');
     if (args.query) detail = ui('查询：') + insightText(typeof args.query === 'string' ? args.query : JSON.stringify(args.query), 100);
+    outcome = insightDigest(result?.data ?? result, text);
+  } else if (name === 'cordis_inspect_list') {
+    title = ui('查看可用查询');
+    outcome = insightDigest(result?.data ?? result, text);
   } else if (name === 'plugin_manager') {
     title = ui('管理插件') + (args.action ? ' · ' + insightText(args.action, 30) : '');
+    outcome = insightDigest(result, text);
   } else if (args.description) detail = ui('调用方说明：') + insightText(args.description, 100);
   const code = call.error?.code || call.error?.info?.code;
   let tone = 'normal';
@@ -94,7 +141,12 @@ export function describeCall(call) {
     tone = 'unknown'; outcome = ui('没有对应的返回记录，暂时不能判断结果。');
   } else if (result?.ok === false) {
     tone = 'bad'; outcome = ui('工具已返回，但结果报告未成功') + (typeof result.error?.message === 'string' ? '：' + insightText(result.error.message, 100) : '。');
-  } else if (!outcome) outcome = text.trim() ? ui('已收到工具返回，可展开查看具体内容。') : ui('工具已返回，没有文字内容。');
+  } else if (!outcome) {
+    // 结果被截断时只说明"有返回、较长",不把半截 JSON 里的数字当成结论。
+    if (!text.trim()) outcome = ui('工具已返回，没有文字内容。');
+    else if ((call.result?.omitted || 0) > 0) outcome = ui('已收到工具返回，结果较长；展开看前 10 行，原文见原始记录。');
+    else outcome = insightDigest(result, text);
+  }
   return { seq: call.seq, title: insightText(title, 110), target: target ? String(target) : null,
     outcome, detail, preview, tone, resultSeq: call.resultSeq, resultExcerpted: (call.result?.omitted || 0) > 0 };
 }

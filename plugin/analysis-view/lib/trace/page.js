@@ -977,6 +977,23 @@ const insightText = (value, limit = 120) => {
   return text.length > limit ? text.slice(0, limit) + '…' : text;
 };
 const insightFile = value => String(value || '').replace(/\\/g, '/').split('/').filter(Boolean).slice(-2).join('/');
+// 结果摘要:先读已知的计数字段,读不到再取返回正文的第一行。这里不猜语义,只把已有内容说清楚。
+function insightDigest(value, text) {
+  if (value && typeof value === 'object') {
+    const labels = [['turns', ui('轮')], ['steps', ui('步')], ['calls', ui('次调用')], ['returned', ui('条结果')],
+      ['hitCount', ui('条命中')], ['total', ui('条记录')], ['totalEntries', ui('条记录')], ['events', ui('条事件')],
+      ['sessions', ui('个会话')], ['nodes', ui('个节点')], ['edges', ui('条关系')]];
+    const source = value.summary && typeof value.summary === 'object' ? { ...value, ...value.summary } : value;
+    const parts = [];
+    for (const [key, label] of labels) {
+      const count = source?.[key];
+      if (Number.isFinite(count) && count > 0 && parts.length < 3) parts.push(count + ' ' + label);
+    }
+    if (parts.length) return ui('返回 ') + parts.join(' · ');
+  }
+  const line = String(text || '').split(/\r?\n/).map(row => row.trim()).find(Boolean) || '';
+  return line ? insightText(line, 110) : '';
+}
 function insightJSON(excerpt) {
   if (!excerpt || excerpt.omitted > 0) return null;
   try { const value = JSON.parse(excerpt.text); return value && typeof value === 'object' ? value : null; } catch { return null; }
@@ -1045,11 +1062,41 @@ function describeCall(call) {
     if (!outcome && text.trim()) outcome = ui('命令返回了输出。');
   } else if (name === 'web_fetch') {
     try { const url = new URL(args.url); title = ui('读取网页 ') + url.hostname + url.pathname; } catch { title = ui('读取网页'); }
+  } else if (name === 'skill') {
+    const skillName = (text.match(/name="([^"]+)"/) || [])[1];
+    title = ui('读取 Skill') + (skillName ? ' · ' + insightText(skillName, 40) : '');
+    if (text.trim()) {
+      outcome = ui('返回了 Skill 正文。');
+      detail = ui('正文 ') + text.trim().length + ui(' 字符');
+    }
+  } else if (name === 'trajectory_inspect') {
+    const kind = String(args.view || 'overview');
+    title = ({ overview: ui('查看执行统计'), latency: ui('查看耗时分布'), cost: ui('查看用量与缓存'), repeats: ui('查看反复尝试'), io: ui('查看工具与文件'), context: ui('查看上下文构成') })[kind] || ui('查看执行统计');
+    const summary = result?.summary && typeof result.summary === 'object' ? result.summary : null;
+    if (summary) {
+      const parts = [];
+      if (Number.isFinite(summary.turns)) parts.push(summary.turns + ui(' 轮'));
+      if (Number.isFinite(summary.steps)) parts.push(summary.steps + ui(' 步'));
+      if (Number.isFinite(summary.calls)) parts.push(summary.calls + ui(' 次调用'));
+      if (parts.length) outcome = ui('覆盖 ') + parts.join(' · ');
+    }
+    if (!outcome && Number.isFinite(result?.totalEntries)) outcome = ui('返回 ') + result.totalEntries + ui(' 条记录。');
+  } else if (name === 'trajectory_graph') {
+    title = ui('查看记录关系');
+    outcome = insightDigest(result, text);
+  } else if (name === 'trajectory_trace') {
+    title = ui('查看会话谱系');
+    outcome = insightDigest(result, text);
   } else if (name === 'cordis_inspect_query') {
     title = ui('查询运行时状态');
     if (args.query) detail = ui('查询：') + insightText(typeof args.query === 'string' ? args.query : JSON.stringify(args.query), 100);
+    outcome = insightDigest(result?.data ?? result, text);
+  } else if (name === 'cordis_inspect_list') {
+    title = ui('查看可用查询');
+    outcome = insightDigest(result?.data ?? result, text);
   } else if (name === 'plugin_manager') {
     title = ui('管理插件') + (args.action ? ' · ' + insightText(args.action, 30) : '');
+    outcome = insightDigest(result, text);
   } else if (args.description) detail = ui('调用方说明：') + insightText(args.description, 100);
   const code = call.error?.code || call.error?.info?.code;
   let tone = 'normal';
@@ -1067,7 +1114,12 @@ function describeCall(call) {
     tone = 'unknown'; outcome = ui('没有对应的返回记录，暂时不能判断结果。');
   } else if (result?.ok === false) {
     tone = 'bad'; outcome = ui('工具已返回，但结果报告未成功') + (typeof result.error?.message === 'string' ? '：' + insightText(result.error.message, 100) : '。');
-  } else if (!outcome) outcome = text.trim() ? ui('已收到工具返回，可展开查看具体内容。') : ui('工具已返回，没有文字内容。');
+  } else if (!outcome) {
+    // 结果被截断时只说明"有返回、较长",不把半截 JSON 里的数字当成结论。
+    if (!text.trim()) outcome = ui('工具已返回，没有文字内容。');
+    else if ((call.result?.omitted || 0) > 0) outcome = ui('已收到工具返回，结果较长；展开看前 10 行，原文见原始记录。');
+    else outcome = insightDigest(result, text);
+  }
   return { seq: call.seq, title: insightText(title, 110), target: target ? String(target) : null,
     outcome, detail, preview, tone, resultSeq: call.resultSeq, resultExcerpted: (call.result?.omitted || 0) > 0 };
 }
@@ -2743,7 +2795,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   }
 }
 
-  // A single inspector: action and observed result first, evidence on demand.
+  // 一步的读数与证据:标题一行、操作一段、依据收进一个折叠区,原文只在最深处。
   reviewRenderStepSummary = function(t, step) {
     const panel = $('step-panel');
     const identity = [session.id, t.number, step.number, overviewLayers.has('duration'), overviewLayers.has('context'), 'inspector'].join(':');
@@ -2753,14 +2805,6 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const index = t.steps.indexOf(step);
     panel.className = 'step-panel on geist-step'; panel.style.display = '';
     panel.setAttribute('aria-label', ui('所选步骤详情'));
-    const render = fact => {
-      const lines = value => value ? String(value).split(/\r?\n/).length : 0;
-      const size = fact.preview && !fact.preview.partial
-        ? (fact.preview.before ? ui('替换片段 ') + lines(fact.preview.before) + ' → ' + lines(fact.preview.after) + ui(' 行') : ui('写入内容 ') + lines(fact.preview.after) + ui(' 行')) : '';
-      return '<article class="geist-operation" data-tone="' + fact.tone + '"><div class="geist-operation-copy"><h3>' + esc(fact.title) + '</h3>' +
-        '<p>' + esc(fact.outcome) + '</p>' + (size ? '<span class="geist-operation-size">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('原计划 · ') : '') + size + '</span>' : '') + '</div>' +
-        (fact.preview ? '<button class="geist-diff-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('查看差异')) + ' <span aria-hidden="true">↗</span></button>' : '') + '</article>';
-    };
     const turnIndex = session.turns.indexOf(t);
     const stepNeighbour = direction => {
       const within = t.steps[index + direction];
@@ -2775,18 +2819,44 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       if (!target.within) return direction > 0 ? ui('下一轮第 1 步') : ui('上一轮末步');
       return direction > 0 ? (insight.following ? ui('下一步 · ') + insight.following.text : ui('下一步')) : ui('上一步');
     };
+    const callOf = fact => step.calls.find(call => call.seq === fact.seq) || null;
+    const rawResult = fact => {
+      const call = callOf(fact), text = call && call.result && typeof call.result.text === 'string' ? call.result.text : '';
+      if (!text.trim() || fact.preview) return null;
+      const lines = text.replace(/\r\n/g, '\n').split('\n');
+      return { shown: lines.slice(0, 10).join('\n'), clipped: Boolean(call.result.omitted) || lines.length > 10 };
+    };
+    const operation = fact => {
+      const raw = rawResult(fact);
+      return '<article class="geist-operation" data-tone="' + fact.tone + '">' +
+        '<h3>' + esc(fact.title) + '</h3>' +
+        '<p>' + esc(fact.outcome) + '</p>' +
+        (fact.detail ? '<span class="geist-operation-size">' + esc(fact.detail) + '</span>' : '') +
+        (raw ? '<details class="geist-result"><summary>' + esc(raw.clipped ? ui('返回原文 · 前 10 行') : ui('返回原文')) + '</summary><pre class="geist-result-text">' + esc(raw.shown) + '</pre></details>' : '') +
+        (fact.preview ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + ' ↗</button>' : '') +
+        '</article>';
+    };
     panel.innerHTML = '<header class="geist-step-meta"><span><b>' + ui`第 ${step.number} 步` + '</b>' +
       (overviewLayers.has('duration') ? '<span>' + preciseTime(recordDuration(step)) + '</span>' : '') +
       (insight.calls.length > 1 ? '<span>' + insight.calls.length + ui(' 项操作</span>') : '') + '</span>' +
       ui('<nav class="geist-step-navigation" aria-label="逐步浏览"><button data-inspector-nav="-1" aria-label="上一步" title="') + esc(navTitle(backward, -1)) + '"' + (backward ? '' : ' disabled') + ui('>←</button><button data-inspector-nav="1" aria-label="下一步" title="') + esc(navTitle(forward, 1)) + '"' + (forward ? '' : ' disabled') + '>→</button></nav></header>' +
-      '<div class="geist-operations">' + (insight.calls.length ? insight.calls.map(render).join('') :
-        ui('<article class="geist-operation"><div class="geist-operation-copy"><h3>回复</h3><p>') + esc(insight.reply || ui('没有记录到本步的文字回复。')) + '</p></div></article>') + '</div>' +
-      (insight.links.length ? '<div class="geist-step-recovery">' + insight.links.map(link => '<button class="geist-text-action recovery" data-insight-step="' + link.step + '">' + esc(link.text) + ' ↗</button>').join('') + '</div>' : '') +
-      ui('<footer class="geist-step-evidence"><button class="geist-text-action quiet" id="review-panel-details">输入与依据 ↗</button><button class="geist-text-action quiet" id="panel-record">原始记录 ↗</button></footer>');
-    $('panel-record').onclick = () => showStep(index);
-    $('review-panel-details').onclick = () => reviewOpenStepDetail(t, step, insight, info);
+      '<p class="geist-step-context" title="' + esc(insight.input.label + ' · ' + insight.input.text) + '"><span>' + esc(insight.input.label) + '</span>' + esc(insight.input.text) + '</p>' +
+      '<div class="geist-operations">' +
+        insight.calls.map(operation).join('') +
+        (insight.reply ? '<p class="geist-step-reply">' + esc(insight.reply) + '</p>' : '') +
+        (!insight.calls.length && !insight.reply ? ui('<p class="review-quiet">没有记录到本步的文字回复或工具操作。</p>') : '') +
+      '</div>' +
+      '<details class="geist-basis"><summary>' + ui('依据与原文') + '</summary><div class="geist-basis-body">' +
+        '<section><h4>' + esc(insight.input.label) + '</h4><p>' + esc(insight.input.text) + '</p></section>' +
+        (insight.links.length ? '<section><h4>' + ui('后续记录') + '</h4>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('') + '</section>' : '') +
+        (insight.following ? '<section><h4>' + ui('接下来') + '</h4><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + ' ↗</button></section>' : '') +
+        (info ? '<section><h4>' + ui('本步请求上下文') + '</h4><p>' + ui('已有 ≈') + reviewTokens(info.total) + ui(' tokens；') + (info.initial ? ui('首次载入 ') : ui('相比上次请求 ')) + reviewSigned(info.amount) + ui('。') + '</p><p class="review-quiet">' + ui('请求发出前的估算构成，不含本次回复。') + '</p></section>' : '') +
+        '<button class="geist-text-action" id="geist-step-record">' + ui('查看原始记录 ↗') + '</button>' +
+      '</div></details>';
     panel.querySelectorAll('[data-insight-change]').forEach(el => el.onclick = () => reviewOpenChange(t, step, insight.calls.find(f => f.seq === Number(el.dataset.insightChange))));
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
+    const record = $('geist-step-record');
+    if (record) record.onclick = () => showStep(index);
     panel.querySelectorAll('[data-inspector-nav]').forEach(el => el.onclick = () => {
       const direction = Number(el.dataset.inspectorNav), target = stepNeighbour(direction);
       if (!target) return;

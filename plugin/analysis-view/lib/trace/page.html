@@ -557,14 +557,28 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-step-meta{display:flex;align-items:center;justify-content:space-between;gap:20px;font:12px/20px var(--sans);color:var(--muted)}
 .geist-step-meta>span{display:flex;align-items:center;flex-wrap:wrap;gap:4px 14px}
 .geist-step-meta b{font-weight:500;color:var(--ink)}
-.geist-operations{display:flex;flex-direction:column;gap:20px}
-.geist-operation{display:flex;gap:24px;align-items:center}
-.geist-operation-copy{flex:1;min-width:0}
-.geist-operation h3{margin:0 0 6px;font:600 16px/24px var(--sans);letter-spacing:-.02em;color:var(--ink);overflow-wrap:anywhere}
+.geist-operations{display:flex;flex-direction:column;gap:16px}
+.geist-operation{display:flex;flex-direction:column;align-items:stretch;gap:5px}
+.geist-operation-copy{min-width:0}
+.geist-operation h3{margin:0;font:500 14px/22px var(--sans);color:var(--ink);overflow-wrap:anywhere}
 .geist-operation p{margin:0;font:13px/22px var(--sans);color:var(--ink);overflow-wrap:anywhere}
 .geist-operation[data-tone=bad] p{color:var(--branch-bad)}
 .geist-operation[data-tone=unknown] p{color:var(--review-unknown)}
-.geist-operation-size{display:block;margin-top:4px;font:11px/20px var(--sans);color:var(--muted);font-variant-numeric:tabular-nums}
+.geist-operation-size{display:block;margin-top:1px;font:11px/18px var(--sans);color:var(--muted);font-variant-numeric:tabular-nums}
+.geist-step-context{display:flex;align-items:baseline;gap:8px;margin:0;font:12px/20px var(--sans);color:var(--muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.geist-review .geist-step-context span{flex:none;color:var(--ink)}
+.geist-step-reply{margin:0;font:13px/22px var(--sans);color:var(--ink);overflow-wrap:anywhere}
+.geist-result summary,.geist-basis summary{display:inline-flex;align-items:center;gap:6px;list-style:none;cursor:pointer;font:12px/20px var(--sans);color:var(--review-action)}
+.geist-result summary::-webkit-details-marker,.geist-basis summary::-webkit-details-marker{display:none}
+.geist-result summary:after,.geist-basis summary:after{content:'⌄';font-size:14px;line-height:16px;transition:transform .1s}
+.geist-result[open] summary:after,.geist-basis[open] summary:after{transform:rotate(180deg)}
+.geist-result-text{margin:4px 0 0;padding:10px 12px;max-height:200px;overflow:auto;border-radius:6px;background:var(--soft);font:11px/18px var(--mono);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.geist-basis{border-top:1px solid var(--line);padding-top:10px}
+.geist-review .geist-basis>summary{color:var(--muted)}
+.geist-basis-body{display:flex;flex-direction:column;gap:10px;padding-top:8px}
+.geist-basis-body section{display:flex;flex-direction:column;gap:2px}
+.geist-basis-body h4{margin:0;font:11px/18px var(--sans);font-weight:500;color:var(--muted)}
+.geist-basis-body p{margin:0;font:12px/21px var(--sans);color:var(--ink);overflow-wrap:anywhere}
 .geist-review .geist-diff-action{flex:none;display:flex;align-items:center;gap:14px;padding:7px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:500 12px/20px var(--sans);box-shadow:0 1px 2px #00000005}
 .geist-review .geist-diff-action:hover{background:var(--soft);border-color:var(--muted)}
 .geist-step-navigation{display:flex;gap:4px}
@@ -820,7 +834,7 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 /* 行动路径:图区吸收剩余高度,步骤面板在内部滚动,内容多了不再顶走图。 */
 .geist-review .canvas.review-action-mode .graph-scroll { flex: 1 1 auto; min-height: 320px; height: auto; max-height: none; }
 /* 步骤面板固定收在 148px,内容在面板内滚动,不再把图挤到顶上。 */
-.geist-review .canvas.review-action-mode .step-panel.geist-step { flex: 0 0 auto; min-height: 0; height: 148px; max-height: 148px; overflow-y: auto; }
+.geist-review .canvas.review-action-mode .step-panel.geist-step { flex: 0 0 auto; min-height: 0; height: auto; max-height: min(46vh, 360px); overflow-y: auto; }
 
 /* 行动路径:步骤面板默认收成摘要,文字多的步骤不再把图挤到顶上。 */
 .geist-review .review-action-mode .step-panel.review-step-summary { max-height: 148px; overflow: hidden; }
