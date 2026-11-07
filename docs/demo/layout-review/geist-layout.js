@@ -6,9 +6,11 @@
     const controlsHeight = Math.max(48, caption.getBoundingClientRect().height);
     const actorReserve = typeof geistActorReserve === 'function' ? geistActorReserve() : 0;
     const available = canvas.clientHeight - header.getBoundingClientRect().height - controlsHeight - actorReserve - 12;
+    // 图区盒子的真实高度优先:它由 flex 决定,不受 SVG 自身高度影响。
+    const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
     const context = overviewLayers.has('context');
     // 页面的实际高度是对话区给的:先跟着可用高度走,不为了满高而把底部挤出视口。
-    const height = Math.round(Math.max(240, available));
+    const height = Math.round(Math.max(240, box > 120 ? box : available));
     const pixels = context ? Math.max(36, Math.min(actorReserve ? 84 : 108, (height - 236) / 2)) : 108;
     reviewContextScale.pixels = pixels;
     return { height, base: context ? 124 + pixels : 208 };

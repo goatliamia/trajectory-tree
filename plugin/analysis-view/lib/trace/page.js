@@ -3168,9 +3168,11 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const controlsHeight = Math.max(48, caption.getBoundingClientRect().height);
     const actorReserve = typeof geistActorReserve === 'function' ? geistActorReserve() : 0;
     const available = canvas.clientHeight - header.getBoundingClientRect().height - controlsHeight - actorReserve - 12;
+    // 图区盒子的真实高度优先:它由 flex 决定,不受 SVG 自身高度影响。
+    const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
     const context = overviewLayers.has('context');
     // 页面的实际高度是对话区给的:先跟着可用高度走,不为了满高而把底部挤出视口。
-    const height = Math.round(Math.max(240, available));
+    const height = Math.round(Math.max(240, box > 120 ? box : available));
     const pixels = context ? Math.max(36, Math.min(actorReserve ? 84 : 108, (height - 236) / 2)) : 108;
     reviewContextScale.pixels = pixels;
     return { height, base: context ? 124 + pixels : 208 };
@@ -3254,7 +3256,20 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     geistSyncLegend();
   }
   const geistOverviewBase = renderOverview;
-  renderOverview = function(...args) { geistSyncMeasureFont(); const value = geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); return value; };
+  let geistFitPass = false;
+  renderOverview = function(...args) {
+    geistSyncMeasureFont();
+    const value = geistOverviewBase(...args);
+    geistArrangeCaption(); geistGoalChip();
+    // 首帧时图注/表头高度可能还没稳定,几何算出的高度和真实盒子会差一截;差超过 14px 就按盒子高度再画一次。
+    const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
+    const svgHeight = parseFloat((graph || {}).getAttribute ? $('graph').getAttribute('height') : '0') || 0;
+    if (!geistFitPass && box > 120 && Math.abs(svgHeight - box) > 14) {
+      geistFitPass = true;
+      try { geistOverviewBase(...args); geistArrangeCaption(); geistGoalChip(); } finally { geistFitPass = false; }
+    }
+    return value;
+  };
   // 目标入口放在观察行:caption 每次重排都会重建子节点,所以放在重排之后补。
   function geistGoalChip() {
     const goal = (typeof data !== 'undefined' && data.context && data.context.goal) || null;
