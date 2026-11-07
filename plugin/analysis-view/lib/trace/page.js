@@ -2533,6 +2533,7 @@ function fileChangeHistory(operations, path) {
     if (goalData && goalMarkers.length) {
       const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
       const reads = goalData.markers.filter(m => m.operation === 'read');
+      const gy = h - 70;
       const goalState = { create: ui('创建'), resume: ui('恢复'), pause: ui('暂停'), edit: ui('编辑'), complete: ui('完成'), blocked: ui('受阻') };
       // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
       const byGoalAll = new Map();
