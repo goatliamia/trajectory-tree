@@ -177,7 +177,7 @@
     if (result.kind === 'check') html += ui('<p class="review-quiet">按检查命令实际输出展示，不代表整个任务已经完成。</p>');
     if (result.calls.some(call => call.name === 'grep')) html += ui('<p class="review-quiet">搜索记录关联实际返回的匹配片段，不表示读入了整份文件。</p>');
     const counts = [result.calls.length + ui(' 项操作'), blocked ? blocked + ui(' 处受阻') : '', recovered ? recovered + ui(' 处已恢复') : ''].filter(Boolean).join(' · ');
-    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], ui`第 ${result.turn} 轮 · 第 ${result.step} 步` + ' · ' + counts, html);
+    openDrawer(result.recorded ? toolResultLabel(result) : names[result.kind], ui`第 ${result.turn} 轮 · 第 ${result.step} 步` + ' · ' + counts, html, back);
     $('geist-result-step').onclick = () => { closeDrawer(); reviewEnterPath(result.turn, result.step); };
     $('geist-result-context').onclick = () => reviewOpenContext(result.turn);
     // 跳到对话由宿主视图完成(切到对话并滚到该轮),页面只把轮次交出去。
