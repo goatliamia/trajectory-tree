@@ -170,7 +170,11 @@
       part+=`<rect class="br-hit" x="${Math.max(left,a)-5}" y="${y-28}" width="${Math.max(20,Math.min(right,b)-Math.max(left,a)+10)}" height="62"/>`;
       html+=brGroup(`class="br-child" data-br-child="${child.id}"`,part,ui`${m.label||ui('子 Agent')} · ${dur(endOf(child.turns.at(-1))-child.turns[0].start)} · ${reports.length} 条主动回报已送达`);
     }
-    const h=Math.max(332,bottom+73),axisY=h-35;
+    // 目标带单独占一段高度:否则它会和下方文件行、时间刻度叠在一起。
+    const goalInfo = overviewLayers.has('goal') ? ((typeof data !== 'undefined' && data.context && data.context.goal) || null) : null;
+    const goalMarkers = goalInfo && Array.isArray(goalInfo.markers) ? goalInfo.markers : [];
+    const goalPad = goalMarkers.length ? 84 : 0;
+    const h=Math.max(332,bottom+73+goalPad),axisY=h-35;
     let axis=`<path d="M${left} ${axisY} H${right}" class="br-rule"/>`;
     const span=(right-left)/factor,step=[100,200,500,1000,2000,5000,10000,30000,60000,120000,300000,600000,1200000].find(v=>v>=span/7)||1200000;
     let lastTick=-Infinity;
@@ -178,11 +182,11 @@
     const visibleTurns=layout.filter(l=>l.end>=left&&l.x<=right).map(l=>l.turn.number);
     const mode=detail?ui`第 ${visibleTurns.join('、')} 轮 · 动作展开`:ui('全览 · 事件折叠');
     html=ui`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,ui('累计执行时间'),'br-note','end')}</g>`;
-    const goalData = overviewLayers.has('goal') ? ((typeof data !== 'undefined' && data.context && data.context.goal) || null) : null;
-    if (goalData && Array.isArray(goalData.markers) && goalData.markers.length) {
+    const goalData = goalInfo;
+    if (goalData && goalMarkers.length) {
       const life = goalData.markers.filter(m => m.operation && m.operation !== 'read');
       const reads = goalData.markers.filter(m => m.operation === 'read');
-      const gy = h - 46;
+      const gy = h - 46 - goalPad;
       // 起点用该目标的所有记录(含读取),终点用生命周期最后一条;一个会话可有多个目标,各自一段。
       const byGoalAll = new Map();
       for (const m of goalData.markers) { const key = m.goalId || 'goal'; if (!byGoalAll.has(key)) byGoalAll.set(key, []); byGoalAll.get(key).push(m); }
@@ -190,22 +194,29 @@
       for (const m of life) { const key = m.goalId || 'goal'; if (!byGoalLife.has(key)) byGoalLife.set(key, []); byGoalLife.get(key).push({ ...m, x: mapTime(m.time) }); }
       let band = '<g class="goal-band" data-goal-band="1" style="cursor:pointer;pointer-events:all">';
       let drawn = 0;
+      const goalLanes = [];
       for (const [id, list] of byGoalLife) {
         const pts = list.filter(m => Number.isFinite(m.x));
         if (!pts.length) continue;
         drawn++;
         const all = (byGoalAll.get(id) || []).map(m => ({ ...m, x: mapTime(m.time) })).filter(m => Number.isFinite(m.x));
         const x0 = all.length ? all[0].x : pts[0].x, x1 = pts[pts.length - 1].x, w = Math.max(18, x1 - x0);
-        band += '<rect x="' + x0 + '" y="' + (gy - 7) + '" width="' + w + '" height="14" rx="4" class="goal-block"/>';
-        if (pts.length > 1) band += '<path d="M' + pts[0].x + ' ' + gy + 'H' + x1 + '" class="goal-line"/>';
-        for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + gy + '" r="4" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ui(' · 第 ') + m.turn + ui(' 轮 · seq ') + m.seq + '</title></circle>';
+        // 目标带按行打包:范围重叠的目标错到上一行,不再互相盖住。
+        const lane = goalLanes.findIndex(right => right < x0 - 8);
+        const laneIndex = lane < 0 ? goalLanes.length : lane;
+        goalLanes[laneIndex] = x1;
+        const laneY = gy - laneIndex * 22;
+        band += '<rect x="' + x0 + '" y="' + (laneY - 7) + '" width="' + w + '" height="14" rx="4" class="goal-block"/>';
+        if (pts.length > 1) band += '<path d="M' + pts[0].x + ' ' + laneY + 'H' + x1 + '" class="goal-line"/>';
+        for (const m of pts) band += '<circle cx="' + m.x + '" cy="' + laneY + '" r="4" class="goal-dot ' + (m.operation || '') + '"><title>' + (m.operation || '') + ui(' · 第 ') + m.turn + ui(' 轮 · seq ') + m.seq + '</title></circle>';
         const last = pts[pts.length - 1];
         const own = (goalData.goals || []).find(x => x.id === id) || null;
         const objective = String(own?.objective || goalData.objective || ui('目标')).replace(/\s+/g, ' ');
-        const compact = objective.length > 26 ? objective.slice(0, 26) + '…' : objective;
-        band += '<text x="' + (x0 + w / 2) + '" y="' + (gy + 16) + '" text-anchor="middle" class="goal-label"><tspan class="goal-text">' + compact + '</tspan><tspan class="goal-state ' + (last.operation || 'active') + '" dx="6">' + (last.operation || '') + '</tspan></text>';
+        const maxChars = Math.max(4, Math.floor((w - 26) / 7));
+        const compact = objective.length > maxChars ? objective.slice(0, maxChars) + '…' : objective;
+        band += '<text x="' + (x0 + w / 2) + '" y="' + (laneY + 16) + '" text-anchor="middle" class="goal-label"><tspan class="goal-text">' + compact + '</tspan><tspan class="goal-state ' + (last.operation || 'active') + '" dx="6">' + (last.operation || '') + '</tspan></text>';
       }
-      for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + gy + ui('" r="1.8" class="goal-read"><title>读取目标 · 第 ') + m.turn + ui(' 轮</title></circle>'); }
+      for (const m of reads) { const x = mapTime(m.time); if (Number.isFinite(x)) band += '<circle cx="' + x + '" cy="' + (gy - 0) + ui('" r="1.8" class="goal-read"><title>读取目标 · 第 ') + m.turn + ui(' 轮</title></circle>'); }
       band += '</g>';
       if (drawn) html += band;
     }
