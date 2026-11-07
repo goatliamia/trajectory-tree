@@ -43,7 +43,7 @@
       (overviewLayers.has('duration') ? '<span>' + preciseTime(recordDuration(step)) + '</span>' : '') +
       (insight.calls.length > 1 ? '<span>' + insight.calls.length + ui(' 项操作</span>') : '') + '</span>' +
       ui('<nav class="geist-step-navigation" aria-label="逐步浏览"><button data-inspector-nav="-1" aria-label="上一步" title="') + esc(navTitle(backward, -1)) + '"' + (backward ? '' : ' disabled') + ui('>←</button><button data-inspector-nav="1" aria-label="下一步" title="') + esc(navTitle(forward, 1)) + '"' + (forward ? '' : ' disabled') + '>→</button></nav></header>' +
-      '<p class="geist-step-context" title="' + esc(insight.input.label + ' · ' + insight.input.text) + '"><span>' + esc(insight.input.label) + '</span>' + esc(insight.input.text) + '</p>' +
+      '<p class="geist-step-context"><span>' + esc(insight.input.label) + '</span><span class="geist-step-context-text" title="' + esc(insight.input.text) + '">' + esc(insight.input.text) + '</span></p>' +
       '<div class="geist-operations">' +
         insight.calls.map(operation).join('') +
         (insight.reply ? '<p class="geist-step-reply">' + esc(insight.reply) + '</p>' : '') +
