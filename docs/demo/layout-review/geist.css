@@ -214,9 +214,11 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-operation-actions{display:flex;align-items:center;flex-wrap:wrap;gap:2px 18px;margin-top:2px}
 .geist-operation-actions .geist-result{flex:0 1 auto}
 .geist-operation-actions .geist-result[open]{flex:1 1 100%}
-.geist-result summary{display:flex;align-items:center;gap:6px;width:100%;min-height:32px;padding:2px 0;list-style:none;cursor:pointer;font:12px/20px var(--sans);color:var(--review-action)}
+.geist-result summary{display:inline-flex;align-items:center;gap:6px;list-style:none;cursor:pointer;font:12px/20px var(--sans);color:var(--ink)}
+.geist-result summary:hover{color:var(--review-action)}
 .geist-result summary::-webkit-details-marker{display:none}
 .geist-chevron{display:inline-flex;flex:none;color:var(--muted);transform:rotate(-90deg);transition:transform .12s}
+.geist-result summary:hover .geist-chevron{color:var(--review-action)}
 .geist-chevron svg{display:block}
 .geist-result[open]>summary .geist-chevron,.geist-history-round[open]>summary .geist-chevron,.entry[open]>summary .geist-chevron,[aria-expanded=true] .geist-chevron{transform:rotate(0)}
 .geist-result-text{margin:4px 0 0;padding:10px 12px;max-height:200px;overflow:auto;border-radius:6px;background:var(--soft);font:11px/18px var(--mono);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
