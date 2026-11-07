@@ -847,7 +847,8 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 /* 行动路径:图区吸收剩余高度,步骤面板在内部滚动,内容多了不再顶走图。 */
 .geist-review .canvas.review-action-mode .graph-scroll { flex: 1 1 auto; min-height: 320px; height: auto; max-height: none; }
 /* 步骤面板固定收在 148px,内容在面板内滚动,不再把图挤到顶上。 */
-.geist-review .canvas.review-action-mode .step-panel.geist-step { flex: 0 0 auto; min-height: 0; height: auto; max-height: min(46vh, 360px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.geist-review .canvas.review-action-mode .graph-scroll { flex: 1 1 180px; min-height: 120px; }
+.geist-review .canvas.review-action-mode .step-panel.geist-step { flex: 0 1 min(46vh, 360px); min-height: 0; height: auto; max-height: min(46vh, 360px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 /* 面板是滚动容器:里面的块不参与压缩,否则文字行会被压成 0 高。 */
 .geist-review .step-panel.geist-step > * { flex: 0 0 auto; }
 
