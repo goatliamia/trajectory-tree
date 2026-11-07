@@ -2521,7 +2521,7 @@ function fileChangeHistory(operations, path) {
     const goalInfo = overviewLayers.has('goal') ? ((typeof data !== 'undefined' && data.context && data.context.goal) || null) : null;
     const goalMarkers = goalInfo && Array.isArray(goalInfo.markers) ? goalInfo.markers : [];
     const goalPad = goalMarkers.length ? 84 : 0;
-    const h=Math.max(geistOverviewFrame.height,bottom+73+goalPad),axisY=h-35;
+    const mainH=Math.max(geistOverviewFrame.height,bottom+72+goalPad),h=mainH,axisY=mainH-24;html=reviewTimeLayer(layout,visible,left,right,mainH,mapTime)+'<g id="trace-context-layer">'+reviewContextLayer(layout,base,left,right,visible)+'</g>'+reviewCompactionLayer(mapTime,left,right,mainH)+html+reviewOverviewFiles(layout,mapTime,base,left,right,mainH);
     let axis=`<path d="M${left} ${axisY} H${right}" class="br-rule"/>`;
     const span=(right-left)/factor,step=[100,200,500,1000,2000,5000,10000,30000,60000,120000,300000,600000,1200000].find(v=>v>=span/7)||1200000;
     let lastTick=-Infinity;

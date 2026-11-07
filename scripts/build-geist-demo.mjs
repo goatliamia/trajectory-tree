@@ -25,9 +25,10 @@ const encodedPayload = JSON.stringify(payload).replace(/</g, '\\u003c').replace(
 page = page.replace(dataMatch[0], () => '<script id="trace-data" type="application/json">' + encodedPayload + '</script>');
 // preserved.html is built from the current demo sources, so the renderer files are already
 // swapped in; only the Geist-only seams below still need patching.
-if (!page.includes('right=scroll+vw-gutter,base=232;') || !page.includes('const h=Math.max(332,bottom+73')) throw new Error('Overview geometry seam changed');
+if (!page.includes('right=scroll+vw-gutter,base=232;') || !page.includes('const mainH=Math.max(420,bottom+72+goalPad)')) throw new Error('Overview geometry seam changed');
 page = page.replace('right=scroll+vw-gutter,base=232;', 'right=scroll+vw-gutter,base=(geistOverviewFrame=geistOverviewGeometry()).base;');
-page = page.replace('const h=Math.max(332,bottom+73', 'const h=Math.max(geistOverviewFrame.height,bottom+73');
+page = page.replace('const mainH=Math.max(420,bottom+72+goalPad)', 'const mainH=Math.max(geistOverviewFrame.height,bottom+72+goalPad)');
+if (!page.includes('trace-context-layer')) throw new Error('Context layer missing from the built page');
 const gestureStart = page.indexOf('  function bindOverviewViewport(){');
 const gestureEnd = page.indexOf('  const preciseTime=', gestureStart);
 if (gestureStart < 0 || gestureEnd < 0) throw new Error('Frozen gesture seam changed');
