@@ -49,25 +49,6 @@ export function installUi(preferred) {
     for (const child of node.childNodes) walk(child);
   };
   walk(document.documentElement);
-  const style = document.createElement('style');
-  style.textContent = 'html[lang=en] .entry summary:after{content:"Expand original ＋"}html[lang=en] .entry[open] summary:after{content:"Collapse −"}';
-  document.head.append(style);
-  const bar = document.querySelector('.review-toolbar') || document.querySelector('.report-brand');
-  if (bar && !document.getElementById('trajectory-language')) {
-    const select = document.createElement('select'); select.id = 'trajectory-language';
-    select.className = 'geist-text-action quiet';
-    select.setAttribute('aria-label', ui('界面语言'));
-    for (const [value, label] of [['auto', globalThis.__trajectoryLocale === 'en' ? 'Auto (English)' : '自动（中文）'], ['zh-CN', '中文'], ['en', 'English']]) {
-      const option = document.createElement('option'); option.value = value; option.textContent = label; select.append(option);
-    }
-    select.value = query === 'auto' ? 'auto' : (() => { try { return normalizeLocale(query || preferred || stored) || 'auto'; } catch { return 'auto'; } })();
-    select.onchange = () => {
-      const language = select.value;
-      try { if (language === 'auto') localStorage.removeItem('trajectory-language'); else localStorage.setItem('trajectory-language', language); } catch {}
-      const target = new URL(location.href); target.searchParams.set('lang', language); location.href = target.href;
-    };
-    bar.append(select);
-  }
   const refresh = () => { if (resolve() !== globalThis.__trajectoryLocale) location.reload(); };
   window.addEventListener('languagechange', refresh);
   window.addEventListener('storage', event => { if (event.key === 'trajectory-language') { stored = event.newValue; refresh(); } });
