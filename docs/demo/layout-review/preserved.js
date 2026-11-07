@@ -127,7 +127,7 @@
         html += ui('<details class="ov-proof"><summary>这条判断依据什么</summary><p class="review-quiet">依据明确的错误结果，以及同一轮中工具与完整参数一致的后续成功。没有把相邻事件直接当作因果。</p><p class="review-targets">失败记录 ') + e.failureSeqs.join(', ') + '</p></details>';
       }
       openDrawer(m.short, ui('第 ') + e.turn + ui(' 轮 · ') + e.failedCount + ui(' 次操作'), html);
-      if ($('review-evidence')) $('review-evidence').onclick = () => openOverviewEpisode(e.id);
+      if ($('review-evidence')) $('review-evidence').onclick = () => openOverviewEpisode(e.id, { label: m.short, open: () => reviewOpenBranch([e]) });
       if ($('review-focus')) $('review-focus').onclick = () => { closeDrawer(); brFocusEpisode(e); };
       if ($('review-path-jump')) $('review-path-jump').onclick = () => reviewEnterPath(e.turn, e.steps?.[0]);
       return;

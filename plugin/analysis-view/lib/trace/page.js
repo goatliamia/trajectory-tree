@@ -613,7 +613,7 @@ window.__geistBoot = () => {
     if(focus==='interruptions')return [f.stop?ui`结束记录：${stopLabel(f.stop)}`:'',f.retryCount?ui`${f.retryCount} 次模型请求重试`:''].filter(Boolean).join('；')+'。';
     return f.unconfirmedCount?ui`${f.unconfirmedCount} 次失败调用尚未找到同一轮、完全相同参数的后续成功；这不等于本轮任务失败。`:f.episodeCount>1?ui`同一轮中出现 ${f.episodeCount} 段独立受阻，分别有后续成功。`:ui`${f.errors} 次工具报错，原调用随后均返回成功；最长间隔 ${preciseTime(f.continuationMs)}。`;
   }
-  function openOverviewEpisode(id){
+  function openOverviewEpisode(id,back){
     const e=session.overview.episodes.find(e=>e.id===id),t=overviewTurn(e.turn),all=t.steps.flatMap(s=>s.calls),find=seq=>all.find(c=>c.seq===seq);
     let html=ui`<div class="ov-evidence-summary"><div><span>失败调用</span><strong>${e.failedCount} 次</strong></div><div><span>原调用后续成功</span><strong>${e.confirmedCount} / ${e.failedCount}</strong></div><div><span>再次成功的间隔</span><strong>${e.continuationMs===null?ui('待确认'):preciseTime(e.continuationMs)}</strong></div></div>`;
     html+=`<div class="ov-episode-flow">${e.sequence.map(s=>`<div class="ov-episode-stage ${s.kind}"><i></i><strong>${esc(s.label)}</strong><span>${clock(s.time)}</span></div>`).join('')}</div>`;
@@ -623,7 +623,7 @@ window.__geistBoot = () => {
     html+=ui`<div class="drawer-actions"><button class="action-button primary" id="episode-round">查看第 ${e.turn} 轮行动路径 ↗</button></div><h3>失败调用 · 原始记录</h3>`+e.failureSeqs.map(find).filter(Boolean).map(callEntry).join('');
     if(e.readSeqs.length)html+=ui('<h3>补充读取 · 原始记录</h3>')+e.readSeqs.map(find).filter(Boolean).map(callEntry).join('');
     if(e.pairs.length)html+=ui('<h3>对应成功 · 原始记录</h3>')+[...new Set(e.pairs.map(p=>p.successSeq))].map(find).filter(Boolean).map(callEntry).join('');
-    openDrawer(ui`第 ${e.turn} 轮 · ${e.reason}`,ui`第 ${e.steps.join('、')} 步 · ${e.summary}`,html);
+    openDrawer(ui`第 ${e.turn} 轮 · ${e.reason}`,ui`第 ${e.steps.join('、')} 步 · ${e.summary}`,html,back);
     $('episode-round').onclick=()=>{const i=session.turns.findIndex(r=>r.number===e.turn);selectTurn(i<0?0:i);};
   }
   function openOverviewRound(number,focus='failures'){
@@ -1443,7 +1443,7 @@ function fileChangeHistory(operations, path) {
         html += ui('<details class="ov-proof"><summary>这条判断依据什么</summary><p class="review-quiet">依据明确的错误结果，以及同一轮中工具与完整参数一致的后续成功。没有把相邻事件直接当作因果。</p><p class="review-targets">失败记录 ') + e.failureSeqs.join(', ') + '</p></details>';
       }
       openDrawer(m.short, ui('第 ') + e.turn + ui(' 轮 · ') + e.failedCount + ui(' 次操作'), html);
-      if ($('review-evidence')) $('review-evidence').onclick = () => openOverviewEpisode(e.id);
+      if ($('review-evidence')) $('review-evidence').onclick = () => openOverviewEpisode(e.id, { label: m.short, open: () => reviewOpenBranch([e]) });
       if ($('review-focus')) $('review-focus').onclick = () => { closeDrawer(); brFocusEpisode(e); };
       if ($('review-path-jump')) $('review-path-jump').onclick = () => reviewEnterPath(e.turn, e.steps?.[0]);
       return;
@@ -2569,7 +2569,7 @@ function fileChangeHistory(operations, path) {
     bindOverviewViewport();tlBindScroll();reviewBind();
   }
 
-  function openDrawer(title,description,html) { $('drawer-title').textContent=title;$('drawer-description').textContent=description;$('drawer-body').innerHTML=html;$('drawer-body').scrollTop=0;$('canvas').classList.add('drawer-open');$('drawer-close').focus({preventScroll:true}); }
+  function openDrawer(title,description,html,back) { const backButton=$('drawer-back'); if(backButton){backButton.hidden=!back;backButton.textContent=back?('← '+(back.label||ui('返回'))):'';backButton.onclick=back?()=>back.open():null;} $('drawer-title').textContent=title;$('drawer-description').textContent=description;$('drawer-body').innerHTML=html;$('drawer-body').scrollTop=0;$('canvas').classList.add('drawer-open');$('drawer-close').focus({preventScroll:true}); }
   function closeDrawer() { $('canvas').classList.remove('drawer-open');activeGroup=null;$('graph').querySelectorAll('.active').forEach(g=>g.classList.remove('active')); }
   function block(value) { return value?`<pre class="excerpt">${esc(value.text)}</pre>${value.omitted?ui`<span class="truncated">节选 · 另有 ${value.omitted.toLocaleString()} 个字符未载入此 demo</span>`:''}`:ui('<span class="muted">未记录文本</span>'); }
   function callEntry(c) {
@@ -3382,7 +3382,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     if (result.kind === 'error') return [ui('受阻'), 'bad'];
     return ['', 'quiet'];
   }
-  function geistOpenResult(result) {
+  function geistOpenResult(result, back) {
     if (view === 'path' && turn().number === result.turn) {
       const index = turn().steps.findIndex(step => step.number === result.step);
       if (index >= 0) selectStep(index);
@@ -3392,7 +3392,12 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const group = reviewFileGroups[Number(el.dataset.fileGroup)];
       el.classList.toggle('branch-related', group.members.some(m => m.file.operations.some(op => seqs.has(op.seq))));
     });
-    if (result.kind === 'incident') { reviewOpenBranch([result.incident]); return; }
+    // 报错类条目直接落到原始记录:中间那层摘要信息量太低,不值得多点一次。
+    if (result.kind === 'incident') {
+      const episode = (session.overview.episodes || []).find(item => item.id === result.incident.id);
+      if (episode) { openOverviewEpisode(episode.id, back); return; }
+      reviewOpenBranch([result.incident]); return;
+    }
     const names = { read: ui('取回文件内容'), change: ui('文件修改'), query: ui('查询结果'), check: ui('检查输出'), error: ui('操作受阻'), command: ui('命令输出'), process: ui('后台任务'), web: ui('网页返回'), coordination: ui('协作返回'), pending: ui('等待工具返回'), other: ui('工具返回') };
     const paths = [...new Set(result.calls.flatMap(c => c.files?.length ? c.files.map(file => file.path) : [c.file]).filter(Boolean))];
     const blocked = result.calls.filter(call => call.fact?.tone === 'bad').length;
@@ -3461,7 +3466,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
         '<span class="geist-outcome-name">' + esc(label) + '</span>' +
         '<small>' + ui('第 ') + member.result.turn + ui(' 轮 · 第 ') + member.result.step + ui(' 步') + (tools ? ' · ' + esc(tools) : '') + '</small></button>';
     }).join('') + '</div>');
-    $('drawer-body').querySelectorAll('[data-result-item]').forEach(el => el.onclick = () => geistOpenResult(members[Number(el.dataset.resultItem)].result));
+    $('drawer-body').querySelectorAll('[data-result-item]').forEach(el => el.onclick = () => geistOpenResult(members[Number(el.dataset.resultItem)].result, { label: ui('这段执行的工具结果'), open: () => geistOpenResultGroup(members) }));
   }
   function geistBindResults() {
     $('graph').querySelectorAll('[data-tool-result]').forEach(el => {
@@ -3996,13 +4001,13 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     }, true);
   })();
 
-﻿  // 左边抽屉里凡是能"查看本轮行动路径"的地方,都配一个"跳到该轮对话"。
+  // 左边抽屉里凡是能"查看本轮行动路径"的地方,都配一个"跳到该轮对话"。
   // 统一在 openDrawer 出口补一个按钮,不在每个调用点重复写。
   (function () {
     if (window.parent === window || data.traceCapabilities?.chatJump !== true) return;
     const base = openDrawer;
-    openDrawer = function (title, description, html) {
-      base(title, description, html);
+    openDrawer = function (title, description, html, back) {
+      base(title, description, html, back);
       const body = $('drawer-body');
       if (!body || body.querySelector('[data-chat-jump]') || body.querySelector('#geist-result-chat')) return;
       const text = String(title || '') + ' ' + String(description || '');

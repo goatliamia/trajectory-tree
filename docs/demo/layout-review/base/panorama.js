@@ -61,7 +61,7 @@
     if(focus==='interruptions')return [f.stop?ui`结束记录：${stopLabel(f.stop)}`:'',f.retryCount?ui`${f.retryCount} 次模型请求重试`:''].filter(Boolean).join('；')+'。';
     return f.unconfirmedCount?ui`${f.unconfirmedCount} 次失败调用尚未找到同一轮、完全相同参数的后续成功；这不等于本轮任务失败。`:f.episodeCount>1?ui`同一轮中出现 ${f.episodeCount} 段独立受阻，分别有后续成功。`:ui`${f.errors} 次工具报错，原调用随后均返回成功；最长间隔 ${preciseTime(f.continuationMs)}。`;
   }
-  function openOverviewEpisode(id){
+  function openOverviewEpisode(id,back){
     const e=session.overview.episodes.find(e=>e.id===id),t=overviewTurn(e.turn),all=t.steps.flatMap(s=>s.calls),find=seq=>all.find(c=>c.seq===seq);
     let html=ui`<div class="ov-evidence-summary"><div><span>失败调用</span><strong>${e.failedCount} 次</strong></div><div><span>原调用后续成功</span><strong>${e.confirmedCount} / ${e.failedCount}</strong></div><div><span>再次成功的间隔</span><strong>${e.continuationMs===null?ui('待确认'):preciseTime(e.continuationMs)}</strong></div></div>`;
     html+=`<div class="ov-episode-flow">${e.sequence.map(s=>`<div class="ov-episode-stage ${s.kind}"><i></i><strong>${esc(s.label)}</strong><span>${clock(s.time)}</span></div>`).join('')}</div>`;
@@ -71,7 +71,7 @@
     html+=ui`<div class="drawer-actions"><button class="action-button primary" id="episode-round">查看第 ${e.turn} 轮行动路径 ↗</button></div><h3>失败调用 · 原始记录</h3>`+e.failureSeqs.map(find).filter(Boolean).map(callEntry).join('');
     if(e.readSeqs.length)html+=ui('<h3>补充读取 · 原始记录</h3>')+e.readSeqs.map(find).filter(Boolean).map(callEntry).join('');
     if(e.pairs.length)html+=ui('<h3>对应成功 · 原始记录</h3>')+[...new Set(e.pairs.map(p=>p.successSeq))].map(find).filter(Boolean).map(callEntry).join('');
-    openDrawer(ui`第 ${e.turn} 轮 · ${e.reason}`,ui`第 ${e.steps.join('、')} 步 · ${e.summary}`,html);
+    openDrawer(ui`第 ${e.turn} 轮 · ${e.reason}`,ui`第 ${e.steps.join('、')} 步 · ${e.summary}`,html,back);
     $('episode-round').onclick=()=>{const i=session.turns.findIndex(r=>r.number===e.turn);selectTurn(i<0?0:i);};
   }
   function openOverviewRound(number,focus='failures'){

@@ -121,6 +121,9 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-outcome-state{flex:none;font:13px/22px var(--sans);color:var(--muted)}
 .geist-outcome-record[data-tone=bad] .geist-outcome-state{color:var(--branch-bad)}
 .geist-outcome-record[data-tone=warn] .geist-outcome-state{color:var(--review-unknown)}
+.drawer-back{display:block;max-width:100%;margin:0 0 6px;padding:0;border:0;background:none;font:11px/16px var(--sans);color:var(--muted);text-align:left;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drawer-back:hover,.drawer-back:focus-visible{color:var(--review-action)}
+.drawer-back[hidden]{display:none}
 .geist-outcome-meta{margin:2px 0 0;font:11px/18px var(--mono);color:var(--muted);overflow-wrap:anywhere}
 /* 组抽屉:一行一条,状态词只在异常时出现,位置与工具名靠右次级排。 */
 #drawer-body [data-result-item]{display:flex;align-items:baseline;gap:8px;width:100%;padding:7px 0;border:0;border-bottom:1px solid var(--line);background:none;font:13px/22px var(--sans);color:var(--ink);text-align:left;cursor:pointer}

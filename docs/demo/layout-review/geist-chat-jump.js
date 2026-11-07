@@ -1,10 +1,10 @@
-﻿  // 左边抽屉里凡是能"查看本轮行动路径"的地方,都配一个"跳到该轮对话"。
+  // 左边抽屉里凡是能"查看本轮行动路径"的地方,都配一个"跳到该轮对话"。
   // 统一在 openDrawer 出口补一个按钮,不在每个调用点重复写。
   (function () {
     if (window.parent === window || data.traceCapabilities?.chatJump !== true) return;
     const base = openDrawer;
-    openDrawer = function (title, description, html) {
-      base(title, description, html);
+    openDrawer = function (title, description, html, back) {
+      base(title, description, html, back);
       const body = $('drawer-body');
       if (!body || body.querySelector('[data-chat-jump]') || body.querySelector('#geist-result-chat')) return;
       const text = String(title || '') + ' ' + String(description || '');

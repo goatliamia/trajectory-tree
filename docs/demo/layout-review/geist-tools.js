@@ -137,7 +137,7 @@
     if (result.kind === 'error') return [ui('受阻'), 'bad'];
     return ['', 'quiet'];
   }
-  function geistOpenResult(result) {
+  function geistOpenResult(result, back) {
     if (view === 'path' && turn().number === result.turn) {
       const index = turn().steps.findIndex(step => step.number === result.step);
       if (index >= 0) selectStep(index);
@@ -147,7 +147,12 @@
       const group = reviewFileGroups[Number(el.dataset.fileGroup)];
       el.classList.toggle('branch-related', group.members.some(m => m.file.operations.some(op => seqs.has(op.seq))));
     });
-    if (result.kind === 'incident') { reviewOpenBranch([result.incident]); return; }
+    // 报错类条目直接落到原始记录:中间那层摘要信息量太低,不值得多点一次。
+    if (result.kind === 'incident') {
+      const episode = (session.overview.episodes || []).find(item => item.id === result.incident.id);
+      if (episode) { openOverviewEpisode(episode.id, back); return; }
+      reviewOpenBranch([result.incident]); return;
+    }
     const names = { read: ui('取回文件内容'), change: ui('文件修改'), query: ui('查询结果'), check: ui('检查输出'), error: ui('操作受阻'), command: ui('命令输出'), process: ui('后台任务'), web: ui('网页返回'), coordination: ui('协作返回'), pending: ui('等待工具返回'), other: ui('工具返回') };
     const paths = [...new Set(result.calls.flatMap(c => c.files?.length ? c.files.map(file => file.path) : [c.file]).filter(Boolean))];
     const blocked = result.calls.filter(call => call.fact?.tone === 'bad').length;
@@ -216,7 +221,7 @@
         '<span class="geist-outcome-name">' + esc(label) + '</span>' +
         '<small>' + ui('第 ') + member.result.turn + ui(' 轮 · 第 ') + member.result.step + ui(' 步') + (tools ? ' · ' + esc(tools) : '') + '</small></button>';
     }).join('') + '</div>');
-    $('drawer-body').querySelectorAll('[data-result-item]').forEach(el => el.onclick = () => geistOpenResult(members[Number(el.dataset.resultItem)].result));
+    $('drawer-body').querySelectorAll('[data-result-item]').forEach(el => el.onclick = () => geistOpenResult(members[Number(el.dataset.resultItem)].result, { label: ui('这段执行的工具结果'), open: () => geistOpenResultGroup(members) }));
   }
   function geistBindResults() {
     $('graph').querySelectorAll('[data-tool-result]').forEach(el => {
