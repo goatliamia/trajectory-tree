@@ -46,13 +46,19 @@ export function assemblyDiff(before, after) {
   return result;
 }
 
-export function assemblyLayout(frame, data, { focus = [], offset = null } = {}) {
+export function assemblyHistoryGroups(history, turnOf, maxPerGroup = Infinity) {
   const groups = [];
-  frame.history.forEach((id, ordinal) => {
-    const block = data.blocks[id], key = block.turn ?? 'unknown';
-    if (groups.at(-1)?.key !== key) groups.push({ key, ids: [], start: ordinal });
+  history.forEach((id, ordinal) => {
+    const key = turnOf(id) ?? 'unknown';
+    const last = groups.at(-1);
+    if (last?.key !== key || last.ids.length >= maxPerGroup) groups.push({ key, ids: [], start: ordinal });
     groups.at(-1).ids.push(id);
   });
+  return groups;
+}
+
+export function assemblyLayout(frame, data, { focus = [], offset = null } = {}) {
+  const groups = assemblyHistoryGroups(frame.history, id => data.blocks[id].turn);
   const focusSet = new Set(focus), hit = groups.findIndex(group => group.ids.some(id => focusSet.has(id)));
   const start = Math.max(0, Math.min(Math.max(0, groups.length - 12), offset ?? (hit >= 0 ? hit - 2 : groups.length - 12)));
   return { groups, start, shown: groups.slice(start, start + 12), before: groups.slice(0,start).reduce((n,g)=>n+g.ids.length,0), after: groups.slice(start+12).reduce((n,g)=>n+g.ids.length,0) };

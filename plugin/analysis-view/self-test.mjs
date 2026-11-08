@@ -18,6 +18,7 @@ const check = (name, condition, detail) => {
 /* ---------------- React 垫片 ---------------- */
 const frames = [];
 const hookFrames = [];
+const renderedComponents = new Map();
 function currentFrame() {
   return hookFrames[hookFrames.length - 1];
 }
@@ -27,6 +28,7 @@ const ReactShim = {
     const merged = Object.assign({}, props || {});
     if (children.length > 0) merged.children = children.length === 1 ? children[0] : children;
     if (typeof type === "function") {
+      renderedComponents.set(type.name, type);
       const depth = hookFrames.length + 1;
       const frame = frames[frames.length - 1];
       hookFrames.push({ index: 0, seeds: depth === 1 && frame ? frame.seeds : null });
@@ -55,6 +57,9 @@ const ReactShim = {
   },
   useCallback(fn) {
     return fn;
+  },
+  memo(component) {
+    return component;
   },
   useRef(value) {
     return { current: value };
@@ -96,7 +101,7 @@ const mod = moduleDef.factory((name) => {
 });
 check("client: 只依赖 react", required.length > 0 && required.every((name) => name === "react"), required);
 
-let Panel = null, ContextPanel = null;
+let Panel = null, ContextPanel = null, CompositionPanel = null;
 const ctx = {
   commandUi: { register(command) { check("client: /trajectory is a direct UI action", command.name === "trajectory" && command.ui.kind === "action"); } },
   uiConversation: { views: { register() {} }, binding() { return { target() { return { getSnapshot() { return null; }, subscribe() { return () => {}; } }; } }; } },
@@ -104,12 +109,14 @@ const ctx = {
     inject(name, register) { register(); },
     register(definition, component) {
       if (definition && definition.id === "analysis") Panel = component;
+      if (definition && definition.id === "context-composition") CompositionPanel = component;
       if (definition && definition.name === "main" && definition.key === "context-manager") ContextPanel = component;
       return () => {};
     },
   },
 };
 mod.apply(ctx);
+check("client: context composition registers a conversation view", typeof CompositionPanel === "function");
 check("client: 注册到 conversation.view 的 analysis", Panel !== null && typeof Panel === "function");
 
 /* ---------------- 渲染工具 ---------------- */
@@ -264,6 +271,71 @@ sandbox.window.navigator.languages = ['fr'];
 const defaultText = textOf(render(Panel, props, { 0: readyState })).join(' ');
 check('locale: first supported navigator language or English fallback', fallbackText.includes('分析') && defaultText.includes('Analysis'));
 captureLocaleEffect = false;
+
+const contextSnapshot = {
+  sessionId: 'session-fixture', asOfSeq: 12,
+  composition: {
+    source: 'dsh-context', estimatedTotal: 1000,
+    categories: [{ key: 'inject', value: 1000, share: 100 }],
+    reportedInput: 1234, projectedInput: 1300, capacity: 2000, percent: 65,
+  },
+  turn: 2,
+  structure: {
+    system: { seq: 1, position: 1, role: 'system', part: 'system' },
+    history: [
+      { seq: 4, position: 2, role: 'developer', part: 'inject', turn: 1, toolChanges: [{ action: 'add', name: 'read' }] },
+      { seq: 5, position: 3, role: 'user', part: 'inject', source: 'agent-instructions', turn: 1 },
+      { seq: 6, position: 4, role: 'assistant', part: 'assistant', toolInputs: [{ name: 'read', callId: 'read-source' }], hasReasoning: true, turn: 2 },
+      { seq: 8, position: 5, role: 'tool', part: 'tool', toolName: 'read', callId: 'read-source', turn: 2 },
+    ],
+    layers: [{ turn: 1, start: 0, count: 2 }, { turn: 2, start: 2, count: 2 }],
+  },
+  files: { messageCount: 5, groups: [{ kind: 'agents', part: 'inject', status: 'body', count: 1, items: [
+    { path: '/repo/AGENTS.md', origin: 'instructions', scope: 'repo / AGENTS.md', seq: 5, logicalPosition: 3, locations: [3] },
+  ] }, { kind: 'code', part: 'tool', status: 'body', count: 1, items: [
+    { path: '/repo/source.js', origin: 'read', seq: 8, logicalPosition: 5, locations: [5] },
+  ] }] },
+  tools: { seq: 2, count: 2, items: [
+    { name: 'read', position: 1, plugin: '@deepseek-ai/dsh-tool-fs', pluginBasis: 'dsh-tool-catalog', noticeSeq: 4, noticePosition: 2 },
+    { name: 'trajectory_trace', position: 2, plugin: 'dsh-trajectory-tools', pluginBasis: 'plugin-tool-catalog' },
+  ] },
+};
+const contextSeeds = {
+  2: { session: contextSnapshot.sessionId, at: null, status: 'ready', snapshot: contextSnapshot },
+  3: { session: contextSnapshot.sessionId, turns: [{ turn: 1, seq: 10 }] },
+};
+let sourceLocation;
+const contextProps = { sessionId: contextSnapshot.sessionId, openView: (...args) => { sourceLocation = args; } };
+const englishContext = render(CompositionPanel, contextProps, contextSeeds);
+const englishContextText = textOf(englishContext).join(' ');
+check('context: cut, logical positions and familiar content types replace the source estimate', [
+  'Observed through #12', 'Turn 1 end · #10', 'System baseline', 'Runtime injections',
+  'Tool inputs & outputs', 'Model reasoning', 'Browse context contents',
+].every(label => englishContextText.includes(label)) && !englishContextText.includes('Source estimate'));
+const renderContext = seeds => render(renderedComponents.get('ContextPositions'), { snapshot: contextSnapshot, openView: contextProps.openView }, seeds);
+const definitionsText = textOf(renderContext({ 0: { definition: 'read' }, 1: 'definitions' })).join(' ');
+const pluginDefinitionText = textOf(renderContext({ 0: { definition: 'trajectory_trace' }, 1: 'definitions' })).join(' ');
+check('context: definitions separate package sources and point to the addition in history', [
+  'Request header #2', 'Official DSH package', '@deepseek-ai/dsh-tool-fs', 'Plugin source', 'dsh-trajectory-tools',
+  'Matched to official definition', 'Locate addition in history · Message 2',
+].every(label => definitionsText.includes(label)) && pluginDefinitionText.includes('Matched to plugin definition'));
+const focused = renderContext({ 0: { seq: 8 }, 1: 'io' });
+all(focused).find(node => node.type === 'button' && node.props.children === 'Open tool record')?.props.onClick();
+check('context: tool output links to its retained input and opens its trajectory', JSON.stringify(sourceLocation) === '["trajectory","read-source"]' &&
+  textOf(focused).join(' ').includes('Locate input · Message 4'));
+const rows = all(focused).filter(node => node.props?.['data-layer-start'] != null);
+check('context: assembly keeps layer order and connects the selected message', rows.map(node => node.props['data-layer-start']).join(',') === '2,4' &&
+  all(focused).some(node => node.props?.className === 'cc-assembly-connector') &&
+  all(focused).some(node => node.props?.['data-position'] === 5 && node.props?.['aria-pressed'] === true));
+sandbox.window.document.documentElement.lang = 'zh';
+const chineseContextText = textOf(render(CompositionPanel, contextProps, contextSeeds)).join(' ');
+check('context: localizes panel and leaves recorded paths and source names intact', [
+  '当前上下文构成', '上下文位置图', '浏览上下文内容', '系统提示词', '模型思考',
+].every(label => chineseContextText.includes(label)));
+const fileContext = renderContext({ 0: { seq: 5, material: '/repo/AGENTS.md' }, 1: 'files' });
+check('context: the files tab retains path, evidence and placement', [
+  '/repo/AGENTS.md', '指令注入', '作用域 repo / AGENTS.md', '消息 3',
+].every(label => textOf(fileContext).join(' ').includes(label)));
 
 for (const line of results) console.log(line);
 console.log(failed === 0 ? "\nALL PASS (" + results.length + " checks)" : "\n" + failed + " FAILED");

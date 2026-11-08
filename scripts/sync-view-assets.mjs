@@ -9,6 +9,7 @@ const assets={
  'visual-tokens.css':visualTokenCss({legacyAliases:true}),
  'i18n.mjs':i18nModuleSource(),
  'host-capabilities.mjs':readFileSync(new URL('lib/host-capabilities.mjs',root),'utf8'),
+ 'assembly-model.mjs':readFileSync(new URL('report/assembly-model.mjs',root),'utf8'),
 };
 let changed=false;
 for(const [name,content] of Object.entries(assets)){

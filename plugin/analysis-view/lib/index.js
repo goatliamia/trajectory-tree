@@ -12,6 +12,7 @@ import { TraceCache, traceSource, observationSource } from "./trace-cache.js";
 import { TraceStages } from "./trace-stages.js";
 import { TraceResources, abortable, abortError } from "./trace-resources.js";
 import { hostCapabilities } from './trace/shared/host-capabilities.mjs';
+import { readContextComposition, readContextContent } from './trace/models/context-composition.mjs';
 import { readTracePresentation, renderTraceDocument, traceAssetVersion } from './trace/presentation.mjs';
 
 const gzipAsync = promisify(gzip);
@@ -1146,6 +1147,35 @@ export function apply(ctx) {
         }
         const sessionId = url.searchParams.get("session");
         if (!sessionId) return send(400, { error: "missing session" });
+        if (url.pathname === ROUTE_PATH + "/context-content") {
+          const at = url.searchParams.get("at"), seq = url.searchParams.get("seq"), tool = url.searchParams.get("tool");
+          const view = url.searchParams.get("view");
+          const validSeq = value => /^\d+$/.test(value ?? "") && Number.isSafeInteger(Number(value));
+          if (!validSeq(at) || (tool === null ? !validSeq(seq) : !tool || seq !== null) ||
+              (view !== null && (tool !== null || !["reasoning", "io"].includes(view)))) {
+            return send(400, { error: "invalid context content target" });
+          }
+          const target = tool === null ? { seq: Number(seq), view } : { tool };
+          const payload = await withAbortTimeout(async (signal) => {
+            const observation = await observeEvents(ctx, sessionId, signal);
+            try { return await readContextContent(ctx, observation, Number(at), target, signal); }
+            finally { disposeObservation(observation); }
+          }, 10000, disconnected.signal);
+          return payload ? send(200, payload) : send(404, { error: "context content not found at this cut" });
+        }
+        if (url.pathname === ROUTE_PATH + "/context-composition") {
+          const at = url.searchParams.get("at");
+          const turnEndSeq = at === null ? null : Number(at);
+          if (at !== null && (!/^\d+$/.test(at) || !Number.isSafeInteger(turnEndSeq))) {
+            return send(400, { error: "invalid context cut" });
+          }
+          const payload = await withAbortTimeout(async (signal) => {
+            const observation = await observeEvents(ctx, sessionId, signal);
+            try { return await readContextComposition(ctx, observation, sessionId, signal, turnEndSeq); }
+            finally { disposeObservation(observation); }
+          }, 10000, disconnected.signal);
+          return payload ? send(200, payload) : send(404, { error: "turn end not found" });
+        }
         if (url.pathname === ROUTE_PATH + "/trace" && url.searchParams.get("staged") === "1") {
           const html = renderTracePage({ traceLoad: { sessionId } });
           await sendHtml(res, req, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, { html });

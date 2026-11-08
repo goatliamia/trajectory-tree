@@ -47,6 +47,87 @@ window.__ModuleLoader__.load({
 .cm-axis{display:flex;justify-content:space-between;font-size:10px;color:var(--dsw-alias-label-secondary);margin-top:6px}
 .cm-progress{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--dsw-alias-label-secondary)}.cm-progress-bar{flex:1;height:4px;border-radius:2px;background:var(--dsw-alias-bg-layer-2);overflow:hidden}.cm-progress-bar i{display:block;height:100%;background:var(--dsw-alias-state-success-primary);transition:width .3s ease}.cm-note{font-size:11px;color:var(--dsw-alias-label-secondary)}
 .cm-bad{color:var(--dsw-alias-state-error-primary);font-size:12px}
+.cc-root{height:100%;box-sizing:border-box;container-type:inline-size;--av-accent:var(--dsw-alias-brand-primary,var(--dsw-alias-label-primary))}
+.cc-nav{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cc-nav .av-btn[aria-pressed="true"]{background:transparent;border-color:var(--dsw-alias-border-l2);font-weight:600}
+.cc-root .av-eval-turn,.cc-root .av-chip{background:transparent}
+.cc-workspace{position:relative;flex:1 1 auto;min-height:350px;height:calc(100dvh - 160px);display:grid;grid-template-columns:minmax(194px,24fr) minmax(300px,47fr) minmax(220px,29fr);grid-template-rows:minmax(0,1fr);grid-template-areas:"materials map record";padding:0}
+.cc-workspace>section{min-width:0;min-height:0;display:flex;flex-direction:column;gap:10px;padding:12px 14px}
+.cc-browser{grid-area:materials;overflow:auto;scrollbar-width:thin;background:color-mix(in srgb,var(--dsw-alias-bg-layer-2) 38%,transparent)}
+.cc-map{grid-area:map;border-inline:1px solid var(--dsw-alias-border-l1)}
+.cc-detail{grid-area:record}
+.cc-pane-scroll{min-height:0;overflow:auto;scrollbar-width:thin;overscroll-behavior:contain}
+.cc-assembly-scroll{flex:1 1 0;position:relative;scrollbar-gutter:stable;overflow-anchor:none}
+.cc-assembly-scroll:focus{outline:none}
+.cc-assembly-scroll:focus-visible{outline:1px solid var(--av-accent);outline-offset:2px}
+.cc-strip-row,.cc-track-heading{display:grid;grid-template-columns:minmax(0,1fr) clamp(86px,29%,126px);align-items:center;gap:8px}
+.cc-strip-row{height:var(--cc-strip-height);box-sizing:border-box;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.cc-baseline,.cc-track-heading{padding-inline-end:8px}
+.cc-assembly-scene{height:100%;min-width:0;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px}
+.cc-track-heading strong{font-size:12px;color:var(--dsw-alias-label-primary);font-weight:550}
+.cc-assembly-meta{font-size:11px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}
+.cc-assembly-meta.is-selected{color:var(--dsw-alias-label-primary);font-weight:600}
+.cc-sources{display:grid;gap:7px;padding-block-end:12px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.cc-source-options{display:grid;gap:2px}
+.cc-source-choice.av-btn{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:4px 7px;border-color:transparent;text-align:start;font-size:12px}
+.cc-source-choice.av-btn[aria-pressed="true"]{border-color:color-mix(in srgb,var(--cc-accent) 45%,transparent);background:color-mix(in srgb,var(--cc-accent) 9%,transparent);font-weight:600}
+.cc-source-choice[data-linked]{font-weight:600;color:var(--dsw-alias-label-primary)}
+.cc-source-count{padding-inline:5px;border-radius:4px;background:var(--dsw-alias-bg-layer-2);font-size:11px;font-weight:400;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary)}
+.cc-compaction{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;padding:5px 8px;border-inline-start:2px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2)}
+.cc-slot{appearance:none;display:flex;align-items:center;min-width:0;padding:0;border:0;background:none;cursor:pointer}
+.cc-slot:focus{outline:none}
+.cc-shape{position:relative;width:100%;height:9px;border-radius:2px;background:var(--cc-accent)}
+.cc-slot[data-file] .cc-shape::after{content:"";position:absolute;inset-inline-end:2px;top:3px;width:3px;height:3px;border-radius:50%;background:white}
+.cc-slot[data-muted] .cc-shape{opacity:.23}
+.cc-slot:hover .cc-shape,.cc-slot:focus-visible .cc-shape{opacity:1;filter:brightness(.91)}
+.cc-slot:focus-visible .cc-shape{outline:1px solid var(--dsw-alias-label-primary);outline-offset:2px}
+.cc-slot[aria-pressed="true"] .cc-shape::before{content:"";position:absolute;left:50%;bottom:-4px;width:6px;height:2px;translate:-50% 0;border-radius:1px;background:var(--cc-accent)}
+.cc-assembly-link{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.cc-assembly-connector{fill:none;stroke-width:1.3;stroke-linecap:round;opacity:.8}
+.cc-filter{flex:1 1 170px}
+.cc-source-dot{width:7px;height:7px;border-radius:2px;display:inline-block;flex:none}
+.cc-subhead{margin:0;font-size:14px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.cc-content-type{display:grid;gap:4px}
+.cc-content-type .av-eval-turn{width:100%;box-sizing:border-box;padding:6px 8px;font-size:12px}
+.cc-index,.cc-record{min-width:0;display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:7px;overflow-wrap:anywhere}
+.cc-list{padding:2px}
+.cc-index{min-height:64px}
+.cc-index .av-eval-turn{box-sizing:border-box;min-width:0;max-width:100%}
+.cc-record-summary{display:grid;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.cc-record-summary strong{font-size:14px;font-weight:600}
+.cc-record dl{margin:0;display:flex;flex-wrap:wrap;gap:6px 18px}
+.cc-record dt{font-size:11px;color:var(--dsw-alias-label-secondary)}
+.cc-record dd{margin:2px 0 0;font-size:12px;font-variant-numeric:tabular-nums}
+.cc-source-details dl{display:grid;gap:6px}
+.cc-source-details dl>div{display:grid;grid-template-columns:74px minmax(0,1fr);align-items:center;gap:8px}
+.cc-source-details dd{margin:0}
+.cc-preview{box-sizing:border-box;min-width:0}
+.cc-preview pre{margin:4px 0 8px;padding:9px 10px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1);white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.55 ui-monospace,monospace}
+.cc-index-row.av-btn{text-align:left;width:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:5px;padding:7px 8px;line-height:1.35;border-color:transparent}
+.cc-index-row .cm-note{font-size:11px}
+.cc-index-row.av-btn[aria-pressed="true"]{background:transparent;box-shadow:inset 2px 0 var(--cc-accent)}
+.cc-index-row[aria-pressed="true"]>span:first-child{font-weight:600}
+.cc-file-title{display:flex;align-items:baseline;gap:6px}
+.cc-file-title .cc-tag{margin-left:auto;flex:none;white-space:nowrap}
+.cc-file-path{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px}
+.cc-locations{display:grid;gap:6px;border-block:1px solid var(--dsw-alias-border-l1);padding:7px 0}
+.cc-locations .av-chip[aria-pressed="true"]{color:var(--dsw-alias-label-primary);border-color:var(--cc-accent)}
+.cc-record .cc-locate-action{padding-inline:0;border-color:transparent;color:var(--dsw-alias-label-primary);text-decoration:underline;text-decoration-color:var(--cc-accent);text-underline-offset:3px}
+.cc-entry{display:flex;flex-wrap:wrap;gap:3px 9px;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.cc-entry:last-child{border-bottom:0}
+.cc-entry code{font:inherit;font-family:monospace;overflow-wrap:anywhere;min-width:0}
+.cc-entry .cm-note{overflow-wrap:anywhere}
+.cc-tag{font-size:10px;border-radius:4px;padding:1px 5px;border:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary)}
+.cc-spacer{margin-left:auto}
+@container(max-width:790px){
+  .cc-workspace{flex:none;height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto;grid-template-areas:"map" "materials" "record"}
+  .cc-map{border-inline:0}
+  .cc-browser,.cc-detail{border-top:1px solid var(--dsw-alias-border-l1)}
+  .cc-source-options{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:10px}
+  .cc-assembly-scroll{flex:0 0 clamp(180px,40dvh,360px)}
+  .cc-index{max-height:290px}
+}
+.av-eval-turn{font:inherit;color:inherit;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;padding:4px 6px;min-width:0;max-width:100%}
 \n
 .av-root{--av-accent:color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, var(--dsw-alias-state-success-primary));padding:16px;overflow:auto;min-height:0;color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5}
 .av-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
@@ -1071,6 +1152,708 @@ window.__ModuleLoader__.load({
       return entry.promise;
     }
 
+    const ccParts = {
+      system: ["系统提示", "System prompt", "#8053e3"], tools: ["工具变更", "Tool changes", "#d49b00"],
+      user: ["用户输入", "User input", "#44a56b"], inject: ["运行时注入", "Runtime injections", "#c442a7"],
+      skill: ["技能内容", "Skill content", "#e66d26"], assistant: ["模型输出", "Assistant output", "#5b9fe8"],
+      tool: ["工具输出", "Tool output", "#3ab4a4"], messages: ["全部消息", "All messages", "#5b9fe8"],
+      unknown: ["未记录所在段", "Section unavailable", "#8c8c8c"],
+    };
+    const ccPart = (part, ui = cmUi) => {
+      const [zh, en] = ccParts[part] || ccParts.unknown;
+      return ui(zh, en);
+    };
+    const ccColor = part => ccParts[part]?.[2] || ccParts.unknown[2];
+    const ccNumber = value => Number.isFinite(value) ? new Intl.NumberFormat(cmUi("zh-CN", "en")).format(value) : "—";
+    const ccSeq = seq => Number.isSafeInteger(seq) && seq >= 0 ? "#" + seq : "—";
+    const ccTurn = (turn, ui = cmUi) => ui("第 " + turn + " 轮", "Turn " + turn);
+    const ccTypes = {
+      agents: ["AGENTS.md", "AGENTS.md"], skill: ["技能文件", "Skill files"], code: ["代码", "Source code"],
+      document: ["文档", "Documents"], data: ["配置与数据", "Config and data"],
+      media: ["图片和媒体", "Images and media"], other: ["其他文件", "Other files"],
+    };
+    const ccOrigins = {
+      instructions: ["指令注入", "Instruction injection"], skill: ["加载的技能", "Loaded skill"],
+      read: ["读取返回", "Read result"], search: ["搜索命中片段", "Search excerpt"],
+      "code-mode": ["Code Mode 外层返回", "Code Mode result"], paths: ["路径列表", "Path listing"],
+      argument: ["工具调用参数", "Tool argument"], attachment: ["附件", "Attachment"],
+    };
+
+
+    const ccMessage = (position, ui = cmUi) => ui("消息 " + position, "Message " + position);
+    const ccFileLabel = name => name.split(/[\\/]/).at(-1) || name;
+    const ccFileStatus = status => status === "body" ? cmUi("正文或片段", "Content or excerpt") : cmUi("路径或附件引用", "Path or attachment reference");
+    const ccDot = part => h("i", { className: "cc-source-dot", style: { background: ccColor(part) }, "aria-hidden": true });
+
+    const ccSlotPart = slot => slot.toolChanges?.length ? "tools" : slot.part || "unknown";
+    const ccIsSkillCatalog = slot => slot?.source === "skill-catalog";
+    const ccIsCheckpoint = slot => slot.source === "compact-checkpoint";
+    const ccIsLoadedSkill = ({ group, item }) => group.kind === "skill" && group.status === "body" && item.origin === "skill";
+    function ccSlotName(slot, system, ui = cmUi) {
+      if (slot.role === "system") return slot === system ? ui("系统基线", "System baseline") : ui("系统提示更新", "System prompt update");
+      if (ccIsCheckpoint(slot)) return ui("压缩摘要", "Compaction summary");
+      if (ccIsSkillCatalog(slot)) return ui("Skill 目录", "Skill catalog");
+      if (slot.loadedSkill) return ui("已加载 Skill", "Loaded skill") + " · " + slot.loadedSkill;
+      return ccPart(ccSlotPart(slot), ui);
+    }
+
+    const ccStripHeight = 28;
+    const ccChinese = zh => zh;
+    const ccEnglish = (_, en) => en;
+
+    const ContextAssemblyStrip = React.memo(function ContextAssemblyStrip({ history, layer, system, selectedPosition, sourceFilter, fileAt, ui }) {
+      const slots = layer ? history.slice(layer.start, layer.start + layer.count) : [system];
+      const first = slots[0].position, last = slots.at(-1).position;
+      const caption = layer
+        ? (layer.turn == null ? ui("轮次未记", "Turn unavailable") : ccTurn(layer.turn, ui)) + " · " + first + (last === first ? "" : "–" + last)
+        : ccMessage(system.position, ui) + " · " + ccSeq(system.seq);
+      const messages = slots.map(slot => {
+        const part = ccSlotPart(slot);
+        const label = ccMessage(slot.position, ui) + " · " + ccSlotName(slot, system, ui);
+        const selected = selectedPosition === slot.position;
+        return h("button", { type: "button", className: "cc-slot", key: slot.seq, title: label,
+          "data-position": slot.position, "aria-label": label, "aria-pressed": selected,
+          "data-muted": sourceFilter && part !== sourceFilter && !selected ? true : undefined,
+          "data-file": fileAt.has(slot.position) ? true : undefined,
+          style: { "--cc-accent": ccColor(part) } },
+          h("span", { className: "cc-shape", "aria-hidden": true }));
+      });
+      return h("div", { className: "cc-strip-row", "data-layer-start": layer ? first : undefined },
+        h("div", { className: "cc-assembly-scene", role: "group", "aria-label": caption }, messages),
+        h("span", { className: "cc-assembly-meta" + (selectedPosition != null ? " is-selected" : "") }, caption));
+    });
+
+    function ContextAssemblyScene({ system, history, layers, active, sourceFilter, fileAt, scrollRef, onClick }) {
+      const ui = cmUi(ccChinese, ccEnglish);
+      const atEnd = React.useRef(true);
+      React.useLayoutEffect(() => {
+        const scroll = scrollRef.current;
+        if (!scroll) return;
+        const followEnd = () => { if (atEnd.current) scroll.scrollTop = scroll.scrollHeight; };
+        followEnd();
+        const observer = window.ResizeObserver ? new window.ResizeObserver(followEnd) : null;
+        observer?.observe(scroll);
+        return () => observer?.disconnect();
+      }, [scrollRef, layers.length]);
+
+      const selectedIndex = active && history.length ? active.position - history[0].position : -1;
+      return h(React.Fragment, null,
+        h("div", { className: "cc-baseline", onClick },
+          h("div", { className: "cc-track-heading" }, h("strong", null, "01  " + cmUi("系统基线", "System baseline"))),
+          system ? h(ContextAssemblyStrip, { system, selectedPosition: active === system ? system.position : null, sourceFilter, fileAt, ui })
+            : h("div", { className: "cm-note" }, cmUi("无系统基线记录", "No system baseline recorded"))),
+        h("div", { className: "cc-track-heading" },
+          h("strong", null, "02  " + cmUi("保留的历史", "Retained history") + " · " + ccNumber(history.length) + cmUi(" 条", " messages")),
+          h("span", { className: "cc-assembly-meta" }, cmUi("轮次 · 消息位置", "Turn · message position"))),
+        h("div", { className: "cc-assembly-scroll cc-pane-scroll", ref: scrollRef, role: "region", tabIndex: 0,
+          "aria-label": cmUi("保留的历史", "Retained history"), onClick,
+          onScroll: ({ currentTarget: scroll }) => { atEnd.current = scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop < 1; } },
+          layers.length > 0 ? layers.map(layer => h(ContextAssemblyStrip, { key: layer.start, history, layer, system, sourceFilter, fileAt, ui,
+            selectedPosition: selectedIndex >= layer.start && selectedIndex < layer.start + layer.count ? active.position : null }))
+            : h("div", { className: "cm-note" }, cmUi("无历史消息记录", "No retained history recorded"))),
+        h("div", { className: "cm-note" }, cmUi("白点标出有可定位文件的消息", "White dots mark messages with locatable files")));
+    }
+
+    function ContextAssemblyConnector({ active }) {
+      const pathRef = React.useRef(null);
+      React.useLayoutEffect(() => {
+        const path = pathRef.current, svg = path?.ownerSVGElement, workspace = svg?.parentElement;
+        if (!workspace) return;
+        const source = workspace.querySelector(".cc-source-choice[data-linked]");
+        const target = workspace.querySelector('.cc-map .cc-slot[aria-pressed="true"] .cc-shape');
+        if (!source || !target) return;
+        const browser = source.closest(".cc-browser"), map = target.closest(".cc-map");
+        const scroll = target.closest(".cc-assembly-scroll");
+        let frame = null;
+        const draw = () => {
+          const from = source.getBoundingClientRect(), to = target.getBoundingClientRect();
+          const origin = svg.getBoundingClientRect(), sidebar = browser.getBoundingClientRect(), chart = map.getBoundingClientRect();
+          const viewport = scroll?.getBoundingClientRect();
+          if (from.right >= chart.left || from.top < sidebar.top || from.bottom > sidebar.bottom ||
+              (viewport && (to.top - 6 < viewport.top || to.bottom > viewport.bottom))) {
+            path.removeAttribute("d");
+            return;
+          }
+          const x = from.right - origin.left, y = from.top + from.height / 2 - origin.top;
+          const endX = to.left + to.width / 2 - origin.left, endY = to.top - origin.top + 1;
+          const gutter = chart.left - origin.left + 6, approach = endY - 6;
+          const bend = Math.min(6, Math.abs(approach - y) / 2);
+          const step = Math.sign(approach - y) * bend;
+          path.setAttribute("d", [
+            "M", x, y, "H", gutter - bend, "Q", gutter, y, gutter, y + step,
+            "V", approach - step, "Q", gutter, approach, gutter + bend, approach,
+            "H", endX - 4, "Q", endX, approach, endX, endY - 2, "V", endY,
+          ].join(" "));
+        };
+        const schedule = () => {
+          if (frame !== null) return;
+          frame = window.requestAnimationFrame(() => { frame = null; draw(); });
+        };
+        draw();
+        scroll?.addEventListener("scroll", schedule, { passive: true });
+        browser.addEventListener("scroll", schedule, { passive: true });
+        const observer = window.ResizeObserver ? new window.ResizeObserver(schedule) : null;
+        for (const element of [workspace, source, target, scroll]) if (element) observer?.observe(element);
+        return () => {
+          path.removeAttribute("d");
+          observer?.disconnect();
+          scroll?.removeEventListener("scroll", schedule);
+          browser.removeEventListener("scroll", schedule);
+          if (frame !== null) window.cancelAnimationFrame(frame);
+        };
+      }, [active]);
+      return active && h("svg", { className: "cc-assembly-link", "aria-hidden": true },
+        h("path", { ref: pathRef, className: "cc-assembly-connector", stroke: ccColor(ccSlotPart(active)) }));
+    }
+
+    function ContextSourceFilter({ sources, sourceFilter, activePart, onChange }) {
+      if (!sources.size) return null;
+      return h("div", { className: "cc-sources", role: "group", "aria-label": cmUi("材料来源", "Material sources") },
+        h("div", { className: "cc-nav" },
+          h("h3", { className: "cc-subhead" }, cmUi("材料来源", "Material sources")),
+          h("button", { type: "button", className: "av-btn cc-spacer", "aria-pressed": !sourceFilter,
+            onClick: () => onChange(null) }, cmUi("全部", "All"))),
+        h("div", { className: "cc-source-options" }, [...sources].map(([part, slots]) => h("button", {
+          key: part, type: "button", className: "av-btn cc-source-choice", "aria-pressed": part === sourceFilter,
+          "data-linked": part === activePart ? true : undefined, style: { "--cc-accent": ccColor(part) },
+          onClick: () => onChange(sourceFilter === part ? null : part),
+        }, ccDot(part), h("span", null, ccPart(part)), h("span", { className: "cc-source-count" }, ccNumber(slots.length))))));
+    }
+
+    const ccSourceDescriptions = {
+      system: ["系统基线与后续系统提示更新。", "The system baseline and later system prompt updates."],
+      user: ["当前切点保留的用户原始输入。", "Original user inputs retained at this snapshot."],
+      skill: ["随上下文提供的 Skill 目录或正文。", "Skill catalogs or instructions supplied in context."],
+      tool: ["工具执行后写回上下文的结果。", "Tool results written back into context."],
+      assistant: ["模型生成的回复、思考和工具调用记录。", "Assistant replies, reasoning, and tool calls."],
+      inject: ["由运行时或插件写入的补充信息，包括压缩摘要。", "Context supplied by the runtime or plugins, including compaction summaries."],
+      tools: ["运行中追加或移除工具的通知。", "Notices about tools added or removed during the session."],
+      unknown: ["日志没有记录这类消息的具体来源。", "The log does not identify a more specific source for these messages."],
+    };
+
+    function ContextSourceDetails({ part, slots, onSelect }) {
+      const first = slots[0], last = slots.at(-1);
+      const location = (label, slot) => h("div", null, h("dt", null, label),
+        h("dd", null, h("button", { type: "button", className: "av-chip", onClick: () => onSelect(slot.position) },
+          ccMessage(slot.position) + (slot.turn == null ? "" : " · " + ccTurn(slot.turn)))));
+      return h("div", { className: "cc-record cc-source-details" },
+        h("div", { className: "cc-record-summary" },
+          h("div", { className: "cc-nav" }, ccDot(part), h("strong", null, ccPart(part))),
+          h("div", { className: "cm-note" }, cmUi(...(ccSourceDescriptions[part] || ccSourceDescriptions.unknown))),
+          h("dl", null,
+            h("div", null, h("dt", null, cmUi("保留消息", "Retained messages")), h("dd", null, ccNumber(slots.length))),
+            location(first === last ? cmUi("图中位置", "Position in diagram") : cmUi("首个位置", "First position"), first),
+            first !== last && location(cmUi("末尾位置", "Last position"), last))));
+    }
+
+    const ccBrowseTypes = {
+      system: ["系统提示词", "System prompts", "system"], definitions: ["工具定义", "Tool definitions", "tools"],
+      io: ["工具输入与输出", "Tool inputs & outputs", "tool"], reasoning: ["模型思考", "Model reasoning", "assistant"],
+      files: ["文件", "Files", "unknown"], skill: ["Skill", "Skills", "skill"], other: ["对话与补充", "Conversation & notes", "inject"],
+    };
+
+    function ccSlotTab(slot) {
+      if (slot.role === "system") return "system";
+      if (slot.toolChanges?.length) return "definitions";
+      if (ccIsSkillCatalog(slot) || slot.loadedSkill || slot.part === "skill") return "skill";
+      if (slot.role === "tool" || slot.toolInputs?.length) return "io";
+      if (slot.hasReasoning) return "reasoning";
+      return "other";
+    }
+
+    const ccPluginBasis = {
+      "dsh-tool-catalog": ["官方定义匹配", "Matched to official definition"],
+      "plugin-tool-catalog": ["插件定义匹配", "Matched to plugin definition"],
+      "context-headers": ["Context 来源标注", "Context source annotation"],
+    };
+
+    function ccPlugin(plugin, basis) {
+      if (!plugin) return cmUi("来源未记录", "Source unavailable");
+      const official = /^@deepseek-ai\/dsh(?:-|$)/.test(plugin);
+      return h(React.Fragment, null,
+        h("span", { className: "cc-tag" }, official ? cmUi("DSH 官方包", "Official DSH package") : cmUi("插件来源", "Plugin source")),
+        " ", plugin,
+        ccPluginBasis[basis] && h("span", { className: "cm-note" }, " · " + cmUi(...ccPluginBasis[basis])));
+    }
+
+    function ccIndexRow({ title, note, selected, onClick }) {
+      return h("button", { type: "button", className: "av-btn cc-index-row", "aria-pressed": selected, onClick },
+        h("span", null, title), h("span", { className: "cm-note" }, note));
+    }
+
+    function ContextFileLocations({ locations, position, onSelect }) {
+      const [limit, setLimit] = React.useState(12);
+      const visible = locations.slice(-limit).reverse();
+      if (!visible.includes(position)) visible.push(position);
+      const remaining = locations.length - visible.length;
+      return h("div", { className: "cc-locations", role: "group", "aria-label": cmUi("出现位置", "Occurrences") },
+        h("div", { className: "cc-nav" },
+          h("strong", null, cmUi("出现位置", "Occurrences")), h("span", { className: "cc-tag" }, ccNumber(locations.length))),
+        h("div", { className: "cc-nav" }, visible.map(value => h("button", {
+          key: value, type: "button", className: "av-chip", "aria-pressed": value === position, onClick: () => onSelect(value),
+        }, ccMessage(value)))),
+        remaining > 0 && h("div", null, h("button", { type: "button", className: "av-btn",
+          onClick: () => setLimit(limit + 12) }, cmUi("更多位置 · ", "More positions · ") + ccNumber(remaining))));
+    }
+
+    function ContextContent({ sessionId, asOfSeq, slot, definition, view }) {
+      const [result, setResult] = React.useState(null);
+      const seq = slot?.seq, tool = definition?.name;
+      React.useEffect(() => {
+        const controller = new AbortController();
+        const params = new URLSearchParams({ session: sessionId, at: String(asOfSeq) });
+        if (tool) params.set("tool", tool);
+        else params.set("seq", String(seq));
+        if (view) params.set("view", view);
+        setResult(null);
+        fetch("/analysis-view/context-content?" + params, { credentials: "same-origin", signal: controller.signal })
+          .then(response => {
+            if (!response.ok) throw new Error(String(response.status));
+            return response.json();
+          })
+          .then(value => { if (!controller.signal.aborted) setResult(value); })
+          .catch(() => { if (!controller.signal.aborted) setResult({ error: true }); });
+        return () => controller.abort();
+      }, [sessionId, asOfSeq, seq, tool, view]);
+
+      if (!result) return h("div", { className: "cm-note", role: "status" }, cmUi("正在读取这条记录…", "Loading this record…"));
+      if (result.error) return h("div", { className: "cm-note", role: "status" }, cmUi("这条记录暂时无法读取。", "This record could not be loaded."));
+      if (!result.blocks.length) return h("div", { className: "cm-note" }, cmUi("这条记录没有可显示的正文。", "This record has no displayable content."));
+      const blockLabels = {
+        reasoning: ["模型思考", "Model reasoning"], "tool-call": ["工具输入", "Tool input"],
+        file: ["文件附件", "File attachment"], image: ["图片附件", "Image attachment"], definition: ["记录的定义", "Recorded definition"],
+      };
+      return h("div", { className: "cc-preview", tabIndex: 0, "aria-label": cmUi("记录内容", "Record contents") },
+        result.blocks.map((block, index) => h("div", { key: index },
+          h("div", { className: "cm-note" }, (block.type === "text" ? ccPart(slot?.part) : cmUi(...blockLabels[block.type])) +
+            (block.name ? " · " + block.name : "")),
+          block.text && h("pre", null, block.text),
+          block.truncated && h("div", { className: "cm-note" }, cmUi("这里只显示节选。", "Showing an excerpt.")))),
+        result.truncated && h("div", { className: "cm-note" }, cmUi("还有内容未展开。", "Additional content is omitted.")));
+    }
+
+    function ContextRecord({ snapshot, active, definition, system, slots, callPositions, activeFiles, selectedFile, material, tab,
+      onClear, onLocate, onSelect, onFileLocation, onCalls, openView }) {
+      if (!active && !definition) return h("div", { className: "cc-record cm-note" },
+        cmUi("选中左侧条目或图中片段，查看内容和位置。", "Select a record or a diagram fragment to see its content and placement."));
+      const value = (label, content) => h("div", null, h("dt", null, label), h("dd", null, content));
+      let title = definition?.name || (tab === "files" && selectedFile ? ccFileLabel(selectedFile.name) : null);
+      if (!title) {
+        if (tab === "reasoning") title = cmUi("模型思考", "Model reasoning");
+        else if (tab === "io" && active.role === "assistant") title = cmUi("工具输入", "Tool input");
+        else title = ccSlotName(active, system);
+      }
+      const scope = active?.turn != null && ccTurn(active.turn) + (active.step == null ? "" : cmUi(" · 第 " + active.step + " 步", " · Step " + active.step));
+      const plugin = definition?.plugin || (active?.source?.startsWith("plugin:") ? active.source.slice(7) : null);
+      const link = (position, label, name) => h("button", { type: "button", className: "av-chip", key: label + position + (name || ""),
+        onClick: () => onSelect(position, name) }, label + " · " + ccMessage(position));
+      const relatedCalls = active?.callId
+        ? [{ name: active.toolName, position: callPositions.get(active.callId)?.input, label: cmUi("定位输入", "Locate input") }]
+        : (active?.toolInputs || []).map(call => ({ name: call.name, position: callPositions.get(call.callId)?.output,
+          label: cmUi("定位输出", "Locate output") }));
+      const before = active && slots[active.position - 2], after = active && slots[active.position];
+      const toolName = active?.toolName;
+      const view = active && ["reasoning", "io"].includes(tab) ? tab : null;
+      const catalogEntry = active?.skillCatalog?.entries?.find(item => item.name === material);
+      const recordPart = definition ? "tools" : ccSlotPart(active);
+      return h("div", { className: "cc-record", style: { "--cc-accent": ccColor(recordPart) } },
+        h("div", { className: "cc-record-summary" },
+          h("div", { className: "cc-nav" },
+            ccDot(recordPart), h("strong", null, title), toolName && h("code", { className: "cm-note" }, toolName),
+            h("button", { type: "button", className: "av-btn cc-spacer", onClick: onClear }, cmUi("取消选中", "Clear selection"))),
+          h("dl", null, definition
+            ? [
+              h("div", { key: "header" }, h("dt", null, cmUi("请求头", "Request header")), h("dd", null, ccSeq(snapshot.tools.seq))),
+              h("div", { key: "source" }, h("dt", null, cmUi("来源", "Source")), h("dd", null, ccPlugin(plugin, definition.pluginBasis))),
+            ]
+            : h(React.Fragment, null,
+              value(cmUi("位置", "Placement"), (active === system ? cmUi("开头", "Beginning") : cmUi("历史", "History")) + " · " + ccMessage(active.position)),
+              scope && value(cmUi("来源轮次和步骤", "Origin step"), scope),
+              value(cmUi("事件", "Event"), ccSeq(active.seq)),
+              plugin && value(cmUi("来源", "Source"), ccPlugin(plugin))))),
+        definition ? h("div", { className: "cc-nav" },
+          definition.deferred && h("span", { className: "cc-tag" }, cmUi("按需加载", "Deferred loading")),
+          definition.noticePosition != null && link(definition.noticePosition, cmUi("定位历史中的追加", "Locate addition in history"), definition.name),
+          h("button", { type: "button", className: "av-chip", onClick: () => onCalls(definition.name) }, cmUi("查找同名调用", "Find calls by name")))
+          : h(React.Fragment, null,
+            h("div", { className: "cc-nav" },
+              h("button", { type: "button", className: "av-chip cc-locate-action", onClick: onLocate }, cmUi("在图中查看", "Show in diagram")),
+              active.callId && typeof openView === "function" && h("button", { type: "button", className: "av-chip",
+                onClick: () => openView("trajectory", active.callId) }, cmUi("查看工具记录", "Open tool record")),
+              relatedCalls.filter(call => call.position != null).map((call, index) =>
+                h(React.Fragment, { key: index }, link(call.position, call.label, call.name)))),
+            selectedFile?.locations.length > 1 && h(ContextFileLocations, {
+              key: selectedFile.key, locations: selectedFile.locations, position: active.position, onSelect: onFileLocation,
+            }),
+            catalogEntry && h("div", { className: "cc-entry" },
+              h("code", null, catalogEntry.name), h("span", { className: "cm-note" }, catalogEntry.description)),
+            (before || after) && h("div", { className: "cc-nav cm-note" },
+              cmUi("相邻消息", "Adjacent messages"),
+              before && link(before.position, "← " + ccSlotName(before, system)),
+              after && link(after.position, ccSlotName(after, system) + " →")),
+            active.role === "system" && active !== system && h("div", { className: "cm-note" },
+              cmUi("这次系统提示更新保留在历史中的这个位置。", "This system prompt update is retained at this position in history.")),
+            active.toolChanges?.length > 0 && h("div", null, active.toolChanges.map((change, index) =>
+              h("div", { className: "cc-entry", key: index },
+                h("span", { className: "cc-tag" }, change.action === "add" ? cmUi("追加", "Added") : cmUi("移除", "Removed")),
+                h("code", null, change.name)))),
+            activeFiles.map(({ group, item }, index) => h("div", { className: "cc-entry", key: index },
+              h(material === (item.path || item.name) ? "strong" : "code", null, item.path || item.name),
+              h("span", { className: "cc-tag" }, ccFileStatus(group.status)),
+              h("span", { className: "cm-note" }, cmUi(...ccOrigins[item.origin])),
+              item.action === "remove" && h("span", { className: "cc-tag" }, cmUi("移除记录", "Removal record")),
+              item.scope && h("span", { className: "cm-note" }, cmUi("作用域 ", "Scope ") + item.scope)))),
+        !active?.toolChanges?.length && h(ContextContent, {
+          key: snapshot.asOfSeq + ":" + (definition?.name ?? active?.seq) + ":" + view,
+          sessionId: snapshot.sessionId, asOfSeq: snapshot.asOfSeq, slot: active, definition, view,
+        }));
+    }
+
+    function ContextPositions({ snapshot, turns = [], onSelectCut, openView }) {
+      const { structure, files, tools } = snapshot;
+      const [picked, setPicked] = React.useState(null);
+      const [tab, setTab] = React.useState("system");
+      const [viewMode, setViewMode] = React.useState("list");
+      const [fileKind, setFileKind] = React.useState("");
+      const [ioTool, setIoTool] = React.useState("");
+      const [query, setQuery] = React.useState("");
+      const [limit, setLimit] = React.useState(16);
+      const [sourceFilter, setSourceFilter] = React.useState(null);
+      const mapRef = React.useRef(null);
+      const browserRef = React.useRef(null);
+      const scrollRef = React.useRef(null);
+      const system = structure?.system;
+      const history = structure?.history || [];
+      const layers = structure?.layers || [];
+      const index = React.useMemo(() => {
+        const slots = system ? [system, ...history] : history;
+        const bySeq = new Map(), callPositions = new Map(), participants = new Set();
+        const sources = new Map(["system", "user", "skill", "tool", "assistant", "inject", "tools"].map(part => [part, []]));
+        const lists = { system: [], definitions: [], io: [], reasoning: [], skill: [], other: [] };
+        let checkpoint = null, earliestOriginalTurn = Infinity;
+        for (const slot of slots) {
+          bySeq.set(slot.seq, slot);
+          const part = ccSlotPart(slot);
+          if (!sources.has(part)) sources.set(part, []);
+          sources.get(part).push(slot);
+          if (ccIsCheckpoint(slot)) {
+            if (checkpoint === null || slot.seq > checkpoint.seq) checkpoint = slot;
+          } else if (Number.isSafeInteger(slot.turn) && ["user", "assistant", "tool"].includes(part)) {
+            earliestOriginalTurn = Math.min(earliestOriginalTurn, slot.turn);
+          }
+          const kind = ccSlotTab(slot);
+          lists[kind].push(slot);
+          if (slot.hasReasoning && kind !== "reasoning") lists.reasoning.push(slot);
+          if (kind !== "io" && (slot.role === "tool" || slot.toolInputs?.length)) lists.io.push(slot);
+          for (const { name, callId } of slot.toolInputs || []) {
+            participants.add(name);
+            if (callId) callPositions.set(callId, { ...callPositions.get(callId), input: slot.position });
+          }
+          if (slot.toolName) participants.add(slot.toolName);
+          if (slot.callId) callPositions.set(slot.callId, { ...callPositions.get(slot.callId), output: slot.position });
+        }
+        for (const [kind, messages] of Object.entries(lists)) if (kind !== "system") messages.reverse();
+        const catalogs = lists.skill.filter(ccIsSkillCatalog).sort((left, right) => right.seq - left.seq);
+        const currentCatalog = catalogs.find(slot => Array.isArray(slot.skillCatalog?.entries)) ?? catalogs[0];
+        return { slots, bySeq, callPositions, lists, currentCatalog, participants: [...participants].sort(),
+          sources: new Map([...sources].filter(([, messages]) => messages.length > 0)), checkpoint, earliestOriginalTurn };
+      }, [structure]);
+      const fileIndex = React.useMemo(() => {
+        const byPosition = new Map(), entries = [];
+        for (const group of files?.groups || []) for (const item of group.items) {
+          const key = JSON.stringify([group.kind, group.part, group.status, item.path || item.name, item.dir, item.origin, item.scope, item.action]);
+          const entry = { key, group, item, name: item.path || item.name, locations: item.locations || [item.logicalPosition] };
+          entries.push(entry);
+          for (const position of entry.locations) {
+            if (!byPosition.has(position)) byPosition.set(position, []);
+            byPosition.get(position).push(entry);
+          }
+        }
+        return { byPosition, entries };
+      }, [files]);
+      const active = index.bySeq.get(picked?.seq);
+      const definition = picked?.definition && tools?.items.find(tool => tool.name === picked.definition);
+      const focusedSource = index.sources.get(sourceFilter);
+      const effectiveFilter = focusedSource ? sourceFilter : null;
+      const { checkpoint, earliestOriginalTurn } = index;
+      const beforeCompaction = checkpoint && turns.findLast(turn => turn.seq < checkpoint.seq);
+      const activeFiles = fileIndex.byPosition.get(active?.position) || [];
+      const loadedMode = tab === "skill" && viewMode === "loaded";
+      const catalogMode = tab === "skill" && !loadedMode;
+      const catalog = ccIsSkillCatalog(active) ? active : index.currentCatalog;
+      const catalogEntries = catalog?.skillCatalog?.entries;
+      const selectedFile = activeFiles.find(entry => entry.key === picked?.fileKey) || (loadedMode ? activeFiles.find(ccIsLoadedSkill) : null);
+      const activePart = active && ccSlotPart(active);
+      const clear = () => setPicked(null);
+      const filterSource = part => {
+        setSourceFilter(part);
+        if (part) clear();
+      };
+      const browse = (kind, mode = kind === "skill" ? "catalog" : "list") => {
+        setTab(kind);
+        setViewMode(mode);
+        setQuery("");
+        setIoTool("");
+        setLimit(16);
+        clear();
+      };
+      const frame = slot => {
+        const scroll = scrollRef.current;
+        if (!scroll || slot === system || !history.length) return;
+        const position = slot.position - history[0].position;
+        const layer = layers.findIndex(row => position >= row.start && position < row.start + row.count);
+        if (layer < 0) return;
+        const top = layer * ccStripHeight;
+        if (top < scroll.scrollTop || top + ccStripHeight > scroll.scrollTop + scroll.clientHeight) {
+          scroll.scrollTop = top - (scroll.clientHeight - ccStripHeight) / 2;
+        }
+      };
+      const selectSlot = (slot, { material, fileKey, followTab = false } = {}) => {
+        if (followTab) {
+          const kind = ccSlotTab(slot);
+          const mode = kind === "definitions" ? "history" : kind === "skill" && !ccIsSkillCatalog(slot) ? "loaded" : undefined;
+          browse(kind, mode);
+        }
+        setPicked({ seq: slot.seq, material, fileKey });
+        frame(slot);
+      };
+      const fromPosition = (position, material) => {
+        const slot = index.slots[position - 1];
+        if (slot) selectSlot(slot, { material, followTab: true });
+      };
+      const pickFromMap = event => {
+        const button = event.target.closest(".cc-slot");
+        const slot = button && index.slots[Number(button.dataset.position) - 1];
+        if (!slot || slot === active) clear();
+        else selectSlot(slot, { followTab: true });
+      };
+      const selectFile = (file, position = file.item.logicalPosition) => {
+        const slot = index.slots[position - 1];
+        if (slot) selectSlot(slot, { material: file.name, fileKey: file.key });
+      };
+
+      const definitionList = tab === "definitions" && viewMode === "list";
+      const fileEntries = tab === "files" ? fileIndex.entries.filter(file => !ccIsLoadedSkill(file))
+        : loadedMode ? fileIndex.entries.filter(ccIsLoadedSkill) : [];
+      const availableFileKinds = tab === "files" ? Object.keys(ccTypes).filter(kind => fileEntries.some(entry => entry.group.kind === kind)) : [];
+      const fileFilter = availableFileKinds.includes(fileKind) ? fileKind : "";
+      const needle = query.trim().toLowerCase();
+      const messages = tab === "skill" ? [] : (index.lists[tab] || []).filter(slot =>
+        tab !== "io" || !ioTool || slot.toolName === ioTool || slot.toolInputs?.some(call => call.name === ioTool));
+      const messageTitle = slot => tab === "reasoning" ? cmUi("模型思考", "Model reasoning")
+        : tab === "io" ? (slot.role === "tool" ? cmUi("输出", "Output") : cmUi("输入", "Input")) +
+          " · " + (slot.toolName || [...new Set(slot.toolInputs?.map(call => call.name))].join(", ") || ccPart("tool"))
+          : ccSlotName(slot, system);
+      const rows = definitionList
+        ? (tools?.items || []).map(tool => ({ tool, name: tool.name, selected: tool === definition }))
+        : messages.map(slot => ({ slot, name: messageTitle(slot), selected: slot === active }));
+      if (catalogMode && catalogEntries) for (const entry of catalogEntries) {
+        rows.push({ catalogEntry: entry, slot: catalog, name: entry.name, selected: catalog === active && picked?.material === entry.name });
+      }
+      for (const file of fileEntries) {
+        if (fileFilter && file.group.kind !== fileFilter) continue;
+        rows.push({ file, name: file.name, selected: file === selectedFile });
+      }
+      const matching = needle ? rows.filter(row => [
+        row.name, row.slot && ccMessage(row.slot.position), row.tool?.plugin, row.file?.item.name, row.catalogEntry?.description,
+        ...(row.slot?.toolChanges?.map(change => change.name) || []),
+      ].filter(Boolean).join(" ").toLowerCase().includes(needle)) : rows;
+      const shown = matching.slice(0, limit);
+      const selectedRow = matching.find(row => row.selected);
+      if (selectedRow && !shown.includes(selectedRow)) shown.unshift(selectedRow);
+      const renderRow = ({ tool, file, catalogEntry, slot, name, selected }) => {
+        if (file) {
+          const position = selected ? active.position : file.item.logicalPosition;
+          const label = loadedMode ? file.item.name || name : ccFileLabel(name);
+          return h("div", { className: "cc-entry", key: "file" + file.key },
+            h(ccIndexRow, {
+              title: h("span", { className: "cc-file-title" }, h("code", null, label),
+                file.locations.length > 1 && h("span", { className: "cc-tag" },
+                  cmUi(ccNumber(file.locations.length) + " 处", ccNumber(file.locations.length) + " places"))),
+              note: h(React.Fragment, null,
+                name !== label && h("span", { className: "cc-file-path", title: name }, name),
+                ccDot(file.group.part), " " + ccPart(file.group.part) + " · " + ccFileStatus(file.group.status) + " · " + ccMessage(position)),
+              selected, onClick: () => selected ? clear() : selectFile(file),
+            }));
+        }
+        if (tool) return h(ccIndexRow, { key: tool.position, title: h("code", null, name), note: ccPlugin(tool.plugin),
+          selected, onClick: () => selected ? clear() : setPicked({ definition: name }) });
+        if (catalogEntry) return h(ccIndexRow, { key: slot.seq + ":" + name, title: h("code", null, name),
+          note: catalogEntry.description, selected, onClick: () => selected ? clear() : selectSlot(slot, { material: name }) });
+        const changes = slot.toolChanges?.map(change => (change.action === "add" ? "+" : "−") + change.name).join(", ");
+        return h(ccIndexRow, { key: slot.seq, title: name,
+          note: ccMessage(slot.position) + (slot.turn == null ? "" : " · " + ccTurn(slot.turn)) + (changes ? " · " + changes : ""),
+          selected, onClick: () => selected ? clear() : selectSlot(slot) });
+      };
+      let emptyMessage = cmUi("这个切点没有这类可浏览记录。", "There are no browsable records of this type at this cut.");
+      if (loadedMode) emptyMessage = cmUi("这个切点没有保留已加载的 Skill 正文。", "No loaded skill instructions are retained at this cut.");
+      if (catalogMode) {
+        if (!catalog) emptyMessage = cmUi("这个切点没有保留 Skill 目录。", "No skill catalog is retained at this cut.");
+        else if (catalogEntries) emptyMessage = cmUi("目录里没有列出 Skill。", "The catalog lists no skills.");
+        else emptyMessage = cmUi("这条记录可查看目录原文。", "Open the catalog message to view its original text.");
+      }
+
+      return h("div", { className: "cm-card cc-workspace", style: { "--cc-strip-height": ccStripHeight + "px" },
+        onKeyDown: event => { if (event.key === "Escape") clear(); } },
+        h("section", { className: "cc-browser", ref: browserRef,
+          style: { "--cc-accent": ccColor(activePart || ccBrowseTypes[tab]?.[2]) } },
+          h(ContextSourceFilter, { sources: index.sources, sourceFilter: effectiveFilter, activePart, onChange: filterSource }),
+          h("h3", { className: "cc-subhead" }, cmUi("浏览上下文内容", "Browse context contents")),
+          h("label", { className: "cc-content-type" },
+            h("span", { className: "cm-note" }, cmUi("内容类型", "Content type")),
+            h("select", { className: "av-eval-turn", value: tab, onChange: event => browse(event.target.value) },
+              Object.entries(ccBrowseTypes).map(([kind, [zh, en]]) => h("option", { key: kind, value: kind }, cmUi(zh, en))))),
+          h("div", { className: "cc-index cc-pane-scroll", key: tab + ":" + viewMode },
+            tab === "definitions" && h(React.Fragment, null,
+              h("div", { className: "cc-nav" },
+                h("button", { type: "button", className: "av-btn", "aria-pressed": viewMode === "list",
+                  onClick: () => browse("definitions") }, cmUi("请求头", "Request header") + (tools ? " " + ccSeq(tools.seq) : "")),
+                h("button", { type: "button", className: "av-btn", "aria-pressed": viewMode === "history",
+                  onClick: () => browse("definitions", "history") }, cmUi("历史变更", "Changes in history"))),
+              h("div", { className: "cm-note" }, definitionList
+                ? cmUi("这里是最近请求头里的工具清单。追加和移除记录可以在历史中定位。",
+                  "Definitions come from the latest request header. Additions and removals can be located in history.")
+                : cmUi("这些消息记录了工具的追加或移除。", "These messages record tool additions and removals."))),
+            tab === "skill" && h(React.Fragment, null,
+              h("div", { className: "cc-nav", role: "group", "aria-label": cmUi("Skill 视图", "Skill views") },
+                h("button", { type: "button", className: "av-btn", "aria-pressed": catalogMode,
+                  onClick: () => browse("skill", "catalog") }, cmUi("目录", "Catalog")),
+                h("button", { type: "button", className: "av-btn", "aria-pressed": loadedMode,
+                  onClick: () => browse("skill", "loaded") }, cmUi("已加载", "Loaded"))),
+              catalogMode && catalog && h("div", { className: "cc-nav cm-note" },
+                h("span", null, cmUi("模型可见目录", "Model-visible catalog")),
+                h("button", { type: "button", className: "av-chip", onClick: () => selectSlot(catalog) }, ccMessage(catalog.position)),
+                catalogEntries && h("span", null, ccNumber(catalogEntries.length) + cmUi(" 项", " entries")),
+                catalog.skillCatalog?.incomplete && h("span", { className: "cc-tag" }, cmUi("目录发现未完成", "Discovery incomplete"))),
+              loadedMode && h("div", { className: "cm-note" },
+                cmUi("此切点仍保留的 Skill 正文。", "Skill instructions still retained at this cut."))),
+            tab === "io" && h("div", { className: "cm-note" }, cmUi(
+              "这里列出仍留在上下文里的工具调用与返回。", "These calls and outputs are still retained in context.")),
+            h("div", { className: "cc-nav" },
+              tab === "io" && (index.participants.length > 0 || ioTool) && h("select", { className: "av-eval-turn", value: ioTool,
+                "aria-label": cmUi("参与工具", "Participating tool"), onChange: event => { setIoTool(event.target.value); setLimit(16); } },
+                h("option", { value: "" }, cmUi("全部工具", "All tools")),
+                ioTool && !index.participants.includes(ioTool) && h("option", { value: ioTool }, ioTool),
+                index.participants.map(name => h("option", { key: name, value: name }, name))),
+              availableFileKinds.length > 0 && h("select", { className: "av-eval-turn", value: fileFilter,
+                "aria-label": cmUi("文件类型", "File type"), onChange: event => { setFileKind(event.target.value); setLimit(16); } },
+                h("option", { value: "" }, cmUi("全部文件", "All files")),
+                availableFileKinds.map(kind => h("option", { key: kind, value: kind }, cmUi(...ccTypes[kind])))),
+              (rows.length > 6 || query) && h("input", { type: "search", className: "av-eval-turn cc-filter", value: query,
+                placeholder: cmUi("筛选名称或消息位置", "Filter names or message positions"),
+                "aria-label": cmUi("筛选此列表", "Filter this list"),
+                onChange: event => { setQuery(event.target.value); setLimit(16); } })),
+            shown.length ? h("div", { className: "cc-list" }, shown.map(renderRow))
+              : h("div", { className: "cm-note" }, query ? cmUi("没有匹配的条目", "No matching records") : emptyMessage),
+            matching.length > limit && h("div", null, h("button", { type: "button", className: "av-btn",
+              onClick: () => setLimit(limit + 16) }, cmUi("显示更多", "Show more") + " · " + (matching.length - limit))),
+            tab === "files" && files?.unconfirmedReads > 0 && h("div", { className: "cm-note" }, cmUi(
+              ccNumber(files.unconfirmedReads) + " 次 Code Mode 读取未在外层结果确认正文",
+              ccNumber(files.unconfirmedReads) + " Code Mode reads without verified content in the outer result")))),
+        h("section", { className: "cc-map", ref: mapRef },
+          h("div", { className: "cc-nav" },
+            h("h3", { className: "cc-subhead" }, cmUi("上下文位置图", "Context positions")),
+            tools && h("button", { type: "button", className: "av-btn cc-spacer",
+              onClick: () => { browse("definitions"); browserRef.current?.scrollIntoView({ block: "nearest" }); } },
+              cmUi("请求头 · 工具定义", "Request header · Tool definitions") + " · " + ccNumber(tools.count))),
+          h("div", { className: "cm-note" }, cmUi("从上到下读，同一行内从左到右。点选片段查看详情。",
+            "Read top to bottom and left to right within each row. Select a fragment for details.")),
+          checkpoint && h("div", { className: "cc-compaction cm-note" },
+            h("button", { type: "button", className: "av-chip", onClick: () => selectSlot(checkpoint, { followTab: true }) },
+              cmUi("压缩摘要", "Compaction summary") + (checkpoint.turn == null ? "" : " · " + ccTurn(checkpoint.turn))),
+            Number.isFinite(earliestOriginalTurn) && h("span", null,
+              cmUi("最早原始记录", "Earliest original record") + " · " + ccTurn(earliestOriginalTurn)),
+            beforeCompaction && onSelectCut && h("button", { type: "button", className: "av-chip",
+              onClick: () => onSelectCut(beforeCompaction.seq) },
+              cmUi("压缩前", "Before compaction") + " · " + ccTurn(beforeCompaction.turn))),
+          h(ContextAssemblyScene, { system, history, layers, active, sourceFilter: effectiveFilter, fileAt: fileIndex.byPosition, scrollRef, onClick: pickFromMap }),
+          !structure && h("div", { className: "cm-note" }, cmUi("该切点的逻辑消息无法重建", "Logical messages could not be reconstructed"))),
+        h("section", { className: "cc-detail" },
+          h("h3", { className: "cc-subhead" }, cmUi("内容详情", "Record details")),
+          h("div", { className: "cc-pane-scroll", key: selectedFile?.key ?? active?.seq ?? definition?.name ?? effectiveFilter },
+            focusedSource && !active && !definition ? h(ContextSourceDetails, { part: effectiveFilter, slots: focusedSource, onSelect: fromPosition })
+              : h(ContextRecord, { snapshot, active, definition, system, slots: index.slots, callPositions: index.callPositions,
+              activeFiles, selectedFile, material: picked?.material, tab, openView, onClear: clear, onSelect: fromPosition,
+              onFileLocation: position => selectFile(selectedFile, position),
+              onLocate: () => { frame(active); mapRef.current?.scrollIntoView({ block: "nearest" }); },
+              onCalls: name => { browse("io"); setIoTool(name); } }))),
+        h(ContextAssemblyConnector, { active }));
+    }
+
+    function ContextCompositionPanel(props) {
+      useLocaleRefresh();
+      React.useEffect(() => ensureStyle(), []);
+      const { sessionId, useProjection, useSession, openView } = props;
+      const timeline = useProjection?.("contextTimeline");
+      const breakdown = useProjection?.("contextBreakdown");
+      const running = useSession?.(session => session?.running);
+      const revision = timeline?.detailRev ?? (breakdown && [breakdown.systemTokens, breakdown.toolsTokens, breakdown.messageTokens].join("/"));
+      const [refresh, setRefresh] = React.useState(0);
+      const [record, setRecord] = React.useState(null);
+      const [turnIndex, setTurnIndex] = React.useState(null);
+      const [selection, setSelection] = React.useState(null);
+      const at = selection?.session === sessionId ? selection.at : null;
+      const liveRevision = at === null ? revision : null;
+      const liveRunning = at === null ? running : null;
+      const current = record?.session === sessionId && record.at === at ? record : null;
+      const snapshot = current?.snapshot;
+      const turns = turnIndex?.session === sessionId ? turnIndex.turns : [];
+      const selectedIndex = at === null ? turns.length : turns.findIndex(turn => turn.seq === at);
+      const select = value => setSelection(value === null ? null : { session: sessionId, at: value });
+
+      React.useEffect(() => {
+        if (!sessionId) return;
+        const controller = new AbortController();
+        const timer = setTimeout(async () => {
+          setRecord(previous => ({ session: sessionId, at, status: "loading",
+            snapshot: previous?.session === sessionId && previous.at === at ? previous.snapshot : null }));
+          try {
+            const query = new URLSearchParams({ session: sessionId });
+            if (at !== null) query.set("at", String(at));
+            const response = await fetch("/analysis-view/context-composition?" + query, {
+              credentials: "same-origin", signal: controller.signal,
+            });
+            if (!response.ok) throw new Error(String(response.status));
+            const value = await response.json();
+            if (value.sessionId !== sessionId || (at !== null && value.asOfSeq !== at)) throw new Error("Context scope mismatch");
+            if (!controller.signal.aborted) {
+              setRecord({ session: sessionId, at, status: "ready", snapshot: value });
+              if (Array.isArray(value.turns)) setTurnIndex({ session: sessionId, turns: value.turns });
+            }
+          } catch {
+            if (!controller.signal.aborted) setRecord(previous => ({ session: sessionId, at, status: "error",
+              snapshot: previous?.session === sessionId && previous.at === at ? previous.snapshot : null }));
+          }
+        }, liveRevision == null ? 0 : 250);
+        return () => { clearTimeout(timer); controller.abort(); };
+      }, [sessionId, at, liveRevision, liveRunning, refresh]);
+
+      return h("div", { className: "cm-root cc-root" },
+        h("div", { className: "cm-head" },
+          h("h2", { className: "cm-title" }, cmUi("当前上下文构成", "Current context")),
+          snapshot && h("span", { className: "cm-sub" }, cmUi("观察切点 ", "Observed through ") + ccSeq(snapshot.asOfSeq)),
+          h("button", { type: "button", className: "av-btn cc-spacer", disabled: !sessionId || current?.status === "loading",
+            onClick: () => setRefresh(value => value + 1) }, cmUi("刷新", "Refresh"))),
+        sessionId && h("div", { className: "cc-nav" },
+          h("button", { type: "button", className: "av-btn", disabled: selectedIndex <= 0,
+            onClick: () => select(turns[selectedIndex - 1].seq) }, cmUi("上一轮", "Previous turn")),
+          h("select", { className: "av-eval-turn", value: at ?? "", "aria-label": cmUi("选择上下文切点", "Choose a context cut"),
+            onChange: event => select(event.target.value === "" ? null : Number(event.target.value)) },
+            h("option", { value: "" }, cmUi("当前保留", "Current retained context")),
+            [...turns].reverse().map(turn => h("option", { value: turn.seq, key: turn.seq },
+              ccTurn(turn.turn) + cmUi("结束", " end") + " · " + ccSeq(turn.seq)))),
+          h("button", { type: "button", className: "av-btn", disabled: at === null || selectedIndex < 0,
+            onClick: () => select(turns[selectedIndex + 1]?.seq ?? null) }, cmUi("下一轮", "Next turn")),
+          snapshot && at === null && snapshot.turn != null && h("span", { className: "cm-note" }, ccTurn(snapshot.turn))),
+        current?.status === "error" ? h("div", { className: "cm-bad", role: "status" }, snapshot
+          ? cmUi("刷新失败，仍显示上一次读取的切点。", "Refresh failed. The previous snapshot is still shown.")
+          : cmUi("无法读取所选切点，可以刷新重试。", "Could not read this cut. Refresh to retry."))
+          : !snapshot && h("div", { className: "cm-note", role: "status" }, sessionId
+            ? cmUi("正在读取上下文…", "Loading context…") : cmUi("请选择会话。", "Select a session.")),
+        snapshot && h(ContextPositions, { key: sessionId + ":" + (at ?? "current"), snapshot, turns, onSelectCut: select, openView }));
+    }
+
+
     function officialTracePatch(sessionId, detail, timeline, pressure, breakdown) {
       const patch = {}, context = {};
       // 口径先走官方:构成与路由取官方投影的当前值(contextTimeline 的精简头),
@@ -1409,6 +2192,7 @@ window.__ModuleLoader__.load({
         slots.register({ name: "main", key: "context-manager" }, ContextManagerPanel);
 
         ctx.uiConversation.views.register({ target: "path", create: () => new AnalysisSnapshotBuilder(), isActive: () => true });
+        ctx.uiConversation.views.register({ target: "context-composition", create: () => new AnalysisSnapshotBuilder(), isActive: () => true });
         slots.inject("conversation.view", () => slots.register({
           name: "conversation.view",
           id: "path",
@@ -1417,6 +2201,14 @@ window.__ModuleLoader__.load({
           children: {},
           inject: (sessionId) => ({ sessionId }),
         }, PathView));
+        slots.inject("conversation.view", () => slots.register({
+          name: "conversation.view",
+          id: "context-composition",
+          order: 35,
+          label: () => cmUi("当前上下文构成", "Current context"),
+          children: {},
+          inject: (sessionId) => ({ sessionId }),
+        }, ContextCompositionPanel));
         slots.inject("conversation.view", () => slots.register({
           name: "conversation.view",
           id: "analysis",

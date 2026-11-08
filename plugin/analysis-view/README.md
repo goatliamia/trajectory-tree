@@ -69,6 +69,14 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
 
 
 
+### Current context
+
+Open **Current context** to see the retained context. The turn picker opens the snapshot at a recorded turn end. The diagram reads from top to bottom and from left to right within each row.
+
+Select a source on the left to highlight its messages and see the retained count and jump targets on the right. Choose a content type to browse prompts, tools, reasoning, files, skills or conversation. Tool definitions come from the selected cut’s latest request header.
+
+A retained compaction summary links to the preceding turn-end snapshot. Open the summary to see the retained text. File details list the message positions where each file was recorded.
+
 ### Verify
 
 - Refresh the GUI → the **分析** tab renders the work path for the current session.
@@ -136,6 +144,14 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
 `GET /analysis-view/trace?session=<id>` 可单独打开自包含快照。
 
 
+
+### 当前上下文构成
+
+打开「当前上下文构成」查看当前保留的消息，也可切换到某轮结束时的快照。装配图从上到下读，同行从左到右读。
+
+点左侧来源可突出对应消息，右栏显示保留数量及可跳转的位置。通过内容类型浏览提示词、工具、思考、文件、Skill 或对话。工具定义来自所选切点的最近请求头。
+
+保留的压缩摘要提供压缩前轮末快照的入口。点摘要可查看正文，点文件可查看它在上下文中的消息位置。
 
 ### 验证
 
