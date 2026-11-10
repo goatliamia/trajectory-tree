@@ -29,6 +29,7 @@ export const REPORT_COLUMNS = {
   system: ['系统提示', 'tokens', 'estimated'], tools: ['工具定义', 'tokens', 'estimated'], user: ['用户输入', 'tokens', 'estimated'],
   inject: ['运行时注入', 'tokens', 'estimated'], skill: ['技能内容', 'tokens', 'estimated'], assistant: ['模型输出（含思考）', 'tokens', 'estimated'], tool: ['工具输出', 'tokens', 'estimated'],
   total: ['构成估算合计', 'tokens', 'estimated'],
+  reportedInput: ['上报请求输入（含缓存）', 'tokens', 'reported'],
 };
 export function reportTable({ source, kind, rows, fields, coverage = {}, labels = {}, columnInfo = {} }) {
   if (!source?.host || !source.session || !source.snapshot || typeof source.log !== 'string' || !source.log) throw Error('Report data requires host, session, snapshot and a string log identity');
@@ -63,13 +64,13 @@ export function inspectionReportData(index, query, source) {
   if (query.groupBy === 'file') coverage.grouping = 'Calls touching multiple files occur in multiple groups; returned characters describe each complete call result';
   const table = (kind, rows, fields) => reportTable({ source, kind, rows, fields, coverage });
   if (query.view === 'context') {
-    const fields = ['seq', 'turn', 'step', 'time', 'system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool', 'total'];
+    const fields = ['seq', 'turn', 'step', 'time', 'system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool', 'total', 'reportedInput', 'headerSeq'];
     const requests = (index.contextSamples || []).map(tuple => Object.fromEntries(fields.map((key, i) => [key, tuple[i]]))).filter(selected).sort((a,b)=>a.seq-b.seq);
     coverage.context = { ...coverage.context, selectedRows: requests.length,
       status: !requests.length ? 'unavailable' : index.coverage.context.firstRecordedTurn > (query.turns?.from ?? 1) ? 'partial' : 'available',
-      missingValues: 'null means unrecorded; gaps are not zero', sampleUnit: 'recorded request composition' };
-    return table('context', requests.map(r => ({ ...r, id: 'context:' + r.seq, evidence: reportRef(index, r.seq) })),
-      ['turn', 'step', 'time', 'system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool', 'total']);
+      missingValues: 'null means unrecorded; gaps are not zero', sampleUnit: 'retained-surface estimate at a recorded response, with reported input separate' };
+    return table('context', requests.map(r => ({ ...r, id: 'context:' + r.seq, evidence: [...reportRef(index, r.seq), ...reportRef(index, r.headerSeq)] })),
+      fields.filter(key => key !== 'seq' && key !== 'headerSeq'));
   }
   if (query.view === 'cost') return table('usage', index.usageRows.filter(selected).sort((a,b)=>a.seq-b.seq).map(r => ({
     id: 'usage:' + r.seq, turn: r.turn, step: r.step, uncachedInputTokens: r.input,

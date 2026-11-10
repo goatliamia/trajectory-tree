@@ -19,17 +19,6 @@ const meterRoot=dirname(sdk.resolve('@deepseek-ai/dsh-token-meter/package.json')
 const breakdown=await importFile(join(meterRoot,'lib/types/breakdown-projection.js'));
 const usage=await importFile(join(meterRoot,'lib/types/usage-projection.js'));
 const definitions=[breakdown.contextBreakdownProjectionDefinition,usage.contextPressureProjectionDefinition,usage.tokenUsageProjectionDefinition];
-const contextRoot=option('--context-plugin') || join(process.env.USERPROFILE,'.dsh/profiles/web/node_modules/dsh-context');
-let contextSource=null;
-try {
-  const plugin=await importFile(join(contextRoot,'lib/index.js')), found=new Map();
-  plugin.apply({fiber:{name:'offline-injection-study'},get(){},inject(){},on(){},effect(){},sessionProjections:{register(d){found.set(d.key,d);return()=>{}}}},{});
-  if(found.has('contextTimeline')){
-    definitions.push(found.get('contextTimeline'));
-    contextSource={name:'dsh-context/contextTimeline',version:JSON.parse(readFileSync(join(contextRoot,'package.json'))).version,
-      hash:createHash('sha256').update(readFileSync(join(contextRoot,'lib/index.js'))).digest('hex')};
-  }
-}catch(error){console.log(JSON.stringify({contextEnrichment:'unavailable',reason:error.message}));}
 const started=performance.now(), loaded=loadSession(option('--source')), {events}=loaded;
 const full=buildInjectionIndex({session:loaded.id,events,SurfaceManager});
 const requestIndex=buildRequestContextIndex({session:loaded.id,events,SurfaceManager,lastAssistantStreamChunk});
@@ -48,7 +37,7 @@ const cases=[{id:'latest',title:'最新上下文',subtitle:'完整长对话的�
 const out=resolve('.dsh/injection-study'); mkdirSync(out,{recursive:true}); mkdirSync(join(out,'evidence'),{recursive:true});mkdirSync(join(out,'receipts'),{recursive:true});
 const meterVersion=JSON.parse(readFileSync(join(meterRoot,'package.json'))).version;
 const sources={contextBreakdown:{name:'@deepseek-ai/dsh-token-meter/contextBreakdown',version:meterVersion},
-  contextPressure:{name:'@deepseek-ai/dsh-token-meter/contextPressure',version:meterVersion},...(contextSource?{contextTimeline:contextSource}:{})};
+  contextPressure:{name:'@deepseek-ai/dsh-token-meter/contextPressure',version:meterVersion}};
 const states=new Map(definitions.map(d=>[d.key,d.init()])); let cursor=0;
 const evidenceSeqs=new Set();
 const receiptSeqs=new Set();

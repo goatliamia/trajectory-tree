@@ -31,6 +31,7 @@ export function portableReportData(data, query, source) {
       })), [query.groupBy === 'tool' ? 'name' : 'file', query.groupBy === 'tool' ? 'calls' : 'operations', 'errors', 'returnedCharacters']);
     }
     return table('calls', calls.map(c => ({ id: 'call:' + c.seq, turn: c.turn, step: c.step, name: toolName(c), status: c.status,
+      ...(c.attribution ? { attribution: c.attribution } : {}),
       start: c.precise ? c.start : null, end: c.precise ? c.end : null, nativeDurationMs: c.durationMs,
       returnedCharacters: c.result ? c.result.text.length + (c.result.omitted || 0) : null,
       evidence: [...evidence(c.seq), ...evidence(c.resultSeq)],

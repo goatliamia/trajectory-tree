@@ -2,6 +2,7 @@ import { summarizeToolOutcomes } from './trace/shared/io-outcome.mjs';
 import { callDurationMs, callTimingSummary } from './trace/shared/tool-intervals.mjs';
 import { createRuntimeMetrics } from './eval-evidence.js';
 import { scopeByTurn } from './trace/shared/scope-index.mjs';
+import { failureCondition, summarizeFailureAttributions } from './trace/shared/tool-attribution.mjs';
 
 function summarizeToolTiming(locations) {
   const groups = new Map();
@@ -49,12 +50,12 @@ function summarizeToolExecution(turns, episodes) {
   // calls here so an episode that contains multiple attempts does not hide them.
   const groups = new Map();
   for (const episode of episodes) {
-    const code = episode.condition.startsWith('TOOL_ERROR:') ? 'TOOL_ERROR' : episode.condition;
-    if (!groups.has(code)) groups.set(code, { code, calls: 0, matched: 0, tools: new Map(), failures: [] });
-    const group = groups.get(code);
     const retries = new Map(episode.pairs.map(pair => [pair.failedSeq, pair.successSeq]));
     for (const seq of episode.failureSeqs) {
       const { call } = locations.get(seq);
+      const code = failureCondition(call.attribution, episode.condition);
+      if (!groups.has(code)) groups.set(code, { code, calls: 0, matched: 0, tools: new Map(), failures: [] });
+      const group = groups.get(code);
       group.calls++;
       group.matched += Number(retries.has(seq));
       group.tools.set(call.name, (group.tools.get(call.name) || 0) + 1);
@@ -71,6 +72,7 @@ function summarizeToolExecution(turns, episodes) {
     rows: failures.sort((a, b) => b.seq - a.seq).slice(0, 8).map(({ seq, retrySeq }) => {
       const { call, turn } = locations.get(seq);
       return { tool: call.name, turn: turn.number, startSeq: turn.seq, failure: record(seq),
+        ...(call.attribution ? { attribution: call.attribution } : {}),
         retry: retrySeq === undefined ? null : record(retrySeq) };
     }),
   })).sort((a, b) => b.calls - a.calls || a.code.localeCompare(b.code));
@@ -80,7 +82,8 @@ function summarizeToolExecution(turns, episodes) {
     partiallyMatched: episodes.filter(episode => !episode.complete && episode.pairs.length).length,
     noSameInputReturn: episodes.filter(episode => !episode.pairs.length).length,
   };
-  return { ...summarizeToolOutcomes(calls), errorsByCondition, timing: summarizeToolTiming(locations), recovery };
+  const attributionCoverage = summarizeFailureAttributions(calls.filter(call => call.status === 'error').map(call => call.attribution));
+  return { ...summarizeToolOutcomes(calls), attributionCoverage, errorsByCondition, timing: summarizeToolTiming(locations), recovery };
 }
 
 export function summarizeTrajectoryEval(session, evidence) {

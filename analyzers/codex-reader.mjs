@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
-import { createInterface } from 'node:readline';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { readBoundedFile } from '../lib/bounded-file.mjs';
+import { jsonlFrames } from '../lib/jsonl-frames.mjs';
+import { omitCodexImages } from './codex-images.mjs';
 
 const unsupported = error => error?.code === -32601 || error?.code === -32602 && /unsupported|not support|pagination|itemsView/i.test(error.message);
 export async function readCodexHistory(rpc, threadId) {
@@ -50,19 +52,20 @@ async function withCodexReader(run, options = {}) {
   const args = executable === process.execPath ? [npmEntry, 'app-server', '--stdio'] : ['app-server', '--stdio'];
   const child = spawn(executable, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
   child.stderr.resume();
-  const lines = createInterface({ input: child.stdout }), pending = new Map();
+  const pending = new Map();
   let nextId = 1;
   const fail = error => { for (const item of pending.values()) { clearTimeout(item.timer); item.reject(error); } pending.clear(); };
   child.on('error', fail);
   child.on('exit', () => fail(new Error('Codex App Server exited before completing the read')));
   child.stdin.on('error', fail);
-  lines.on('line', line => {
-    let message; try { message = JSON.parse(line); } catch { return; }
+  const frames = jsonlFrames(line => {
+    let message; try { message = JSON.parse(omitCodexImages(line)); } catch { return; }
     const item = pending.get(message.id); if (!item) return;
     pending.delete(message.id); clearTimeout(item.timer);
     if (message.error) item.reject(Object.assign(new Error(message.error.message), { code: message.error.code }));
     else item.resolve(message.result);
   });
+  child.stdout.setEncoding('utf8').on('data', frames.push);
   const rpc = (method, params) => new Promise((resolve, reject) => {
     if (options.signal?.aborted) { reject(options.signal.reason || new Error('Codex read cancelled')); return; }
     const id = nextId++, timer = setTimeout(() => { pending.delete(id); reject(new Error('Timed out reading ' + method)); }, 20000);
@@ -76,9 +79,14 @@ async function withCodexReader(run, options = {}) {
     return await run(rpc);
   } finally {
     options.signal?.removeEventListener('abort', abort);
-    child.stdin.end(); lines.close();
+    child.stdin.end(); child.stdout.off('data', frames.push);
     const kill = setTimeout(() => child.kill(), 2000); kill.unref(); child.once('exit', () => clearTimeout(kill));
   }
+}
+
+export async function readCodexSnapshot(file, { signal } = {}) {
+  const bytes = await readBoundedFile(file, { maxBytes: 128 * 1024 * 1024, signal, overflow: 'Codex snapshot exceeds 128 MiB' });
+  return JSON.parse(omitCodexImages(bytes.toString('utf8')));
 }
 export async function readCodexThread(threadId, options = {}) {
   if (!threadId || typeof threadId !== 'string') throw new Error('An explicit thread ID or CODEX_THREAD_ID is required');
@@ -89,5 +97,26 @@ export async function listCodexThreads({ cwd = process.cwd(), query, cursor, lim
   return withCodexReader(async rpc => {
     const page = await rpc('thread/list', { cwd, limit, sortKey: 'updated_at', sortDirection: 'desc', useStateDbOnly: true, ...(query ? { searchTerm: query } : {}), ...(cursor ? { cursor } : {}) });
     return { sessions: page.data.map(t => ({ session: t.id, host: 'codex', title: t.name || t.preview?.slice(0, 180), cwd: t.cwd, updatedAt: t.updatedAt, parent: t.parentThreadId })), ...(page.nextCursor ? { cursor: page.nextCursor } : {}), scope: 'Codex indexed metadata for the specified cwd; no rollout scan/repair' };
+  }, { signal });
+}
+
+// A project overview reuses one read-only connection for the whole cohort.
+export async function readCodexOverview({ cwd = process.cwd(), threads, limit = 20, signal, visit }) {
+  return withCodexReader(async rpc => {
+    let ids = threads;
+    let more = false;
+    if (!ids?.length) {
+      const page = await rpc('thread/list', { cwd, limit, sortKey: 'updated_at', sortDirection: 'desc', useStateDbOnly: true });
+      if (!Array.isArray(page.data)) throw Error('Invalid Codex project history');
+      ids = page.data.map(row => row.id);
+      more = Boolean(page.nextCursor);
+    }
+    let unread = 0;
+    for (const id of new Set(ids)) {
+      signal?.throwIfAborted();
+      try { await visit(await readCodexHistory(rpc, id)); }
+      catch (error) { signal?.throwIfAborted(); if (threads?.length) throw error; unread++; }
+    }
+    return { unread, more };
   }, { signal });
 }

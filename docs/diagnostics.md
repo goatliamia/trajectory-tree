@@ -24,7 +24,7 @@
 
 ## 历史与实验
 
-[三会话再试](diagnostic-experiment-v3-results.md)、[首轮试跑](diagnostic-pilot-results.md)保留真实试验范围与开销，不作为后续文字修订已重跑的证明。[方法复盘](diagnostic-method-and-tools.md)、[上下文适配](context-evidence-interface.md)和[机制研究](injection-provenance-research.md)保留设计依据。
+[三会话再试](archive/diagnostic-experiment-v3-results.md)、[首轮试跑](archive/diagnostic-pilot-results.md)保留真实试验范围与开销，不作为后续文字修订已重跑的证明。[方法复盘](archive/diagnostic-method-and-tools.md)、[上下文适配](archive/context-evidence-interface.md)和[机制研究](injection-provenance-research.md)保留设计依据。
 
 `diagnostic-prompts-draft.md`、`diagnostic-analysis-v2.md`、`diagnostic-analysis-v3.md` 是历史草稿/实验材料。当前使用版以包内导出和生成文档为准。
 

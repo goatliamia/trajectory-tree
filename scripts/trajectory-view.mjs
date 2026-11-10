@@ -1,10 +1,27 @@
 #!/usr/bin/env node
 import {generateTraceView} from '../view/generate.mjs';
+import {generateOverviewView} from '../view/overview.mjs';
+import {generateCommandView} from '../view/commands.mjs';
+import {commandCrOptions} from '../analyzers/cr-pwsh.mjs';
 import {serveViewFile,openViewBrowser} from '../view/serve.mjs';
-const args=process.argv.slice(2),option=key=>{const at=args.indexOf(key);return at<0?undefined:args[at+1];};
-if(args.includes('--help'))console.log('trajectory-view --host pi|codex|claude [--eval] [--file native-session|snapshot] [--thread ID] [--leaf ID] [--capture file] [--api-only] [--lang en|zh-CN|auto] [--out view.html] [--serve] [--open]');
+const args=process.argv.slice(2);
+const options=key=>args.flatMap((arg,index)=>{
+ if(arg!==key)return [];
+ const value=args[index+1];if(!value||value.startsWith('--'))throw Error('Missing value for '+key);
+ return [value];
+});
+const option=key=>options(key)[0];
+if(args.includes('--help'))console.log('trajectory-view --host pi|codex|claude [--eval | --overview | --commands] [--file native-session|snapshot] [--thread ID] [--dir session-directory] [--project cwd] [--limit 20] [--leaf ID] [--capture file] [--api-only] [--lang en|zh-CN|auto] [--out view.html] [--serve] [--open]\nOverview accepts repeated --file or --thread arguments. Codex defaults to the current project; Pi and Claude require a directory or files.\nCommand diagnosis uses --host codex [--cr-root PATH] [--pwsh PATH] [--seq N ...] [--cut N].');
 else try{
- const view=await generateTraceView({host:option('--host'),file:option('--file'),thread:option('--thread'),leafId:option('--leaf'),captureFile:option('--capture'),rollout:option('--rollout'),apiOnly:args.includes('--api-only'),synthetic:args.includes('--synthetic'),output:option('--out'),locale:option('--lang'),initialView:args.includes('--eval')?'eval':'trace'});
+ const common={host:option('--host'),rollout:option('--rollout'),apiOnly:args.includes('--api-only'),output:option('--out'),locale:option('--lang'),synthetic:args.includes('--synthetic')};
+ const modes=['--eval','--overview','--commands'].filter(flag=>args.includes(flag));
+ if(modes.length>1)throw Error('Choose one of --eval, --overview or --commands');
+ const selected={...common,file:option('--file'),thread:option('--thread')};
+ let view;
+ if(modes[0]==='--overview')view=await generateOverviewView({...common,files:options('--file'),threads:options('--thread'),directory:option('--dir'),project:option('--project'),limit:Number(option('--limit')??20)});
+ else if(modes[0]==='--commands')view=await generateCommandView({...selected,seqs:options('--seq').map(Number),cut:option('--cut')===undefined?undefined:Number(option('--cut')),cr:commandCrOptions(args)});
+ else view=await generateTraceView({...selected,leafId:option('--leaf'),captureFile:option('--capture'),
+   ...(modes[0]==='--eval'?{initialView:'eval',cr:commandCrOptions(args)}:{initialView:'trace'})});
  if(args.includes('--serve')||args.includes('--open'))Object.assign(view,await serveViewFile(view.output));
  if(args.includes('--open'))await openViewBrowser(view.url);
  console.log(JSON.stringify({ok:true,...view}));

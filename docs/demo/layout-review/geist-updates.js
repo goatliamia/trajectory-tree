@@ -9,7 +9,7 @@
     const before = { requests: reviewContextData.requests, history: reviewContextData.historyRequests,
       files: reviewContextData.fileOperations, facts: reviewContextData.callFacts,
       branches: reviewContextData.agentBranches, skills: reviewContextData.skillEvents, analysis: reviewContextData.skillAnalysis,
-      stats: data.officialStats?.snapshot };
+      stats: data.recordedModelTiming ?? data.officialStats?.snapshot };
     if (patch.sessions) {
       for (const incoming of patch.sessions) {
         const current = data.sessions.find(row => row.id === incoming.id);
@@ -45,7 +45,7 @@
     if (reviewContextData.fileOperations !== before.files || patch.context?.fileOperations) geistDirty.add('files');
     if (reviewContextData.callFacts !== before.facts || patch.context?.callFacts) geistDirty.add('facts');
     if (reviewContextData.agentBranches !== before.branches || reviewContextData.skillEvents !== before.skills || reviewContextData.skillAnalysis !== before.analysis) geistDirty.add('actors');
-    if (data.officialStats?.snapshot !== before.stats || patch.officialStats?.snapshot) geistDirty.add('stats');
+    if ((data.recordedModelTiming ?? data.officialStats?.snapshot) !== before.stats) geistDirty.add('stats');
     if (patch.context?.current || patch.context?.route || patch.officialStats?.context) geistDirty.add('summary');
     geistProgressStatus();
     if (!geistDirty.size) { geistContextCoverage(); return; }
@@ -82,8 +82,8 @@
       }
       if (changed('actors') || changed('files') || sessionChanged) geistSkillScopeCache.clear();
       if (changed('stats')) {
-        geistOfficialStats = data.officialStats?.snapshot;
-        geistStatsByStep = new Map((geistOfficialStats?.turns || []).flatMap(t => t.steps.map(s => [t.turn + ':' + s.step, s])));
+        geistModelTiming = data.recordedModelTiming ?? data.officialStats?.snapshot;
+        geistStatsByStep = new Map((geistModelTiming?.turns || []).flatMap(t => t.steps.map(s => [t.turn + ':' + s.step, s])));
         geistUpdateCounts.stats++;
       }
       const graph = sessionChanged || ['context', 'files', 'facts', 'actors', 'stats'].some(changed);

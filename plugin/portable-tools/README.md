@@ -57,6 +57,18 @@ node scripts/trajectory-query.mjs --host codex --file /absolute/snapshot.json --
 
 只使用官方读取/列表接口；可选结合属于该线程、且不晚于快照的本地 rollout。支持有 Zstandard 解压能力的 Node 读取 `.jsonl.zst` 归档。`--api-only` 禁用本地补充。官方快照通过 `node scripts/export-codex-thread.mjs --thread THREAD_ID` 导出。
 
+### 命令诊断
+
+工具报错归因可从 Eval 明细查看。Codex、Pi 和 Claude Code 都支持单独配置 `trajectory_command_diagnose`，按 `seqs`、`cut` 和 `logId` 细查命令。Pi 和 Claude Code 绑定本地 transcript 时加 `--file`。
+
+```toml
+[mcp_servers.trajectory_commands]
+command = "node"
+args = ["C:/path/to/trajectory-tree/plugin/portable-tools/mcp.mjs", "--commands", "--host", "codex", "--cr-root", "C:/path/to/code-relations"]
+```
+
+CLI 和 CR 配置见[命令诊断入口](../../docs/host-entrypoints.md#命令诊断)。
+
 ## Claude Code
 
 ```sh

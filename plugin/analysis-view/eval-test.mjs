@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { summarizeTrajectoryEval } from './lib/eval-metrics.js';
 import { apply } from './lib/index.js';
 import { buildTracePayload } from './lib/trace-build.js';
+import { errorsForTurn } from './lib/eval/overview/shared.mjs';
 
 const text = value => [{ type: 'text', text: value }];
 const args = { file_path: '/project/panel.js', old_string: 'old', new_string: 'new' };
@@ -36,6 +37,7 @@ test('tool outcomes and per-call errors use the trajectory classification and re
   const { cut, execution, turns } = summarizeTrajectoryEval(session);
   assert.equal(cut, raw.at(-1).seq);
   assert.deepEqual([execution.calls, execution.returned, execution.errors, execution.unknown], [6, 1, 4, 1]);
+  assert.deepEqual(execution.attributionCoverage, { confirmed: 3, candidate: 0, unclassified: 1, noOutput: 0 });
   assert.equal(execution.outcomeCoverage, 5 / 6);
   assert.equal(execution.errorRate, 4 / 5);
   assert.deepEqual(turns.map(({ execution: scope }) => [scope.calls, scope.returned, scope.errors, scope.unknown]), [[2, 1, 1, 0], [4, 0, 3, 1]]);
@@ -80,6 +82,29 @@ test('tool timing follows the selected scope and requires a recorded call and re
   assert.equal(dispatch.rows[0].resultSeq, 17);
 });
 
+test('DSH tool and overview preserve native outcomes alongside attribution', () => {
+  const events = raw.map(event => {
+    if (event.data.callId === 'shell') return { ...event, data: { ...event.data, arguments: { command: 'node smoke.mjs' } } };
+    if (event.data.message?.toolCallId === 'shell') return { ...event, data: { ...event.data, meta: {
+      exitCode: 1, stderr: 'connect EACCES 127.0.0.1:1234',
+    } } };
+    return event;
+  });
+  const [session] = buildTracePayload(events, 'test').sessions;
+  const turn = session.turns[1], calls = turn.steps.flatMap(step => step.calls);
+  const shell = calls.find(call => call.id === 'shell');
+  assert.equal(shell.status, 'error');
+  assert.equal(shell.attribution.code, 'COMMAND_CONNECTION_DENIED');
+  assert.equal(shell.attribution.basis, 'native-stderr');
+  assert.equal(shell.attribution.exitCode, 1);
+  assert.equal(calls.find(call => call.id === 'pending').attribution, undefined);
+  const errors = errorsForTurn(session.overview.episodes.filter(episode => episode.turn === turn.number), calls);
+  assert.deepEqual(errors.find(error => error.failed === shell.resultSeq).attribution, shell.attribution);
+  const group = summarizeTrajectoryEval(session).execution.errorsByCondition.find(row => row.code === shell.attribution.code);
+  assert.equal(group.calls, 1);
+  assert.equal(group.rows[0].failure.seq, shell.seq);
+});
+
 test('framework scopes keep measured spans, paired cache fields and recorded evidence separate', () => {
   const events = raw.slice(0, -1);
   const append = (type, data, surfaceOp) => events.push({ type, data, seq: events.length, time: events.length * 10, surfaceOp });
@@ -101,9 +126,9 @@ test('framework scopes keep measured spans, paired cache fields and recorded evi
   const { metrics, turns } = summarizeTrajectoryEval(session, { events,
     official: { source: 'fixture', snapshot: { turns: [{ turn: 2, steps: [{ wall: 20, ttft: 0 }] }] } },
     projections: { source: 'fixture', values: {
-      contextTimeline: { requests: [{ turn: 2, system: 1, tools: 2, user: 3, inject: 4, skill: 0, assistant: 5, tool: 6 }] },
       contextPressure: { pressureTokens: 10, projectedTokens: 12, contextWindow: 100 },
     } },
+    requestContext: { requests: [{ turn: 2, system: 1, tools: 2, user: 3, inject: 4, skill: 0, assistant: 5, tool: 6 }] },
   });
   assert.deepEqual(metrics.timing.turns, { total: 2, measured: 1, ms: 90 });
   assert.deepEqual(metrics.timing.official.fields.ttft, { value: 0, samples: 1 });
@@ -172,14 +197,15 @@ test('the Eval route reads the existing cut and publishes read-only metrics', as
       return { events: raw, [Symbol.dispose]() { releases++; } };
     } },
     sessions: new Map([['test', { seq: raw.at(-1).seq + 1 }]]),
-    sessionProjections: { snapshot() {
-      return { asOfSeq: raw.at(-1).seq + 1, values: { contextTimeline: { requests: [] } } };
+    sessionProjections: { snapshot(_session, keys) {
+      assert.deepEqual(keys, ['contextPressure']);
+      return { asOfSeq: raw.at(-1).seq + 1, values: {} };
     } },
   };
   apply({ get(name) {
     assert.ok(name !== 'llm' && name !== 'agentDefaultModel', 'read-only metrics do not acquire model services');
     return services[name];
-  }, effect: run => { disposers.push(run()); } });
+  }, effect: run => { disposers.push(run()); } }, { evalToolSort: { get: () => 'errors' } });
   async function request(method, format = '') {
     const req = Object.assign(new EventEmitter(), { method, url: '/analysis-view/eval?session=test' + format, headers: {} });
     const res = new EventEmitter();
@@ -195,7 +221,7 @@ test('the Eval route reads the existing cut and publishes read-only metrics', as
     assert.equal(response.data.cut, expected.cut);
     assert.deepEqual(response.data.execution, expected.execution);
     assert.equal(response.data.metrics.files.returnedWriteCalls, 1);
-    assert.equal(response.data.metrics.context.requestComposition, null);
+    assert.equal(response.data.metrics.context.requestComposition?.peakTokens ?? null, null);
     assert.equal(response.data.turns[0].metrics.repeats.groups, 1);
     const page = await request('GET', '&format=page');
     assert.equal(page.status, 200);
@@ -205,6 +231,7 @@ test('the Eval route reads the existing cut and publishes read-only metrics', as
       Object.keys(dashboard.whole.outcomes).map(key => [key, expected.execution[key]])));
     assert.match(page.data, /id="diagnosis-editor"/);
     assert.match(page.data, /analysis-diagnosis-draft/);
+    assert.match(page.data, /window\.__trajectoryEvalToolSort = "errors"/);
     assert.equal((await request('POST')).status, 404);
     assert.equal(reads, 2);
     assert.equal(releases, reads);

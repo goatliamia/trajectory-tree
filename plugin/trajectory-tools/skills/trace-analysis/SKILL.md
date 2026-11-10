@@ -38,6 +38,7 @@ Respond and write reports in the language of the user's current request unless t
 | 哪些投入持续增加开销，怎样保留能力地调整 | [用量与能力投入](references/cost.md) |
 | 尝试有没有进展，反馈为何没有被用上 | [反复尝试](references/repeats.md) |
 | 查找、读取、修改是否支持了正确判断 | [工具与文件使用](references/io.md) |
+| PowerShell 命令为何报错，调用怎么改和验证 | [PowerShell 命令诊断](references/powershell.md) |
 | 材料如何保留、更新和恢复，是否支持后续工作 | [上下文持续使用](references/context.md) |
 
 需要交付报告时，按[报告写作](../../report/WRITING.md)组织。

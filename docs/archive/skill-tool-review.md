@@ -1,6 +1,6 @@
 # Skill 与工具整理 review
 
-保留四个工具及其参数。综合诊断直接写在 [trace-analysis](../skill/trace-analysis/SKILL.md)，耗时、用量、反复尝试、工具文件、上下文五类专项按需引用；[context-profile](../skill/context-profile/SKILL.md) 处理静态剖面。
+保留四个工具及其参数。综合诊断直接写在 [trace-analysis](../../skill/trace-analysis/SKILL.md)，耗时、用量、反复尝试、工具文件、上下文五类专项按需引用；[context-profile](../../skill/context-profile/SKILL.md) 处理静态剖面。
 
 ## 发现与修正
 
@@ -12,7 +12,7 @@
 - 综合诊断补充阶段投入、反馈利用、可调整原因及验证方法；删除工具使用章节和主题参数表。专项的能力取舍、组装与恢复通过交叉引用维护。
 - Claude Code 复用四工具与报告数据接口，保留原生工具名、参数、可续读的结果和消息身份；用量按消息 ID 去重。SessionStart hook 提供当前 transcript，不在每轮提示重复注入。
 
-正文写作只维护 [WRITING.md](../report/WRITING.md) 一份；组件和 HTML 装配另在 [AUTHORING.md](../report/AUTHORING.md)。DSH 的包内副本由同步脚本生成。原工具方法模块已删除，一键提示词只请求加载相应 skill。
+正文写作只维护 [WRITING.md](../../report/WRITING.md) 一份；组件和 HTML 装配另在 [AUTHORING.md](../../report/AUTHORING.md)。DSH 的包内副本由同步脚本生成。原工具方法模块已删除，一键提示词只请求加载相应 skill。
 
 ## 验证
 
@@ -22,6 +22,6 @@
 
 新增检查通过 Claude 原文、长结果续读、重复用量、混合会话与不完整尾行测试，以及生命周期绑定契约。Codex/Pi/Claude 三套包在仓库外解包执行查询、生成视图和渲染报告，四宿主的资源引用可达。
 
-DSH 工具 0.6.0、视图 0.10.32 已通过原生 `dsh plugin --profile web add` 安装；安装目录的注册与取证自检通过，新启动的 3080 实例通过认证后的页面与路径路由检查。Codex/Pi/Claude 本地包为 0.2.1。Claude 本机 transcript 已做只读验证；未找到 Claude Code CLI，未验证实际 CLI 插件发现，也未更新本体。完整相关文件见 [封装文件清单](host-integration-files.md)。
+DSH 工具 0.6.0、视图 0.10.32 已通过原生 `dsh plugin --profile web add` 安装；安装目录的注册与取证自检通过，新启动的 3080 实例通过认证后的页面与路径路由检查。Codex/Pi/Claude 本地包为 0.2.1。Claude 本机 transcript 已做只读验证；未找到 Claude Code CLI，未验证实际 CLI 插件发现，也未更新本体。完整相关文件见 [封装文件清单](../host-integration-files.md)。
 
 共享视图回归修复：DSH 页面装配接入与其他宿主相同的来源多选、总趋势及折线压缩资源。总趋势默认关闭，关闭态在数据投影和 SVG 构建之前返回。455 轮会话已核对七类来源、多选及关闭态零面积路径。Codex、Pi、Claude 与 DSH 共享脚本内容一致。

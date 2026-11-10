@@ -102,12 +102,36 @@ const mod = moduleDef.factory((name) => {
 });
 check("client: 只依赖 react", required.length > 0 && required.every((name) => name === "react"), required);
 
-let EvalDashboard = null;
+let EvalDashboard = null, PathView = null;
 const conversationPanels = [];
 const contextPanels = [];
+const configListeners = new Set(), tabListeners = new Set(), rightTabs = new Map();
+const notify = listeners => { for (const listener of listeners) listener(); };
+let settingsCard, searchBody, searchEnabled;
+const form = {
+  getSnapshot: () => ({ status: "ready", value: { conversationSearch: searchEnabled } }),
+  subscribe(listener) { configListeners.add(listener); return () => configListeners.delete(listener); },
+};
+const sidebarRightTabs = {
+  get: kind => rightTabs.get(kind),
+  register(tab) {
+    if (rightTabs.has(tab.kind)) throw new Error("Duplicate tab kind");
+    rightTabs.set(tab.kind, tab); notify(tabListeners);
+    return () => { rightTabs.delete(tab.kind); notify(tabListeners); };
+  },
+  subscribe(listener) { tabListeners.add(listener); return () => tabListeners.delete(listener); },
+};
 const draftRequests = [], binding = {};
 let canApplyDraft = true;
 const ctx = {
+  effect(run) { return run(); },
+  inject(_services, run) { return run(ctx); },
+  get(name) { return ctx[name]; },
+  sidebarRightTabs,
+  configForms: {
+    get(id) { check("client: settings use the plugin's native configuration namespace", id === "dsh-analysis-view"); return form; },
+    whileServed(ids, register) { return ids.includes("dsh-analysis-view") ? register() : () => {}; },
+  },
   sessions: { binding(id) { return id === "session-fixture" ? binding : undefined; } },
   conversation: { input: { requestDraftInitialization(target, options) {
     draftRequests.push([target, options]); return canApplyDraft ? "applied" : "blocked";
@@ -115,11 +139,17 @@ const ctx = {
   commandUi: { register(command) { check("client: /trajectory is a direct UI action", command.name === "trajectory" && command.ui.kind === "action"); } },
   uiConversation: { views: { register() {} }, binding() { return { target() { return { getSnapshot() { return null; }, subscribe() { return () => {}; } }; } }; } },
   slots: {
-    inject(name, register) { register(); },
+    inject(name, register) { return register(); },
     register(definition, component) {
       if (definition && definition.name === "conversation.view") conversationPanels.push([definition.id, definition.label(), definition.order]);
       if (definition && definition.id === "analysis") EvalDashboard = component;
+      if (definition && definition.id === "path") PathView = component;
       if (definition.id === "context-manager" || definition.key === "context-manager") contextPanels.push(definition.name);
+      if (definition.name === "plugins.bundle.config") settingsCard = definition;
+      if (definition.name === "sidebar.right.pane.tab") {
+        searchBody = definition;
+        return () => { searchBody = undefined; };
+      }
       return () => {};
     },
   },
@@ -129,6 +159,18 @@ check("client: 两个会话面板依次可打开", JSON.stringify(conversationPa
   ["path", "轨迹树", 30], ["analysis", "评估", 40],
 ]));
 check("client: 已移除左侧上下文管理入口", contextPanels.length === 0);
+check("client: settings card is registered and search starts enabled",
+  settingsCard?.key === "dsh-analysis-view" && settingsCard.inject().form === form &&
+  rightTabs.size === 1 && rightTabs.has(searchBody?.key) && searchBody?.inject("session-fixture").sessionId === "session-fixture");
+const disposeLegacy = sidebarRightTabs.register({ id: "dsh-conversation-search", kind: "conversation-search" });
+check("client: a legacy provider keeps one search entry",
+  rightTabs.size === 1 && !searchBody);
+disposeLegacy();
+check("client: removing legacy restores the enabled search", rightTabs.size === 1 && rightTabs.has(searchBody?.key));
+searchEnabled = false; notify(configListeners);
+check("client: disabling search removes both the right tab and its pane", rightTabs.size === 0 && !searchBody);
+searchEnabled = true; notify(configListeners);
+check("client: enabling again restores the search pane", rightTabs.size === 1 && rightTabs.has(searchBody?.key));
 
 /* ---------------- 渲染工具 ---------------- */
 function render(component, props, seeds) {
@@ -139,6 +181,10 @@ function render(component, props, seeds) {
     frames.pop();
   }
 }
+const requestedProjections = [];
+render(PathView, { sessionId: "session-fixture", useProjection: key => { requestedProjections.push(key); } });
+check("client: the tree only requests the built-in token meter projections",
+  requestedProjections.join(",") === "contextPressure,contextBreakdown");
 function textOf(node, out = []) {
   if (node === null || node === undefined || node === false) return out;
   if (typeof node === "string" || typeof node === "number") {

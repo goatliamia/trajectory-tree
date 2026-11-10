@@ -1,10 +1,12 @@
 import { TOOLS, executeTool } from './tools.mjs';
 import { PortableService } from './service.mjs';
 import { datasetFromNative } from './sources.mjs';
+import { dirname } from 'node:path';
 import {generateTraceView} from '../../view/generate.mjs';
+import {generateOverviewView} from '../../view/overview.mjs';
 import {serveViewFile,openViewBrowser} from '../../view/serve.mjs';
 
-const trajectoryUsage = '用法：/trajectory [--eval] [--no-open] 或 /trajectory --draft <内容>';
+const trajectoryUsage = '用法：/trajectory [--eval | --overview] [--lang en|zh-CN|auto] [--no-open] 或 /trajectory --draft <内容>';
 
 function readEvalDraft(encoded) {
   if (!encoded || encoded.length > 16 * 1024 || !/^[A-Za-z0-9_-]+$/.test(encoded)) throw Error('无效的 Eval 草稿命令。');
@@ -41,7 +43,7 @@ export default function trajectoryExtension(pi) {
   pi.on('tool_execution_start', observe); pi.on('tool_execution_end', observe);
   pi.on('session_shutdown', () => { for (const entry of sessions.values()) entry.service.dispose(); sessions.clear(); timing.clear(); });
   pi.registerCommand?.('trajectory',{
-    description:'打开当前分支的轨迹树或 Eval，或载入 Eval 草稿',
+    description:'打开当前分支的轨迹树或 Eval、项目总览，或载入 Eval 草稿',
     async handler(args,ctx){
       const flags = args.trim().split(/\s+/).filter(Boolean);
       if (flags[0] === '--draft') {
@@ -61,15 +63,23 @@ export default function trajectoryExtension(pi) {
         } catch (error) { ctx.ui.notify(error.message, 'warning'); }
         return;
       }
-      if (new Set(flags).size !== flags.length || flags.some(flag => !['--eval', '--no-open'].includes(flag))) {
+      const langAt = flags.indexOf('--lang');
+      const locale = langAt < 0 ? undefined : flags.splice(langAt, 2)[1];
+      const english = (locale === 'auto' || !locale ? Intl.DateTimeFormat().resolvedOptions().locale : locale).startsWith('en');
+      if ((langAt >= 0 && !['en', 'zh-CN', 'auto'].includes(locale)) || new Set(flags).size !== flags.length
+          || flags.some(flag => !['--eval', '--overview', '--no-open'].includes(flag)) || (flags.includes('--eval') && flags.includes('--overview'))) {
         ctx.ui.notify(trajectoryUsage, 'warning'); return;
       }
       try{
         const evalView = flags.includes('--eval');
-        const view = await generateTraceView({ host: 'pi', input: viewInput(ctx), initialView: evalView ? 'eval' : undefined });
+        const input = viewInput(ctx), overview = flags.includes('--overview');
+        const view = overview ? await generateOverviewView({ host: 'pi', input, locale,
+          directory: input.source.file ? dirname(input.source.file) : undefined })
+          : await generateTraceView({ host: 'pi', input, locale, initialView: evalView ? 'eval' : undefined });
         const { url } = await serveViewFile(view.output);
         if (!flags.includes('--no-open')) await openViewBrowser(url);
-        ctx.ui.notify((evalView ? 'Eval' : '轨迹树') + ' · ' + url, 'info');
+        const title = overview ? (english ? 'Eval overview' : 'Eval 总览') : evalView ? 'Eval' : (english ? 'Trajectory Tree' : '轨迹树');
+        ctx.ui.notify(title + ' · ' + url, 'info');
       }catch(error){ctx.ui.notify('轨迹树：'+error.message,'error');}
     },
   });

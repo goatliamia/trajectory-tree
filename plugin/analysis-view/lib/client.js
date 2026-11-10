@@ -4,6 +4,9 @@ window.__ModuleLoader__.load({
   id: "dsh-analysis-view",
   factory: (require) => {
     const React = require("react");
+    const PLUGIN_ID = "dsh-analysis-view";
+    const SEARCH_KIND = "trajectory-conversation-search";
+    const hasLegacySearch = tabs => tabs?.get?.("conversation-search")?.id === "dsh-conversation-search";
     const cmUi = (zh, en) => { let stored; try { stored = window.localStorage?.getItem("trajectory-language"); } catch {} const candidates = [stored, window.document?.documentElement?.lang, ...(window.navigator?.languages || []), window.navigator?.language]; const language = candidates.find(value => typeof value === "string" && /^(?:en|zh)(?:-|$)/i.test(value)) || "en"; return /^en(?:-|$)/i.test(language) ? en : zh; };
     function useLocaleRefresh() {
       const [, refresh] = React.useState(0);
@@ -155,65 +158,73 @@ window.__ModuleLoader__.load({
 .av-eval-metrics dd{margin:3px 0 0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .av-eval-list code{overflow-wrap:anywhere}
 `;
+    let styleUsers = 0;
     const ensureStyle = () => {
       if (typeof document === "undefined") return () => {};
-      if (document.getElementById(STYLE_ID) !== null) return () => {};
-      const el = document.createElement("style");
-      el.id = STYLE_ID;
-      el.textContent = CSS;
-      document.head.appendChild(el);
-      return () => { if (el.parentNode) el.parentNode.removeChild(el); };
+      let style = document.getElementById(STYLE_ID);
+      if (!style) {
+        style = document.createElement("style");
+        style.id = STYLE_ID;
+        style.textContent = CSS + SEARCH_CSS + SETTINGS_CSS;
+        document.head.appendChild(style);
+      }
+      styleUsers++;
+      return () => { if (--styleUsers === 0) style.remove(); };
     };
 
     let clientCtx = null;
 
+    function visibleChatTurn(turn) {
+      return Array.from(document.querySelectorAll('[data-chat-turn="' + turn + '"]'))
+        .find(row => row.getClientRects().length > 0);
+    }
+
     /** 等对话里那一轮的行出现(切视图是异步的)。 */
-    function waitForChatTurn(turn, ms) {
-      const selector = '[data-chat-turn="' + turn + '"]';
-      const found = document.querySelector(selector);
-      if (found !== null) return Promise.resolve(found);
+    function waitForChatTurn(turn, ms, signal) {
+      const found = visibleChatTurn(turn);
+      if (found || signal?.aborted) return Promise.resolve(found);
       return new Promise((resolve) => {
         const observer = new MutationObserver(() => {
-          const row = document.querySelector(selector);
-          if (row !== null) {
-            observer.disconnect();
-            clearTimeout(timer);
-            resolve(row);
-          }
+          const row = visibleChatTurn(turn);
+          if (row) finish(row);
         });
-        const timer = setTimeout(() => {
+        const cancel = () => finish();
+        const timer = setTimeout(cancel, ms);
+        function finish(row) {
           observer.disconnect();
-          resolve(null);
-        }, ms);
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", cancel);
+          resolve(row);
+        }
         observer.observe(document.body, { childList: true, subtree: true });
+        signal?.addEventListener("abort", cancel, { once: true });
       });
     }
 
     /** 和对话搜索同一条路:切到「对话」→ 需要时按 seq 加载那一页 → 滚到该轮。 */
-    async function jumpToChatTurn(openView, sessionId, turn) {
-      if (openView === undefined) return false;
+    async function jumpToChatTurn(openView, sessionId, turn, signal) {
       try {
-        openView("chat", "");
+        openView?.("chat", "");
       } catch {
         /* 切不过去就按当前 DOM 找 */
       }
-      let row = await waitForChatTurn(turn.turn, 1200);
-      if (row === null && clientCtx !== null && typeof clientCtx.get === "function") {
-        const sessions = clientCtx.get("sessions");
-        const binding = sessions && typeof sessions.binding === "function" ? sessions.binding(sessionId) : undefined;
-        const session = binding && binding.session;
-        if (session && typeof session.loadThrough === "function" && typeof turn.startSeq === "number") {
+      let row = visibleChatTurn(turn.turn);
+      if (!row) {
+        const sessions = clientCtx?.sessions ?? clientCtx?.get?.("sessions");
+        const session = sessions?.binding?.(sessionId)?.session;
+        const seq = turn.startSeq ?? turn.promptSeq ?? turn.matches?.[0]?.seq;
+        if (Number.isSafeInteger(seq)) {
           try {
-            await session.loadThrough(turn.startSeq);
+            await session?.loadThrough?.(seq);
           } catch {
             /* 分页失败就按已加载的找 */
           }
-          row = await waitForChatTurn(turn.turn, 1500);
         }
+        row = await waitForChatTurn(turn.turn, 1500, signal);
       }
-      if (row === null) return false;
+      if (!row || signal?.aborted) return;
       row.scrollIntoView({ block: "center", behavior: "smooth" });
-      return true;
+      return row;
     }
 
     /* ---------------- 数字与格式 ---------------- */
@@ -805,94 +816,10 @@ window.__ModuleLoader__.load({
 
 
     /* ---------------- 面板 ---------------- */
-    // 官方统计与上下文构成只存在于视图侧。页面由 /analysis-view/trace 现场生成,
-    // 把这类值作为补丁交进 iframe;主干立即启动,详情后到时更新对应图层。
-    //
-    // contextTimeline 在浏览器里只有精简头,requests/events 是空的;插件自己的完整明细由
-    // 它自己的只读路由给出(它自己的面板也是这么取的那份)。拿不到就当没有,不猜。
-    const traceDetails = new Map();
-    function loadTraceDetail(sessionId, revision) {
-      const cached = traceDetails.get(sessionId);
-      if (cached && Date.now() - cached.at < 120000 && cached.revision === revision && (revision !== undefined || !cached.settled)) return cached.promise;
-      const entry = { revision, settled: false, at: Date.now() };
-      const controller = new AbortController();
-      entry.controller = controller;
-      const timer = setTimeout(() => controller.abort(), 10000);
-      entry.promise = fetch("/api/dsh-context/detail", {
-        method: "POST",
-        credentials: "same-origin",
-        signal: controller.signal,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId }),
-      }).then((response) => (response.ok ? response.json() : null))
-        .then((body) => {
-          const value = body?.ok && body.value;
-          return value && typeof value === "object" ? { rev: value.rev, head: value.head, current: value.current,
-            provider: value.provider, model: value.model, reasoningEffort: value.reasoningEffort, requests: value.requests } : null;
-        })
-        .catch(() => null)
-        .then(value => {
-          entry.settled = true;
-          if (value === null || (revision !== undefined && value.rev !== revision)) {
-            if (traceDetails.get(sessionId) === entry) traceDetails.delete(sessionId);
-          }
-          return value;
-        }).finally(() => clearTimeout(timer));
-      traceDetails.delete(sessionId);
-      traceDetails.set(sessionId, entry);
-      while (traceDetails.size > 2) traceDetails.delete(traceDetails.keys().next().value);
-      return entry.promise;
-    }
-
-    function officialTracePatch(sessionId, detail, timeline, pressure, breakdown) {
-      const patch = {}, context = {};
-      // 口径先走官方:构成与路由取官方投影的当前值(contextTimeline 的精简头),
-      // 官方没有的按轮历史才退回插件自己的明细。
-      const head = detail && detail.head && typeof detail.head === "object" ? detail.head : null;
-      const current = timeline?.current ?? detail?.current ?? head?.current;
-      if (current && Object.values(current).some(value => typeof value === "number" && value > 0)) context.current = current;
-      const route = (timeline && (timeline.provider || timeline.model) ? timeline : null)
-        || (detail && (detail.provider || detail.model) ? detail : null) || head;
-      if (route && (route.provider || route.model)) context.route = { provider: route.provider, model: route.model, reasoningEffort: route.reasoningEffort };
-      const requests = Array.isArray(detail?.requests) && detail.requests.length ? detail.requests
-        : Array.isArray(timeline?.requests) && timeline.requests.length ? timeline.requests : null;
-      if (requests) context.requests = requests;
-      if (Object.keys(context).length) patch.context = context;
-      let snapshot;
-      try {
-        const target = clientCtx && clientCtx.uiConversation && clientCtx.uiConversation.binding(sessionId).target("stats");
-        snapshot = target && (typeof target.getSnapshot === "function" ? target.getSnapshot() : typeof target.snapshot === "function" ? target.snapshot() : target);
-      } catch (error) {
-        snapshot = undefined;
-      }
-      if (snapshot || pressure || breakdown) {
-        patch.officialStats = { context: { pressure, breakdown, source: "@deepseek-ai/dsh-token-meter" } };
-        if (snapshot) {
-          patch.officialStats.snapshot = snapshot;
-          // 页面按「轮 → 步」查每步的工具耗时;之前只传 snapshot,页面拿不到 turns,
-          // 于是每一步都显示"未记录"。这里把 snapshot 摊平成同构的 turns。
-          const list = Array.isArray(snapshot) ? snapshot
-            : Array.isArray(snapshot.turns) ? snapshot.turns
-              : Array.isArray(snapshot.nodes) ? snapshot.nodes : null;
-          if (list) {
-            const byTurn = new Map();
-            for (const item of list) {
-              const turn = Number(item && item.turn), step = Number(item && item.step);
-              if (!Number.isFinite(turn)) continue;
-              if (!byTurn.has(turn)) byTurn.set(turn, { turn, steps: [] });
-              if (Number.isFinite(step)) byTurn.get(turn).steps.push({ ...item, step });
-            }
-            if (byTurn.size) patch.officialStats.turns = [...byTurn.values()].sort((a, b) => a.turn - b.turn);
-          }
-        }
-      }
-      return Object.keys(patch).length ? patch : null;
-    }
-
     // 独立的一页:执行路径图,数据由 /analysis-view/trace 现场生成。
     // Removing or reparenting an iframe destroys its browsing context. Keep one
     // connected layer; the view's placeholder supplies its bounds while visible.
-    const traceFrame = { element: null, layer: null, session: null, ready: false, version: null, assets: null, active: false, expiry: null, postedDetail: null };
+    const traceFrame = { element: null, layer: null, session: null, ready: false, version: null, assets: null, active: false, expiry: null };
     function receiveDiagnosisDraft(event, frame, sessionId, ctx, openView) {
       const message = event.data;
       if (event.origin !== window.location.origin || event.source !== frame?.contentWindow ||
@@ -921,29 +848,11 @@ window.__ModuleLoader__.load({
       React.useEffect(() => ensureStyle(), []);
       const sessionId = props && props.sessionId;
       const useProjection = props && props.useProjection;
-      const timeline = useProjection ? useProjection("contextTimeline") : undefined;
       const pressure = useProjection ? useProjection("contextPressure") : undefined;
       const breakdown = useProjection ? useProjection("contextBreakdown") : undefined;
-      const [detailRecord, setDetailRecord] = React.useState(undefined);
-      const detail = detailRecord?.session === sessionId ? detailRecord.value : undefined;
-      const detailRevision = timeline?.detailRev;
-      React.useEffect(() => {
-        setDetailRecord(undefined);
-        if (!sessionId) return undefined;
-        let live = true;
-        const load = () => { if (document.visibilityState !== "hidden") loadTraceDetail(sessionId, detailRevision).then((value) => { if (live) setDetailRecord({ session: sessionId, value }); }); };
-        const cancel = () => {
-          const entry = traceDetails.get(sessionId);
-          if (entry && !entry.settled) { entry.controller.abort(); traceDetails.delete(sessionId); }
-        };
-        const visibility = () => { if (document.visibilityState === "hidden") cancel(); else load(); };
-        load(); document.addEventListener("visibilitychange", visibility);
-        return () => { live = false; cancel(); document.removeEventListener("visibilitychange", visibility); };
-      }, [sessionId, detailRevision]);
-      const patch = React.useMemo(
-        () => (sessionId ? officialTracePatch(sessionId, detail, timeline, pressure, breakdown) : null),
-        [sessionId, detail, timeline, pressure, breakdown],
-      );
+      const patch = React.useMemo(() => sessionId && (pressure || breakdown)
+        ? { officialStats: { context: { pressure, breakdown, source: "@deepseek-ai/dsh-token-meter" } } } : null,
+        [sessionId, pressure, breakdown]);
       const shell = React.useRef(null);
       const [frame, setFrame] = React.useState(null);
       useDiagnosisDraft(frame, sessionId, props.openView);
@@ -973,7 +882,7 @@ window.__ModuleLoader__.load({
           traceFrame.session = sessionId;
           traceFrame.ready = false;
           traceFrame.version = null;
-          traceFrame.assets = null; traceFrame.postedDetail = null;
+          traceFrame.assets = null;
           layer.append(element);
         }
         setFrame(element);
@@ -998,11 +907,12 @@ window.__ModuleLoader__.load({
         // Revalidate the retained page without transferring or parsing its HTML.
         if (reused && traceFrame.ready) fetch("/analysis-view/trace-version?staged=1&session=" + encodeURIComponent(sessionId), { cache: "no-store" })
           .then(response => response.ok ? response.json() : undefined).then(value => {
-            if (live && value && value.version !== traceFrame.version) {
-              if (value.assets && traceFrame.assets && value.assets !== traceFrame.assets) {
-                traceFrame.ready = false; traceFrame.version = null; traceFrame.postedDetail = null;
-                element.src = "/analysis-view/trace?staged=1&session=" + encodeURIComponent(sessionId);
-              } else element.contentWindow?.postMessage({ type: "analysis-trace-refresh", sessionId }, location.origin);
+            if (!live || !value) return;
+            if (value.assets && traceFrame.assets && value.assets !== traceFrame.assets) {
+              traceFrame.ready = false; traceFrame.version = null;
+              element.src = "/analysis-view/trace?staged=1&session=" + encodeURIComponent(sessionId);
+            } else if (value.version !== traceFrame.version) {
+              element.contentWindow?.postMessage({ type: "analysis-trace-refresh", sessionId }, location.origin);
             }
           }).catch(() => {});
         return () => {
@@ -1018,8 +928,8 @@ window.__ModuleLoader__.load({
           traceFrame.expiry = setTimeout(() => {
             if (traceFrame.active || traceFrame.element !== element) return;
             layer.remove(); traceFrame.element = traceFrame.layer = null;
-            traceFrame.session = traceFrame.version = traceFrame.assets = traceFrame.postedDetail = null;
-            traceFrame.ready = false; traceDetails.clear();
+            traceFrame.session = traceFrame.version = traceFrame.assets = null;
+            traceFrame.ready = false;
           }, 120000);
         };
       }, [sessionId]);
@@ -1027,11 +937,7 @@ window.__ModuleLoader__.load({
         if (!frame) return undefined;
         const post = () => {
           if (!frame.contentWindow || !traceFrame.active) return;
-          const next = { ...(patch || {}), ...(patch?.context ? { context: { ...patch.context } } : {}),
-            traceStatus: { context: detail === undefined ? "loading" : detail === null ? "unavailable" : "ready" } };
-          if (next.context?.requests && traceFrame.postedDetail === detail) delete next.context.requests;
-          else if (next.context?.requests) traceFrame.postedDetail = detail;
-          frame.contentWindow.postMessage({ type: "analysis-trace-data", sessionId, payload: next }, location.origin);
+          if (patch) frame.contentWindow.postMessage({ type: "analysis-trace-data", sessionId, payload: patch }, location.origin);
           frame.contentWindow.postMessage({ type: "analysis-trace-visibility", sessionId, visible: true }, location.origin);
         };
         const onLoad = () => {
@@ -1047,7 +953,6 @@ window.__ModuleLoader__.load({
           traceFrame.assets = event.data.assets ?? traceFrame.assets;
           // A ready announcement comes from a document; that document has not received
           // this detail yet, so the requests are not deduplicated against the previous one.
-          traceFrame.postedDetail = null;
           if (!traceFrame.active) frame.contentWindow?.postMessage({ type: "analysis-trace-visibility", sessionId, visible: false }, location.origin);
           post();
         };
@@ -1058,7 +963,7 @@ window.__ModuleLoader__.load({
           window.removeEventListener("message", onMessage);
           frame.removeEventListener("load", onLoad);
         };
-      }, [frame, patch, detail, sessionId]);
+      }, [frame, patch, sessionId]);
       // 页面里的"跳到第 N 轮对话":切到对话并滚到那一轮,复用分析面板的定位逻辑。
       React.useEffect(() => {
         if (!sessionId) return undefined;
@@ -1337,7 +1242,7 @@ window.__ModuleLoader__.load({
               item("切点预计占用", "Projected context pressure", context.pressure.projectedTokens),
               item("上下文窗口", "Context window", context.pressure.contextWindow),
             ] : []),
-          ] }, h("p", { className: "av-hint" }, cmUi("请求构成来自 dsh-context 的分类估算。投递回执和宿主上报用量另计。", "Request composition uses dsh-context category estimates. Delivery receipts and reported usage are counted separately.")),
+          ] }, h("p", { className: "av-hint" }, cmUi("请求构成根据 DSH 记录中的可见消息和工具定义估算。宿主上报的用量另计。", "Request composition is estimated from the recorded DSH messages and tool definitions. Reported usage is counted separately.")),
           evalEvidenceLinks(context.evidence, recordLink)));
     }
 
@@ -1388,6 +1293,26 @@ window.__ModuleLoader__.load({
       return details ? h(EvalPanel, { ...props, backToCharts: () => setDetailsSession(null) }) :
         h("div", { className: "av-root av-trace" }, h("iframe", { key: sessionId, ref: setFrame, className: "av-trace-frame",
           title: cmUi("运行评估", "Session evaluation"), src: "/analysis-view/eval?format=page&session=" + encodeURIComponent(sessionId) }));
+    }
+
+    function EvalOverviewPanel() {
+      React.useEffect(ensureStyle, []);
+      useLocaleRefresh();
+      return h("div", { className: "av-root av-trace" }, h("iframe", {
+        className: "av-trace-frame", title: cmUi("Eval 总览", "Eval overview"),
+        src: "/analysis-view/overview",
+      }));
+    }
+
+    function mountOverview(slots) {
+      const id = "trajectory-eval-overview";
+      const main = slots.inject("main", () => slots.register({ name: "main", key: id }, EvalOverviewPanel));
+      const entry = slots.inject("sidebar.panellist", () => slots.register({
+        name: "sidebar.panellist", id, order: 25, label: () => cmUi("Eval 总览", "Eval overview"),
+      }, ({ size = 18 } = {}) => h("svg", { width: size, height: size, viewBox: "0 0 18 18", "aria-hidden": true,
+        fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round" },
+      h("path", { d: "M2.75 3v11.75H15M6 11.75v-3m3.75 3V6.5m3.75 5.25v-7" }))));
+      return () => { entry?.(); main?.(); };
     }
 
     function EvalPanel(props) {
@@ -1494,6 +1419,285 @@ window.__ModuleLoader__.load({
       ]);
     }
 
+    /* ---------------- 对话搜索 ---------------- */
+    const SEARCH_CSS = `
+.cs-root{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;box-sizing:border-box;padding:12px;color:var(--dsw-alias-label-primary);font-size:13px}
+.cs-field{display:flex;align-items:center;gap:8px;height:36px;flex:none;border:1px solid var(--dsw-alias-border-l1);border-radius:7px;padding:0 10px;color:var(--dsw-alias-label-secondary)}
+.cs-field:focus-within{border-color:var(--dsw-alias-brand-primary)}
+.cs-field svg{flex:none}
+.cs-input{width:100%;min-width:0;height:100%;border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;outline:none}
+.cs-input::placeholder{color:var(--dsw-alias-label-secondary)}
+.cs-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:10px 0 8px}
+.cs-filters{display:inline-flex;gap:8px}
+.cs-filter,.cs-more,.cs-retry{border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer}
+.cs-filter{min-height:26px;padding:2px 3px;border-bottom:2px solid transparent;font-size:12px;white-space:nowrap}
+.cs-filter[aria-pressed="true"]{border-bottom-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-primary);font-weight:600}
+.cs-meta,.cs-note{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.45}
+.cs-note{margin:0 0 8px}
+.cs-list{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;border-top:1px solid var(--dsw-alias-border-l1)}
+.cs-turn{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--dsw-alias-border-l1);padding:10px 6px;cursor:pointer;font:inherit;color:inherit}
+.cs-turn:hover,.cs-more:hover{background:var(--dsw-alias-bg-layer-2)}
+.cs-root button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
+.cs-turn-head{display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-bottom:4px;font-size:12px;font-weight:600}
+.cs-count{color:var(--dsw-alias-label-secondary);font-size:11px;font-weight:400;white-space:nowrap}
+.cs-prompt,.cs-text{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.cs-prompt{-webkit-line-clamp:1;color:var(--dsw-alias-label-secondary);font-size:11px;margin-bottom:6px}
+.cs-match{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px;margin-top:4px;line-height:1.5}
+.cs-role{font-size:11px;color:var(--dsw-alias-label-secondary);white-space:nowrap}
+.cs-text{-webkit-line-clamp:2;min-width:0;font-size:12px;white-space:pre-line}
+.cs-text mark{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 16%,transparent);color:inherit;font-weight:650;border-radius:2px}
+.cs-empty{padding:24px 6px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.55;text-align:center}
+.cs-more{display:block;width:100%;min-height:34px;color:var(--dsw-alias-brand-primary);font-size:12px}
+.cs-more:disabled{opacity:.6;cursor:default}
+.cs-retry{padding:0 4px;color:var(--dsw-alias-brand-primary)}
+.cs-target{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
+`;
+
+    const searchTurnLabel = turn => cmUi("第 " + turn + " 轮", "Turn " + turn);
+    const searchRoles = {
+      "user/message": ["你", "You"],
+      "assistant/message": ["助手", "Assistant"],
+      "tool/call": ["工具", "Tool"],
+      "tool/result": ["工具返回", "Tool result"],
+      "tool/ptc-dispatch": ["工具", "Tool"],
+    };
+
+    function marked(match, query) {
+      const parts = [];
+      let start = 0;
+      const ranges = match.highlights ?? [[match.matchAt, match.matchAt + query.length]];
+      for (const [from, to] of ranges) {
+        if (from < start || to > match.text.length || from >= to) continue;
+        parts.push(match.text.slice(start, from), h("mark", { key: from }, match.text.slice(from, to)));
+        start = to;
+      }
+      parts.push(match.text.slice(start));
+      return parts;
+    }
+
+    function SearchPane({ sessionId, openView }) {
+      useLocaleRefresh();
+      React.useEffect(ensureStyle, []);
+      const [query, setQuery] = React.useState("");
+      const [composing, setComposing] = React.useState(false);
+      const [scope, setScope] = React.useState("chat");
+      const [state, setState] = React.useState({ phase: "idle", data: null });
+      const [notice, setNotice] = React.useState("");
+      const [retry, setRetry] = React.useState(0);
+      const request = React.useRef(null);
+      const needle = query.trim();
+
+      async function fetchPage(job, before) {
+        if (job.loading || job.signal.aborted) return;
+        job.loading = true;
+        if (before != null) setState(previous => ({ ...previous, phase: "paging" }));
+        const params = new URLSearchParams({ session: sessionId, q: needle, scope });
+        if (before != null) params.set("before", String(before));
+        try {
+          const response = await fetch("/analysis-view/search?" + params, { signal: job.signal, cache: "no-store" });
+          if (!response.ok) throw new Error("Search failed");
+          const result = await response.json();
+          if (job.signal.aborted) return;
+          if (!result.ok || !Array.isArray(result.turns)) throw new Error("Invalid search result");
+          setState(previous => ({
+            phase: "ready",
+            data: before != null ? { ...result, turns: [...(previous.data?.turns ?? []), ...result.turns] } : result,
+          }));
+        } catch {
+          if (!job.signal.aborted) setState(previous => ({ ...previous, phase: "error" }));
+        } finally {
+          job.loading = false;
+        }
+      }
+
+      React.useEffect(() => {
+        setNotice("");
+        const ready = Boolean(sessionId && needle && !composing);
+        setState({ phase: ready ? "loading" : "idle", data: null });
+        if (!ready) return;
+        const controller = new AbortController();
+        const job = { signal: controller.signal, loading: false };
+        request.current = job;
+        const timer = setTimeout(() => fetchPage(job), 220);
+        return () => {
+          clearTimeout(timer);
+          controller.abort();
+          if (request.current === job) request.current = null;
+        };
+      }, [sessionId, needle, scope, retry, composing]);
+
+      const data = state.data && state.data.session === sessionId && state.data.query === needle && state.data.scope === scope ? state.data : null;
+      const busy = state.phase === "loading" || state.phase === "paging";
+      const meta = data ? cmUi(data.matchedTurns + " 轮 · " + data.totalMatches + " 条匹配",
+        data.matchedTurns + " turns · " + data.totalMatches + " matches") : busy ? cmUi("搜索中…", "Searching…") : "";
+
+      async function jump(group) {
+        const job = request.current;
+        if (!job) return;
+        setNotice("");
+        const row = await jumpToChatTurn(openView, sessionId, group, job.signal);
+        if (row) {
+          row.classList.add("cs-target");
+          setTimeout(() => row.classList.remove("cs-target"), 1400);
+        }
+        if (!row && !job.signal.aborted) setNotice(cmUi("切到对话后再点一次结果。", "Open the conversation, then select the result again."));
+      }
+
+      const cards = (data?.turns ?? []).map(group => h("button", {
+        key: group.turn, type: "button", className: "cs-turn", onClick: () => jump(group),
+        title: cmUi("跳到" + searchTurnLabel(group.turn), "Jump to " + searchTurnLabel(group.turn)),
+      },
+      h("div", { className: "cs-turn-head" },
+        h("span", null, searchTurnLabel(group.turn)),
+        h("span", { className: "cs-count" }, cmUi(group.count + " 条匹配", group.count + " matches"))),
+      group.prompt && !group.matches.some(match => match.seq === group.promptSeq)
+        ? h("div", { className: "cs-prompt" }, group.prompt) : null,
+      group.matches.map(match => h("div", { key: match.seq, className: "cs-match" },
+        h("span", { className: "cs-role" }, cmUi(...(searchRoles[match.type] ?? ["记录", "Record"]))),
+        h("span", { className: "cs-text" }, marked(match, data.query))))));
+
+      const empty = !sessionId ? cmUi("先打开一个会话。", "Open a conversation first.")
+        : data && !data.turns.length ? cmUi("没找到匹配。可以少输几个词，或选择「含工具」。", "No matches. Try fewer words or include tools.")
+        : !needle ? cmUi("用空格分隔关键词，用引号匹配完整短语。", "Separate keywords with spaces. Quote an exact phrase.")
+        : null;
+
+      return h("section", { className: "cs-root", "aria-label": cmUi("对话搜索", "Conversation search") },
+        h("label", { className: "cs-field" },
+          h("svg", { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", "aria-hidden": true },
+            h("circle", { cx: 6.8, cy: 6.8, r: 4.3, stroke: "currentColor", strokeWidth: 1.3 }),
+            h("path", { d: "m10 10 3.4 3.4", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round" })),
+          h("input", {
+            className: "cs-input", type: "search", value: query, autoFocus: true, maxLength: 240, disabled: !sessionId,
+            placeholder: cmUi("搜索当前会话", "Search this conversation"), "aria-label": cmUi("搜索当前会话", "Search this conversation"),
+            onChange: event => setQuery(event.target.value),
+            onCompositionStart: () => setComposing(true),
+            onCompositionEnd: event => { setComposing(false); setQuery(event.currentTarget.value); },
+            onKeyDown: event => { if (event.key === "Escape" && query && !composing) { event.stopPropagation(); setQuery(""); } },
+          })),
+        h("div", { className: "cs-bar" },
+          h("div", { className: "cs-filters", role: "group", "aria-label": cmUi("搜索范围", "Search scope") },
+            [["chat", cmUi("消息", "Messages")], ["all", cmUi("含工具", "Include tools")]].map(([id, label]) => h("button", {
+              key: id, type: "button", className: "cs-filter", "aria-pressed": scope === id, onClick: () => setScope(id),
+            }, label))),
+          h("span", { className: "cs-meta", role: "status" }, meta)),
+        notice ? h("p", { className: "cs-note", role: "status" }, notice) : null,
+        state.phase === "error" ? h("p", { className: "cs-note", role: "status" },
+          cmUi("搜索未完成。", "Search could not finish."),
+          !data ? h("button", { type: "button", className: "cs-retry", onClick: () => setRetry(value => value + 1) }, cmUi("重试", "Retry")) : null) : null,
+        h("div", { className: "cs-list", "aria-busy": busy },
+          empty ? h("div", { className: "cs-empty" }, empty) : null,
+          cards,
+          data?.nextBefore != null ? h("button", {
+            type: "button", className: "cs-more", disabled: busy,
+            onClick: () => request.current && fetchPage(request.current, data.nextBefore),
+          }, state.phase === "paging" ? cmUi("正在加载…", "Loading…") : cmUi("加载更早的结果", "Load older results")) : null));
+    }
+
+    /* ---------------- DSH 插件设置 ---------------- */
+    const SETTINGS_CSS = `
+.av-prefs-group{padding:14px 0 10px;border-top:1px solid var(--dsw-alias-border-l1)}
+.av-prefs-group h3{margin:0 0 4px;font-size:14px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.av-prefs-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px}
+.av-prefs-note{display:block;margin:3px 0 6px;font-size:12px;color:var(--dsw-alias-label-secondary)}
+.av-prefs-choice{display:inline-flex;align-items:center;gap:8px;flex:none;padding:7px 12px;border:0;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer}
+.av-prefs-choice:hover:enabled{background:var(--dsw-alias-interactive-bg-hover)}
+.av-prefs-choice:disabled{opacity:.55;cursor:default}
+`;
+
+    function PreferenceChoice({ label, value, options, disabled, onSelect }) {
+      const { Menu } = require("@deepseek-ai/dsh-client-ui-primitives");
+      const [open, setOpen] = React.useState(false);
+      const selected = options.find(option => option.id === value);
+      return h("div", { className: "av-prefs-row" },
+        h("span", null, label),
+        h(Menu, {
+          items: options, selectedId: value, align: "end", portal: true,
+          open: open && !disabled, onClose: () => setOpen(false),
+          onSelect: id => { setOpen(false); onSelect(id); },
+          anchor: h("button", {
+            className: "av-prefs-choice", type: "button", disabled,
+            "aria-label": label + " · " + selected.label, "aria-haspopup": "menu", "aria-expanded": open && !disabled,
+            onClick: () => setOpen(!open),
+          }, selected.label, h("svg", { width: 12, height: 12, viewBox: "0 0 12 12", "aria-hidden": true },
+            h("path", { d: "m3 4.5 3 3 3-3", fill: "none", stroke: "currentColor", strokeLinecap: "round" }))),
+        }));
+    }
+
+    function Preferences({ form }) {
+      useLocaleRefresh();
+      React.useEffect(ensureStyle, []);
+      const [subscribe, snapshot] = React.useMemo(() => [form.subscribe.bind(form), form.getSnapshot.bind(form)], [form]);
+      const { status, value, writable } = React.useSyncExternalStore(subscribe, snapshot);
+      const [saving, setSaving] = React.useState(false);
+      const [failed, setFailed] = React.useState(false);
+      const disabled = status !== "ready" || !writable || saving;
+      async function save(key, next) {
+        if (disabled || value?.[key] === next) return;
+        setSaving(true);
+        setFailed(false);
+        try { setFailed(!await form.set(key, next)); }
+        catch { setFailed(true); }
+        finally { setSaving(false); }
+      }
+      const section = (title, ...rows) => h("section", { className: "av-prefs-group", "aria-label": title }, h("h3", null, title), ...rows);
+      const visibility = (key, label, visible) => h(PreferenceChoice, {
+        label, value: visible ? "show" : "hide", disabled,
+        options: [{ id: "show", label: cmUi("显示", "Show") }, { id: "hide", label: cmUi("隐藏", "Hide") }],
+        onSelect: id => save(key, id === "show"),
+      });
+      const sortOptions = [
+        { id: "time", label: cmUi("累计耗时", "Total duration") },
+        { id: "errors", label: cmUi("报错数", "Errors") },
+        { id: "calls", label: cmUi("调用量", "Calls") },
+      ];
+      return h(React.Fragment, null,
+        section(cmUi("入口与可见性", "Entry points and visibility"),
+          visibility("conversationSearch", cmUi("右侧栏 · 对话搜索", "Right sidebar · Conversation search"), value?.conversationSearch !== false)),
+        section(cmUi("视图默认值", "View defaults"),
+          visibility("traceContext", cmUi("轨迹树 · 上下文变化图层", "Trajectory Tree · Context changes"), value?.traceContext !== false),
+          visibility("traceFiles", cmUi("轨迹树 · 文件图层", "Trajectory Tree · Files"), value?.traceFiles !== false),
+          h(PreferenceChoice, {
+            label: cmUi("Eval · 工具排序", "Eval · Tool sort"),
+            value: sortOptions.some(option => option.id === value?.evalToolSort) ? value.evalToolSort : "time",
+            options: sortOptions, disabled, onSelect: id => save("evalToolSort", id),
+          }),
+          h("p", { className: "av-prefs-note" }, cmUi("重新打开视图时应用默认值。已调整的会话图层会保留。",
+            "Defaults apply when a view is reopened. Per-session layer choices are kept."))),
+        failed || (status === "ready" && !writable)
+          ? h("p", { className: "av-prefs-note", role: "status" }, failed ? cmUi("设置未保存，请重试。", "The setting could not be saved. Try again.")
+            : cmUi("此配置为只读。", "This configuration is read-only.")) : null);
+    }
+
+    function mountSearch(ctx, form) {
+      const tabs = ctx.sidebarRightTabs, slot = "sidebar.right.pane.tab";
+      const title = () => cmUi("对话搜索", "Conversation search");
+      let dispose;
+      const refresh = () => {
+        const snapshot = form.getSnapshot();
+        const enabled = snapshot.status === "ready" && snapshot.value?.conversationSearch !== false && !hasLegacySearch(tabs);
+        if (!enabled) {
+          const close = dispose;
+          dispose = undefined;
+          close?.();
+          return;
+        }
+        if (dispose || tabs.get?.(SEARCH_KIND)) return;
+        const unregister = tabs.register({
+          id: SEARCH_KIND, kind: SEARCH_KIND, title,
+          guide: [{ id: SEARCH_KIND, order: 30, title,
+            description: () => cmUi("搜索整段会话并跳回命中轮次。", "Search the full conversation and jump to a matching turn.") }],
+        });
+        const detach = ctx.slots.inject(slot, () => ctx.slots.register({
+          name: slot, key: SEARCH_KIND, inject: sessionId => ({ sessionId }),
+        }, SearchPane));
+        dispose = () => { detach?.(); unregister(); };
+      };
+      refresh();
+      const unsubscribe = form.subscribe(refresh);
+      const unwatchTabs = tabs.subscribe?.(refresh);
+      return () => { unsubscribe(); unwatchTabs?.(); dispose?.(); };
+    }
+
     /* ---------------- 注册 ---------------- */
     function AnalysisSnapshotBuilder() {
       this.snap = { order: [], nodes: new Map(), locations: new Map(), navigation: null, timeline: null, counts: { nodes: 0, upserts: 0 } };
@@ -1523,14 +1727,26 @@ window.__ModuleLoader__.load({
         });
         if (typeof ctx.effect === "function") ctx.effect(() => () => {
           clearTimeout(traceFrame.expiry);
-          for (const entry of traceDetails.values()) if (!entry.settled) entry.controller.abort();
           traceFrame.layer?.remove();
           Object.assign(traceFrame, { element: null, layer: null, session: null, ready: false, version: null });
-          traceDetails.clear();
-        }, "analysis-view: retained trace frame");
+         }, "analysis-view: retained trace frame");
         ctx.uiConversation.views.register({ target: "analysis", create: () => new AnalysisSnapshotBuilder(), isActive: () => true });
         const slots = ctx.slots;
         if (!slots) return;
+        if (typeof ctx.effect === "function") ctx.effect(() => mountOverview(slots), "analysis-view: global Eval");
+        else mountOverview(slots);
+        ctx.inject?.(["configForms"], settingsCtx => {
+          const forms = settingsCtx.configForms;
+          const form = forms.get(PLUGIN_ID);
+          const slot = "plugins.bundle.config";
+          settingsCtx.effect(() => forms.whileServed([PLUGIN_ID], () => slots.inject(slot, () => slots.register({
+            name: slot, key: PLUGIN_ID,
+            inject: () => ({ form }),
+          }, Preferences))), "analysis-view: plugin settings");
+          settingsCtx.inject(["sidebarRightTabs"], searchCtx => {
+            searchCtx.effect(() => mountSearch(searchCtx, form), "analysis-view: optional sidebar search");
+          });
+        });
         ctx.uiConversation.views.register({ target: "path", create: () => new AnalysisSnapshotBuilder(), isActive: () => true });
         slots.inject("conversation.view", () => slots.register({
           name: "conversation.view",

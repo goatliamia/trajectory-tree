@@ -16,9 +16,10 @@
 - [用量与能力投入](../skill/trace-analysis/references/cost.md)
 - [反复尝试](../skill/trace-analysis/references/repeats.md)
 - [工具与文件使用](../skill/trace-analysis/references/io.md)
+- [PowerShell 命令诊断](../skill/trace-analysis/references/powershell.md)
 - [上下文持续使用](../skill/trace-analysis/references/context.md)
 - [静态剖面](../skill/context-profile/SKILL.md)
 - [报告写作](../report/WRITING.md)
 - [HTML 组件](../report/AUTHORING.md)
 
-Codex、Pi 和 DSH 的 skill 均由这些源文件生成。`dsh-trajectory-tools/prompts` 只保留一键入口请求文本。
+Codex、Pi、Claude Code 和 DSH 的 skill 由这些源文件生成。`dsh-trajectory-tools/prompts` 保留一键入口请求文本。

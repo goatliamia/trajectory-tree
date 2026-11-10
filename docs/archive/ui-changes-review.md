@@ -98,9 +98,9 @@ view/assets/                  # CSS 与宿主适配（geist.css、context-observ
 
 | 文档 | 内容 |
 |---|---|
-| [trajectory-fields.md](trajectory-fields.md) | 工具字段、统计口径、上下文七类定义、已知边界（已更新到最新命名与 `toolWall` 语义） |
-| [INDEX.md](INDEX.md) | 仓库索引与文档导航 |
-| [host-entrypoints.md](host-entrypoints.md) | 各宿主入口与构建 |
+| [trajectory-fields.md](../trajectory-fields.md) | 工具字段、统计口径、上下文七类定义、已知边界（已更新到最新命名与 `toolWall` 语义） |
+| [INDEX.md](../INDEX.md) | 仓库索引与文档导航 |
+| [host-entrypoints.md](../host-entrypoints.md) | 各宿主入口与构建 |
 
 ---
 

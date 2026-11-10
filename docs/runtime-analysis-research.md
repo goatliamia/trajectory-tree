@@ -26,8 +26,8 @@
 | 材料 | 已有证据 | 对 Eval 的要求 |
 | --- | --- | --- |
 | Runtime Progress | 原生记录区分 execution、goal 和 effect。受控案例同时有工具返回、独立状态和任务验收 | 单独评价真实效果、最终验收与重复副作用。依据本机 Runtime 研究 `native-pp-final-2026-09-02.md` |
-| 三份 DSH 冻结会话 | 保存了编辑保护、包自检、浏览器探针和后台状态交接等原始事件 | 按真实要求判断恢复和验收范围。分别核对证据能否取回、结论有无依据、解释能否帮助行动。 [内部试跑](diagnostic-pilot-results.md) · [三会话再试](diagnostic-experiment-v3-results.md) |
-| 注入、上下文与续映研究 | 已有入队、取消、正式提交、请求回执及部分内部实验 | 在可观测时核对反馈有无送达和上下文保留是否支持继续工作。 [注入研究](injection-provenance-research.md) · [请求回执](context-evidence-interface.md#6-请求缓存回执与图内信息后续试作) |
+| 三份 DSH 冻结会话 | 保存了编辑保护、包自检、浏览器探针和后台状态交接等原始事件 | 按真实要求判断恢复和验收范围。分别核对证据能否取回、结论有无依据、解释能否帮助行动。 [内部试跑](archive/diagnostic-pilot-results.md) · [三会话再试](archive/diagnostic-experiment-v3-results.md) |
+| 注入、上下文与续映研究 | 已有入队、取消、正式提交、请求回执及部分内部实验 | 在可观测时核对反馈有无送达和上下文保留是否支持继续工作。 [注入研究](injection-provenance-research.md) · [请求回执](archive/context-evidence-interface.md#6-请求缓存回执与图内信息后续试作) |
 
 用量、时长、调用状态和上下文数据作为分析证据。需要解释投入时，按宿主提供的字段和覆盖范围读取。 [已有字段口径](trajectory-fields.md) · [宿主能力](host-compatibility.md)
 
@@ -67,7 +67,7 @@ Agent 将证据与判据配对，输出评价单位、结论、支持或反驳�
 ### 论文精读转化为验收案例
 
 - **时间与依赖。** Dapper 用显式身份关联跨进程记录，并讨论用发送与接收关系约束时钟差。CRISP 用子跨度时间推断调度与同步边，论文明确说明了依赖数据缺失与时钟漂移的限制。对于相同的记录区间，父步骤可以等待两个子调用，也可以只等待一个，另一个在后台结束。两种情形的区间并集相同。实录时长回归检查所属步裁剪、并行重叠和缺少边界。若要进一步评价等待原因，验收应要求独立的等待或交接证据。 [Dapper](https://research.google/pubs/dapper-a-large-scale-distributed-systems-tracing-infrastructure/) · [CRISP §3、§5](https://www.usenix.org/system/files/atc22-zhang-zhizhou.pdf)
-- **恢复与成果。** AgentRx 的案例将早期可恢复的取文失败与后续决定性错误分别标注。AgentRewardBench 将成功、无进展重复和副作用分别交给人工核验。用内部试跑的同一冻结切点准备完整证据和受控删减版，分别问编辑保护后的局部恢复、包装器丢失后台任务 ID、包自检与浏览器验收的差异，以及检索声明与核对完整定理的差异。移除关键返回或验证记录后，预期 Agent 降低结论强度，并指出缺哪项证据。受控删减用于检查对证据的敏感性，再用独立的真实会话复核方法。 [AgentRx 附录 C](https://arxiv.org/html/2602.02475v2#A3) · [AgentRewardBench](https://arxiv.org/html/2504.08942) · [内部试跑](diagnostic-pilot-results.md)
+- **恢复与成果。** AgentRx 的案例将早期可恢复的取文失败与后续决定性错误分别标注。AgentRewardBench 将成功、无进展重复和副作用分别交给人工核验。用内部试跑的同一冻结切点准备完整证据和受控删减版，分别问编辑保护后的局部恢复、包装器丢失后台任务 ID、包自检与浏览器验收的差异，以及检索声明与核对完整定理的差异。移除关键返回或验证记录后，预期 Agent 降低结论强度，并指出缺哪项证据。受控删减用于检查对证据的敏感性，再用独立的真实会话复核方法。 [AgentRx 附录 C](https://arxiv.org/html/2602.02475v2#A3) · [AgentRewardBench](https://arxiv.org/html/2504.08942) · [内部试跑](archive/diagnostic-pilot-results.md)
 
 ### 验证顺序
 
@@ -87,7 +87,7 @@ Agent 将证据与判据配对，输出评价单位、结论、支持或反驳�
 | Runtime `pretend-b1` 与 `pretend-a1` | 基线工具声称执行成功，独立状态仍为 `applied=false`。另一个样本经核查和修复，状态为 `applied=true` | 所要求的状态变化分别为未满足和已满足，范围限于实际效果 |
 | Runtime `nonatomic-b1` 与 `nonatomic-a1` | 两例均达到实验任务验收，分别有 4 次和 1 次实际写入 | 任务验收相同，重复副作用单独区分 |
 
-DSH 案例的复核范围按本地试跑的源哈希和事件序号固定。Runtime 的效果来自 `experiments/native-pp/results` 的独立状态文件和对比结果。后续用独立判定校准 Agent，比较误判、待核验和引用准确性。 [内部试跑](diagnostic-pilot-results.md) · [项目路线图](ROADMAP.md)
+DSH 案例的复核范围按本地试跑的源哈希和事件序号固定。Runtime 的效果来自 `experiments/native-pp/results` 的独立状态文件和对比结果。后续用独立判定校准 Agent，比较误判、待核验和引用准确性。 [内部试跑](archive/diagnostic-pilot-results.md) · [项目路线图](ROADMAP.md)
 
 ### 研发侧联调
 

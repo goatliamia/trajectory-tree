@@ -104,7 +104,10 @@
       const episode = kind === 'episode'
         ? data.episodes.find(row => row.id === selection.id)
         : data.episodes.find(row => row.failureSeqs.includes(selection.seq));
-      return episode ? episodeSelection(episode, kind === 'failure' ? selection.seq : null) : null;
+      if (!episode) return null;
+      const item = episodeSelection(episode, kind === 'failure' ? selection.seq : null);
+      if (kind === 'failure' && selection.powerShell) item.powerShellSeqs = [selection.seq];
+      return item;
     }
     if (kind === 'result') {
       return {
@@ -133,8 +136,8 @@
     if (kind === 'group') {
       const { tool, group } = selection;
       const examples = group.conditions.flatMap(condition => condition.examples);
-      const candidates = [examples.find(row => row.returned != null), examples.find(row => row.returned == null)]
-        .filter(Boolean).map(row => row.failed);
+      const representatives = [examples.find(row => row.returned != null), examples.find(row => row.returned == null)].filter(Boolean);
+      const candidates = representatives.map(row => row.failed);
       const codes = group.conditions.map(condition => condition.code);
       return {
         kind, turn, tool, scope: scopeLabel(turn),
@@ -143,7 +146,7 @@
           `${group.calls} errors, ${group.matched} with a same-argument non-error return in the same turn`),
           `${t('错误码', 'Error codes')} ${codes.join(t('、', ', '))}`,
           candidates.length ? `${t('代表记录', 'Example records')} ${refs(candidates)}` : ''].filter(Boolean),
-        first: candidates[0],
+        first: candidates[0], powerShellSeqs: representatives.filter(row => row.powerShell).map(row => row.failed),
       };
     }
     if (kind === 'tool') {
@@ -299,6 +302,7 @@
         `${label}duration ${duration(row.ms)}, ${row.calls} calls, ${row.errors} errors${output}`);
     }) : showToolSupply ? [] : item.facts;
     const entry = data.host === 'codex' ? '$trace-analysis' : data.host === 'claude' ? '/trajectory-tree:trace-analysis' : '';
+    const powerShell = item.powerShellSeqs?.length && ['工具与文件使用', '反复尝试'].includes(question.method);
     const text = [
       ...(entry ? [entry] : []),
       question.prompt ?? t(`请分析「${question.label}」。${question.ask}`, `Analyze: ${question.label} ${question.ask}`),
@@ -308,6 +312,8 @@
         `Selected: ${item.label} (${item.scope})${facts.length ? ' · ' + facts.join('. ') : ''}.`),
       t(entry ? `采用「${question.method}」方法。` : `使用 trace-analysis 的「${question.method}」方法。`,
         entry ? `Apply the ${methods[question.method]} method.` : `Apply the ${methods[question.method]} method from trace-analysis.`),
+      ...(powerShell ? [t(`对 ${refs(item.powerShellSeqs)} 读取 trace-analysis 的 references/powershell.md。`,
+        `For ${refs(item.powerShellSeqs)}, read references/powershell.md from trace-analysis.`)] : []),
       evidenceEntry(item, question),
       t('引用关键记录序号，说明能确认到哪一步。', 'Cite the key record numbers and state what the evidence can confirm.'),
     ].join('\n');

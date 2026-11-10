@@ -1,5 +1,5 @@
-  let geistOfficialStats = data.officialStats?.snapshot;
-  let geistStatsByStep = new Map((geistOfficialStats?.turns || []).flatMap(t => t.steps.map(s => [t.turn + ':' + s.step, s])));
+  let geistModelTiming = data.recordedModelTiming ?? data.officialStats?.snapshot;
+  let geistStatsByStep = new Map((geistModelTiming?.turns || []).flatMap(t => t.steps.map(s => [t.turn + ':' + s.step, s])));
   let geistOutcomes = collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations);
   let geistOutcomeBranches = [];
   const geistOutcomeLayoutCache = new Map();
@@ -275,7 +275,10 @@
       .filter(([, value]) => value !== null && value >= 0)
       .map(([name, value, kind]) => '<div class="geist-timing-row ' + kind + '"><dt><i></i>' + name + '</dt><dd>' + preciseTime(value) + '</dd></div>');
     let html = ui('<dl class="geist-timing-facts"><div class="geist-timing-row total"><dt>这一步</dt><dd>') + preciseTime(total) + '</dd></div>' + rows.join('') + '</dl>';
-    html += ui('<p class="review-quiet">覆盖时间把重叠执行的区间只算一次') + (timing.cumulative != null && timing.coverage != null && Math.abs(timing.cumulative - timing.coverage) > 1 ? ui('；累计时间把每次调用分别相加,重叠部分会重复计入') : ui('；本步调用之间没有重叠,累计与覆盖相同')) + ui('。全部直接读取官方统计结果。</p>');
+    const timingBasis = tool === null ? ui('本步缺少可用的工具耗时记录。')
+      : Number.isFinite(stats.toolWall) || Number.isFinite(stats.tool) ? ui('工具耗时来自 DSH 官方统计。')
+      : ui('工具耗时根据本步已记录的调用时间计算。');
+    html += '<p class="review-quiet">' + timingBasis + (tool === null ? '' : ui('覆盖时间会合并重叠区间，累计时间逐次相加。')) + '</p>';
     html += ui('<div class="drawer-actions"><button class="action-button" id="geist-timing-path">查看这一步 ↗</button></div>');
     openDrawer(ui('工具执行时间'), ui('第 ') + number + ui(' 轮 · ') + stepNumber + ui(' 步'), html);
     $('geist-timing-path').onclick = () => { closeDrawer(); reviewEnterPath(number, stepNumber); };

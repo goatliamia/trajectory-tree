@@ -49,6 +49,14 @@ assert.equal(capturedCall.timingSource, 'unrecorded-start', 'capture for a diffe
 const changed = structuredClone(input), later = changed.entries.filter(e => e.type === 'message' && e.message.role === 'assistant').flatMap(e => e.message.content).filter(c => c.type === 'toolCall' && c.name === 'bash');
 later[1].arguments.command += ' --changed';
 assert.equal(adaptPiSession(changed).sessions[0].overview.episodes.find(e => e.turn === 2).complete, false, 'different command is not exact-operation recovery');
+const splitResult = structuredClone(input);
+const failedShell = splitResult.entries.find(entry => entry.message?.role === 'toolResult' && entry.message.toolName === 'bash' && entry.message.isError).message;
+failedShell.content = [];
+failedShell.details = { exitCode: 2, stderr: 'rg: regex parse error:' };
+const splitCall = adaptPiSession(splitResult).sessions[0].turns.flatMap(turn => turn.steps.flatMap(step => step.calls))
+  .find(call => call.id === failedShell.toolCallId);
+assert.deepEqual([splitCall.status, splitCall.attribution.code, splitCall.attribution.basis, splitCall.attribution.exitCode],
+  ['error', 'COMMAND_PATTERN', 'native-stderr', 2]);
 assert.throws(() => piSessionPath([{ id: 'a', parentId: 'a' }]), /cycle/);
 assert.throws(() => piSessionPath([{ id: 'a', parentId: 'missing' }]), /Missing/);
 const prompt = [{ type: 'message', id: 'a', parentId: null, message: { role: 'system', content: 'base', sections: { rules: 'first' }, toolsAdded: [{ name: 'read', parameters: {} }] } }, { type: 'message', id: 'b', parentId: 'a', message: { role: 'system', content: '', sections: { rules: null }, toolsRemoved: [{ name: 'read' }] } }, { type: 'custom', id: 'c', parentId: 'b', customType: 'state', data: 'PRIVATE-STATE'.repeat(100) }];

@@ -36,10 +36,15 @@ try{
   id:'package-codex',cwd:work,createdAt:start,turns:[{
    id:'t1',startedAt:start,completedAt:start+1,status:'completed',items:[
     {type:'userMessage',id:'u1',content:[{type:'text',text:'Read a file'}]},
-    {type:'commandExecution',id:'c1',command:'Get-Content a.txt',aggregatedOutput:'file body',exitCode:0,status:'completed',durationMs:5},
+    {type:'commandExecution',id:'c1',command:'pwsh.exe -Command Get-Content a.txt',aggregatedOutput:'file body',exitCode:0,status:'completed',durationMs:5},
    ],
   }],
  }}));
+ const codexRollout=join(work,'codex.jsonl');
+ writeFileSync(codexRollout,[['session_meta',{id:'package-codex'}],['event_msg',{type:'task_started',turn_id:'t1',model_context_window:1000}],
+  ['turn_context',{turn_id:'t1',model:'package-model'}],['token_usage_record',{turn_id:'t1',response_id:'p1',usage:{input_tokens:325,output_tokens:42}}],
+  ['event_msg',{type:'item_completed',turn_id:'t1',item:{id:'c1',command:['pwsh.exe','-Command','Get-Content a.txt']}}]]
+  .map(([type,payload])=>JSON.stringify({timestamp:claudeBase.timestamp,type,payload})).join('\n')+'\n');
  const sources={
   codex:['--host','codex','--file',codexNative,'--api-only'],
   pi:['--host','pi','--file',native,'--synthetic'],
@@ -55,14 +60,39 @@ try{
   const source=sources[host];
   const schema=run('trajectory-query.mjs',['--tool','schema']);assert.equal(schema.tools.length,4);
   const view=run('trajectory-view.mjs',[...source,'--out',join(directory,'view.html')]);assert.equal(view.ok,true);assert.equal(view.host,host);
+  assert.match(readFileSync(view.output,'utf8'), /SIL OPEN FONT LICENSE Version 1\.1/);
   const evaluation=run('trajectory-view.mjs',[...source,'--eval','--lang','en','--out',join(directory,'eval.html')]);
   assert.equal(evaluation.view,'eval');assert.equal(evaluation.host,host);
   const evalHtml=readFileSync(evaluation.output,'utf8');
   assert.ok(evalHtml.includes('installUi("en", false)')&&evalHtml.includes('id="diagnosis-editor"'));
+  assert.match(evalHtml, /SIL OPEN FONT LICENSE Version 1\.1/);
+  const overviewSource=host==='codex'?[...source.filter(arg=>arg!=='--api-only'),'--rollout',codexRollout]:source;
+  for(const locale of ['en','zh-CN']){
+   const overview=run('trajectory-view.mjs',[...overviewSource,'--overview','--lang',locale,'--out',join(directory,'overview-'+locale+'.html')]);
+   assert.equal(overview.view,'overview');assert.equal(overview.host,host);assert.equal(overview.sessions,1);assert.equal(overview.projects,1);
+   const html=readFileSync(overview.output,'utf8');
+   assert.ok(html.includes('installUi('+JSON.stringify(locale)+', false)'));
+   assert.match(html, /SIL OPEN FONT LICENSE Version 1\.1/);
+   const data=JSON.parse(html.match(/id="overview-data">([^<]*)<\/script>/)[1]);
+   assert.ok(data.projects[0].name && data.sessions[0].occupancy.actions.length);
+   if(host==='codex')assert.deepEqual(data.sessions[0].turns[0].requests[0].window,[1000,2]);
+  }
   const scope={session:evaluation.session,cut:evaluation.cut,logId:evaluation.logId};
   assert.ok(Number.isSafeInteger(scope.cut)&&scope.logId);
   const scoped=run('trajectory-query.mjs',[...source,'--args',JSON.stringify({view:'io',...scope})]);
   assert.ok(scoped.rows.length>0,host+' can query the exact cut opened in Eval');
+  if(host==='codex'){
+   const commandSchema=run('trajectory-query.mjs',['--tool','schema','--commands']);
+   assert.deepEqual(commandSchema.tools.map(t=>t.name),['trajectory_command_diagnose']);
+   const commands=run('trajectory-view.mjs',[...overviewSource,'--commands','--seq','3','--lang','en','--out',join(directory,'commands.html')]);
+   assert.equal(commands.view,'commands');assert.equal(commands.calls,1);
+   const commandHtml=readFileSync(commands.output,'utf8');
+   const commandData=JSON.parse(commandHtml.match(/id="command-data" type="application\/json">([^<]*)<\/script>/)[1]);
+   assert.equal(commandData.locale,'en');assert.equal(commandData.rows[0].syntax.rolloutLine,5);
+   const report=run('trajectory-query.mjs',[...overviewSource,'--tool','trajectory_command_diagnose','--args',
+    JSON.stringify({session:commands.session,cut:commands.cut,logId:commands.logId,seqs:[3]})]);
+   assert.equal(report.rows[0].resultSeq,4);assert.equal(report.rows[0].cause.kind,'returned');
+  }
   const query=run('trajectory-query.mjs',[...source,'--args','{"view":"overview","format":"data"}']);assert.ok(query.source.snapshot);
   if(host==='claude'){
    assert.equal(view.host,'claude');assert.ok(readFileSync(view.output,'utf8').includes('Claude Code · 会话分析'));
@@ -81,6 +111,7 @@ try{
  const dshVersion=JSON.parse(readFileSync(join(root,'plugin/trajectory-tools/package.json'),'utf8')).version;
  const dshInstalled=unpack('dsh-trajectory-tools',dshVersion);checkLinks(join(dshInstalled,'skills'));
  assert.ok(!existsSync(join(dshInstalled,'lib/inspect-methods.js')));
+ execFileSync(process.execPath,['--test',join(dshInstalled,'request-context-test.mjs')],{cwd:dshInstalled,windowsHide:true});
  const {loadDiagnosticSkills,SKILL_BODY}=await import(pathToFileURL(join(dshInstalled,'lib/skill.js')).href);
  assert.ok(SKILL_BODY.includes('原文位置'));
  assert.deepEqual(loadDiagnosticSkills().map(s=>s.name),['trace-analysis','context-profile']);
@@ -93,15 +124,17 @@ try{
  const dshView=unpack('dsh-analysis-view',dshViewVersion);
  const {renderEvalPage}=await import(pathToFileURL(join(dshView,'lib/eval/render.mjs')).href);
  assert.ok(renderEvalPage({},{locale:'zh-CN',diagnosis:{session:'package-dsh'},mode:'dsh'}).includes('id="diagnosis-editor"'));
- const searchVersion=JSON.parse(readFileSync(join(root,'plugin/conversation-search/package.json'),'utf8')).version;
- const searchName='dsh-conversation-search';
- if(existsSync(join(release,searchName+'-'+searchVersion+'.tgz'))){
-  const search=unpack(searchName,searchVersion);
-  assert.ok(existsSync(join(search,'lib/client.js')));
-  execFileSync(process.execPath,[join(search,'self-test.mjs')],{cwd:search,windowsHide:true});
-  console.log('The optional DSH search archive passed its packaged route and full-history tests.');
- }
- console.log('Five core archives passed independent extraction, resource allowlists, native metadata and view assets. Codex/Pi/Claude Eval cuts were verified by the packaged query CLI.');
+ const {renderOverviewPage}=await import(pathToFileURL(join(dshView,'lib/eval/overview/render.mjs')).href);
+ assert.ok(renderOverviewPage({locale:'en'}).includes('installUi("en", false)'));
+ const viewPackage=JSON.parse(readFileSync(join(dshView,'package.json'),'utf8'));
+ assert.ok(existsSync(join(dshView,viewPackage.main)));
+ assert.equal(JSON.parse(readFileSync(join(dshView,'locale/zh.json'),'utf8')).meta.title,'轨迹树');
+ assert.equal(JSON.parse(readFileSync(join(dshView,'locale/en.json'),'utf8')).meta.title,'Trajectory Tree');
+ assert.match(readFileSync(join(dshView,'lib/trace/fonts/LICENSE.txt'),'utf8'), /SIL OPEN FONT LICENSE Version 1\.1/);
+ execFileSync(process.execPath,[join(dshView,'self-test.mjs')],{cwd:dshView,windowsHide:true});
+ execFileSync(process.execPath,[join(dshView,'search-test.mjs')],{cwd:dshView,windowsHide:true});
+ execFileSync(process.execPath,['--test',join(dshView,'overview-test.mjs')],{cwd:dshView,windowsHide:true});
+ console.log('Five archives passed independent extraction, bilingual overview rendering, native metadata and view assets. Codex/Pi/Claude Eval cuts were verified by the packaged query CLI.');
 }finally{
  if(!resolve(work).startsWith(resolve(tmpdir(),'trajectory-package-test-')))throw Error('Unexpected cleanup path');
  rmSync(work,{recursive:true,force:true});

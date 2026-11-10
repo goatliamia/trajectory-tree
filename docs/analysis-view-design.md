@@ -41,17 +41,15 @@ node analyzers/shape-law.mjs --mutate   # 证明法则会咬:合理的错法必�
 ## 路径页
 
 单独的「路径」标签取 `GET /analysis-view/trace?staged=1&session=<id>`:立即启动真实页面,
-先显示当前统计,主干就绪后立即显示,正文、文件与子代理图层随后主动补齐。所有阶段共享一次主日志观察和同一份 cut;
+先显示当前统计和轻量主干，再发送上下文增量，随后补齐正文、文件和子代理图层。所有阶段共享一次主日志观察和同一份 cut。
 预载期间选中某轮会优先读取该轮正文,参数与结果沿用原始投影的节选长度,不再额外缩到 600 字符。
 图层补齐保留缩放、位置与选择。原有 `GET /analysis-view/trace?session=<id>` 仍提供自包含快照。
 官方当前上下文更新只刷新摘要;历史增量更新只替换上下文 SVG 图层,不重建主干。
 切走或浏览器隐藏会取消未完成的补齐任务。切走后的隐藏 iframe 最多保留两分钟,到期释放;回到页面时重验数据与资产版本。
 HTML 与阶段数据共用最多四项、估算 64 MiB、空闲两分钟的缓存预算,仅一个超大当前快照可超过预算。
-缓存只保留压缩后的响应,不同时长期保留 JSON 字符串;主日志、子代理、历史回放各有全局并发限制。
+缓存保留压缩响应，主日志和子代理的读取各有并发限制。
 
-超长会话若超过 `dsh-context` 的历史保留范围,页面会标注当前覆盖范围并提供「回补更早增量」。
-点击后通过 Harness 公共 `sessionProjections.restore` 接口分批回放早期日志,不改动活跃投影或全局保留设置。
-每个快照只保留一个回补窗口;每个窗口最多 1500 条请求,继续点击可向前回补。工具正文仍主动预载,选中轮次会优先返回。
+上下文阶段只传请求构成、压缩和裁短边界以及当前用量。取 `assistant/message` 落盘前的可见历史和最近的请求头，用 DSH 内置估算器按七类计量。估算构成和宿主上报的输入量分列。页面确认收到同一切点的上下文后，正文响应会省去这部分数据。
 两者由 `lib/trace/page.html` + `lib/trace/page.js` 组成。它就是
 `docs/demo/layout-review` 里那套 Geist 视觉试作搬回插件后的样子 —— 全景与逐轮行动路径、上下文构成、
 文件对象、工具结果枝条、子代理与 Skill 观察。
@@ -59,18 +57,16 @@ HTML 与阶段数据共用最多四项、估算 64 MiB、空闲两分钟的缓�
 页面代码的**作者位置在 demo,不在插件里**。`node scripts/port-geist-page.mjs` 把构建好的 demo 页面
 拆成这两个运行时资产,并把纯模型模块复制到 `lib/trace/models/`;`page.html` 与 `page.js` 不要手改。
 
-数据分两头来,因为有两类值只存在于视图侧:
+数据来自宿主日志和内置统计接口。
 
 - host(`lib/trace-context.js`):调用事实、文件操作、压缩与裁短边界、模型重试、补充内容计数、
   Skill 读入记录、Skill 正文存续(走官方 `SurfaceManager` 回放)、子代理支线(子会话同样通过
   Session 查询服务读取)。
-- 视图(`lib/client.js`):`stats` 会话目标里的官方统计快照,以及通过标准 `useProjection` 钩子位读到的
-  `contextPressure` / `contextBreakdown` / `contextTimeline`。这些作为按会话隔离的 `postMessage` 补丁送达,
+- 视图(`lib/client.js`):通过标准 `useProjection` 钩子读取 `contextPressure` / `contextBreakdown`。
+  这些作为按会话隔离的 `postMessage` 补丁送达,
   到达后重建对应索引并更新图层,主干启动不再等待它们;详情先到、后到都能正确保留。
 
-两边都可缺:投影没到、没有 stats 目标时,对应图层不出现,主图照常渲染。
-会话在本进程里活着时,host 也会直接读一次 `contextTimeline`(`ctx.sessionProjections.snapshot`),
-每轮请求构成就来自这里。
+步骤耗时从原生步骤起点、模型流和工具调用时间计算。
 
 ## 文件
 

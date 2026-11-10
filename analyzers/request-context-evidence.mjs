@@ -2,28 +2,12 @@
 // from provider-reported cache usage and never locate a token cache boundary.
 import { createHash } from 'node:crypto';
 import { evidenceCut } from './context-evidence.mjs';
-const numeric = n => typeof n === 'number' && Number.isFinite(n) && n >= 0;
+import { requestUsageEvidence } from '../plugin/trajectory-tools/lib/request-context.js';
+export { requestUsageEvidence };
 const copy = value => JSON.parse(JSON.stringify(value));
 const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
 const digest = value => createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
-
-export function requestUsageEvidence(usage) {
-  const input = numeric(usage?.inputTokens) ? usage.inputTokens : null;
-  const read = numeric(usage?.cacheReadTokens) ? usage.cacheReadTokens : null;
-  const write = numeric(usage?.cacheWriteTokens) ? usage.cacheWriteTokens : null;
-  const output = numeric(usage?.outputTokens) ? usage.outputTokens : null;
-  const aggregate = numeric(usage?.totalTokens) && output !== null && usage.totalTokens >= output ? usage.totalTokens - output : null;
-  const full = input !== null && read !== null && write !== null ? input + read + write : null;
-  const knownInput = [input, read, write].filter(n => n !== null).reduce((a, b) => a + b, 0);
-  const inconsistent = aggregate !== null && (full !== null ? aggregate !== full : knownInput > aggregate);
-  const prompt = inconsistent ? null : aggregate ?? full;
-  return { uncachedInputTokens: input, cacheReadTokens: read, cacheWriteTokens: write, outputTokens: output,
-    promptTokens: prompt, cacheRate: prompt > 0 && read !== null && read <= prompt ? read / prompt : null,
-    available: usage != null, consistent: !inconsistent,
-    denominator: inconsistent ? 'inconsistent' : aggregate !== null ? 'reported-total-minus-output' : full !== null ? 'disjoint-input-buckets' : 'unavailable',
-    raw: usage || null };
-}
 
 export function buildRequestContextIndex({ session, events, SurfaceManager, lastAssistantStreamChunk, asOfSeq = events.at(-1)?.seq ?? -1 }) {
   const cut = evidenceCut(session, events, asOfSeq);

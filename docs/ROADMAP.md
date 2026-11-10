@@ -12,7 +12,7 @@ Langfuse 已经支持生产轨迹评估和用户反馈。Trajectory Tree 的产�
 - `trajectory_inspect`、`trajectory_search`、`trajectory_read` 和 `trajectory_graph` 已提供统计、结果筛选、原文及关联读取。`trace-analysis` 和 `context-profile` 已有按问题调查的方法。 [工具字段](trajectory-fields.md) · [过程诊断方法](../skill/trace-analysis/SKILL.md)
 - 现有查询已能提供任务要求、工具反馈、文件改动和验证输出。各宿主提供的记录范围不同，Eval 按问题使用可取得的证据。 [工具字段](trajectory-fields.md) · [宿主兼容](host-compatibility.md)
 - DSH 的「开放解读」已能用宿主配置的默认模型解释会话中的失败。路径图和解读入口分别计算失败事件。对象诊断可以复用现有读取和模型调用，让同一个切点上的证据同时支撑图和解读。 [路径图投影](../plugin/analysis-view/lib/trace-build.js) · [解读入口](../plugin/analysis-view/lib/index.js)
-- 三会话试跑记录了查询负担和原文定位情况，长会话仍出现过取证输出截断。建议能否改变下一次行动，以及改动后能否通过原任务的验收，是后续要单独验证的两件事。 [三会话试跑](diagnostic-experiment-v3-results.md)
+- 三会话试跑记录了查询负担和原文定位情况，长会话仍出现过取证输出截断。建议能否改变下一次行动，以及改动后能否通过原任务的验收，是后续要单独验证的两件事。 [三会话试跑](archive/diagnostic-experiment-v3-results.md)
 
 ## 职责与证据
 
@@ -45,7 +45,7 @@ DSH 优先验证完整交互。跨宿主共享方法的输入输出和证据定�
 
 ## 建议的交付顺序
 
-下一步是全局 Eval。从单会话扩展到按工作区、时间和宿主筛选的会话集合。先对比有统一口径和覆盖说明的指标，再从异常读数进入对应会话核对证据。
+全局 Eval 已接入 DSH Web 左侧栏，并提供 Pi、Codex 和 Claude Code 的便携总览。总览按项目与时间筛选，用窗口占用、输入量或工具作为对照维度。从对照表进入样本核对记录。发布前的工作集中在证据口径、双语、宿主入口和包验收。[功能索引](INDEX.md) · [总览入口](host-entrypoints.md#eval-总览)
 
 ### 1 数据、指标与 Eval 校准
 

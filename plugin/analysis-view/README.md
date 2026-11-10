@@ -1,4 +1,4 @@
-# dsh-analysis-view
+# 轨迹树 · Trajectory Tree
 
 A DSH Web GUI plugin for browsing the current conversation's trajectory and evaluation metrics.
 DSH Web GUI 插件提供当前会话的轨迹树与评估指标。
@@ -42,18 +42,22 @@ Open **Detailed metrics** for the session overview and the optional interpretati
 - **Interpretation** — click to request an explanation from the current default model.
   It consumes tokens and includes evidence citations. It is not run until requested.
 
-### Install (permanent, not a dynamic plugin)
+### Install
 
-Dynamic plugins are session-scoped and vanish on reload; this one is installed into the web profile.
+Install into your DSH Web profile and restart DSH Web.
 
-```text
-1. npm pack                       # -> dsh-analysis-view-0.10.144.tgz
-2. add to ~/.dsh/profiles/web/package.json:
-     dependencies:  "dsh-analysis-view": "file:<abs path>/dsh-analysis-view-0.10.144.tgz"
-     dsh.profile.bundles: append "dsh-analysis-view"
-3. pnpm install                   # in ~/.dsh/profiles/web
-4. rebuild / restart `dsh web`    # so the new client module enters the bundle
+```sh
+npm pack ./plugin/analysis-view
+dsh plugin --profile web add ./dsh-analysis-view-0.10.146.tgz
 ```
+
+### Plugin settings
+
+Open **Plugins → Trajectory Tree** in DSH. Conversation search starts enabled and can be hidden from here. Open **Conversation search** from the right sidebar to search the entire session, load older matches, and jump to a turn. Search accepts space-separated keywords and quoted phrases. **Include tools** also searches tool calls and results.
+
+Set the default visibility of the context and file layers and choose an Eval tool sort by total duration, errors, or calls. Defaults apply when you reopen the view. Trajectory Tree keeps layer choices already saved for that session.
+
+When upgrading from the standalone `dsh-conversation-search` bundle, disable that bundle in the web profile to give Trajectory Tree control of the search entry.
 
 ### Path view
 
@@ -63,7 +67,7 @@ from the page. Tool parameters and results open in the detail drawer.
 
 The page appears in stages: the real trunk appears first, followed by details and other layers.
 Selecting a turn gives its details priority. Viewport, zoom and selection remain while data arrives.
-When older context data is outside the current range, use **Load earlier increments**.
+Context increments cover the available log cut. Select a turn or step to see the estimated composition and the reported request input.
 
 The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contained snapshot.
 
@@ -114,18 +118,22 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
   `Cause / Runtime 知道 / Model 收到 / Harness 反应 / 影响`,并带证据 `seq` 徽章。
 - **解读**：点击后由当前默认模型解释，消耗 token，并附证据引用。默认不调用；输出达到上限时显示「已截断」。
 
-### 安装(常驻,非动态插件)
+### 安装
 
-动态插件是会话级、刷新即失;这个是装进 web profile 的常驻插件。
+安装到 DSH 的 Web profile 后重启 `dsh web`。
 
-```text
-1. npm pack                       # 生成 dsh-analysis-view-0.10.144.tgz
-2. 在 ~/.dsh/profiles/web/package.json 中:
-     dependencies 增加 "dsh-analysis-view": "file:<绝对路径>/dsh-analysis-view-0.10.144.tgz"
-     dsh.profile.bundles 追加 "dsh-analysis-view"
-3. 在 ~/.dsh/profiles/web 下执行 pnpm install
-4. 重建/重启 `dsh web`,让新的 client 模块进入前端包
+```sh
+npm pack ./plugin/analysis-view
+dsh plugin --profile web add ./dsh-analysis-view-0.10.146.tgz
 ```
+
+### 插件设置
+
+在 DSH 的「插件」中打开「轨迹树」。右侧栏的「对话搜索」默认开启，可在这里隐藏。搜索覆盖整段会话，可以加载更早的结果并跳回对应轮次。关键词用空格分隔，短语用引号括起。「含工具」可同时查调用和结果。
+
+可设置轨迹树的上下文变化和文件图层默认是否显示，以及 Eval 默认按累计耗时、报错数或调用量排序。重新打开视图时应用默认值。轨迹树保留已为该会话保存的图层选择。
+
+从独立版 `dsh-conversation-search` 升级时，在 Web profile 中停用旧版后，右栏入口由轨迹树设置控制。
 
 ### 路径页
 
@@ -133,7 +141,7 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
 子代理和 Skill 记录。点击工具即可在详情中查看参数和结果。
 
 页面分阶段显示：先出现真实主干，再补齐正文和其他图层；选中某轮会优先加载其详情。
-补齐数据时保留位置、缩放和选中项。更早的上下文超出当前范围时，可点击「回补更早增量」。
+补齐数据时保留位置、缩放和选中项。上下文增量覆盖本次读取的日志，点击轮次或步骤可看七类估算与宿主上报的请求输入。
 
 `GET /analysis-view/trace?session=<id>` 可单独打开自包含快照。
 

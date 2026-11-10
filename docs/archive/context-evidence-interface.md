@@ -1,6 +1,6 @@
 # 上下文构成与投递证据接口：第一阶段
 
-日期：2026-10-30。当前为可执行的只读适配器与独立可视化试作，尚未注册到 DSH 的 HTTP 路由或模型工具。依据本机 SDK `0.2.2-alpha.2`；机制复核见 [注入来源研究](injection-provenance-research.md)。设计说明独立保存，不放入 README。
+日期：2026-10-30。当前为可执行的只读适配器与独立可视化试作，尚未注册到 DSH 的 HTTP 路由或模型工具。依据本机 SDK `0.2.2-alpha.2`；机制复核见 [注入来源研究](../injection-provenance-research.md)。设计说明独立保存，不放入 README。
 
 ## 1. 先约束能证明的事情
 
@@ -38,7 +38,7 @@ SDK 文件定位（均在 `@deepseek-ai` 安装目录下）：
 
 ## 3. 本次封装
 
-实现：[analyzers/context-evidence.mjs](../analyzers/context-evidence.mjs)。先提供主机内部的纯读取函数，外部工具名称与 HTTP 契约另行评审。
+实现：[analyzers/context-evidence.mjs](../../analyzers/context-evidence.mjs)。先提供主机内部的纯读取函数，外部工具名称与 HTTP 契约另行评审。
 
 ```js
 evidenceCut(session, events, asOfSeq)
@@ -96,7 +96,7 @@ observeContextEvidence(ctx, session, {
 
 ## 4. 可视化试作
 
-实现：[docs/demo/injection-study](demo/injection-study)。使用这条长对话的本地持久事件，生成六个真实切点：最终历史、后台通知、运行时快照、取消投递、一次工具结果替换前后。
+实现：[docs/demo/injection-study](../demo/injection-study)。使用这条长对话的本地持久事件，生成六个真实切点：最终历史、后台通知、运行时快照、取消投递、一次工具结果替换前后。
 
 - 左侧显示声明来源，中间显示已记录的队列或直接提交，右侧显示该切点的逻辑消息序列。
 - 每个来源仅画一条代表链；选择记录后高亮其真实路径。避免把数百条投递一起铺开。
@@ -126,7 +126,7 @@ node scripts/serve-injection-study.mjs 3087
 
 ## 6. 请求缓存回执与图内信息（后续试作）
 
-新增 [analyzers/request-context-evidence.mjs](../analyzers/request-context-evidence.mjs)：
+新增 [analyzers/request-context-evidence.mjs](../../analyzers/request-context-evidence.mjs)：
 
 ```js
 requestUsageEvidence(usage)

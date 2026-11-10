@@ -1,6 +1,7 @@
 // Host-half self-test: 按轮次分组的检索语义(大小写、轮次、prompt、scope、上限)+ 路由形状。
-// 用法:node plugin/conversation-search/self-test.mjs
-import { apply, eventText, logIdentity, searchTurns } from "./lib/index.js";
+// 用法:node plugin/analysis-view/search-test.mjs
+import { apply, logIdentity } from "./lib/index.js";
+import { eventText, searchTurns } from "./lib/conversation-search.js";
 
 let failed = 0;
 const results = [];
@@ -105,39 +106,45 @@ const ctx = {
   },
   effect(callback) { callback(); return () => {}; },
 };
-apply(ctx, {});
-check("route: 注册在 /conversation-search", captured.route !== undefined && captured.route.path === "/conversation-search", captured.route && captured.route.path);
+let searchEnabled;
+apply(ctx, { conversationSearch: { get: () => searchEnabled } });
+check("route: search uses the Analysis View route", captured.route?.path === "/analysis-view");
 
 const fakeRes = () => ({
   status: 0,
   body: "",
+  once() {},
   writeHead(status) { this.status = status; },
   end(body) { this.body = body; },
 });
 const call = async (url) => {
   const res = fakeRes();
-  await captured.route.handler({ method: "GET", url }, res);
+  await captured.route.handler({ method: "GET", url, once() {} }, res);
   return { status: res.status, json: res.body ? JSON.parse(res.body) : null };
 };
 
-const found = await call("/conversation-search/search?session=s1&q=package.json&limit=2");
-check("route: 200 且按轮返回", found.status === 200 && found.json.matchedTurns === 1 && found.json.turns.length === 1, found.json);
+const search = "/analysis-view/search";
+const found = await call(search + "?session=s1&q=package.json&limit=2");
+check("route: enabled by default and returns matches grouped by turn", found.status === 200 && found.json.matchedTurns === 1 && found.json.turns.length === 1, found.json);
 check("route: 轮里带 matches", found.json.turns[0].matches.every((match) => typeof match.seq === "number" && typeof match.text === "string" && typeof match.matchAt === "number"), found.json.turns[0].matches);
-const tools = await call("/conversation-search/search?session=s1&q=package.json&scope=all");
+const tools = await call(search + "?session=s1&q=package.json&scope=all");
 check("route: scope=all 多一处", tools.json.totalMatches === 3, tools.json.totalMatches);
-const secondPage = await call("/conversation-search/search?session=long&q=release&before=15&limit=10");
+const secondPage = await call(search + "?session=long&q=release&before=15&limit=10");
 check("route: older pages use an exclusive turn cursor", secondPage.status === 200 &&
   secondPage.json.turns[0].turn === 14 && secondPage.json.nextBefore === 5 && secondPage.json.matchedTurns === 24);
 check("route: reuses native observation without projection work and releases the lease",
   observationOptions.projectionMode === "none" && observationOptions.signal instanceof AbortSignal && released === 3);
-check("route: invalid pagination is rejected", (await call("/conversation-search/search?session=s1&q=x&before=NaN")).status === 400 &&
-  (await call("/conversation-search/search?session=s1&q=x&limit=2.5")).status === 400);
-const missing = await call("/conversation-search/search?q=x");
+check("route: invalid pagination is rejected", (await call(search + "?session=s1&q=x&before=NaN")).status === 400 &&
+  (await call(search + "?session=s1&q=x&limit=2.5")).status === 400);
+const missing = await call(search + "?q=x");
 check("route: 缺 session 返回 400", missing.status === 400, missing.json);
-const noQuery = await call("/conversation-search/search?session=s1");
+const noQuery = await call(search + "?session=s1");
 check("route: 缺 q 返回 400", noQuery.status === 400, noQuery.json);
-const unknown = await call("/conversation-search/nope");
+const unknown = await call("/analysis-view/nope?session=s1");
 check("route: 未知路径返回 404", unknown.status === 404, unknown.json);
+searchEnabled = false;
+check("route: hiding the pane disables new requests immediately",
+  (await call(search + "?session=s1&q=package.json")).status === 404 && released === 3);
 
 for (const line of results) console.log(line);
 console.log(failed === 0 ? "\nALL PASS (" + results.length + " checks)" : "\n" + failed + " FAILED");

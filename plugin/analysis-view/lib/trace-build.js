@@ -1,5 +1,6 @@
 // 会话事件 → 「执行路径」页面需要的数据。判定与聚合都是确定性的,不调模型。
 import { createHash } from 'node:crypto';
+import { attributeToolFailure, isShellTool } from './trace/shared/tool-attribution.mjs';
 
 // The demo uses execution history, not the current compacted message surface.
 // A replacement result belongs to an old call: counting it again fabricates duration.
@@ -30,6 +31,20 @@ const argumentTarget = args => {
 };
 const argumentText = args => typeof args === 'string' ? args : JSON.stringify(args ?? {});
 const codeMode = name => /^run_?code$/i.test(name || '');
+function shellCommand(args) {
+  try {
+    const value = typeof args === 'string' ? JSON.parse(args) : args;
+    return value?.command ?? value?.cmd;
+  } catch { return undefined; }
+}
+
+function attachFailure(call, data, output, command) {
+  if (call.status !== 'error') return;
+  call.attribution = attributeToolFailure({ status: call.status, tool: call.name, output, error: data.error,
+    exitCode: data.meta?.exitCode ?? data.message?.details?.exitCode,
+    stderr: data.meta?.stderr ?? data.message?.details?.stderr,
+    interrupted: data.meta?.interrupted ?? data.message?.details?.interrupted, command });
+}
 
 export function projectSession(rows, source = {}) {
   const header = rows.find(e => e.type === 'session');
@@ -38,6 +53,7 @@ export function projectSession(rows, source = {}) {
   const events = rows.filter(e => Number.isFinite(e.seq)).sort((a, b) => a.seq - b.seq);
   const turns = [], turnIndex = new Map(), steps = new Map(), calls = new Map();
   const roots = new Map(), dispatches = new Map(), hasChildren = new Set();
+  const shellCommands = new WeakMap();
   const diagnostics = { replacementEventsExcluded: 0, unmatchedResults: 0, duplicateResults: 0, unresolvedCalls: 0 };
   let currentTurn;
   const getStep = (turn, step) => steps.get(key(turn, step, 'step'));
@@ -64,10 +80,12 @@ export function projectSession(rows, source = {}) {
       }
       hasChildren.add(d.rootCallId); hasChildren.add(d.parentCallId);
       if (e.type === 'tool/ptc-dispatch') {
+        const output = textOf(d.content);
         Object.assign(call, { seq: e.seq, name: d.name, signature: argumentSignature(d.name, d.arguments),
           target: argumentTarget(d.arguments), args: excerpt(argumentText(d.arguments), 6000), end: e.time,
           resultSeq: e.seq, status: d.isError || d.error ? 'error' : 'returned', error: d.error || null,
-          result: excerpt(textOf(d.content), 8000) });
+          result: excerpt(output, 8000) });
+        attachFailure(call, d, output, isShellTool(call.name) ? shellCommand(d.arguments) : undefined);
       }
       continue;
     }
@@ -100,6 +118,7 @@ export function projectSession(rows, source = {}) {
       const id = key(d.turn, d.step, d.callId);
       if (calls.has(id)) throw new Error(`Duplicate call at seq ${e.seq}`);
       const call = { id: d.callId, seq: e.seq, name: d.name, signature: argumentSignature(d.name, d.arguments), target: argumentTarget(d.arguments), args: excerpt(argumentText(d.arguments), 2200), start: e.time, end: null, resultSeq: null, status: 'unknown', error: null, result: null };
+      if (isShellTool(d.name)) shellCommands.set(call, shellCommand(d.arguments));
       step.calls.push(call); calls.set(id, call); roots.set(d.callId, { call, step });
     } else if (e.type === 'tool/result') {
       const id = d.message?.toolCallId ?? d.message?.source?.callId ?? d.callId;
@@ -109,7 +128,9 @@ export function projectSession(rows, source = {}) {
       if (e.time < call.start) throw new Error(`Result predates call ${id}`);
       call.end = e.time; call.resultSeq = e.seq;
       call.status = d.error || d.message?.isError ? 'error' : 'returned';
-      call.error = d.error || null; call.result = excerpt(textOf(d.message?.content), 2400);
+      const output = textOf(d.message?.content);
+      call.error = d.error || null; call.result = excerpt(output, 2400);
+      attachFailure(call, d, output, shellCommands.get(call));
     } else if (e.type === 'llm/retry') {
       const step = getStep(d.turn, d.step);
       if (step) step.retries.push({ seq: e.seq, time: e.time, delayMs: d.delayMs, failure: d.failure });
@@ -154,17 +175,20 @@ const reasonNames = {FS_NOT_OBSERVED:'目标文件尚未读取',FS_STALE_VERSION
 const unique = values => [...new Set(values.filter(Boolean))];
 const conditionOf = c => c.error?.code || (/timed out after \d+ms/.test(c.result?.text || '') ? 'TOOL_TIMEOUT' : 'TOOL_ERROR:' + c.name);
 const intersects = (a,b) => a.some(v=>b.includes(v));
+const invocationSeq = call => call.inner ? call.startSeq : call.seq;
 
 export function analyzeTraceOverview(session) {
   const episodes=[],facts=[];
   for(const turn of session.turns){
-    const calls=turn.steps.flatMap(s=>s.calls).sort((a,b)=>a.seq-b.seq),batches=[];
-  // 同签名后续成功是热点:每个失败调用原来都要线性扫一遍全部调用,先按签名建索引。
-  const successBySignature=new Map();
-  for(const c of calls) if(c.status==='returned'&&c.signature){
-    const bucket=successBySignature.get(c.signature);
-    if(bucket===undefined) successBySignature.set(c.signature,[c]); else bucket.push(c);
-  }
+    // A PTC child's display anchor is its result; follow-ups require its
+    // actual invocation to start after the error, including for parallel calls.
+    const calls=turn.steps.flatMap(s=>s.calls).filter(c=>invocationSeq(c)!=null)
+      .sort((a,b)=>invocationSeq(a)-invocationSeq(b)),batches=[];
+    const startByAnchor=new Map(calls.map(c=>[c.seq,invocationSeq(c)])),successBySignature=new Map();
+    for(const c of calls) if(c.status==='returned'&&c.signature){
+      const bucket=successBySignature.get(c.signature);
+      if(bucket===undefined) successBySignature.set(c.signature,[c]); else bucket.push(c);
+    }
     for(const step of turn.steps){
       const byCondition=new Map();
       for(const call of step.calls.filter(c=>c.status==='error')){
@@ -172,8 +196,7 @@ export function analyzeTraceOverview(session) {
         const key=condition+'|'+(serviceConditions.has(condition)?'shared-service':family)+(condition.startsWith('TOOL_ERROR:')?'|'+(call.signature||call.seq):'');
         if(!byCondition.has(key))byCondition.set(key,{key,condition,family,steps:[step.number],start:step.start,end:step.end,failed:[],pairs:[]});
         const batch=byCondition.get(key);batch.failed.push(call);
-        const bucket=call.signature===undefined?undefined:successBySignature.get(call.signature);
-      const next=bucket===undefined?undefined:bucket.find(n=>n.seq>call.resultSeq);
+        const next=successBySignature.get(call.signature)?.find(c=>invocationSeq(c)>call.resultSeq);
         if(next)batch.pairs.push({failedSeq:call.seq,successSeq:next.seq,successTime:next.end,successStart:next.start});
       }
       batches.push(...byCondition.values());
@@ -199,10 +222,14 @@ export function analyzeTraceOverview(session) {
       const resolvedAt=complete?Math.max(...e.pairs.map(p=>p.successTime)):null;
       const readProof=e.failed.map(c=>{
         const pair=e.pairs.find(p=>p.failedSeq===c.seq);
-        return pair&&c.target?calls.find(r=>reads.has(r.name)&&r.status==='returned'&&r.target===c.target&&r.seq>c.resultSeq&&r.end<=pair.successStart):null;
+        return pair&&c.target?calls.find(r=>reads.has(r.name)&&r.status==='returned'&&r.target===c.target
+          &&invocationSeq(r)>c.resultSeq&&r.resultSeq<startByAnchor.get(pair.successSeq)):null;
       });
       const readConfirmed=complete&&readProof.every(Boolean)&&e.failed.every(c=>c.target);
-      const readCalls=readConfirmed?calls.filter(c=>reads.has(c.name)&&c.status==='returned'&&e.targets.includes(c.target)&&c.seq>Math.min(...e.failed.map(c=>c.resultSeq))&&c.end<=Math.max(...e.pairs.map(p=>p.successStart))).map(c=>c.seq):[];
+      const earliestError=readConfirmed?Math.min(...e.failed.map(c=>c.resultSeq)):null;
+      const latestRetry=readConfirmed?Math.max(...e.pairs.map(p=>startByAnchor.get(p.successSeq))):null;
+      const readCalls=readConfirmed?calls.filter(c=>reads.has(c.name)&&c.status==='returned'&&e.targets.includes(c.target)
+        &&invocationSeq(c)>earliestError&&c.resultSeq<latestRetry).map(c=>c.seq):[];
       const modification=e.family==='file-change',operationCount=unique(e.failed.map(c=>c.signature||String(c.seq))).length,successReturnCount=unique(e.pairs.map(p=>p.successSeq)).length;
       const firstLabel=modification?`${operationCount} 处修改受阻`:`${e.failed.length} 次调用报错`;
       const sequence=[{kind:'failure',label:firstLabel,time:firstError,seqs:e.failed.map(c=>c.seq)}];

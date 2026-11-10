@@ -2,6 +2,7 @@
 // 通过 /analysis-view 的只读路由给出。
 
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { readFileSync } from "node:fs";
 import { gzip, gunzip } from "node:zlib";
 import { promisify } from "node:util";
@@ -13,7 +14,12 @@ import { TraceResources, abortable, abortError } from "./trace-resources.js";
 import { summarizeTrajectoryEval } from "./eval-metrics.js";
 import { createRuntimeMetrics, readRuntimeEvidence } from "./eval-evidence.js";
 import { buildEvalData, diagnosisSource, EVAL_DETAIL_TURNS } from "./eval/data.mjs";
+import { evalPowerShellEvidence } from "./eval/pwsh-evidence.mjs";
 import { editorMarkup, renderEvalPage } from "./eval/render.mjs";
+import { renderOverviewPage } from "./eval/overview/render.mjs";
+import { OverviewService } from "./eval/overview/service.mjs";
+import { parseSearchParams, searchTurns } from "./conversation-search.js";
+import { viewSettings } from "./settings.js";
 import { hostCapabilities } from './trace/shared/host-capabilities.mjs';
 import { readTracePresentation, renderTraceDocument, traceAssetVersion } from './trace/presentation.mjs';
 
@@ -658,7 +664,7 @@ function evidenceLine(e) {
 /** A log identity so a (session, seq) citation can be resolved to one exact log revision. */
 export function logIdentity(sessionId, events) {
   const first = (events || []).find((e) => e && typeof e.seq === "number");
-  const last = [...(events || [])].reverse().find((e) => e && typeof e.seq === "number");
+  const last = (events || []).findLast((e) => e && typeof e.seq === "number");
   const parts = [sessionId, first ? first.seq : -1, first ? first.type : "", first ? first.time : 0].join("|");
   return { id: createHash("sha256").update(parts).digest("hex").slice(0, 12), events: (events || []).length, minSeq: first ? first.seq : null, maxSeq: last ? last.seq : null };
 }
@@ -746,7 +752,10 @@ function classifyByName(ctx) {
   };
 }
 
-export function apply(ctx) {
+const traceViewDefaults = settings => ({ context: settings.traceContext, files: settings.traceFiles });
+const tracePageVersion = (assets, { context, files }) => assets + ":layers:" + Number(context) + Number(files);
+
+export function apply(ctx, config) {
   const webServer = ctx.get("webServer");
   if (webServer === undefined) return;
   const traceResources = new TraceResources();
@@ -755,7 +764,11 @@ export function apply(ctx) {
     observe: (id, signal) => observeEvents(ctx, id, signal), dispose: disposeObservation, timeout: withAbortTimeout,
     resources: traceResources,
   });
-  ctx.effect(() => () => { traceStages.dispose(); traceResources.dispose(); }, "analysis-view: trace resources");
+  const overview = new OverviewService(ctx, {
+    observe: (id, signal) => observeEvents(ctx, id, signal), dispose: disposeObservation, timeout: withAbortTimeout,
+    queue: traceResources.main,
+  });
+  ctx.effect(() => () => { overview.dispose(); traceStages.dispose(); traceResources.dispose(); }, "analysis-view: trace resources");
   // 面板每次切回「分析」都会拉一次;同一会话 2 秒内的重复请求复用上一次结果。
   const digestCache = new Map();
   const DIGEST_TTL_MS = 2000;
@@ -774,6 +787,28 @@ export function apply(ctx) {
       try {
         const url = new URL(req.url || "/", "http://localhost");
         if (req.method !== "GET") return send(404, { error: "not found" });
+        if (url.pathname === ROUTE_PATH + "/overview" || url.pathname === ROUTE_PATH + "/overview-data") {
+          const connection = ctx.get("connection");
+          if (typeof connection?.admit !== "function") return send(503, { error: "Web authorization unavailable" });
+          const admission = connection.admit(req);
+          if (admission.peer?.principal.kind !== "owner") return send(admission.rejection ?? 403, { error: "Web access required" });
+          if (url.pathname.endsWith("/overview")) {
+            await sendHtml(res, req, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
+              "content-security-policy": "frame-ancestors 'self'" }, { html: renderOverviewPage() });
+            return;
+          }
+          const scope = overview.scope();
+          if (!scope) return send(503, { error: "workspace registry unavailable" });
+          res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store",
+            "x-content-type-options": "nosniff" });
+          const signal = AbortSignal.any([disconnected.signal, admission.peer.signal]);
+          for await (const row of overview.stream(scope, signal)) {
+            signal.throwIfAborted();
+            if (!res.write(JSON.stringify(row) + "\n")) await once(res, "drain", { signal });
+          }
+          res.end();
+          return;
+        }
         if (url.pathname.startsWith(ROUTE_PATH + "/trace/fonts/")) {
           const name = url.pathname.slice((ROUTE_PATH + "/trace/fonts/").length);
           if (!Object.hasOwn(TRACE_FONTS, name)) return send(404, { error: "not found" });
@@ -781,8 +816,23 @@ export function apply(ctx) {
           res.end(readFileSync(new URL("./trace/fonts/" + name, import.meta.url)));
           return;
         }
+        const settings = viewSettings(config);
+        const isSearch = url.pathname === ROUTE_PATH + "/search";
+        if (isSearch && !settings.conversationSearch) return send(404, { error: "not found" });
         const sessionId = url.searchParams.get("session");
         if (!sessionId) return send(400, { error: "missing session" });
+        if (isSearch) {
+          const options = parseSearchParams(url.searchParams);
+          if (options.error) return send(400, { error: options.error });
+          const result = await withAbortTimeout(async signal => {
+            const observation = await observeEvents(ctx, sessionId, signal);
+            try {
+              const events = observation.events || [];
+              return { log: logIdentity(sessionId, events), ...searchTurns(events, options.query, options) };
+            } finally { disposeObservation(observation); }
+          }, 5000, disconnected.signal);
+          return send(200, { ok: true, session: sessionId, query: options.query, scope: options.scope, ...result });
+        }
         if (url.pathname === ROUTE_PATH + "/eval") {
           const page = url.searchParams.get("format") === "page";
           const viewer = Symbol("eval");
@@ -792,8 +842,9 @@ export function apply(ctx) {
               const evidence = await readRuntimeEvidence(ctx, entry, events, stop);
               const session = entry.payload.sessions[0];
               if (!page) return summarizeTrajectoryEval(session, evidence);
-              const data = buildEvalData(session, createRuntimeMetrics(session, evidence), { turnLimit: EVAL_DETAIL_TURNS });
-              return renderEvalPage(data, { integrated: true, mode: 'dsh', diagnosis: diagnosisSource(session, data) });
+              const attributions = await evalPowerShellEvidence(session, events, stop);
+              const data = buildEvalData(session, createRuntimeMetrics(session, evidence), { turnLimit: EVAL_DETAIL_TURNS, attributions });
+              return renderEvalPage(data, { integrated: true, mode: 'dsh', diagnosis: diagnosisSource(session, data), toolSort: settings.evalToolSort });
             }, signal), 8000, disconnected.signal);
             if (page) {
               await sendHtml(res, req, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, { html: evaluation });
@@ -803,39 +854,45 @@ export function apply(ctx) {
           } finally { traceStages.release(entry, viewer); }
         }
         if (url.pathname === ROUTE_PATH + "/trace" && url.searchParams.get("staged") === "1") {
-          const html = renderTracePage({ traceLoad: { sessionId } });
+          const assets = readTraceAssets(), defaults = traceViewDefaults(settings);
+          const html = renderTracePage({ traceLoad: { sessionId, assets: tracePageVersion(assets.version, defaults) }, traceViewDefaults: defaults }, assets);
           await sendHtml(res, req, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, { html });
           return;
         }
         if (url.pathname === ROUTE_PATH + "/trace-data") {
           const stage = url.searchParams.get("stage") || "core";
-          if (!["core", "details", "actors", "turn", "history", "release"].includes(stage)) return send(400, { error: "invalid stage" });
+          if (!["core", "context", "details", "actors", "turn", "release"].includes(stage)) return send(400, { error: "invalid stage" });
           const viewer = url.searchParams.get("view")?.slice(0, 128) || "anonymous";
           const entry = stage === "core" ? await traceStages.load(sessionId, readTraceAssets().version, disconnected.signal, viewer)
             : traceStages.cut(sessionId, url.searchParams.get("cut"));
           if (stage === "release") { if (entry) traceStages.release(entry, viewer); return send(200, { released: true }); }
           if (!entry) return send(409, { error: "trace cut expired" });
           traceStages.view(entry, viewer);
-          const key = stage === "turn" ? stage + ":" + url.searchParams.get("turn") : stage;
+          const withContext = stage !== "details" || url.searchParams.get("context") !== "loaded";
+          const key = stage === "turn" ? stage + ":" + url.searchParams.get("turn") : withContext ? stage : "details:without-context";
           let body = entry.bodies.get(key);
           if (!body) {
             body = (async () => {
-              const payload = await traceStages.stage(entry, stage, Number(url.searchParams.get("turn")));
+              let payload = await traceStages.stage(entry, stage, Number(url.searchParams.get("turn")));
               if (!payload) return null;
+              if (!withContext) {
+                const { requests, boundaries, current, route, ...context } = payload.context;
+                payload = { ...payload, context };
+              }
               return traceResources.encoding.run(async () => {
                 const text = JSON.stringify({ sessionId, cut: entry.token, payload });
                 const gzip = await gzipAsync(Buffer.from(text), { level: 1 });
-                if (stage !== "turn" && stage !== "history") {
+                if (stage !== "turn") {
                   entry.encodedBytes += gzip.length;
                   if (stage === "core") entry.core = null;
                   traceResources.update(entry);
                 }
                 return { gzip };
-              }, entry.controller.signal, stage === "core" || stage === "turn" ? 0 : 1);
+              }, entry.controller.signal, stage === "core" || stage === "context" || stage === "turn" ? 0 : 1);
             })();
             // Turn responses are small and transient; don't retain a second
             // serialized copy of every round in a very long conversation.
-            if (stage !== "turn" && stage !== "history") entry.bodies.set(key, body);
+            if (stage !== "turn") entry.bodies.set(key, body);
           }
           const encoded = await body;
           if (!encoded) return send(404, { error: "turn not found" });
@@ -851,26 +908,28 @@ export function apply(ctx) {
         if (url.pathname === ROUTE_PATH + "/trace-version" && url.searchParams.get("staged") === "1") {
           const assets = readTraceAssets().version;
           const entry = await traceStages.current(sessionId, assets);
-          return send(200, { version: entry?.version ?? null, assets });
+          return send(200, { version: entry?.version ?? null, assets: tracePageVersion(assets, traceViewDefaults(settings)) });
         }
         if (url.pathname === ROUTE_PATH + "/trace" || url.pathname === ROUTE_PATH + "/trace-version") {
           const started = Date.now();
           const sendTiming = (extra) => Object.entries(extra).map(([name, ms]) => name + ";dur=" + ms).join(", ");
           const assets = readTraceAssets();
+          const defaults = traceViewDefaults(settings);
+          const pageVersion = tracePageVersion(assets.version, defaults);
           const source = await withAbortTimeout(signal => traceSource(ctx, sessionId, signal), 1500).catch(() => null);
-          const cached = await traceCache.get(sessionId, source, assets.version);
+          const cached = await traceCache.get(sessionId, source, pageVersion);
           if (url.pathname.endsWith("/trace-version")) return send(200, { version: cached?.version ?? null });
-          const entry = cached || await traceCache.build(sessionId, source, assets.version, async () => {
+          const entry = cached || await traceCache.build(sessionId, source, pageVersion, async () => {
             const viewer = "html:" + Date.now() + ":" + Math.random();
             const snapshot = await traceStages.load(sessionId, assets.version, undefined, viewer);
             try {
               const details = await traceStages.stage(snapshot, "details");
               const actors = await traceStages.stage(snapshot, "actors");
               const data = structuredClone({ ...details, context: { ...details.context, ...actors.context }, traceVersion: snapshot.version });
-              const html = renderTracePage(shrinkTracePayload(data), assets);
+              const html = renderTracePage({ ...shrinkTracePayload(data), traceViewDefaults: defaults }, assets);
               const entry = { html, etag: 'W/"' + createHash("sha1").update(html).digest("hex").slice(0, 16) + '"', gz: null,
                 resourceKey: "html:" + sessionId + ":" + snapshot.version, encodedBytes: 0, retainCompressed: true, gzipLevel: 1,
-                source: snapshot.source, assets: assets.version, children: new Map(snapshot.children), version: snapshot.version,
+                source: snapshot.source, assets: pageVersion, children: new Map(snapshot.children), version: snapshot.version,
                 retryAt: snapshot.retryAt, timing: snapshot.timing };
               entry.changed = () => traceResources.update(entry);
               return entry;
@@ -908,6 +967,7 @@ export function apply(ctx) {
         return send(404, { error: "not found" });
       } catch (error) {
         if (res.destroyed || res.writableEnded) return;
+        if (res.headersSent) { res.end(); return; }
         return send(error?.name === "AbortError" || error?.message === "trace cut expired" ? 409 : 500, { error: String((error && error.message) || error) });
       }
     }

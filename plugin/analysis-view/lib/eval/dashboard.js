@@ -12,7 +12,8 @@
   let usageTurn = null;
   const usagePair = [];
   let usageSlot = 0;
-  const state = { turn: null, sort: 'time', allTools: false, tool: null };
+  const defaultSort = globalThis.__trajectoryEvalToolSort;
+  const state = { turn: null, sort: ['calls', 'errors'].includes(defaultSort) ? defaultSort : 'time', allTools: false, tool: null };
   const standardOrder = ['tool-comparison', 'tool-errors', 'turn-usage'];
   const views = {
     classic: { title: t('运行评估', 'Session evaluation'), sections: standardOrder },
@@ -63,7 +64,11 @@
     ABORTED: t('执行中止', 'Aborted'), ABORTED_BEFORE_DISPATCH: t('调度前取消', 'Cancelled before dispatch'),
     TOOL_OUTCOME_UNKNOWN: t('宿主报告结果未知', 'Host reports an unknown outcome'), TOOL_ERROR: t('无细分错误码', 'Unspecified error code'),
   };
-  const errorName = code => html(Object.hasOwn(errorNames, code) ? errorNames[code] : code);
+  const errorName = code => {
+    const label = data.failureLabels && Object.hasOwn(data.failureLabels, code) ? data.failureLabels[code] : null;
+    return html(label ? t(...label) : /^EXIT_-?\d+$/.test(code) ? t('命令退出', 'Command exit')
+      : Object.hasOwn(errorNames, code) ? errorNames[code] : code);
+  };
   const errorCategories = new Map([
     [t('文件修改保护', 'File edit protection'), ['FS_NOT_OBSERVED', 'FS_STALE_VERSION']],
     [t('文件与编辑目标', 'Files and edit targets'), ['FS_NOT_FOUND', 'FS_NOT_TEXT', 'FS_EDIT_NOT_FOUND']],
@@ -78,7 +83,8 @@
   function groupErrors(conditions) {
     const groups = new Map();
     for (const condition of conditions) {
-      const label = errorCategories.get(condition.code) ?? t('其他工具报错', 'Other tool errors');
+      const category = data.failureCategories?.[condition.category];
+      const label = category ? t(...category) : errorCategories.get(condition.code) ?? t('其他工具报错', 'Other tool errors');
       if (!groups.has(label)) groups.set(label, { label, calls: 0, matched: 0, conditions: [] });
       const group = groups.get(label);
       group.calls += condition.calls;
@@ -234,7 +240,9 @@
       return `<div class="error-pair">
         <div class="pair-marker" aria-hidden="true"></div>
         <div>${t(`第 ${sample.turn} 轮报错调用`, `Failed call in turn ${sample.turn}`)} ${record(sample.failed)}${window.__diagnosisDemoAsk
-          ? ` <button type="button" class="text-action" data-diagnosis-failure="${sample.failed}">${t('问这次', 'Ask about this call')}</button>` : ''}</div>
+          ? ` <button type="button" class="text-action" data-diagnosis-failure="${sample.failed}"${sample.powerShell ? ' data-powershell' : ''}>${t('问这次', 'Ask about this call')}</button>` : ''}
+          ${sample.attribution ? `<p class="error-attribution">${html(window.__trajectoryFailureText(sample.attribution))}
+            ${sample.result != null && sample.result !== sample.failed ? record(sample.result) : ''}</p>` : ''}</div>
         ${sample.read != null ? `<div class="pair-marker read" aria-hidden="true"></div>
           <div>${t('读取目标文件', 'Target file read')} ${record(sample.read)}</div>` : ''}
         <div class="pair-marker ${returned ? 'returned' : 'unknown'}" aria-hidden="true"></div>
@@ -296,12 +304,13 @@
     diagnosisAction($('error-example'), t('问这组报错', 'Ask about these errors'), { kind: 'group', turn: state.turn, tool, group });
   }
 
-  function renderErrors({ tools, outcomes }) {
+  function renderErrors({ tools, outcomes, attributionCoverage }) {
     const errorTools = tools.filter(tool => tool.errorConditions?.length)
       .sort((a, b) => b.errors - a.errors || a.name.localeCompare(b.name));
     const columns = groupErrors(errorTools.flatMap(tool => tool.errorConditions));
     const top = columns[0];
-    if (top) $('error-caption').innerHTML = `<strong>${ratio(top.calls, outcomes.errors)}</strong> ${t(
+    if (outcomes.errors && attributionCoverage) $('error-caption').textContent = globalThis.__trajectoryFailureCoverageText(attributionCoverage);
+    else if (top) $('error-caption').innerHTML = `<strong>${ratio(top.calls, outcomes.errors)}</strong> ${t(
       `次工具报错集中在「<strong>${top.label}</strong>」`, `tool errors fall under <strong>${top.label}</strong>`,
     )}`;
     else $('error-caption').textContent = outcomes.errors
@@ -674,7 +683,7 @@
   $('error-example').addEventListener('click', event => {
     const sample = event.target.closest('[data-diagnosis-failure]');
     if (sample) {
-      window.__diagnosisDemoAsk?.({ kind: 'failure', seq: Number(sample.dataset.diagnosisFailure) }, sample);
+      window.__diagnosisDemoAsk?.({ kind: 'failure', seq: Number(sample.dataset.diagnosisFailure), powerShell: sample.hasAttribute('data-powershell') }, sample);
       return;
     }
     const button = event.target.closest('button[data-condition]');

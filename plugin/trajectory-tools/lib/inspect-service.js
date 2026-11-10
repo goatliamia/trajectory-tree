@@ -4,6 +4,7 @@ import { linkedPlan, linkedRecord } from './linked-read.js';
 import { inspectionReportData, reportPage } from './report-data.js';
 import { validateIoOutcome } from './io-outcome.js';
 import { MAX_IO_SELECTION } from './inspection-io.js';
+import { readRequestContext } from './request-context.js';
 
 const GROUPS = { overview: ['turn', 'tool', 'file'], latency: ['turn'], cost: ['turn'], io: ['tool', 'file'], repeats: [], context: [] };
 const SORTS = { overview: ['time', 'wall', 'input', 'output', 'returned', 'count'], latency: ['time', 'wall', 'input', 'output'], cost: ['time', 'wall', 'input', 'output'], io: ['time', 'returned', 'count'], repeats: ['time', 'count'], context: ['time', 'change'] };
@@ -77,7 +78,8 @@ export class InspectionService {
       let projections;
       try { projections = await readOfficialProjections(this.ctx, loaded, signal); }
       catch (error) { if (signal?.aborted) throw error; projections = { values: {}, source: 'unavailable', error: String(error.message) }; }
-      const index = buildInspection(loaded, session, { projections });
+      const contextSeries = await readRequestContext(loaded.events, signal, this.ctx.get?.('sessions')?.messageProjections);
+      const index = buildInspection(loaded, session, { projections, contextSeries });
       index.log = this.identify?.(session, loaded.events) || null;
       signal?.throwIfAborted(); if (this.closed) throw Error('Inspection service disposed');
       const bytes = JSON.stringify(index).length * 2;

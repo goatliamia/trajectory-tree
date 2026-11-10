@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { win32, posix } from 'node:path';
+import { omitCodexImages, omitImageLabels } from './codex-images.mjs';
+import { attributeToolFailure, commandPowerShellEdition } from '../plugin/trajectory-tools/lib/tool-attribution.js';
 
 const keys = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
 const empty = () => Object.fromEntries(keys.map(k => [k, 0]));
@@ -29,7 +31,7 @@ const absolute = (path, cwd) => /^[A-Za-z]:[\\/]|^\\\\/.test(path) ? win32.norma
 // A deliberately explicit character heuristic. These are visible-text estimates,
 // never provider token counts or a claim about the full dispatched request.
 export function estimateVisibleTokens(text) {
-  const s = String(text ?? ''), wide = (s.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+  const s = omitImageLabels(String(text ?? '')), wide = (s.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
   return Math.ceil(wide + (s.length - wide) / 4);
 }
 export function userText(item) {
@@ -127,7 +129,7 @@ export function parseCodexRollout(text, { capturedAt, threadId, skillMaterials =
   const cutoff = capturedAt ? Date.parse(capturedAt) : Infinity, rows = [], malformed = [];
   for (const [index, line] of String(text).split(/\r?\n/).entries()) {
     if (!line.trim()) continue;
-    try { const row = JSON.parse(line); if (Date.parse(row.timestamp) <= cutoff) rows.push({ ...row, ordinal: index + 1 }); } catch { malformed.push(index + 1); }
+    try { const row = JSON.parse(omitCodexImages(line)); if (Date.parse(row.timestamp) <= cutoff) rows.push({ ...row, ordinal: index + 1 }); } catch { malformed.push(index + 1); }
   }
   const meta = rows.find(r => r.type === 'session_meta')?.payload;
   if (threadId && meta && meta.id !== threadId) throw new Error('Rollout thread ID differs from official snapshot');
@@ -141,15 +143,37 @@ export function parseCodexRollout(text, { capturedAt, threadId, skillMaterials =
     const owningContext = rows.findLast(entry => entry.ordinal <= row.ordinal && entry.type === 'turn_context');
     collaboration.push({ id: p.id || p.call_id, callId: p.call_id, tool: p.name, taskName: args.task_name ?? args.target ?? null, taskPath: returned.task_name ?? null, turnId: p.internal_chat_message_metadata_passthrough?.turn_id ?? owningContext?.payload?.turn_id, start: Date.parse(row.timestamp), end: result ? Date.parse(result.timestamp) : null, source: 'local-rollout', receiverThreadIds: [], childHistoryAvailable: false });
   }
+  const capacities = new Map(), turnModels = new Map();
   let state = empty(), turnId = null, skillCalls = new Set(), latestUsage = null, window = null;
   const save = row => compositions.push({ time: Date.parse(row.timestamp), ordinal: row.ordinal, turnId, ...state });
+  const recordCapacity = (id, value, line) => {
+    if (id && Number.isSafeInteger(value) && value > 0) capacities.set(id, [value, line]);
+  };
   for (const row of rows) {
     const p = row.payload || {};
-    if (row.type === 'turn_context') { turnId = p.turn_id; contexts.push({ turnId, time: Date.parse(row.timestamp), model: p.model, reasoningEffort: p.effort }); }
-    if (row.type === 'event_msg' && p.type === 'task_started') { turnId = p.turn_id; window = p.model_context_window ?? window; }
+    if (row.type === 'turn_context') {
+      turnId = p.turn_id;
+      if (turnModels.has(turnId) && turnModels.get(turnId) !== p.model) capacities.delete(turnId);
+      turnModels.set(turnId, p.model);
+      contexts.push({ turnId, time: Date.parse(row.timestamp), model: p.model, reasoningEffort: p.effort });
+    }
+    if (row.type === 'event_msg' && p.type === 'task_started') {
+      turnId = p.turn_id;
+      recordCapacity(turnId, p.model_context_window, row.ordinal);
+      window = p.model_context_window ?? window;
+    }
     if (row.type === 'event_msg' && p.type === 'item_completed' && p.item?.id) completed.set(p.item.id, { time: Date.parse(row.timestamp), start: p.started_at_ms ?? null, end: p.completed_at_ms ?? null, turnId: p.turn_id, ordinal: row.ordinal });
-    if (row.type === 'token_usage_record') { usage.push({ time: Date.parse(row.timestamp), turnId: p.turn_id ?? turnId, responseId: p.response_id, usage: p.usage, line: row.ordinal, source: 'local-rollout' }); latestUsage = p.usage; }
-    if (row.type === 'event_msg' && p.type === 'token_count' && p.info) { window = p.info.model_context_window ?? window; latestUsage = p.info.last_token_usage ?? latestUsage; }
+    if (row.type === 'token_usage_record') {
+      const owner = p.turn_id ?? turnId, capacity = capacities.get(owner), model = turnModels.get(owner);
+      usage.push({ time: Date.parse(row.timestamp), turnId: owner, responseId: p.response_id, usage: p.usage, line: row.ordinal,
+        source: 'local-rollout', ...(capacity ? { window: capacity } : {}), ...(model ? { model } : {}) });
+      latestUsage = p.usage;
+    }
+    if (row.type === 'event_msg' && p.type === 'token_count' && p.info) {
+      recordCapacity(turnId, p.info.model_context_window, row.ordinal);
+      window = p.info.model_context_window ?? window;
+      latestUsage = p.info.last_token_usage ?? latestUsage;
+    }
     if (row.type === 'response_item') { compositionItem(p, state, skillCalls, skillMaterials); save(row); if (p.type === 'additional_tools') declarations.push({ line: row.ordinal, time: Date.parse(row.timestamp), turnId, tools: p.tools, source: 'local-rollout' }); }
     if (row.type === 'compacted') {
       const before = { ...state }; state = empty(); skillCalls = new Set();
@@ -211,10 +235,19 @@ export function adaptCodexThread(snapshot, options = {}) {
       const args = item.type === 'commandExecution' ? { command: commandBody(item.command), cwd: item.cwd, commandActions: item.commandActions }
         : ['mcpToolCall', 'dynamicToolCall'].includes(item.type) ? item.arguments : item.type === 'fileChange' ? { changes: item.changes } : item;
       const result = item.type === 'commandExecution' ? item.aggregatedOutput : item.type === 'mcpToolCall' ? flat(item.result?.content) : item.type === 'dynamicToolCall' ? flat(item.contentItems) : item.type === 'fileChange' ? (item.changes || []).map(c => c.diff || '').join('\n') : JSON.stringify(item.results || item.states || item.agentsStates || '');
-      const names = { read: 'read', write: 'apply_patch', run: 'pwsh', query: 'web_search', other: ['mcpToolCall', 'dynamicToolCall'].includes(item.type) ? [item.server || item.namespace, item.tool].filter(Boolean).join('/') : item.type };
+      const nativeName = ['mcpToolCall', 'dynamicToolCall'].includes(item.type)
+        ? [item.server || item.namespace, item.tool].filter(Boolean).join('/') : item.type;
+      const name = ({ read: 'read', write: 'apply_patch', run: 'pwsh' })[cls.kind]
+        ?? (item.type === 'webSearch' ? 'web_search' : nativeName);
       const target = item.changes?.[0]?.path || cls.reads?.[0]?.path || item.path || null;
-      const call = { id: item.id, seq: itemSeq, name: names[cls.kind], nativeName: ['mcpToolCall', 'dynamicToolCall'].includes(item.type) ? [item.server || item.namespace, item.tool].filter(Boolean).join('/') : item.type, classification: cls, signature: hash(JSON.stringify([item.type, args])), target, args: excerpt(JSON.stringify(args), 22000), start: a, end: state === 'unknown' ? null : b, resultSeq, status: state, error: state === 'error' ? { code: item.exitCode != null ? 'EXIT_' + item.exitCode : 'TOOL_ERROR', message: short(item.error || result, 180) } : null, result: excerpt(result, 18000), durationMs: Number.isFinite(item.durationMs) && item.durationMs >= 0 ? item.durationMs : precise ? b - a : null, timingSource: step.timingSource, source: cls.source };
+      const call = { id: item.id, seq: itemSeq, name, nativeName, classification: cls, signature: hash(JSON.stringify([item.type, args])), target, args: excerpt(JSON.stringify(args), 22000), start: a, end: state === 'unknown' ? null : b, resultSeq, status: state, error: state === 'error' ? { code: item.exitCode != null ? 'EXIT_' + item.exitCode : 'TOOL_ERROR', message: short(item.error || result, 180) } : null, result: excerpt(result, 18000), durationMs: Number.isFinite(item.durationMs) && item.durationMs >= 0 ? item.durationMs : precise ? b - a : null, timingSource: step.timingSource, source: cls.source };
       if (item.evidenceSource === 'local-rollout' && item.type === 'collabAgentToolCall') call.nativeName = 'collaboration.' + item.tool;
+      if (state === 'error') {
+        call.attribution = attributeToolFailure({ status: state, tool: nativeName, output: result,
+          error: item.error, exitCode: item.exitCode, command: item.command });
+        const edition = item.type === 'commandExecution' ? commandPowerShellEdition(item.command) : null;
+        if (edition) call.powerShellEdition = edition;
+      }
       step.calls.push(call); step.errors = state === 'error' ? 1 : 0; output.errors += step.errors;
       let outcome = '已收到工具返回。';
       if (state === 'error') outcome = '操作未成功' + (item.exitCode != null ? '，退出码 ' + item.exitCode : '') + '。';
@@ -272,7 +305,7 @@ export function adaptCodexThread(snapshot, options = {}) {
   }
   const totals = { turns: turns.length, steps: turns.reduce((n, t) => n + t.steps.length, 0), calls: turns.reduce((n, t) => n + t.calls, 0), errors: episodes.length };
   const current = local?.current ?? null;
-  const session = { id: thread.id, title: thread.name || 'Codex 当前对话', parentSession: thread.parentThreadId, source: { host: 'codex', name: snapshot.source, file: thread.path, session: thread.id }, firstSeq: 0, lastSeq: seq, eventCount: events.length, diagnostics: { replacementEventsExcluded: 0, unmatchedResults: 0, duplicateResults: 0, unresolvedCalls: turns.flatMap(t => t.steps).flatMap(s => s.calls).filter(c => c.resultSeq == null).length }, turns, communications: [], totals, overview: { rulesVersion: 1, episodes, retries: [], representatives: episodes.map(e => e.id) } };
+  const session = { id: thread.id, title: thread.name || 'Codex 当前对话', parentSession: thread.parentThreadId, source: { host: 'codex', name: snapshot.source, file: thread.path, session: thread.id, cwd: thread.cwd, provider: thread.modelProvider }, firstSeq: 0, lastSeq: seq, eventCount: events.length, diagnostics: { replacementEventsExcluded: 0, unmatchedResults: 0, duplicateResults: 0, unresolvedCalls: turns.flatMap(t => t.steps).flatMap(s => s.calls).filter(c => c.resultSeq == null).length }, turns, communications: [], totals, overview: { rulesVersion: 1, episodes, retries: [], representatives: episodes.map(e => e.id) } };
   const evidence = { api: { source: 'official-api', name: snapshot.source }, local: local?.evidence ?? null, timingMatched, visibleEvents: events.length, context: { estimate: true, semantics: 'visible text retained in local history, not full model input', incomplete: true, knownCategories: current ? keys.filter(k => current[k] > 0) : [], unknown: ['unrecorded request serialization', 'image tokens', 'hidden reasoning', 'unrecorded system/tool definitions'] }, model: 'Configured model is current thread metadata; per-turn model comes only from local turn_context.' };
   return { schema: 1, generatedAt: snapshot.capturedAt, mainSession: thread.id, sessions: [session], host: 'codex', events,
     context: { session: thread.id, cutoffSeq: seq, eventCount: events.length, source: { name: 'Codex official history + optional local rollout; independent visible-text estimate' }, requests, boundaries, retries: [], retryStarted: [], callFacts, fileOperations, supplementSources: [], current, route: { model: local?.contexts.at(-1)?.model || thread.model, provider: thread.modelProvider, reasoningEffort: local?.contexts.at(-1)?.reasoningEffort || thread.reasoningEffort }, skillEvents: [...skillEvents, ...(local?.skills || [])], collaborationEvents, compactions: local?.compactions || [], declarations: local?.declarations || [], usage: local?.usage || [] },

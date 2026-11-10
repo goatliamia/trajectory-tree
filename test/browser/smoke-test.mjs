@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { after, before, test } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import { chromium, firefox, webkit } from 'playwright';
 import { createPiSample } from '../../analyzers/pi-sample.mjs';
 import { adaptPiSession } from '../../analyzers/pi-adapter.mjs';
@@ -12,6 +13,7 @@ import { renderTracePage } from '../../plugin/analysis-view/lib/index.js';
 import { generateTraceView } from '../../view/generate.mjs';
 import { datasetFromNative } from '../../plugin/portable-tools/sources.mjs';
 import { writeHostEvalPage } from '../../view/eval.mjs';
+import { generateCommandView } from '../../view/commands.mjs';
 
 const goalText = 'Check <limits> & results';
 const secondGoalText = 'Review changed files';
@@ -19,7 +21,7 @@ const nativeDiff = '@@ -23,2 +23,2 @@\n-const value = "<old>";\n+const value = "
 const addedFile = '/sample/flag.js';
 const addedLines = 510;
 const assets = new Map();
-let directory, server, origin;
+let directory, server, origin, commandUrl;
 
 function hostDocument(src) {
   return '<!doctype html><html lang="zh-CN"><body style="margin:0">' +
@@ -60,6 +62,29 @@ before(async () => {
       ],
     }],
   } };
+  const commandSnapshot = structuredClone(snapshot);
+  const command = (id, durationMs, exitCode, aggregatedOutput) => ({
+    id, type: 'commandExecution', command: 'pwsh.exe -Command sample', durationMs, exitCode, aggregatedOutput,
+    status: exitCode === 0 ? 'completed' : 'failed',
+  });
+  commandSnapshot.thread.turns[0].items.push(command('syntax', 380, 1,
+    'ParserError:\nLine |\n  2 | rg needle src/{a.js,b.js}\n    | ~\n    | Missing argument in parameter list.'),
+  command('return', 2400, 0, 'sample'));
+  commandSnapshot.thread.turns.push({
+    id: 't2', startedAt: start + 5, completedAt: start + 9, status: 'completed',
+    items: [command('no-output', 100, 1, ''), command('unknown-output', 100, 1, 'sample')],
+  });
+  const commandPage = await generateCommandView({ host: 'codex', snapshot: commandSnapshot, apiOnly: true,
+    locale: 'en', output: join(directory, 'commands.html') });
+  commandUrl = pathToFileURL(commandPage.output).href;
+  const shellSnapshot = structuredClone(commandSnapshot);
+  const [powerShellCall, bashCall] = shellSnapshot.thread.turns[1].items;
+  powerShellCall.exitCode = -1;
+  bashCall.command = "bash -lc 'printf pwsh.exe'";
+  shellSnapshot.thread.turns[1].items.push(command('same-arguments', 100, 0, 'sample'));
+  const shellEval = await generateTraceView({ host: 'codex', snapshot: shellSnapshot, apiOnly: true, initialView: 'eval',
+    locale: 'en', output: join(directory, 'eval-shell.html') });
+  assets.set('/eval-shell', ['text/html; charset=utf-8', await readFile(shellEval.output)]);
   const transcript = join(directory, 'claude.jsonl');
   const event = { sessionId: 'browser-claude', timestamp, cwd: '/sample' };
   await writeFile(transcript, [
@@ -224,6 +249,10 @@ async function checkEval(page) {
     assert.equal(await page.locator('html').getAttribute('lang'), locale);
     await page.getByRole('heading', { name: title, exact: true }).waitFor();
     assert.equal(await page.locator('#scope option[value=""]').textContent(), fullSession);
+    assert.equal(await page.locator('#error-caption').innerText(), locale === 'en' ? '2 / 2 attributed' : '2 / 2 已归因');
+    const bashRow = page.locator('#error-matrix tr').filter({ has: page.getByRole('rowheader', { name: 'bash', exact: true }) });
+    await bashRow.locator('button[data-cell]').click();
+    assert.match(await page.locator('.error-attribution').innerText(), locale === 'en' ? /Verification failed.*Exit code 1/ : /验证未通过.*退出码 1/);
     await page.locator('#scope').selectOption('1');
     await page.locator('#tool-rows').getByRole('button', { name: /^read[,，]/ }).click();
     await page.getByRole('button', { name: question, exact: true }).click();
@@ -267,6 +296,49 @@ async function checkTurnComparison(page) {
   assert.deepEqual(query.turns, { from: 2, to: 3 }, 'The draft uses the new comparison pair');
 }
 
+async function checkPowerShellDraft(page) {
+  await page.goto(origin + '/eval-shell');
+  await page.locator('#scope').selectOption('2');
+  const ask = page.locator('#error-samples [data-diagnosis-failure]');
+  const draft = page.locator('#draft');
+  await page.locator('#error-example [data-condition]').filter({ hasText: 'EXIT_-1' }).click();
+  const seq = Number(await ask.getAttribute('data-diagnosis-failure'));
+  await ask.click();
+  const powerShellDraft = await draft.inputValue();
+  assert.ok(powerShellDraft.includes(`For #${seq}, read references/powershell.md`));
+  assert.equal(JSON.parse(/trajectory_read\((\{[^\n]*?\})\)/.exec(powerShellDraft)[1]).seq, seq);
+  await page.locator('#close-editor').click();
+  await page.getByRole('button', { name: 'Ask about these errors', exact: true }).click();
+  assert.ok((await draft.inputValue()).includes(`For #${seq}, read references/powershell.md`));
+  await page.locator('#close-editor').click();
+  await page.locator('#error-example [data-condition]').filter({ hasText: 'EXIT_1' }).click();
+  await ask.click();
+  assert.ok(!(await draft.inputValue()).includes('references/powershell.md'), 'Shell names in command text do not trigger routing');
+}
+
+async function checkCommands(page) {
+  await page.goto(commandUrl);
+  const select = (dimension, value) => page.locator('[data-filter="' + dimension + '"][data-value="' + value + '"]');
+  const rows = page.locator('#rows [data-seq]');
+  await select('turn', '1').click();
+  await select('duration', '0').click();
+  await select('reason', 'syntax').click();
+  assert.equal(await page.locator('#active button').count(), 3, 'Turn, duration and reason filters compose');
+  assert.equal(await rows.count(), 1);
+  assert.match(await page.locator('.diagnosis').innerText(), /Runtime report L2\s+An argument is missing/);
+  await page.locator('#mode-count').click();
+  assert.equal(await page.locator('#mode-count').getAttribute('aria-pressed'), 'true');
+  assert.equal(await select('duration', '0').getAttribute('aria-pressed'), 'true');
+  await page.getByRole('button', { name: 'Clear filters' }).click();
+  assert.equal(await rows.count(), 4);
+  await select('reason', 'unresolved-empty').click();
+  assert.match(await page.locator('#details').innerText(), /contains no output to diagnose/);
+  await page.getByRole('button', { name: 'Clear filters' }).click();
+  const syntax = rows.filter({ hasText: 'Shell syntax' });
+  await syntax.locator('td').nth(3).click();
+  assert.equal(await page.locator('#detail-title').textContent(), '#' + await syntax.getAttribute('data-seq'));
+}
+
 for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
   test(name + ' opens the shared trace and Eval with scoped host actions', { timeout: 60_000 }, async t => {
     const browser = await engine.launch();
@@ -288,7 +360,9 @@ for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
       assert.equal(await page.locator('[data-br-layer="goal"], [data-chat-jump]').count(), 0);
     }
     await checkEval(page);
+    await checkPowerShellDraft(page);
     await checkTurnComparison(page);
+    await checkCommands(page);
     assert.deepEqual(dshRequests, [], 'Frozen and portable pages do not request live DSH stages');
     assert.deepEqual(errors, [], 'No renderer errors');
   });

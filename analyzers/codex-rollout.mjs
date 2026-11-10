@@ -1,9 +1,28 @@
 import * as zlib from 'node:zlib';
 import { promisify } from 'node:util';
-import { readBoundedFile } from '../lib/bounded-file.mjs';
+import { StringDecoder } from 'node:string_decoder';
+import { readBoundedChunks, readBoundedFile } from '../lib/bounded-file.mjs';
+import { jsonlFrames } from '../lib/jsonl-frames.mjs';
+import { omitCodexImages } from './codex-images.mjs';
 
 const maxBytes = 128 * 1024 * 1024;
 const decompress = typeof zlib.zstdDecompress === 'function' ? promisify(zlib.zstdDecompress) : null;
+
+async function compactRollout(chunks, signal) {
+  const decoder = new StringDecoder('utf8');
+  const lines = [];
+  const frames = jsonlFrames((line, ending) => lines.push(omitCodexImages(line), ending));
+  for await (const bytes of chunks) {
+    for (let offset = 0; offset < bytes.length; offset += 64 * 1024) {
+      signal?.throwIfAborted();
+      frames.push(decoder.write(bytes.subarray(offset, offset + 64 * 1024)));
+    }
+  }
+  frames.push(decoder.end());
+  frames.finish();
+  signal?.throwIfAborted();
+  return lines.join('');
+}
 
 export function validateCodexRollout(text, threadId) {
   if (!text) return;
@@ -16,24 +35,23 @@ export function validateCodexRollout(text, threadId) {
 export async function readCodexRollout(file, { signal, required = false } = {}) {
   if (!file) return null;
   const paths = /\.zst$/i.test(file) ? [file] : [file, file + '.zst'];
+  const options = { maxBytes, signal, overflow: 'Codex rollout exceeds 128 MiB' };
   let missing;
   for (const path of paths) {
-    let bytes;
     try {
-      bytes = await readBoundedFile(path, { maxBytes, signal, overflow: 'Codex rollout exceeds 128 MiB' });
-    } catch (error) {
-      if (error.code === 'ENOENT') { missing ??= error; continue; }
-      throw error;
-    }
-    if (/\.zst$/i.test(path)) {
+      if (!/\.zst$/i.test(path)) return await compactRollout(readBoundedChunks(path, options), signal);
+      const compressed = await readBoundedFile(path, options);
       if (!decompress) {
         if (!required) return null;
         throw Error('Reading a Zstandard rollout requires a Node runtime with zstd support');
       }
-      bytes = await decompress(bytes, { maxOutputLength: maxBytes });
+      const bytes = await decompress(compressed, { maxOutputLength: maxBytes });
+      signal?.throwIfAborted();
+      return await compactRollout([bytes], signal);
+    } catch (error) {
+      if (error.code === 'ENOENT') { missing ??= error; continue; }
+      throw error;
     }
-    signal?.throwIfAborted();
-    return bytes.toString('utf8');
   }
   if (required) throw missing;
   return null;

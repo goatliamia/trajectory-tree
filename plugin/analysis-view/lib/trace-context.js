@@ -1,6 +1,5 @@
 // 「执行路径」页面的数据补充:上下文层、重试、文件操作、Skill 与子代理。
-// 全部从已记录的事件里推导;不复制第三方实现,也不新增指标。
-// 唯一的外部依赖是官方 surface 回放(判断某段 Skill 正文是否仍在模型可见历史里)。
+// Everything is derived from the recorded log and the host's surface APIs.
 
 import { buildTracePayload } from "./trace-build.js";
 import { describeCall } from "./trace/models/step-insight.mjs";
@@ -20,29 +19,35 @@ const fullCall = (call, native, result) => {
   };
 };
 
-/**
- * The installed context plugin's `contextTimeline` projection, read for a live session.
- * The Host is the only computation site, so this is the full value rather than the slim
- * broadcast head. Absent when that plugin is not mounted or the session is not live.
- */
-export function readContextTimeline(ctx, sessionId) {
-  try {
-    const sessions = ctx.get("sessions"), projections = ctx.get("sessionProjections");
-    const session = sessions && typeof sessions.get === "function" ? sessions.get(sessionId) : undefined;
-    if (!session || !projections || typeof projections.snapshot !== "function") return undefined;
-    const cut = projections.snapshot(session, ["contextTimeline"]);
-    const value = cut && cut.values ? cut.values.contextTimeline : undefined;
-    return value && typeof value === "object" ? value : undefined;
-  } catch {
-    return undefined;
+export function traceRequestLayer(events, series) {
+  // 压缩与裁短分开记:压缩是摘要替换,裁短是工具返回被就地替换。
+  const boundaries = events.filter(event => event.type === "compaction/start").map(event => ({
+    seq: event.seq, time: event.time, kind: "compaction",
+    turn: event.data?.turn ?? null, step: event.data?.step ?? null,
+  }));
+  const prunes = events.filter(event => event.type === "compaction/prune");
+  const bySeq = prunes.length ? new Map(events.map(event => [event.seq, event])) : null;
+  const calls = prunes.length ? new Map(events.filter(event => event.type === "tool/call").map(event => [event.data.callId, event])) : null;
+  for (const event of prunes) {
+    const shadowed = event.data?.shadowedSeqs;
+    if (!Array.isArray(shadowed) || !shadowed.length) continue;
+    const replaced = shadowed.map(seq => {
+      const source = bySeq.get(seq)?.data?.message?.source;
+      const call = source?.kind === "tool" ? calls.get(source.callId) : null;
+      return { seq, turn: call?.data?.turn ?? null, step: call?.data?.step ?? null, tool: call?.data?.name ?? null };
+    });
+    boundaries.push({ seq: event.seq, time: event.time, kind: "prune",
+      turn: event.data?.turn ?? null, step: event.data?.step ?? null,
+      tools: [...new Set(replaced.map(r => r.tool).filter(Boolean))], replaced });
   }
+  boundaries.sort((a, b) => a.seq - b.seq);
+  return { boundaries, requests: series?.requests.filter(row => Number.isFinite(row.total)) ?? [],
+    ...(series?.current ? { current: series.current } : {}), ...(series?.route ? { route: series.route } : {}) };
 }
 
-/** The layers the page can derive from recorded events alone. */
-export function traceContext(events, payload, timeline) {
+export function traceContextDetails(events, payload) {
   const session = payload.sessions[0];
   const bySeq = new Map(events.filter(e => Number.isFinite(e.seq)).map(e => [e.seq, e]));
-  const callByCallId = new Map(events.filter(e => e.type === "tool/call").map(e => [e.data.callId, e]));
 
   const callFacts = {}, fileOperations = [];
   for (const turn of session.turns) for (const step of turn.steps) for (const call of step.calls) {
@@ -66,39 +71,6 @@ export function traceContext(events, payload, timeline) {
     });
   }
 
-  // 压缩与裁短分开记:压缩是摘要替换,裁短是工具返回被就地替换。
-  const prunes = new Map();
-  for (const event of events) {
-    const shadowed = event.data?.shadowedSeqs;
-    if (!Array.isArray(shadowed) || !shadowed.length) continue;
-    const replaced = shadowed.map(seq => {
-      const source = bySeq.get(seq)?.data?.message?.source;
-      const call = source?.kind === "tool" ? callByCallId.get(source.callId) : null;
-      return { seq, turn: call?.data?.turn ?? null, step: call?.data?.step ?? null, tool: call?.data?.name ?? null };
-    });
-    prunes.set(event.seq, { seq: event.seq, time: event.time, kind: "prune",
-      turn: event.data?.turn ?? null, step: event.data?.step ?? null,
-      tools: [...new Set(replaced.map(r => r.tool).filter(Boolean))], replaced });
-  }
-  const boundaries = [];
-  if (timeline && Array.isArray(timeline.events) && timeline.events.length) {
-    for (const entry of timeline.events) {
-      if (entry.kind !== "compaction" && entry.kind !== "prune") continue;
-      const prune = entry.kind === "prune" ? prunes.get(entry.seq) : undefined;
-      boundaries.push({ seq: entry.seq, time: entry.time, kind: entry.kind, turn: entry.turn ?? null,
-        step: entry.step ?? null, tokens: entry.tokens ?? null, ...(prune ? { tools: prune.tools, replaced: prune.replaced } : {}) });
-    }
-  } else {
-    for (const event of events) {
-      if (event.type === "compaction/start") {
-        boundaries.push({ seq: event.seq, time: event.time, kind: "compaction",
-          turn: event.data?.turn ?? null, step: event.data?.step ?? null });
-      }
-    }
-    boundaries.push(...prunes.values());
-  }
-  boundaries.sort((a, b) => a.seq - b.seq);
-
   // 重试:llm/retry 只表示安排重试,llm/retry-started 才确认开始。
   const retryStarted = events.filter(e => e.type === "llm/retry-started")
     .map(e => ({ seq: e.seq, time: e.time, ...e.data }));
@@ -119,16 +91,7 @@ export function traceContext(events, payload, timeline) {
   }
   const supplementSources = [...supplement].map(([kind, count]) => ({ kind, count }));
 
-  const context = { callFacts, fileOperations, boundaries, retryStarted, retries, supplementSources,
-    // 页面按数组直接遍历这份请求构成;没有 contextTimeline 时也必须给出空表。
-    requests: Array.isArray(timeline?.requests) ? timeline.requests : [],
-    skillEvents: skillEvents(events, session) };
-  if (timeline) {
-    if (timeline.current) context.current = timeline.current;
-    if (timeline.provider || timeline.model) {
-      context.route = { provider: timeline.provider, model: timeline.model, reasoningEffort: timeline.reasoningEffort };
-    }
-  }
+  const context = { callFacts, fileOperations, retryStarted, retries, supplementSources, skillEvents: skillEvents(events, session) };
   // 目标从工具调用还原:create_goal / get_goal / update_goal 的参数与返回里就有目标字段。
   // 观察事件流不含 goal/change,所以以调用记录为准。
   const goalCalls = [];
@@ -161,6 +124,11 @@ export function traceContext(events, payload, timeline) {
     };
   }
   return context;
+}
+
+/** The layers the page can derive from recorded events alone. */
+export function traceContext(events, payload, series) {
+  return { ...traceRequestLayer(events, series), ...traceContextDetails(events, payload) };
 }
 
 /** Skill 的读入记录:目录、显式引用,以及 skill 工具真实返回的正文。 */

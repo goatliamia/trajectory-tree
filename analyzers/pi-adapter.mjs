@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { posix, win32 } from 'node:path';
 import { commandReadEvidence } from './codex-adapter.mjs';
+import { attributeToolFailure } from '../plugin/trajectory-tools/lib/tool-attribution.js';
 
 const categories = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
 const empty = () => Object.fromEntries(categories.map(k => [k, 0]));
@@ -123,6 +124,10 @@ export function adaptPiSession(input) {
       const start = completeTiming ? begin.observedAt : observedEnd ?? begin?.observedAt ?? responseEnd, end = observedEnd;
       const call = { id: native.id, seq: callSeq, name: native.name === 'bash' ? 'bash' : native.name, nativeName: native.name, signature: signature(native.name, native.arguments), target: native.arguments.path || null, args: excerpt(JSON.stringify(native.arguments)), start, end, startSeq: completeTiming ? callSeq : null, observedStart: begin?.observedAt ?? null, observedEnd, resultSeq: result ? ++seq : null, status: state, error: result?.isError ? { code: 'PI_TOOL_ERROR', message: text(result.content).slice(0, 180) } : null, result: result ? excerpt(text(result.content)) : null, durationMs: finish?.event.durationMs ?? result?.durationMs ?? null, timingSource: completeTiming ? source + '-capture' : 'unrecorded-start', source, synthetic };
       step.calls.push(call); step.end = Math.max(step.end, end ?? responseEnd); step.errors += state === 'error' ? 1 : 0;
+      if (state === 'error') call.attribution = attributeToolFailure({ status: state, tool: native.name,
+        output: text(result.content), error: result.details?.error, exitCode: result.details?.exitCode,
+        stderr: result.details?.stderr, interrupted: result.details?.interrupted,
+        command: native.arguments.command ?? native.arguments.cmd });
       const shellReads = native.name === 'bash' ? commandReadEvidence(native.arguments.command || '') : [];
       const shellSearch = native.name === 'bash' && /\b(?:rg|grep|Select-String)\b/.test(native.arguments.command || '');
       call.semanticKind = native.name === 'read' || shellReads.length ? 'read' : ['edit', 'write'].includes(native.name) ? 'write' : shellSearch ? 'query' : native.name === 'bash' ? 'run' : 'other';
@@ -146,7 +151,7 @@ export function adaptPiSession(input) {
   }
   for (const t of turns) t.calls = t.steps.reduce((n, s) => n + s.calls.length, 0);
   const totals = { turns: turns.length, steps: turns.reduce((n, t) => n + t.steps.length, 0), calls: turns.reduce((n, t) => n + t.calls, 0), errors: episodes.length };
-  const session = { id: input.header.id, title: path.findLast(e => e.type === 'session_info')?.name || (synthetic ? 'Pi · 模拟账单导出任务' : turns[0]?.title || 'Pi 会话'), parentSession: input.header.parentSession ?? null, source: { host: 'pi', session: input.header.id, file: input.source?.file || (synthetic ? 'synthetic-session.jsonl' : null), revision: input.source?.revision }, firstSeq: 0, lastSeq: seq, eventCount: path.length, diagnostics: { replacementEventsExcluded: 0, unmatchedResults: 0, duplicateResults: 0, unresolvedCalls: turns.flatMap(t => t.steps).flatMap(s => s.calls).filter(c => c.resultSeq == null).length }, turns, communications: [], totals, overview: { rulesVersion: 1, episodes, retries: [], representatives: episodes.map(e => e.id) } };
+  const session = { id: input.header.id, title: path.findLast(e => e.type === 'session_info')?.name || (synthetic ? 'Pi · 模拟账单导出任务' : turns[0]?.title || 'Pi 会话'), parentSession: input.header.parentSession ?? null, source: { host: 'pi', session: input.header.id, cwd: input.header.cwd, file: input.source?.file || (synthetic ? 'synthetic-session.jsonl' : null), revision: input.source?.revision }, firstSeq: 0, lastSeq: seq, eventCount: path.length, diagnostics: { replacementEventsExcluded: 0, unmatchedResults: 0, duplicateResults: 0, unresolvedCalls: turns.flatMap(t => t.steps).flatMap(s => s.calls).filter(c => c.resultSeq == null).length }, turns, communications: [], totals, overview: { rulesVersion: 1, episodes, retries: [], representatives: episodes.map(e => e.id) } };
   const modelEntry = path.findLast(e => e.type === 'model_change' || e.type === 'message' && e.message.role === 'assistant');
   const lastModel = modelEntry?.type === 'model_change' ? modelEntry : null, lastAssistant = path.findLast(e => e.type === 'message' && e.message.role === 'assistant')?.message;
   const matchingModel = !!input.scope?.model && !!input.scope?.provider && input.scope.model === lastAssistant?.model && input.scope.provider === lastAssistant?.provider;

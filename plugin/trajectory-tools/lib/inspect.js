@@ -7,6 +7,7 @@ import { buildRelations } from './linked-read.js';
 import { summarizeToolOutcomes, TOOL_OUTCOME_BASIS } from './io-outcome.js';
 import { groupInspectionCalls, matchesInspectionFocus, sampleInspectionCall, sampleInspectionFiles, selectInspectionCalls } from './inspection-io.js';
 import { recordedStepTimingBasis, recordedStepTimings } from './tool-intervals.js';
+import { buildRequestContext, requestContextBasis, requestContextKeys, requestContextSource } from './request-context.js';
 
 export const INSPECT_VIEWS = ['overview', 'latency', 'cost', 'repeats', 'io', 'context'];
 const replacement = e => e.surfaceOp && typeof e.surfaceOp === 'object';
@@ -15,7 +16,9 @@ const json = value => { try { return typeof value === 'string' ? JSON.parse(valu
 const hash = value => createHash('sha256').update(value).digest('base64url');
 const clip = (value, max = 180) => { const s = String(value || ''); return { text: Buffer.from(s.slice(0, max), 'utf16le').toString('utf16le'), omitted: Math.max(0, s.length - max) }; };
 const inRange = (n, range) => !range || n >= range.from && n <= range.to;
+const stepKey = row => row.turn + ':' + row.step;
 const finite = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
+const contextTotalColumn = 4 + requestContextKeys.length;
 const sum = values => { const known = values.filter(v => v != null); return known.length ? known.reduce((a, b) => a + b, 0) : null; };
 const METRICS = ['wall', 'ttft', 'model', 'decode', 'tool', 'toolWall', 'retries', 'toolErrors', 'output'];
 const outsideStep = s => finite(s.official.toolWall) !== null && finite(s.official.wall) !== null && s.official.toolWall > s.official.wall + 1;
@@ -40,19 +43,19 @@ function sumRecordedToolTiming(steps, recorded) {
 }
 
 export async function readOfficialProjections(ctx, loaded, signal) {
+  signal?.throwIfAborted();
   const registry = ctx.get('sessionProjections');
-  if (!registry?.restore || !loaded.header) return { values: {}, source: 'unavailable' };
-  let checkpoint = {}, snapshot;
-  const deadline = performance.now() + 8000;
-  for (let i = 0; i < loaded.events.length; i += 1000) {
-    signal?.throwIfAborted();
-    if (performance.now() > deadline) throw Error('Official projection replay exceeded its time budget');
-    const batch = loaded.events.slice(i, i + 1000);
-    const restored = registry.restore(checkpoint, batch, batch[0].seq, loaded.header, loaded.inherited || 0);
-    checkpoint = restored.checkpoint; snapshot = restored.snapshot;
-    await new Promise(resolve => setImmediate(resolve));
+  const id = loaded.header?.id ?? loaded.id;
+  const live = id ? ctx.get('sessions')?.get?.(id) : undefined;
+  const keys = ['tokenUsage', 'contextBreakdown', 'contextPressure'];
+  if (live && typeof registry?.snapshot === 'function') {
+    const snapshot = registry.snapshot(live, keys);
+    if (snapshot?.asOfSeq === loaded.events.at(-1)?.seq) {
+      const values = Object.fromEntries(keys.filter(key => snapshot.values?.[key] !== undefined).map(key => [key, snapshot.values[key]]));
+      return { values, source: 'sessionProjections.snapshot', asOfSeq: snapshot.asOfSeq };
+    }
   }
-  return { values: snapshot?.values || {}, source: 'sessionProjections.restore', asOfSeq: snapshot?.asOfSeq ?? null };
+  return { values: {}, source: 'unavailable' };
 }
 
 function schemaInventory(events) {
@@ -112,7 +115,7 @@ function schemaInventory(events) {
       measurement: 'Definition sizes are estimates; metadata changes are not requests/exposures. Invocation counts do not establish necessity.' } };
 }
 
-export function buildInspection(loaded, sessionId, { turns = null, projections = { values: {} }, statsReader = replayOfficialStats } = {}) {
+export function buildInspection(loaded, sessionId, { turns = null, projections = { values: {} }, contextSeries, statsReader = replayOfficialStats } = {}) {
   const events = loaded.events, bySeq = new Map(events.map(e => [e.seq, e]));
   const scope = { session: sessionId, turns, fromSeq: events[0]?.seq ?? null, toSeq: events.at(-1)?.seq ?? null };
   const anchors = Object.fromEntries(events.map(e => [e.seq, hash(JSON.stringify(e))]));
@@ -133,6 +136,7 @@ export function buildInspection(loaded, sessionId, { turns = null, projections =
       const startSeq = call.inner ? call.startSeq : call.seq;
       calls.push({ seq: call.seq, resultSeq: call.resultSeq, startSeq, rootSeq: call.rootSeq ?? null,
         name: call.name, turn: t.number, step: s.number, signature: call.signature, status: call.status, start: startSeq == null ? null : call.start, end: call.end,
+        ...(call.attribution ? { attribution: call.attribution } : {}),
         args: clip(typeof raw.arguments === 'string' ? raw.arguments : JSON.stringify(raw.arguments || {})), result: clip(output),
         resultHash: call.resultSeq == null ? null : hash(output), outputCharacters: call.resultSeq == null ? null : output.length,
         family: detail.family, files: detail.files.map(f => ({ path: f.path, access: f.access, matchedLines: f.lines?.length || 0 })),
@@ -172,10 +176,14 @@ export function buildInspection(loaded, sessionId, { turns = null, projections =
     files: [...new Set(own.flatMap(c => c.files.map(f => f.path)))] });
   views.repeats.sort((a, b) => b.count - a.count);
   views.io.sort((a, b) => b.outputCharacters - a.outputCharacters || a.seq - b.seq);
-  const values = projections.values || {}, requests = values.contextTimeline?.requests || [];
-  coverage.projections = { source: projections.source || 'unavailable', keys: ['tokenUsage', 'contextBreakdown', 'contextPressure', 'contextTimeline'].filter(k => values[k] !== undefined),
+  const values = projections.values || {};
+  const { requests, current, pressure } = contextSeries ?? buildRequestContext(events, null);
+  coverage.projections = { source: projections.source || 'unavailable', keys: ['tokenUsage', 'contextBreakdown', 'contextPressure'].filter(k => values[k] !== undefined),
     ...(projections.error ? { reason: projections.error } : {}) };
-  coverage.context = { source: projections.source || 'unavailable', firstRecordedTurn: requests[0]?.turn ?? null,
+  coverage.context = { source: requestContextSource, basis: requestContextBasis,
+    estimatedSamples: requests.filter(row => finite(row.total) !== null).length,
+    reportedSamples: requests.filter(row => finite(row.reportedInput) !== null).length,
+    firstRecordedTurn: requests[0]?.turn ?? null,
     status: requests.length ? requests[0].turn > (turns?.from ?? native.turns[0]?.number ?? 1) ? 'partial' : 'available' : 'unavailable' };
   let relatedAt = 0;
   for (let i = 1; i < requests.length; i++) {
@@ -186,12 +194,13 @@ export function buildInspection(loaded, sessionId, { turns = null, projections =
       if (relatedEvents.length < 5 && /^(?:compaction\/|tool\/result|tool\/ptc-dispatch$)/.test(e.type)) relatedEvents.push({ seq: e.seq, type: e.type });
     }
     if (!inRange(after.turn, turns)) continue;
-    views.context.push({ turn: after.turn, step: after.step, seq: after.seq,
-      before: { seq: before.seq, total: before.total }, after: { seq: after.seq, total: after.total },
-      categoryNetChange: Object.fromEntries(['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'].map(k => [k, finite(after[k]) !== null && finite(before[k]) !== null ? after[k] - before[k] : null])),
-      net: finite(after.total) !== null && finite(before.total) !== null ? after.total - before.total : null, relatedEvents });
+    const estimatedNet = finite(after.total) !== null && finite(before.total) !== null ? after.total - before.total : null;
+    const reportedNet = finite(after.reportedInput) !== null && finite(before.reportedInput) !== null ? after.reportedInput - before.reportedInput : null;
+    if (estimatedNet === null && reportedNet === null) continue;
+    // The two endpoints already live in contextSamples. Expand the deltas only
+    // for rows on the requested page, so long cuts stay within the cache budget.
+    views.context.push([i, estimatedNet, reportedNet, relatedEvents]);
   }
-  views.context.sort((a, b) => Math.abs(b.net ?? 0) - Math.abs(a.net ?? 0));
   const inventory = schemaInventory(events);
   inventory.definitions.sort((a, b) => b.standaloneEstimatedTokens - a.standaloneEstimatedTokens);
   const definitions = inventory.definitions.map(d => ({ ...d, invocationsInScope: inventory.invocations.filter(u => u.name === d.name && inRange(u.turn, turns)).reduce((n, u) => n + u.count, 0) }));
@@ -205,23 +214,42 @@ export function buildInspection(loaded, sessionId, { turns = null, projections =
       replySeq: last?.assistantSeq ?? null, official: sumSteps(own), toolCounts,
       markers: t.markers.map(m => ({ seq: m.seq, type: m.type })) };
   });
+  const usage = costTotals(usageRows);
   const summary = { steps: stepEntries.length, nativeCallsForEvidence: calls.length,
-    tokenUsageWholeSession: values.tokenUsage || null, contextBreakdownAtCut: values.contextBreakdown || null,
-    contextPressureAtCut: values.contextPressure || null,
+    tokenUsageWholeSession: values.tokenUsage || (usage.requests ? {
+      uncachedInputTokens: usage.input, outputTokens: usage.output, cacheReadTokens: usage.cacheRead, cacheWriteTokens: usage.cacheWrite,
+    } : null),
+    contextBreakdownAtCut: values.contextBreakdown || (current ? { systemTokens: current.system, toolsTokens: current.tools,
+      messageTokens: current.total - current.system - current.tools, source: requestContextSource } : null),
+    contextPressureAtCut: values.contextPressure || pressure || null,
     toolDefinitions: { ...inventory, headerSeqs: undefined, invocations: undefined, definitions, definitionCount: definitions.length },
     statisticsScope: 'official step metrics; whole-session projections and at-cut composition labeled separately' };
   return JSON.parse(JSON.stringify({ scope, coverage, summary, views, stepEntries, turnEntries, usageRows,
     // Tuples avoid retaining a second set of long field names per request.
-    contextSamples: requests.map(r => ['seq', 'turn', 'step', 'time', 'system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool', 'total'].map(k => r[k] ?? null)),
+    contextSamples: requests.map(r => ['seq', 'turn', 'step', 'time', ...requestContextKeys, 'total', 'reportedInput', 'headerSeq'].map(k => r[k] ?? null)),
     declarationHeaders: inventory.headerSeqs, declarationInvocations: inventory.invocations,
     definitionItems: definitions.filter(d => d.invocationsInScope === 0), anchors, relations }));
 }
 
-function usageFor(index, turns, stepKeys) {
-  const own = index.usageRows.filter(r => inRange(r.turn, turns) && (!stepKeys || stepKeys.has(r.turn + ':' + r.step)));
-  const { requests, unknownRequests, ...totals } = costTotals(own);
-  return { settlements: requests, unknownSettlements: unknownRequests, ...totals, coverage: costCoverage(own),
+function usageSummary(rows) {
+  const { requests, unknownRequests, ...totals } = costTotals(rows);
+  return { settlements: requests, unknownSettlements: unknownRequests, ...totals, coverage: costCoverage(rows),
     basis: 'recorded assistant/message usage settlements; missing buckets remain null' };
+}
+
+function usageFor(index, turns, stepKeys) {
+  return usageSummary(index.usageRows.filter(row => inRange(row.turn, turns) && (!stepKeys || stepKeys.has(stepKey(row)))));
+}
+
+function usageByStep(rows, turns) {
+  const groups = new Map();
+  for (const row of rows) {
+    if (!inRange(row.turn, turns)) continue;
+    const key = stepKey(row), group = groups.get(key);
+    if (group) group.push(row);
+    else groups.set(key, [row]);
+  }
+  return groups;
 }
 
 function definitionsInScope(index, turns, tool) {
@@ -250,6 +278,19 @@ function definitionsInScope(index, turns, tool) {
   return definitions.sort((a, b) => b.standaloneEstimatedTokens - a.standaloneEstimatedTokens);
 }
 
+function contextChange(samples, { sampleIndex, ...row }) {
+  const before = samples[sampleIndex - 1], after = samples[sampleIndex];
+  const endpoint = sample => {
+    const [total, reportedInput, headerSeq] = sample.slice(contextTotalColumn);
+    return { seq: sample[0], headerSeq, total, reportedInput };
+  };
+  const categoryNetChange = Object.fromEntries(requestContextKeys.map((key, i) => {
+    const left = before[4 + i], right = after[4 + i];
+    return [key, left !== null && right !== null ? right - left : null];
+  }));
+  return { ...row, before: endpoint(before), after: endpoint(after), categoryNetChange };
+}
+
 export function inspectionPage(index, view, offset = 0, limit = 3, options = {}) {
   const { turns = index.scope.turns, focus, outcome, groupBy, sort, samples = true, seqs } = options;
   const { scopedCalls, calls, callSelection } = selectInspectionCalls(index, { turns, focus, outcome, seqs });
@@ -261,6 +302,9 @@ export function inspectionPage(index, view, offset = 0, limit = 3, options = {})
   const timings = view === 'latency' ? recordedStepTimings(steps, index.views.io) : null;
   const allowedTurns = new Set([...steps.map(s => s.turn), ...calls.map(c => c.turn)]);
   const ownTurns = index.turnEntries.filter(t => inRange(t.turn, turns) && (!focusSteps || allowedTurns.has(t.turn)));
+  const stepView = (view === 'latency' || view === 'cost') && groupBy !== 'turn';
+  let stepUsage;
+  const usageRowsFor = row => (stepUsage ??= usageByStep(index.usageRows, turns)).get(stepKey(row)) ?? [];
   const scope = { ...index.scope, turns: turns || null, ...(outcome ? { outcome } : {}),
     ...(focus ? { focus } : {}), ...(callSelection ? { callSelection } : {}),
     ...(focusSteps ? { metricsScope: 'whole steps containing matching calls; not per-object token/time attribution' } : {}) };
@@ -296,15 +340,20 @@ export function inspectionPage(index, view, offset = 0, limit = 3, options = {})
     else if (groupBy === 'turn') rows = ownTurns.map(t => groupTurn([t]));
     else { rows = []; const size = Math.max(1, Math.ceil(ownTurns.length / 6)); for (let i = 0; i < ownTurns.length; i += size) rows.push(groupTurn(ownTurns.slice(i, i + size), true)); }
   } else if (view === 'latency' || view === 'cost') {
-    rows = groupBy === 'turn' ? ownTurns.map(t => groupTurn([t])) : steps.map(s => ({ ...hydration(s),
-      ...(timings ? { recordedToolTiming: timings.get(s) } : {}),
-      usage: usageFor(index, { from: s.turn, to: s.turn }, new Set([s.turn + ':' + s.step])) }));
+    rows = stepView ? steps.slice() : ownTurns.map(t => groupTurn([t]));
   } else if (view === 'io') rows = groupBy ? groupInspectionCalls(calls, groupBy) : calls;
   else if (view === 'repeats') rows = index.views.repeats.filter(r => inRange(r.turn, turns) && matchesInspectionFocus(r, focus))
     .map(r => ({ ...r, files: sampleInspectionFiles(r.files, focus), evidenceSeqs: undefined, evidence: r.evidenceSeqs.map(seq => preview(callBySeq.get(seq))) }));
-  else rows = index.views.context.filter(r => inRange(r.turn, turns) && (!focusSteps || focusSteps.has(r.turn + ':' + r.step)));
+  else rows = index.views.context.flatMap(([sampleIndex, estimatedNet, reportedNet, relatedEvents]) => {
+    const [seq, turn, step] = index.contextSamples[sampleIndex];
+    if (!inRange(turn, turns) || focusSteps && !focusSteps.has(turn + ':' + step)) return [];
+    return [{ sampleIndex, turn, step, seq, net: estimatedNet ?? reportedNet, estimatedNet, reportedNet, relatedEvents }];
+  });
   const order = sort || (view === 'latency' ? 'wall' : view === 'cost' ? 'input' : view === 'io' ? 'returned' : view === 'repeats' ? 'count' : view === 'context' ? 'change' : 'time');
-  const value = row => order === 'wall' ? row.official?.wall : order === 'input' ? row.usage?.input : order === 'output' ? row.usage?.output :
+  const usageOrder = order === 'input' || order === 'output';
+  // Rank on the requested bucket and attach full usage and evidence only after paging.
+  const ranks = stepView && usageOrder ? new Map(rows.map(row => [row, sum(usageRowsFor(row).map(usage => usage[order]))])) : null;
+  const value = row => order === 'wall' ? row.official?.wall : usageOrder ? (ranks ? ranks.get(row) : row.usage?.[order]) :
     order === 'returned' ? row.returnedCharacters ?? row.outputCharacters : order === 'count' ? row.calls ?? row.count : order === 'change' ? Math.abs(row.net ?? 0) : row.seq;
   rows.sort((a, b) => order === 'time' ? (value(a) ?? Infinity) - (value(b) ?? Infinity) : (value(b) ?? -1) - (value(a) ?? -1) || (a.seq ?? 0) - (b.seq ?? 0));
   const includeDefinitions = view === 'overview' || view === 'cost';
@@ -333,7 +382,10 @@ export function inspectionPage(index, view, offset = 0, limit = 3, options = {})
   if (includeDefinitions) summary.toolDefinitions = { ...index.summary.toolDefinitions, definitions: undefined,
     definitionCount: definitions.length,
     scope: (definitionTool ? 'selected tool; ' : '') + 'declaration versions active at recorded settlements/calls in selected turns; metadata counters cover the whole cut' };
-  const items = rows.slice(offset, offset + limit);
+  let items = rows.slice(offset, offset + limit);
+  if (stepView) items = items.map(step => ({ ...hydration(step),
+    ...(timings ? { recordedToolTiming: timings.get(step) } : {}), usage: usageSummary(usageRowsFor(step)) }));
+  if (view === 'context') items = items.map(row => contextChange(index.contextSamples, row));
   return { scope, coverage, summary, groupBy: groupBy || (view === 'overview' ? 'window' : view === 'io' ? 'call' : 'step'), sort: order,
     totalEntries: rows.length, offset, items: view === 'io' && !groupBy ? items.map(preview) : items,
     ...(view === 'overview' ? { availableViews: ['latency', 'cost', 'repeats', 'io', 'context'] } : {}),
@@ -347,7 +399,7 @@ export function evidencePointers(packet) {
   const walk = value => {
     if (!value || typeof value !== 'object') return;
     for (const [key, field] of Object.entries(value)) {
-      if (['seq', 'stepSeq', 'callSeq', 'resultSeq', 'startSeq', 'endSeq', 'rootSeq', 'firstHeaderSeq', 'lastHeaderSeq', 'replySeq'].includes(key) && Number.isSafeInteger(field)) refs.add(field);
+      if (['seq', 'stepSeq', 'callSeq', 'resultSeq', 'startSeq', 'endSeq', 'rootSeq', 'headerSeq', 'firstHeaderSeq', 'lastHeaderSeq', 'replySeq'].includes(key) && Number.isSafeInteger(field)) refs.add(field);
       else if (field && typeof field === 'object') walk(field);
     }
   };

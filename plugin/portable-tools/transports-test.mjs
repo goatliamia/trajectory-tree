@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join, dirname, resolve, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { readCodexThread } from '../../analyzers/codex-reader.mjs';
 import { createPiSample } from '../../analyzers/pi-sample.mjs';
 import piExtension from './pi.mjs';
 
@@ -14,6 +15,48 @@ assert.equal(dirname(resolve(temp)), resolve(tmpdir())); assert.ok(basename(temp
 const root = dirname(fileURLToPath(import.meta.url)), input = createPiSample({ version: '1.4.0' });
 let client;
 try {
+  const appData = join(temp, 'appdata');
+  const appServer = join(appData, 'npm/node_modules/@openai/codex/bin/codex.js');
+  const search = '搜索结果\u2028第二行\u2029下一段';
+  const encoded = 'iVBORw0KGgo' + 'A'.repeat(64 * 1024);
+  await mkdir(dirname(appServer), { recursive: true });
+  await writeFile(appServer, `
+const { createInterface } = require('node:readline');
+const search = ${JSON.stringify(search)};
+const encoded = ${JSON.stringify(encoded)};
+const responses = {
+  initialize: {},
+  'thread/read': { thread: { id: 'fixture', historyMode: 'paginated' } },
+  'thread/turns/list': { data: [{ id: 'turn' }] },
+  'thread/items/list': { data: [
+    { turnId: 'turn', item: { id: 'item', type: 'webSearch', query: search } },
+    { turnId: 'turn', item: { id: 'image', type: 'imageGeneration', status: 'completed', result: encoded } },
+  ] },
+};
+createInterface({ input: process.stdin }).on('line', line => {
+  const { id, method } = JSON.parse(line);
+  if (id == null) return;
+  const response = Buffer.from(JSON.stringify({ id, result: responses[method] }) + '\\r\\n');
+  const split = response.indexOf(Buffer.from('\\u2028'));
+  if (split === -1) { process.stdout.write(response); return; }
+  process.stdout.write(response.subarray(0, split + 1));
+  setTimeout(() => process.stdout.write(response.subarray(split + 1)), 10);
+});
+`);
+  const previousAppData = process.env.APPDATA;
+  try {
+    process.env.APPDATA = appData;
+    const snapshot = await readCodexThread('fixture', { executable: process.execPath });
+    const [searchItem, image] = snapshot.thread.turns[0].items;
+    assert.equal(searchItem.query, search, 'Codex JSONL preserves Unicode separators, even across UTF-8 chunks');
+    assert.equal(image.id, 'image');
+    assert.equal(image.status, 'completed');
+    assert.match(image.result, /^\[inline image omitted image\/png \d+B [a-f0-9]{64}\]$/);
+  } finally {
+    if (previousAppData === undefined) delete process.env.APPDATA;
+    else process.env.APPDATA = previousAppData;
+  }
+
   const file = join(temp, 'native.jsonl'), capture = join(temp, 'capture.jsonl');
   await writeFile(file, [input.header, ...input.entries].map(JSON.stringify).join('\n') + '\n');
   await writeFile(capture, input.capture.map(JSON.stringify).join('\n') + '\n');
@@ -24,6 +67,23 @@ try {
   assert.equal(report.summary.calls, 12); assert.equal(report.synthetic, true);
   const failure = await client.callTool({ name: 'trajectory_inspect', arguments: { view: 'bad' } }); assert.equal(failure.isError, true);
   const io = JSON.parse((await client.callTool({ name: 'trajectory_inspect', arguments: { snapshot: report.snapshot, view: 'io' } })).content[0].text); assert.ok(io.rows.length);
+  await client.close(); client = null;
+
+  const commandFile = join(temp, 'command.json');
+  await writeFile(commandFile, JSON.stringify({ thread: { id: 'command-session', createdAt: 1767225600, turns: [{
+    id: 'turn', startedAt: 1767225600, status: 'completed', completedAt: 1767225601, items: [{
+      id: 'cmd', type: 'commandExecution', command: 'pwsh.exe -Command rg broken src',
+      status: 'failed', exitCode: 1, aggregatedOutput: 'rg: regex parse error:',
+    }],
+  }] } }));
+  const commandTransport = new StdioClientTransport({ command: process.execPath, args: [
+    join(root, 'mcp.mjs'), '--commands', '--host', 'codex', '--file', commandFile, '--api-only',
+  ], stderr: 'pipe' });
+  client = new Client({ name: 'command-diagnosis-test', version: '1.0.0' }); await client.connect(commandTransport);
+  assert.deepEqual((await client.listTools()).tools.map(tool => tool.name), ['trajectory_command_diagnose']);
+  const diagnosis = await client.callTool({ name: 'trajectory_command_diagnose', arguments: { seqs: [2] } });
+  const row = JSON.parse(diagnosis.content[0].text).rows[0];
+  assert.equal(row.cause.kind, 'pattern'); assert.equal(row.syntax.state, 'no-source');
   await client.close(); client = null;
 
   const cli = args => JSON.parse(execFileSync(process.execPath, [resolve(root, '../../scripts/trajectory-query.mjs'), '--host', 'pi', '--file', file, '--synthetic', ...args], { encoding: 'utf8', windowsHide: true }));
@@ -70,4 +130,4 @@ try {
   const abort = new AbortController(); abort.abort(); await assert.rejects(registered.get('trajectory_inspect').execute('cancel', {}, abort.signal, undefined, ctx));
   hooks.get('session_shutdown')();
 } finally { if (client) await client.close(); await rm(temp, { recursive: true, force: true }); }
-console.log('Transport tests passed: real MCP stdio handshake and four tools, native Pi registration/context/timing callbacks, CLI snapshot continuation, cancellation; no model/provider calls.');
+console.log('Transport tests passed: Codex JSONL framing, real MCP stdio handshake and four tools, native Pi registration/context/timing callbacks, CLI snapshot continuation and cancellation.');

@@ -44,6 +44,22 @@ assert.ok(collectToolResults(session, adapted.context.callFacts, adapted.context
 assert.ok(fileObjects(adapted.context.fileOperations).length);
 assert.ok(contextByTurn(adapted.context.requests).length);
 assert.throws(() => parseCodexRollout(raw, { threadId: 'different' }), /differs/);
+const lookupFixture = structuredClone(fixture);
+lookupFixture.thread.turns[0].items = [
+  command('local-search', 'rg pattern missing.js', 1),
+  command('local-match', 'rg pattern found.js'),
+  { type: 'mcpToolCall', id: 'browser', server: 'cua_repl', tool: 'js', readOnlyHint: true, status: 'failed', error: 'execution timed out' },
+  { type: 'webSearch', id: 'web', query: 'fixture search' },
+];
+const lookups = adaptCodexThread(lookupFixture);
+const lookupSession = lookups.sessions[0];
+const lookupCalls = lookupSession.turns[0].steps.flatMap(step => step.calls);
+assert.deepEqual(lookupCalls.map(call => [call.name, call.classification.kind, call.status]), [
+  ['commandExecution', 'query', 'error'], ['commandExecution', 'query', 'returned'],
+  ['cua_repl/js', 'query', 'error'], ['web_search', 'query', 'returned'],
+]);
+assert.ok(collectToolResults(lookupSession, lookups.context.callFacts, []).some(branch =>
+  branch.kind === 'query' && branch.calls.some(call => call.id === 'local-match')));
 const textMaterial = 'Skill instruction example. '.repeat(10);
 const mixed = [{ timestamp: '2026-01-01T00:00:00Z', type: 'response_item', payload: { type: 'custom_tool_call_output', output: [{ type: 'input_text', text: JSON.stringify({ status: 'fulfilled', value: { output: textMaterial + '\nordinary file content' } }) }, { type: 'input_image', image_url: 'data:image/png;base64,' + 'x'.repeat(50000) }] } }].map(JSON.stringify).join('\n');
 const mixedParsed = parseCodexRollout(mixed, { skillMaterials: [{ path: '/skill/SKILL.md', text: textMaterial }] });

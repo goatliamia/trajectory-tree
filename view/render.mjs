@@ -3,6 +3,7 @@ import { resolve, dirname } from 'node:path';
 import { normalizeLocale } from '../lib/i18n.mjs';
 import { hostCapabilities } from '../lib/host-capabilities.mjs';
 import { readTracePresentation, renderTraceDocument } from '../plugin/analysis-view/lib/trace/presentation.mjs';
+import { inlineTraceFonts } from '../plugin/analysis-view/lib/trace/fonts.mjs';
 
 // Assemble current shipped renderer + shared observations + host semantics.
 // No dependency on a cached DSH conversation or its private stats snapshot.
@@ -18,10 +19,7 @@ export function writeHostTracePage(payload, output, { locale } = {}) {
   if (payload.host === 'pi') template = template.replace('<strong>执行路径</strong>', '<strong>Pi · ' + (payload.synthetic ? '模拟会话' : '会话分析') + '</strong>');
   if (payload.host === 'claude') template = template.replace('<strong>执行路径</strong>', '<strong>Claude Code · 会话分析</strong>');
   if (payload.synthetic) template = template.replace('<div class="app">', '<p role="note" style="font:11px var(--sans);color:var(--muted);padding:0 24px">全部内容、时长、用量与结果均为模拟；没有调用模型。</p><div class="app">');
-  for (const font of ['Geist-Variable.woff2', 'GeistMono-Variable.woff2']) {
-    const bytes = readFileSync(new URL('../plugin/analysis-view/lib/trace/fonts/' + font, import.meta.url));
-    template = template.replaceAll('/analysis-view/trace/fonts/' + font, 'data:font/woff2;base64,' + bytes.toString('base64'));
-  }
+  template = inlineTraceFonts(template);
   const extension = readFileSync(new URL('./assets/' + payload.host + '-host.js', import.meta.url), 'utf8');
   const html = renderTraceDocument(payload, assets, { template, locale, extension });
   mkdirSync(dirname(resolve(output)), { recursive: true }); writeFileSync(output, html);

@@ -1,13 +1,13 @@
-import { readFile, stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { adaptPiSession, piSessionPath } from '../../analyzers/pi-adapter.mjs';
 import { readPiSession } from '../../analyzers/pi-reader.mjs';
 import { adaptCodexThread } from '../../analyzers/codex-adapter.mjs';
-import { readCodexThread } from '../../analyzers/codex-reader.mjs';
+import { readCodexSnapshot, readCodexThread } from '../../analyzers/codex-reader.mjs';
+import { omitCodexImages, omitCodexImageValues } from '../../analyzers/codex-images.mjs';
 import { readCodexRollout, validateCodexRollout } from '../../analyzers/codex-rollout.mjs';
 import { readClaudeTranscript } from '../../analyzers/claude-reader.mjs';
 import { projectClaudeTranscript, finalizeClaudeDataset } from '../../analyzers/claude-adapter.mjs';
+import { powerShellScript } from '../trajectory-tools/lib/tool-attribution.js';
 
 export const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export function visible(value, parameters = false) {
@@ -58,8 +58,10 @@ export function datasetFromNative(host, native, options = {}) {
     return finalizeClaudeDataset(datasetFromNative('pi', projected), native, projected);
   }
   if (!['pi', 'codex'].includes(host)) throw Error('Unsupported native host');
+  if (host === 'codex') native = omitCodexImageValues(native);
   const payload = host === 'pi' ? adaptPiSession(native) : adaptCodexThread(native, options);
   const session = payload.sessions[0], records = new Map();
+  const commandScripts = options.commandDiagnostics && host === 'codex' ? new Map() : null;
   function add(seq, body, metadata = {}, original = body) {
     if (!Number.isSafeInteger(seq)) return;
     const safe = visible(body);
@@ -95,9 +97,17 @@ export function datasetFromNative(host, native, options = {}) {
     const localCalls = new Map(), localResults = new Map();
     for (const [line, text] of String(options.rollout || '').split(/\r?\n/).entries()) {
       if (!text.trim()) continue;
-      let row; try { row = JSON.parse(text); } catch { continue; }
+      let row; try { row = JSON.parse(omitCodexImages(text)); } catch { continue; }
       if (native.capturedAt && Date.parse(row.timestamp) > Date.parse(native.capturedAt)) continue;
       const item = row.payload;
+      if (commandScripts && row.type === 'event_msg' && item?.type === 'item_completed' && Number.isFinite(Date.parse(row.timestamp))) {
+        const completed = item.item, script = powerShellScript(completed?.command);
+        if (items.get(completed?.id)?.item.type === 'commandExecution' && script && !script.text.includes('[inline image omitted ')) {
+          const previous = commandScripts.get(completed.id);
+          if (!commandScripts.has(completed.id)) commandScripts.set(completed.id, { line: line + 1, ...script });
+          else if (previous?.text !== script.text || previous?.edition !== script.edition) commandScripts.set(completed.id, null);
+        }
+      }
       if (row.type !== 'response_item' || !item) continue;
       if (item.type === 'function_call' && item.namespace === 'collaboration') localCalls.set(item.id || item.call_id, { item, line: line + 1 });
       if (item.type === 'function_call_output') localResults.set(item.call_id, { item, line: line + 1 });
@@ -159,22 +169,18 @@ export function datasetFromNative(host, native, options = {}) {
   delete payload.context.declarations;
   for (const file of payload.context.fileOperations) if (file.diff) { file.diffCharacters = (file.diff.text?.length || 0) + (file.diff.omitted || 0); delete file.diff; }
   const fingerprint = hash({ host, session: session.id, records: all.map(r => [r.seq, r.nativeHash]), usage: payload.context.usage, current: payload.context.current });
-  return { host, session: session.id, payload, records: all, fingerprint, logId: host + ':' + session.id + ':' + fingerprint.slice(0, 16), synthetic: payload.synthetic === true };
+  return { host, session: session.id, payload, records: all, fingerprint, logId: host + ':' + session.id + ':' + fingerprint.slice(0, 16), synthetic: payload.synthetic === true,
+    ...(commandScripts ? { commandScripts: Object.fromEntries(commandScripts) } : {}) };
 }
 
-async function boundedRead(file, maxBytes = 128 * 1024 * 1024) {
-  if ((await stat(file)).size > maxBytes) throw Error('Source exceeds input budget');
-  const bytes = await readFile(file); if (bytes.length > maxBytes) throw Error('Source exceeds input budget');
-  return bytes.toString('utf8');
-}
 export async function loadPortableSource(spec, signal) {
   signal?.throwIfAborted();
   if (spec.host === 'pi') return datasetFromNative('pi', spec.input || await readPiSession(spec.file, { ...spec, signal }));
   if (spec.host === 'claude') return datasetFromNative('claude', spec.input || await readClaudeTranscript(spec.file, { signal }));
   if (spec.host !== 'codex') throw Error('Supported hosts: pi, codex, claude');
-  const snapshot = spec.snapshot || (spec.file ? JSON.parse(await boundedRead(resolve(spec.file))) : await readCodexThread(spec.thread, { signal }));
+  const snapshot = spec.snapshot || (spec.file ? await readCodexSnapshot(spec.file, { signal }) : await readCodexThread(spec.thread, { signal }));
   let rollout = spec.rolloutText;
   if (!spec.apiOnly && rollout === undefined) rollout = await readCodexRollout(spec.rollout || snapshot.thread.path, { required: !!spec.rollout, signal });
   if (!spec.apiOnly) validateCodexRollout(rollout, snapshot.thread.id);
-  return datasetFromNative('codex', snapshot, { rollout: spec.apiOnly ? null : rollout });
+  return datasetFromNative('codex', snapshot, { rollout: spec.apiOnly ? null : rollout, commandDiagnostics: spec.commandDiagnostics });
 }

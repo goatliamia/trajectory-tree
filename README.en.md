@@ -22,7 +22,9 @@ Start with the session's main path, then open any turn to inspect tool arguments
 
 ## Eval
 
-Eval uses the same trace data as the trajectory tree. Compare turn duration with output tokens, see which tools take the most time, and spot recurring errors. Switch between the full session and an individual turn. Charts indicate how much of the session was measured.
+Eval uses the same trace data as the trajectory tree. Compare turn duration with output tokens, see which tools take the most time, and spot recurring errors. Switch between the full session and an individual turn. Charts indicate how much of the session was measured. Tool details show the host outcome alongside the attributed cause and its evidence. Possible causes appear with their samples.
+
+Eval overview groups recorded sessions by project. Open it from the DSH left sidebar, run `/trajectory --overview` in Pi, or request a project overview from the Codex or Claude Code Eval skill. Compare metrics by window occupancy, input size, or tool, then open the underlying samples. [Host entry points](docs/host-entrypoints.md#eval-总览)
 
 ![Eval scatter plot comparing output tokens, turn duration and tool errors](docs/media/eval-overview-en.jpg)
 
@@ -51,14 +53,17 @@ Run commands from the repository root. The plugin packages declare Node.js 18+, 
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.5.tgz ./dsh-analysis-view-0.10.144.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.6.tgz ./dsh-analysis-view-0.10.146.tgz
 ```
 
 Restart `dsh web`, then open **Eval** or use `/trajectory` for the current session's path. Choose a diagnostic question and select **Fill conversation** to append the draft to the composer. The plugins target the DSH 0.2.2 line; see the [host compatibility notes](docs/host-compatibility.md#dsh-version).
 
-Select a goal line in the overview to open that goal. Select an event marker to inspect that change and open the associated turn in the action path or conversation.
+Open **Eval overview** in the local DSH Web left sidebar to compare progress, model behavior, and tool errors across projects. The context section compares request and tool metrics by window occupancy.
 
-Optionally install [Conversation search](plugin/conversation-search/README.md) to search the full session, load older matches, and jump to a turn from the right sidebar. DSH on-demand interpretation calls the current model. Disable the default post-compaction check-in with `config.reconcile: false`.
+Select a goal line in the overview to open that goal. Select an event marker to inspect that change and open the associated turn in the action path or conversation.
+Trajectory Tree estimates seven categories of request context from DSH session records and shows changes by turn and step. Eval and the evidence tools share the samples. Reported input is shown separately.
+
+Open **Trajectory Tree** in DSH's plugin manager to configure right-sidebar conversation search, default trace layers, and the Eval tool sort. Search starts enabled and covers the full session. Load older matches and select a result to jump to its turn. DSH on-demand interpretation calls the current model. Disable the default post-compaction check-in with `config.reconcile: false`.
 
 [Analysis panel](plugin/analysis-view/README.md) · [Evidence tools](plugin/trajectory-tools/README.md)
 
@@ -94,6 +99,8 @@ Generate a view directly for the current session; local session reads require th
 ```sh
 node scripts/trajectory-view.mjs --host codex --serve
 ```
+
+Use `trajectory_command_diagnose` to inspect a command failure at the same log cut. Optional syntax inspection supports Windows PowerShell 5.1 and PowerShell 7. [Command diagnostics setup](docs/host-entrypoints.md#命令诊断)
 
 Open **Compare changes** from an action or file history to switch between changed files, read added and removed lines with the recorded line numbers, or see the raw patch.
 
@@ -154,7 +161,7 @@ Queries are read-only. Each host exposes its recorded evidence; missing content 
 
 ## Documentation
 
-- [Repository index](docs/INDEX.md)
+- [Feature index](docs/INDEX.md) · [Code map](docs/code-map.md) · [Design archive](docs/archive/README.md)
 - [Host setup and commands](docs/host-entrypoints.md)
 - [Tool configuration, queries and continued reads](plugin/portable-tools/README.md)
 - [Analysis methods](skill/trace-analysis/SKILL.md) · [Context and configuration profile](skill/context-profile/SKILL.md)
@@ -179,3 +186,5 @@ node plugin/analysis-view/perf-test.mjs
 ## License
 
 [MIT](LICENSE) © 2026 goatliamia
+
+Trajectory Tree and Eval bundle Geist Sans and Geist Mono by Vercel in collaboration with basement.studio. The fonts are licensed under the SIL Open Font License 1.1. [Geist website](https://vercel.com/font) · [Bundled font license](plugin/analysis-view/lib/trace/fonts/LICENSE.txt)

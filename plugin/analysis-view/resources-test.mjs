@@ -69,14 +69,12 @@ try {
 } finally {cancelStages.dispose();cancelledPool.dispose();}
 console.log('PASS last-viewer cancellation aborts child work and releases the parent lease');
 
-const historyPool=new TraceResources();let restores=0;
-const historyCtx={get:name=>name==='sessionProjections'?{restore(checkpoint,batch){restores++;return{checkpoint:{contextTimeline:{val:{requests:[...(checkpoint.contextTimeline?.val.requests||[]),...batch.filter(e=>e.type==='assistant/message').map(e=>({seq:e.seq,turn:e.data.turn,total:100}))]}}}}}}:services[name]};
-const historyStages=new TraceStages(historyCtx,{resources:historyPool,timeout,observe:async()=>({source:'prepared',revision:versions.get('a'),header:{id:'a'},events:[...rows,...rows.map(e=>({...e,seq:e.seq+5,time:e.time+5,data:{...e.data,turn:2}}))]}),dispose(){}});
+const seriesPool=new TraceResources();
+const seriesStages=new TraceStages(ctx,{resources:seriesPool,timeout,observe:async()=>({source:'prepared',revision:versions.get('a'),header:{id:'a'},events:[...rows,...rows.map(e=>({...e,seq:e.seq+5,time:e.time+5,data:{...e.data,turn:2}}))]}),dispose(){}});
 try {
-  const entry=await historyStages.load('a','assets');
-  const data=await historyStages.stage(entry,'history',2);
-  assert.deepEqual(data.context.historyRequests.map(row=>row.turn),[1]);
-  assert.equal((await historyStages.stage(entry,'history',2)),data);assert.equal(restores,1);
-  assert.equal(entry.header.id,'a');
-} finally {historyStages.dispose();historyPool.dispose();}
-console.log('PASS on-demand history uses the official detached restore face and retains one window');
+  const entry=await seriesStages.load('a','assets');
+  await seriesStages.stage(entry,'details');
+  assert.deepEqual(entry.contextData.requests.map(row=>row.turn),[1,2]);
+  assert.equal(await entry.requestContext([]),entry.contextData);
+} finally {seriesStages.dispose();seriesPool.dispose();}
+console.log('PASS context samples cover the whole cut and are shared by its consumers');

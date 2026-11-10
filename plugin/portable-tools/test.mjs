@@ -8,6 +8,8 @@ import { readCodexHistory } from '../../analyzers/codex-reader.mjs';
 import { datasetAtCut, datasetFromNative } from './sources.mjs';
 import { PortableService } from './service.mjs';
 import { executeTool } from './tools.mjs';
+import { commandPageCut, commandReport, executeCommandTool } from './command-diagnosis.mjs';
+import { attributeToolFailure } from '../trajectory-tools/lib/tool-attribution.js';
 
 const input = createPiSample({ version: '1.4.0', revision: 'fixture' });
 const missingAssistantContent = structuredClone(input);
@@ -48,6 +50,11 @@ try {
   assert.ok(definition.nextRead); assert.equal(definition.native.tool, 'unused_capability');
   const signatureOnly = await executeTool(service, 'trajectory_read', { ...defRead, field: 'parameters' }); assert.equal(JSON.parse(signatureOnly.text).type, 'object'); assert.ok(!signatureOnly.nextRead);
   const entry = service.entries.get(first.snapshot), originalCall = entry.data.payload.sessions[0].turns.flatMap(t => t.steps).flatMap(s => s.calls).find(c => c.id === rawCall.id);
+  const shell = entry.data.payload.sessions[0].turns.flatMap(t => t.steps.flatMap(s => s.calls))
+    .find(c => c.nativeName === 'bash' && c.status === 'error');
+  const shellResult = await commandReport(entry.data, { seqs: [shell.seq] });
+  assert.equal(shellResult.rows[0].attribution.code, 'COMMAND_TEST_FAILED');
+  assert.equal(shellResult.rows[0].syntax.state, 'other-shell');
   let args = { snapshot: first.snapshot, seq: originalCall.seq, field: 'arguments', maxChars: 7000 }, joined = '';
   do { const piece = await executeTool(service, 'trajectory_read', args); joined += piece.text; if (!piece.nextRead) break; const { tool, ...rest } = piece.nextRead; args = rest; } while (true);
   assert.equal(JSON.parse(joined).longArgument, rawCall.arguments.longArgument, 'long arguments are available without adapter excerpt loss');
@@ -114,6 +121,95 @@ try {
   const api = new PortableService({ load: async () => datasetFromNative('codex', snapshot) });
   const partial = await api.call('trajectory_inspect', { view: 'cost' }); assert.equal(partial.summary.usage.input, null); assert.equal(partial.summary.toolCoveredMs, null); api.dispose();
 } finally { codex.dispose(); }
+
+const commandsFixture = structuredClone(snapshot);
+const commandItems = [
+  ['miss', 'rg needle src', ''],
+  ['later', 'Get-Content a.txt; rg broken src', 'file body\nrg: regex parse error:'],
+  ['child', 'node check.mjs', 'Error: token="private-fixture"\n    at verify (file:///project/check.mjs:12:3)'],
+  ['syntax', 'rg needle src/{a.js,b.js}', 'ParserError:\nLine |\n   2 | private-fixture\n     | ~\n     | Missing argument in parameter list.'],
+  ['unknown-output', 'Write-Output body; exit 1', 'body'],
+  ['unknown-empty', 'exit 1', ''],
+  ['unix', 'bash -c true', 'Error: unrelated shell'],
+];
+commandsFixture.thread.turns[0].items = commandItems.map(([id, script, aggregatedOutput]) => ({
+  id, type: 'commandExecution', command: id === 'unix' ? script : 'pwsh.exe -Command rendered',
+  aggregatedOutput, status: 'failed', exitCode: 1,
+}));
+commandsFixture.thread.turns.push({ id: 'live', status: 'interrupted', startedAt: 1767225620, items: [] });
+const commandRollout = rollout + '\n' + commandItems.map(([id, script]) => JSON.stringify({
+  timestamp: '2026-01-01T00:00:04Z', type: 'event_msg', payload: { type: 'item_completed', item: {
+    id, command: id === 'unix' ? ['bash', '-c', 'true'] : ['pwsh.exe', '-Command', script],
+  } },
+})).join('\n') + '\n' + JSON.stringify({
+  timestamp: '2026-01-01T00:00:12Z', type: 'event_msg', payload: { type: 'item_completed', item: {
+    id: 'miss', command: ['pwsh.exe', '-Command', 'Write-Output future'],
+  } },
+});
+const commandLoad = () => datasetFromNative('codex', commandsFixture, { rollout: commandRollout, commandDiagnostics: true });
+const commandData = commandLoad();
+const commandCut = commandPageCut(commandData);
+const commandSnapshot = datasetAtCut(commandData, commandCut);
+assert.equal(commandSnapshot.payload.sessions[0].turns.length, 1, 'The default page freezes the closed prefix');
+const commands = await commandReport(commandSnapshot, { whole: true });
+assert.deepEqual(commands.rows.map(row => row.cause.kind), ['no-match', 'pattern', 'child', 'syntax', 'unresolved', 'unresolved']);
+assert.equal(commands.rows[1].cause.outputBefore, true);
+assert.deepEqual(commands.rows[2].cause.code, { file: 'file:///project/check.mjs', line: 12, column: 3, source: 'runtime-stack' });
+assert.deepEqual(commands.rows[3].cause.reported, { id: 'MissingArgument', line: 2 });
+assert.equal(commands.rows[3].cause.evidence, 'Missing argument in parameter list.');
+assert.equal(commands.rows[4].cause.outputRecorded, true);
+assert.equal(commands.rows[5].cause.outputRecorded, undefined);
+assert.equal(commands.rows[0].attribution.certainty, 'candidate');
+assert.equal(commands.rows[3].attribution.code, 'COMMAND_SYNTAX');
+const shellError = { status: 'error', tool: 'commandExecution', exitCode: 1 };
+assert.equal(attributeToolFailure({ ...shellError, command: 'rg -n "connect EACCES" src',
+  output: 'src/example.js:4:const message = "connect EACCES"' }).certainty, 'unknown');
+assert.equal(attributeToolFailure({ ...shellError, command: "rg -n 'old|new' src" }).certainty, 'candidate');
+assert.equal(attributeToolFailure({ ...shellError, command: 'node fixture.js',
+  output: '{"error":"thread/items/list timed out","elapsedMs":20003}' }).code, 'COMMAND_TIMEOUT');
+assert.equal(attributeToolFailure({ ...shellError, command: 'powershell.exe -Command sample',
+  output: '    + CategoryInfo : ParserError: (:) []\n    + FullyQualifiedErrorId : MissingArgument' }).evidence, 'MissingArgument');
+assert.equal(attributeToolFailure({ ...shellError, tool: 'Bash', command: 'rg needle sample',
+  output: 'Command exited with code 1' }).certainty, 'candidate');
+assert.equal(attributeToolFailure({ ...shellError, status: 'unknown', command: 'node fixture.js',
+  output: 'connect EACCES' }), undefined);
+const readFailure = 'Codex App Server exited before completing the read';
+assert.equal(attributeToolFailure({ ...shellError, command: 'node fixture.js',
+  output: JSON.stringify({ ok: false, error: readFailure }) }).code, 'COMMAND_APP_SERVER_EXITED');
+assert.equal(attributeToolFailure({ ...shellError, command: 'node fixture.js',
+  output: JSON.stringify({ ok: true, error: readFailure }) }).certainty, 'unknown');
+assert.equal(attributeToolFailure({ ...shellError, command: 'git -c core.safecrlf=false diff --check',
+  output: 'src/main.js:19: new blank line at EOF.' }).code, 'COMMAND_TEST_FAILED');
+assert.equal(attributeToolFailure({ ...shellError, command: 'git log',
+  output: 'src/main.js:19: new blank line at EOF.' }).certainty, 'unknown');
+assert.equal(attributeToolFailure({ ...shellError, command: 'Start-Process test', stderr: `Start-Process:
+Line |
+   1 | Start-Process test
+     | The process cannot access the file 'output.txt' because it is being used by another process.` }).code, 'COMMAND_FILE_BUSY');
+assert.equal(attributeToolFailure({ ...shellError, command: 'node fixture.js',
+  stderr: 'response.json: Protocol error. Request content was evicted from inspector cache' }).code, 'COMMAND_RESPONSE_BODY_UNAVAILABLE');
+assert.equal(attributeToolFailure({ ...shellError, command: 'pnpm --offline install',
+  output: '[ERR_PNPM_NO_OFFLINE_TARBALL] A package is missing from the store' }).code, 'COMMAND_OFFLINE_DEPENDENCY');
+assert.equal(attributeToolFailure({ ...shellError, command: 'Get-CimInstance example',
+  output: 'Get-CimInstance:\nLine |\n   1 | Get-CimInstance example\n     | 无法从客户端中访问 CIM 资源。' }).code, 'COMMAND_CIM_UNAVAILABLE');
+assert.equal(attributeToolFailure({ ...shellError, command: 'python quick_validate.py example',
+  output: 'Unexpected key(s) in SKILL.md frontmatter: example. Allowed properties are: description, name' }).code, 'COMMAND_TEST_FAILED');
+assert.equal(attributeToolFailure({ ...shellError, interrupted: true }).basis, 'native-status');
+assert.equal(attributeToolFailure({ ...shellError, exitCode: -1 }).basis, 'no-output');
+assert.ok(!JSON.stringify(commands).includes('private-fixture'));
+assert.equal(commands.rows[0].syntax.state, 'not-configured');
+assert.equal(commandData.commandScripts.miss.text, 'rg needle src', 'A later raw record cannot replace the original script');
+const commandService = new PortableService({ load: async () => commandLoad(), rebuildSnapshots: true });
+try {
+  const exact = { cut: commandCut, logId: commandSnapshot.logId, seqs: [commands.rows[1].seq] };
+  const result = await executeCommandTool(commandService, exact, {});
+  assert.equal(result.rows[0].cause.kind, 'pattern');
+  const { tool, ...pointer } = result.rows[0].read;
+  const linked = await executeTool(commandService, tool, pointer);
+  assert.ok(linked.linked.some(row => row.seq === result.rows[0].resultSeq));
+  await assert.rejects(executeCommandTool(commandService, { ...exact, logId: 'foreign' }, {}), /Log identity/);
+  await assert.rejects(executeCommandTool(commandService, { ...exact, seqs: [5000] }, {}), /No command call/);
+} finally { commandService.dispose(); }
 const prior = datasetFromNative('codex', snapshot, { rollout });
 const cut = prior.payload.sessions[0].lastSeq;
 const anchored = datasetAtCut(prior, cut);

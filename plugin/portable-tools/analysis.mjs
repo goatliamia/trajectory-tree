@@ -137,6 +137,7 @@ export function inspectData(data, q) {
     }
   } else if (q.view === 'io') rows = q.groupBy === 'turn' ? turnRows() : q.groupBy === 'file' ? fileRows() :
     q.seqs && !q.groupBy ? calls.map(c => ({ turn: c.turn, step: c.step, seq: c.seq, tool: toolName(c), status: c.status,
+      ...(c.attribution ? { attribution: c.attribution } : {}),
       native: bySeq.get(c.seq)?.native, nativeDurationMs: c.durationMs, read: read(c.seq) })) : toolRows();
   else if (q.view === 'repeats') {
     const groups = new Map();

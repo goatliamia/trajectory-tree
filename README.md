@@ -24,7 +24,9 @@
 
 ## Eval
 
-Eval 和轨迹树共用轨迹数据。用真实任务里的记录对照轮次耗时与输出 token，查看哪些工具耗时多、哪些报错反复出现。可切换整段会话或某一轮；图表会标出统计覆盖范围。
+Eval 和轨迹树共用轨迹数据。用真实任务里的记录对照轮次耗时与输出 token，查看哪些工具耗时多、哪些报错反复出现。可切换整段会话或某一轮，图表会标出统计覆盖范围。工具明细并列展示宿主结果、归因和证据，候选原因保留在对应样本中。
+
+Eval 总览按项目汇总会话。DSH 从左侧栏进入，Pi 用 `/trajectory --overview`，Codex 和 Claude Code 可从各自的 Eval skill 打开项目总览。窗口占用、输入量和工具都是对照维度，点区间可回查样本。[四宿主入口](docs/host-entrypoints.md#eval-总览)
 
 ![Eval：用散点图对照输出 token、轮次耗时和工具报错](docs/media/eval-overview.jpg)
 
@@ -53,14 +55,17 @@ Eval 和轨迹树共用轨迹数据。用真实任务里的记录对照轮次耗
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.5.tgz ./dsh-analysis-view-0.10.144.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.6.tgz ./dsh-analysis-view-0.10.146.tgz
 ```
 
 重启 `dsh web`，在会话里打开「评估」或用 `/trajectory` 打开轨迹树。选好诊断问题后，点「填入对话」把草稿追加到当前输入框。插件面向 DSH 0.2.2 系列，逐包核对见[兼容与语言说明](docs/host-compatibility.md#dsh-version)。
 
-在路径总览中，点击目标线可查看对应目标。点击事件点可查看那次变更，并从详情进入对应轮次的行动路径或对话。
+在本机 DSH Web 的左侧栏打开「Eval 总览」，按项目查看推进、模型行为和工具报错，也可以按窗口占用区间对照模型请求与工具调用。
 
-可另装 [对话搜索](plugin/conversation-search/README.md)，在右侧栏搜整段会话，按需加载更早的结果，点击可跳到对应轮次。DSH 的按需解读会调用当前模型。压缩后对账默认开启，可设 `config.reconcile: false` 关闭。
+在路径总览中，点击目标线可查看对应目标。点击事件点可查看那次变更，并从详情进入对应轮次的行动路径或对话。
+轨迹树从 DSH 会话记录估算七类请求构成，按轮和按步展示上下文变化。Eval 和取证工具使用同一批样本，宿主上报的输入量单列。
+
+在 DSH 插件管理中打开「轨迹树」，可配置右侧栏的「对话搜索」、轨迹图层和 Eval 工具排序。搜索默认开启，覆盖整段会话，可翻到更早的命中并跳回对应轮次。DSH 的按需解读会调用当前模型。压缩后对账默认开启，可设 `config.reconcile: false` 关闭。
 
 [分析面板](plugin/analysis-view/README.md) · [取证工具](plugin/trajectory-tools/README.md)
 
@@ -96,6 +101,8 @@ node scripts/package-trajectory.mjs --host codex
 ```sh
 node scripts/trajectory-view.mjs --host codex --serve
 ```
+
+可以用 `trajectory_command_diagnose` 从同一切点细查命令归因。PowerShell 语法补查支持 Windows PowerShell 5.1 和 PowerShell 7。 [命令诊断入口](docs/host-entrypoints.md#命令诊断)
 
 从动作或文件历史打开「改动对比」，可以按文件查看记录中的增删行、原／新行号和原始补丁。
 
@@ -156,7 +163,7 @@ node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl
 
 ## 文档
 
-- [仓库索引](docs/INDEX.md)——目录、文档导航与常用命令
+- [功能索引](docs/INDEX.md) · [代码语义地图](docs/code-map.md) · [历史归档](docs/archive/README.md)
 - [宿主接入与命令](docs/host-entrypoints.md)
 - [工具配置、查询与正文续读](plugin/portable-tools/README.md)
 - [分析方法](skill/trace-analysis/SKILL.md) · [上下文与配置剖面](skill/context-profile/SKILL.md)
@@ -181,3 +188,5 @@ node plugin/analysis-view/perf-test.mjs
 ## 许可证
 
 [MIT](LICENSE) © 2026 goatliamia
+
+轨迹树和 Eval 随附由 Vercel 与 basement.studio 合作制作的 Geist Sans 和 Geist Mono，字体采用 SIL Open Font License 1.1。[Geist 官网](https://vercel.com/font) · [随附的字体许可证](plugin/analysis-view/lib/trace/fonts/LICENSE.txt)

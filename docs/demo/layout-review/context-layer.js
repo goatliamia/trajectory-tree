@@ -13,6 +13,9 @@
   overviewLayers.add('context');
   const reviewTokens = value => Math.abs(value) >= 1000 ? (value / 1000).toFixed(1) + 'k' : Math.round(value).toLocaleString();
   const reviewSigned = value => (value > 0 ? '+' : value < 0 ? '−' : '') + reviewTokens(Math.abs(value));
+  const reviewReportedInput = sample => Number.isFinite(sample?.reportedInput)
+    ? '<p class="review-quiet">' + ui('宿主上报的请求输入（含缓存）') + ' <b>' + sample.reportedInput.toLocaleString() + ' tokens</b></p>'
+    : '';
   function reviewDuration(ms) {
     const seconds = Math.max(0, Math.round(ms / 1000));
     if (seconds < 60) return seconds + ui('秒');
@@ -166,6 +169,7 @@
     const first = reviewContextRequests.find(r => r.turn === row.turn);
     const max = Math.max(1, ...CONTEXT_CATEGORIES.map(c => Math.abs(row.parts[c.key][row.isBaseline ? 'after' : 'delta'])));
     let html = '<div class="review-context-headline"><strong>' + (row.isBaseline ? reviewTokens(row.total) : reviewSigned(row.net)) + '</strong><span>' + (row.isBaseline ? ui('首轮末次请求 · 已有上下文') : ui('tokens · 净变化')) + '</span></div>';
+    html += reviewReportedInput(reviewContextRequests.findLast(sample => sample.turn === row.turn));
     if (row.isBaseline) html += ui('<p class="review-context-change-note">首次请求已经带着约 ') + reviewTokens(CONTEXT_CATEGORIES.reduce((n, c) => n + (first[c.key] || 0), 0)) + ui(' tokens，并不是空白。下面同时列出首次请求与本轮末次请求的构成。</p>');
     if (!row.isBaseline && (row.increase || row.decrease)) html += '<div class="review-context-totals">' +
       (row.increase ? ui('<span>增加 <b>') + reviewSigned(row.increase) + '</b></span>' : '') +
@@ -238,6 +242,7 @@
     let html = info.initial
       ? '<div class="review-context-headline"><strong>≈' + reviewTokens(info.total) + '</strong><span>' + ui('tokens · 首次请求已有量') + '</span></div>'
       : '<div class="review-context-headline"><strong>' + reviewSigned(info.amount) + '</strong><span>' + ui('tokens · 本步净变化') + '</span></div>';
+    html += reviewReportedInput(info.current);
     if (!info.initial && (increase || decrease)) html += '<div class="review-context-totals">' +
       (increase ? ui('<span>增加 <b>') + reviewSigned(increase) + '</b></span>' : '') +
       (decrease ? ui('<span>减少 <b>') + reviewSigned(-decrease) + '</b></span>' : '') + '</div>';

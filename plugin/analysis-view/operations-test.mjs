@@ -48,4 +48,26 @@ const structured = [...rows];
 structured[grep.seq] = { ...structured[grep.seq], data: { ...structured[grep.seq].data, content: text(''), meta: { shape: 'matches', total: 2, files: [{ path: 'other.ts', matches: [{ lineNumber: 8, line: 'one' }, { lineNumber: 9, line: 'two' }] }] } } };
 const projected = traceContext(structured, payload);
 assert.deepEqual(projected.fileOperations.filter(op => op.access === 'match').map(op => [op.path, op.matchLines]), [['D:/work/other.ts', 2]]);
-console.log('PASS native dispatch identity/timing, wrapper folding and own errors, pending bodies, grep legacy/metadata evidence, path-only exclusions and single exceptional endpoint');
+
+const dispatch = (type, id, result = {}) => event(type, {
+  rootCallId: 'ptc', parentCallId: 'ptc', subCallId: id, name: 'web_fetch',
+  arguments: { url: 'https://example.com/' }, ...result,
+});
+const start = id => dispatch('tool/ptc-dispatch-start', id);
+const settle = (id, result) => dispatch('tool/ptc-dispatch', id, result);
+const head = [
+  event('turn/start', { turn: 3 }), event('step/start', { turn: 3, step: 1 }),
+  event('tool/call', { turn: 3, step: 1, callId: 'ptc', name: 'run_code', arguments: {} }),
+  start('failed'), start('parallel'),
+];
+const failed = settle('failed', { isError: true, error: { code: 'TOOL_TIMEOUT' } });
+const parallel = settle('parallel', { isError: false });
+const retryStart = start('retry');
+const retry = settle('retry', { isError: false });
+const followup = [event('tool/result', { turn: 3, step: 1, message: { toolCallId: 'ptc', content: text('done') } }),
+  event('step/end', { turn: 3, step: 1 }), event('turn/end', { turn: 3 })];
+const episode = buildTracePayload([...head, failed, parallel, retryStart, retry, ...followup], 'parallel-ptc')
+  .sessions[0].overview.episodes[0];
+assert.deepEqual(episode.pairs.map(({ failedSeq, successSeq }) => [failedSeq, successSeq]), [[failed.seq, retry.seq]],
+  'a later result from a concurrent PTC subcall is not a retry');
+console.log('PASS native dispatch identity/timing, wrapper folding and own errors, pending bodies, grep evidence, path-only exclusions, and PTC retry ordering');

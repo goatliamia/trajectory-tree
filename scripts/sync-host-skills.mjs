@@ -3,8 +3,9 @@ import {DIAGNOSIS_SKILLS,QUERY_SKILL} from '../skill/catalog.mjs';
 const check=process.argv.includes('--check');let changed=false;
 function emit(path,wanted){
  const file=new URL('../'+path,import.meta.url);let actual;try{actual=readFileSync(file,'utf8');}catch{}
- if(actual===wanted)return;changed=true;
- if(check)console.error('Skill resource differs: '+path);else{mkdirSync(new URL('./',file),{recursive:true});writeFileSync(file,wanted);}
+ const expected=wanted.replaceAll('\r\n','\n');
+ if(actual?.replaceAll('\r\n','\n')===expected)return;changed=true;
+ if(check)console.error('Skill resource differs: '+path);else{mkdirSync(new URL('./',file),{recursive:true});writeFileSync(file,expected);}
 }
 function files(path){return readdirSync(new URL('../'+path,import.meta.url),{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?files(path+'/'+entry.name):[path+'/'+entry.name]);}
 function dshFrontmatter(text, skill) {

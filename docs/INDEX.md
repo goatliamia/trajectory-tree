@@ -1,106 +1,27 @@
-# 仓库索引
+# 功能索引
 
-一句话：**把各宿主（DSH / Pi / Codex / Claude Code）的会话记录，变成可查、可诊断、可复现的轨迹视图与报告**的仓库。
+Trajectory Tree 把 DSH、Pi、Codex 和 Claude Code 的会话记录组织成执行路径、Eval 和可复核的诊断证据。
 
-四条主线：`plugin/` 提供宿主接入，`view/` + `report/` 提供视图与报告组件，`skill/` 提供诊断方法，`scripts/` 负责构建与打包。
+| 模块 | 用途 | 入口与实现 |
+| --- | --- | --- |
+| 宿主接入 | 读取宿主原生记录并保留分支、事件定位和数据粒度 | [各宿主命令与打包](host-entrypoints.md) · [能力与语言](host-compatibility.md) · [适配器](../analyzers/) |
+| 轨迹树 | 浏览行动路径、工具反馈、文件、目标和上下文变化 | [路径页](analysis-view-design.md) · [页面装配](../view/render.mjs) · [DSH 加载](../plugin/analysis-view/lib/trace-stages.js) |
+| 单会话 Eval | 在同一切点查看轮次耗时、用量、工具和报错，按选区生成诊断草稿 | [统计口径](metric-framework.md) · [数据模型](../plugin/analysis-view/lib/eval/data.mjs) · [便携入口](../view/eval.mjs) |
+| Eval 总览 | 按项目汇总会话，并按窗口占用、输入量或工具对照已记录指标 | [总览入口](host-entrypoints.md#eval-总览) · [共用页面](../plugin/analysis-view/lib/eval/overview/) · [便携投影](../view/overview.mjs) |
+| 取证查询 | 从摘要下钻到原始记录、关联调用、文件或统计切点 | [DSH 工具](../plugin/trajectory-tools/README.md) · [便携 CLI / MCP / Pi](../plugin/portable-tools/README.md) · [字段](trajectory-fields.md) |
+| 命令诊断 | 在 Eval 中查看程序归因，沿 PowerShell 执行链核对报错、改法和验收 | [命令取证](host-entrypoints.md#命令诊断) · [PowerShell 专项](../skill/trace-analysis/references/powershell.md) |
+| 诊断方法 | 把用户的关注点变成可执行的取证步骤，并给出可核查的改法 | [诊断入口与方法索引](diagnostic-prompts.md) · [过程诊断](../skill/trace-analysis/SKILL.md) · [静态剖面](../skill/context-profile/SKILL.md) |
+| 报告 | 将诊断结论、证据和可视化组件装配成 HTML | [编写流程](report-authoring-workflow.md) · [组件绑定](../report/AUTHORING.md) · [渲染入口](../scripts/trajectory-report.mjs) |
+| 测试与分发 | 检查关系、记录覆盖、浏览器交互及真实归档包入口 | [关系与回归](relation-ci.md) · [验收语料](../experiments/README.md#任务验收-eval) · [包验收](../scripts/test-trajectory-packages.mjs) |
 
----
+[代码语义地图](code-map.md)记录入口、数据流和 CR 观察到的源码依赖。维护目标见[路线图](ROADMAP.md)，早期草案与实验结果见[历史归档](archive/README.md)。
 
-## 顶层目录
+## 构建与源码归属
 
-| 目录 | 作用 | 关键入口 | 是否生成 |
-|---|---|---|---|
-| `plugin/` | 宿主侧插件与工具 | `plugin/trajectory-tools`（DSH 工具）、`plugin/analysis-view`（DSH 路径页）、`plugin/portable-tools`（Pi、Codex、Claude Code 共用工具）、`plugin/claude` | 部分生成 |
-| `view/` | 跨宿主的视图源码与资源 | `view/render.mjs`（页面装配）、`view/assets/`（CSS / 宿主适配 / 观察层） | 否 |
-| `report/` | HTML 报告组件与写作规范 | `report/AUTHORING.md`（组件绑定）、`report/WRITING.md`（写作）、`report/out/`（产出） | `out/` 是产物 |
-| `skill/` | 诊断方法源文件 | `skill/trace-analysis`、`skill/context-profile` | 否；由 `scripts/sync-host-skills.mjs` 分发到各宿主 |
-| `scripts/` | 构建、打包、取证 | `trajectory-view.mjs`、`package-trajectory.mjs`、`build-readme-media.mjs`、`sync-view-assets.mjs` | 否 |
-| `analyzers/` | 各宿主原生记录的读取与适配 | `pi-reader/adapter`、`codex-reader/adapter`、`incidents.mjs`、`retry.mjs` | 否 |
-| `docs/` | 设计与口径文档 | 见下节 | 否 |
-| `dist/` | 各宿主可分发包 | `trajectory-tree-{codex,pi,claude}` | **是**，由打包脚本重建；已被 `.gitignore` 忽略 |
-| `experiments/` / `logs/` | 实验与本地日志 | — | 否 |
-| `.agents/` | 通用方法 skill（项目自身） | `skills/trace-analysis` 等 | 否 |
-
----
-
-## 文档导航（`docs/`）
-
-**总体与接入**
-
-- [运行时分析路线图](ROADMAP.md) — 现有基础、方法目录、对象诊断与阶段验收
-- [指标框架](metric-framework.md) — 原始证据、确定性口径、宿主范围与 Eval 转化
-- [运行轨迹的 Eval 指标与方法](runtime-analysis-research.md) — 已有证据、评价判据与冻结案例复核
-- [宿主兼容与自动语言选择](host-compatibility.md) — 共享报告、能力降级、中文／英文、验证入口
-- [宿主接入与命令](host-entrypoints.md) — 四个宿主各自的入口、构建与分发
-- [宿主接入文件清单](host-integration-files.md) — hook、插件清单、打包内容
-- [轨迹工具字段与统计口径（DSH）](trajectory-fields.md) — 字段、单位、上下文七类定义、已知边界
-- [本轮 UI 改动评审](ui-changes-review.md) — DSH 专用与通用改动分层、模板生成方式、遗留项
-- [轨迹工具设计](trajectory-tools-design.md) — 四个工具的取舍
-
-**视图**
-- [分析视图设计](analysis-view-design.md) — 路径页的结构与数据流
-- [DSH 目标定位](demo/layout-review/goal-layer.js) — 按目标与事件打开详情，定位关联轮次
-- [Codex 历史改动](demo/layout-review/diff-model.mjs) — 从记录的补丁生成增删行与行号
-- [上下文证据接口](context-evidence-interface.md) — 七类构成的数据来源
-- [静态上下文剖面](static-context-profile.md)
-
-**诊断方法**
-- [工具结果筛选](../plugin/portable-tools/README.md) — `trajectory_inspect` 的 `outcome` 参数
-- [诊断方法（定稿）](diagnostic-method-and-tools.md) · [诊断草稿](diagnostic-methods-draft.md)
-- [诊断 v3](diagnostic-analysis-v3.md) · [v3 实验结果](diagnostic-experiment-v3-results.md) · [试点结果](diagnostic-pilot-results.md)
-- [提示词（定稿）](diagnostic-prompts.md) · [提示词草稿](diagnostic-prompts-draft.md)
-
-**报告**
-- [报告写作](../report/WRITING.md) · [组件绑定](../report/AUTHORING.md)
-- [报告装配](report-assembly.md) · [报告模板](report-templates.md) · [编写流程](report-authoring-workflow.md)
-
-**其他**
-- [可移植分析](portable-analysis.md) · [Assembly 组件](assembly-component.md)
-- [Skill 工具评审](skill-tool-review.md) · [注入来源研究](injection-provenance-research.md)
-
----
-
-## 常用命令
-
-```sh
-# 生成某个宿主的视图
-node scripts/trajectory-view.mjs --host codex --serve
-node scripts/trajectory-view.mjs --host pi --file session.jsonl --open
-
-# 打包宿主插件
-node scripts/sync-host-skills.mjs
-node scripts/package-trajectory.mjs --host codex|pi|claude
-
-# DSH 共享视图资源（打包前自动执行）
-node scripts/sync-view-assets.mjs
-
-# 浏览器交互回归
-npm ci --prefix test/browser
-npm exec --prefix test/browser -- playwright install chromium firefox webkit
-npm test --prefix test/browser
-```
-
----
-
-## 不要手改的生成物
-
-| 文件 | 由谁生成 | 改哪里 |
-|---|---|---|
-| `plugin/analysis-view/lib/trace/page.html`、`page.js` | `scripts/port-geist-page.mjs` | `docs/demo/layout-review/` + `view/assets/` |
-| `plugin/analysis-view/lib/trace/models/*.mjs` | 同上（脚本头有注释） | 同上 |
-| `plugin/analysis-view/lib/trace/shared/*` | `scripts/sync-view-assets.mjs` | `view/assets/` |
-| `dist/trajectory-tree-*` | `scripts/package-trajectory.mjs` | 对应的 `plugin/` 与 `view/` 源码 |
-| `README` 中的图片与动图 | `scripts/build-readme-media.mjs` | `demo/` 与视图组件 |
-
----
-
-## 未纳入版本控制、需要留意的目录
-
-| 路径 | 状态 | 说明 |
-|---|---|---|
-| `dist/` | `.gitignore` 忽略 | 可分发包，随时可重建 |
-| `docs/demo/` | 仓库内，但页面数据来自 `.dsh/` | 演示用中间产物，部分文件带真实会话数据，**不要随意提交** |
-| `a2ui-research/` | 未跟踪 | 与轨迹主线无关的资料，索引暂不收录 |
-| `build-client.mjs` | 未跟踪，0 字节 | 疑似遗留空文件，确认后可删 |
-| `lib/`（2 个文件） | 未跟踪 | `client.source.js` 等，来源待确认 |
-| `.dsh/` | 本地产物 | 构建中间文件、检查页、截图 |
+| 路径 | 维护方式 |
+| --- | --- |
+| `plugin/analysis-view/lib/trace/page.html`、`page.js` 和轨迹模型 | [路径页移植脚本](../scripts/port-geist-page.mjs)使用 `docs/demo/layout-review/` 与 `view/assets/` |
+| `plugin/analysis-view/lib/trace/shared/` | [共享资源脚本](../scripts/sync-view-assets.mjs)从 `lib/`、视图资源与查询工具同步 |
+| 各宿主的诊断 skill | [Skill 同步脚本](../scripts/sync-host-skills.mjs)从 `skill/` 分发正文、资源和宿主元数据 |
+| `dist/trajectory-tree-*` | [宿主打包脚本](../scripts/package-trajectory.mjs)按入口依赖和资源清单生成 |
+| `.dsh/` 与 `report/out/` | 本地数据、检查和导出产物 |

@@ -1,19 +1,23 @@
 {
   "name": "dsh-analysis-view",
-  "version": "0.10.144",
+  "version": "0.10.146",
   "private": true,
   "type": "module",
-  "description": "「分析」标签与执行路径页:Geist 视觉、上下文层、文件层、子代理与 Skill 观察",
-  "main": "lib/index.js",
+  "description": "Trajectory Tree, Eval and conversation search for DSH",
+  "main": "lib/dsh-entry.js",
   "scripts": { "prepack": "node ../../scripts/sync-view-assets.mjs" },
   "exports": {
-    ".": "./lib/index.js",
+    ".": "./lib/dsh-entry.js",
     "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/client.js",
     "lib/index.js",
+    "lib/dsh-entry.js",
+    "lib/settings.js",
+    "lib/conversation-search.js",
     "lib/cache-efficiency.js",
     "lib/eval-metrics.js",
     "lib/eval-evidence.js",
@@ -27,10 +31,14 @@
     "lib/trace-skill-evidence.js",
     "lib/trace",
     "lib/eval",
+    "locale/*.json",
     "cordis.patch.yml",
     "README.md",
-    "self-test.mjs"
+    "self-test.mjs",
+    "search-test.mjs",
+    "overview-test.mjs"
   ],
+  "dependencies": { "@deepseek-ai/schemastery": "^3.18.4" },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -41,7 +49,9 @@
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-conversation",
-        "@deepseek-ai/dsh-client-ui-commands"
+        "@deepseek-ai/dsh-client-ui-commands",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
       ]
     }
   },

@@ -1,8 +1,5 @@
 // Search recorded messages in one session. Return recent matching turns and an older-page cursor.
 
-import { createHash } from "node:crypto";
-
-const ROUTE_PATH = "/conversation-search";
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 30;
 const MAX_QUERY_CHARS = 240;
@@ -163,113 +160,13 @@ export function searchTurns(events, needle, options = {}) {
   return { turns, totalMatches, matchedTurns, nextBefore: recent.length > limit ? turns.at(-1).turn : null };
 }
 
-export function logIdentity(sessionId, events) {
-  const first = (events || []).find((event) => event && typeof event.seq === "number");
-  const parts = [sessionId, first ? first.seq : -1, first ? first.type : "", first ? first.time : 0].join("|");
-  return { id: createHash("sha256").update(parts).digest("hex").slice(0, 12), events: (events || []).length };
-}
-
-function disposeObservation(observation) {
-  const dispose = observation && (observation[Symbol.dispose] || observation.dispose);
-  if (typeof dispose === "function") {
-    try {
-      dispose.call(observation);
-    } catch {
-      /* 释放失败不影响这次读取 */
-    }
-  }
-}
-
-async function loadEvents(ctx, sessionId, signal) {
-  const query = ctx.get("sessionQuery");
-  if (query && typeof query.observeSession === "function") {
-    const observation = await query.observeSession(sessionId, { projectionMode: "none", signal });
-    try {
-      signal.throwIfAborted();
-      return observation.events || [];
-    } finally {
-      disposeObservation(observation);
-    }
-  }
-  const sessions = ctx.get("sessions");
-  const live = sessions && typeof sessions.get === "function" ? sessions.get(sessionId) : undefined;
-  if (live && typeof live.snapshotEvents === "function") return live.snapshotEvents();
-  const persistence = ctx.get("sessionPersistence");
-  if (persistence && typeof persistence.open === "function") {
-    const handle = await persistence.open(sessionId, "read", { signal });
-    try {
-      const result = await handle.read(0, undefined, { signal });
-      return (result && result.events) || [];
-    } finally {
-      if (handle && typeof handle.close === "function") await handle.close();
-    }
-  }
-  throw new Error("no session source available (sessionQuery/sessions/sessionPersistence)");
-}
-
-function withTimeout(promise, ms, label) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(label + ": session load timed out")), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
-
-export const inject = ["webServer"];
-
-export function apply(ctx) {
-  const webServer = ctx.get("webServer");
-  if (webServer === undefined) return;
-  ctx.effect(() => webServer.register({
-    kind: "prefix",
-    path: ROUTE_PATH,
-    handler: async (req, res) => {
-      const send = (status, body) => {
-        res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-        res.end(JSON.stringify(body));
-      };
-      try {
-        const url = new URL(req.url || "/", "http://localhost");
-        if (req.method !== "GET") return send(404, { error: "not found" });
-        if (url.pathname !== ROUTE_PATH + "/search") return send(404, { error: "not found" });
-        const sessionId = url.searchParams.get("session");
-        if (!sessionId) return send(400, { error: "missing session" });
-        const query = (url.searchParams.get("q") || "").trim();
-        if (query === "") return send(400, { error: "missing q" });
-        if (query.length > MAX_QUERY_CHARS) return send(400, { error: "query too long" });
-        const scope = url.searchParams.get("scope") === "all" ? "all" : "chat";
-        const limit = Number(url.searchParams.get("limit") ?? DEFAULT_LIMIT);
-        const beforeParam = url.searchParams.get("before");
-        const before = beforeParam === null ? undefined : Number(beforeParam);
-        if (!Number.isSafeInteger(limit) || limit < 1) return send(400, { error: "invalid limit" });
-        if (before !== undefined && (!Number.isSafeInteger(before) || before < 1)) return send(400, { error: "invalid before" });
-        const events = await withTimeout(loadEvents(ctx, sessionId, AbortSignal.timeout(5000)), 5000, "conversation-search");
-        const log = logIdentity(sessionId, events);
-        const found = searchTurns(events, query, { limit, scope, before });
-        return send(200, {
-          ok: true,
-          session: sessionId,
-          log,
-          query,
-          scope,
-          totalMatches: found.totalMatches,
-          matchedTurns: found.matchedTurns,
-          returnedTurns: found.turns.length,
-          truncated: found.nextBefore !== null,
-          nextBefore: found.nextBefore,
-          turns: found.turns,
-        });
-      } catch (error) {
-        return send(500, { error: String((error && error.message) || error) });
-      }
-    },
-  }), "conversation-search: search route");
+export function parseSearchParams(params) {
+  const query = (params.get("q") || "").trim();
+  if (!query) return { error: "missing q" };
+  if (query.length > MAX_QUERY_CHARS) return { error: "query too long" };
+  const limit = Number(params.get("limit") ?? DEFAULT_LIMIT);
+  const before = params.has("before") ? Number(params.get("before")) : undefined;
+  if (!Number.isSafeInteger(limit) || limit < 1) return { error: "invalid limit" };
+  if (before !== undefined && (!Number.isSafeInteger(before) || before < 1)) return { error: "invalid before" };
+  return { query, limit, before, scope: params.get("scope") === "all" ? "all" : "chat" };
 }

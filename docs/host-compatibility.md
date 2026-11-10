@@ -7,15 +7,23 @@ The four hosts use the same trajectory document, renderer and report components.
 | Execution unit | Native model step | Assistant cycle | Visible action | Assistant record |
 | Tool intervals | Official recorded intervals | Validated start/end capture | Matching local rollout timestamps | Not reconstructed from transcript order |
 | Native duration without intervals | Kept separately | Kept separately | Kept separately | Missing stays unknown |
+| Tool failure evidence | Native error codes and direct/PTC result text | Recorded tool result and typed details, when present | Aggregated output and the recorded command exit code | `tool_result` content and typed shell metadata for a single paired result |
 | Context sources | Request composition estimates | Retained branch text estimates | Retained rollout text estimates | Visible transcript text estimates |
 | Request usage | Official statistics | Recorded assistant usage | Optional local response telemetry | Message usage, deduplicated by message ID |
 | Child execution history | Load on demand when available | No invented history | Delegation metadata; child completion remains unknown | No invented history |
 | Jump to host conversation | Supported in native frame | Disabled | Disabled | Disabled |
 | Bring a diagnostic draft back | Append to the composer | Load with the copied Pi command or paste the text | Copy and paste | Copy and paste |
+| Project Eval overview | Native left sidebar and registered workspaces | Selected branch and recent sessions in its directory | Indexed project threads or explicit snapshots | Explicit transcripts or their directory |
 
 `lib/host-capabilities.mjs` describes these boundaries. Frame embedding alone does not authorize DSH-specific actions. Missing evidence is not zero. A cumulative duration does not supply an execution interval; interval coverage unions overlaps and excludes idle gaps. Unknown model timing is not classified as “other” time.
 
 Portable pages retain the shared light/dark theme rules and responsive viewport layout. The old research-only fixed graph heights are not applied. English source names can wrap inside their existing grid cells.
+
+The portable overview compares reported input bands and recorded tool results. Codex offers occupancy bands when usage and window capacity belong to the same turn's recorded request. Pi and Claude history retain the input and tool comparisons without borrowing a current model capacity for historical requests.
+
+Eval and overview count attribution among recorded tool errors in the selected scope. Both use the same rule set and separate confirmed causes, tentative causes, unclassified output and empty text. Coverage depends on the tasks and the evidence each host records. Optional PowerShell parsing can add a location or a tentative explanation to the evidence details.
+
+Codex analysis replaces inline Base64 images in App Server responses, saved snapshots and local rollouts with a compact reference. It keeps the surrounding record, image type, encoded size and a digest. Native request usage still comes from the host's telemetry.
 
 ## Automatic language selection
 
@@ -39,7 +47,7 @@ node scripts/trajectory-view.mjs --host pi --file session.jsonl --eval --lang en
 node scripts/trajectory-report.mjs render --markdown report.md --bundle bundle.json --output report.html --lang en
 ```
 
-Interface language and report prose are separate. AI-authored reports follow the user's current request or explicit language instruction. Quoted messages, tool arguments/results, paths and identifiers remain verbatim. UI literals are translated before inserting evidence; the renderer does not translate the completed DOM or the source dataset. Stored annotations are presented from structured calls in the selected language while retaining native facts, operation metadata and diffs.
+Interface language and report prose are separate. AI-authored reports follow the user's current request or explicit language instruction. Quoted text, paths and identifiers retain their source wording. UI literals are translated before inserting evidence. Stored annotations are presented from structured calls in the selected language while retaining native facts, operation metadata and diffs.
 
 ## Diagnostic changes and verification
 
@@ -81,3 +89,11 @@ Checked against the installed runtime `0.2.2-alpha.2` and the published `0.2.2-r
 The update also raises the minimum Node.js version to 24.9.
 
 One behaviour to verify after upgrading: `contextBreakdown` and `contextPressure` are no longer part of a Session's summary key set. The panel reads them through `useProjection("contextBreakdown")` and `useProjection("contextPressure")`, so it should still receive them; a reader that took them from the summary instead would stop seeing them.
+
+### Optional DSH data sources
+
+The tree, conversation search and core Eval metrics use recorded session events. The built-in token meter supplies context occupancy and the current three-category estimate.
+
+The tree and Eval derive elapsed and tool timing from recorded intervals and model timing from native step starts and assistant streams. Eval and the evidence tools can also replay the official Stats definitions shipped with DSH for supplementary step statistics. The experimental Inspector bundle can stay disabled.
+
+Trajectory Tree rebuilds its seven-category request history from the durable DSH surface and the built-in token-meter estimator. The pre-response surface is the estimate anchor and the latest recorded request header supplies tool definitions. The tree, Eval and evidence queries use the same sampler. Provider-reported input is a separate field.

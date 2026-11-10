@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { i18nRuntime } from './shared/i18n.mjs';
+import { failureMessages, failureViewRuntime } from './shared/tool-attribution.mjs';
 
 const files = [
   'page.html',
@@ -54,7 +55,7 @@ export function renderTraceDocument(payload, assets, {
   const renderer = assets.renderer.replace(extensionSlot, () => extension + '\n' + assets.observation);
   const values = {
     DATA: JSON.stringify(payload).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'),
-    RENDERER: inlineScript(i18nRuntime(locale) + renderer),
+    RENDERER: inlineScript(i18nRuntime(locale, failureMessages) + failureViewRuntime() + renderer),
     BOOT: inlineScript(boot),
   };
   return template.replace(documentSlots, (_, key) => values[key]);

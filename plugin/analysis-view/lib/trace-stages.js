@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { traceSource, observationSource, sameSource } from './trace-cache.js';
 import { TraceResources, abortable, abortError } from './trace-resources.js';
 import { buildTracePayload } from './trace-build.js';
-import { traceContext, traceActors, readContextTimeline, applyGoalEvents } from './trace-context.js';
+import { traceRequestLayer, traceContextDetails, traceActors, applyGoalEvents } from './trace-context.js';
 import { readGoalChanges } from './goal-events.js';
+import { readRecordedModelTiming, readRequestContext } from './trace/shared/request-context.mjs';
 
 const hash = value => createHash('sha1').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 const preview = value => value && ({ text: value.text.slice(0, 96), omitted: (value.omitted || 0) + Math.max(0, value.text.length - 96) });
@@ -44,7 +45,7 @@ export class TraceStages {
   }
   release(entry, viewer) {
     entry.viewers.delete(viewer);
-    if (!entry.viewers.size && (!entry.actorData || entry.historyPending)) this.resources.remove(entry.resourceKey);
+    if (!entry.viewers.size && !entry.actorData) this.resources.remove(entry.resourceKey);
   }
   async load(sessionId, assets, signal, viewer = 'anonymous') {
     const source = await this.source(sessionId, signal);
@@ -91,8 +92,7 @@ export class TraceStages {
         version: hash([cut?.revision, assets, []]), payload, actorData: null,
         header: observation.header || observation.session, inherited: observation.inheritedEventCount ?? 0,
         timing: { load: loaded - started, core: Date.now() - loaded } };
-      entry.core = { ...traceCore(payload), traceVersion: entry.version, traceAssets: assets,
-        traceCapabilities: { history: !!entry.header && typeof this.ctx.get('sessionProjections')?.restore === 'function' } };
+      entry.core = { ...traceCore(payload), traceVersion: entry.version, traceAssets: assets, traceCapabilities: { requestContext: true } };
       const ensureEvents = async () => {
         controller.signal.throwIfAborted();
         if (!events) await (reopening ||= (async () => {
@@ -116,14 +116,30 @@ export class TraceStages {
           } finally { rawUsers--; }
         }, stop, 1);
       };
-      entry.startDetails = () => entry.details ||= this.resources.main.run(async () => {
+      entry.requestContext = rows => entry.contextJob ||= readRequestContext(rows, controller.signal, this.ctx.get?.('sessions')?.messageProjections).then(result => {
+        entry.contextData = result; this.resources.update(entry); return result;
+      });
+      entry.modelTiming = rows => entry.modelJob ||= readRecordedModelTiming(rows, controller.signal).then(turns => {
+        entry.modelData = turns; this.resources.update(entry); return turns;
+      });
+      entry.startContext = () => entry.contextStage ||= this.resources.main.run(async () => {
         const rows = await ensureEvents(), at = Date.now();
-        payload.context = structuredClone(traceContext(rows, payload, readContextTimeline(this.ctx, sessionId)));
+        const series = await entry.requestContext(rows);
+        const context = traceRequestLayer(rows, series);
+        entry.contextPatch = { context, traceStatus: { context: context.requests.length ? 'ready' : 'unavailable' },
+          ...(series.pressure ? { officialStats: { context: { pressure: series.pressure } } } : {}) };
+        entry.timing.context = Date.now() - at;
+        this.resources.update(entry); return entry.contextPatch;
+      }, controller.signal, 0);
+      entry.startDetails = () => entry.details ||= entry.startContext().then(layer => this.resources.main.run(async () => {
+        const rows = await ensureEvents(), at = Date.now();
+        payload.recordedModelTiming = { turns: await entry.modelTiming(rows) };
+        Object.assign(payload, layer, { context: { ...layer.context, ...traceContextDetails(rows, payload) } });
         // 目标事件不在 observeSession 的流里:单独读一次原始日志(按会话缓存,同 revision 不重读)。
         try { applyGoalEvents(payload, await readGoalChanges(this.ctx, sessionId, toSeq, cut)); } catch { /* 目标事件缺失不影响其余数据 */ }
         entry.timing.details = Date.now() - at;
         this.resources.update(entry); return payload;
-      }, controller.signal, 1);
+      }, controller.signal, 1));
       entry.startActors = () => entry.actors ||= entry.startDetails().then(() => this.resources.actors.run(async () => {
         rawUsers++;
         let incomplete = false;
@@ -150,39 +166,11 @@ export class TraceStages {
           this.resources.update(entry); return entry.actorData;
         } finally { rawUsers--; releaseRaw(); }
       }, controller.signal));
-      entry.startHistory = before => {
-        if (entry.historyBefore === before && entry.historyJob) return entry.historyJob;
-        entry.historyBefore = before; entry.historyPending = true;
-        const job = this.resources.history.run(async () => {
-          const registry = this.ctx.get('sessionProjections');
-          if (!entry.header || typeof registry?.restore !== 'function') throw new Error('historical projection replay unavailable');
-          rawUsers++;
-          try {
-            const rows = await this.resources.main.run(ensureEvents, controller.signal, 2);
-            const start = rows.find(e => e.type === 'turn/start' && e.data?.turn >= before);
-            const prefix = start ? rows.filter(e => e.seq < start.seq) : rows;
-            let checkpoint = {}, deadline = Date.now() + 8000;
-            // Pure restore returns detached checkpoints; no live Session or
-            // durable DSH projection cache is changed by this history read.
-            for (let i = 0; i < prefix.length; i += 1000) {
-              controller.signal.throwIfAborted();
-              if (Date.now() > deadline) throw new Error('historical replay budget exceeded');
-              const batch = prefix.slice(i, i + 1000);
-              checkpoint = await this.resources.main.run(() => registry.restore(checkpoint, batch, batch[0].seq, entry.header, entry.inherited).checkpoint, controller.signal, 2);
-              await new Promise(resolve => setImmediate(resolve));
-            }
-            const requests = checkpoint.contextTimeline?.val?.requests;
-            if (!Array.isArray(requests)) throw new Error('context history is unavailable');
-            const history = { context: { historyRequests: structuredClone(requests.filter(row => row.turn < before).slice(-1500)) }, traceStatus: { history: 'ready' } };
-            if (entry.historyBefore === before) { entry.historyData = history; this.resources.update(entry); }
-            return history;
-          } finally { rawUsers--; releaseRaw(); }
-        }, controller.signal).finally(() => { if (entry.historyJob === job) entry.historyPending = false; });
-        entry.historyJob = job; return job;
-      };
       entry.dispose = () => {
         controller.abort(abortError()); releaseRaw(true); entry.viewers.clear();
-        entry.payload = entry.core = entry.actorData = entry.historyData = entry.historyJob = entry.details = entry.actors = null; entry.bodies.clear();
+        entry.payload = entry.core = entry.actorData = entry.contextData = entry.contextJob = entry.details = entry.actors = null; entry.bodies.clear();
+        entry.contextStage = entry.contextPatch = null;
+        entry.modelData = entry.modelJob = null;
         if (this.latest.get(sessionId) === entry.resourceKey) this.latest.delete(sessionId);
       };
       // An abandoned core releases its log, without starting optional work.
@@ -194,9 +182,9 @@ export class TraceStages {
   async stage(entry, stage, turnNumber) {
     entry.controller.signal.throwIfAborted();
     if (stage === 'core') return entry.core;
+    if (stage === 'context') return entry.startContext();
     if (stage === 'details') return entry.startDetails();
     if (stage === 'actors') return entry.startActors();
-    if (stage === 'history') return entry.startHistory(turnNumber);
     if (stage === 'turn') {
       const session = entry.payload.sessions[0], turn = session.turns.find(t => t.number === turnNumber);
       return turn ? { sessions: [{ id: session.id, turns: [turn] }] } : null;

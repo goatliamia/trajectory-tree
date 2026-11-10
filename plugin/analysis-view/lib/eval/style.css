@@ -217,6 +217,7 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; ba
 .error-condition code { grid-column: 1 / -1; }
 .error-pair { margin-top: 7px; display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 0 6px; }
 .error-pair > div { min-height: 21px; font-size: 11px; overflow-wrap: anywhere; }
+.error-attribution { margin: 3px 0 5px; color: var(--muted); }
 .pair-marker { position: relative; }
 .pair-marker::before { position: absolute; content: ""; width: 6px; height: 6px; border-radius: 50%; top: 5px; left: 2px; background: var(--red); }
 .pair-marker:not(:nth-last-child(2))::after { position: absolute; content: ""; width: 1px; top: 12px; bottom: -4px; left: 4.5px; background: var(--line); }

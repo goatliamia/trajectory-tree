@@ -24,7 +24,7 @@ export function collectToolResults(session, facts, fileOperations) {
       else if (file?.kind === 'change') kind = 'change';
       else if (file?.kind === 'read') kind = 'read';
       else if (/^(?:trajectory|session|session_event)_(?:read|search)$/.test(call.name) && /(?:返回|命中) \d+ 条/.test(fact?.outcome || '')) kind = 'query';
-      else if (['grep', 'glob', 'web_search', 'web_fetch'].includes(call.name) && fact?.outcome && !/已收到工具返回|工具已返回/.test(fact.outcome)) kind = 'query';
+      else if ((call.classification?.kind === 'query' || ['grep', 'glob', 'web_search', 'web_fetch'].includes(call.name)) && fact?.outcome && !/已收到工具返回|工具已返回/.test(fact.outcome)) kind = 'query';
       if (!kind) continue;
       const key = operation ? call.name + ':' + kind : kind;
       let group = groups.get(key);

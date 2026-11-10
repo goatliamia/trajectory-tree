@@ -1,10 +1,7 @@
 # dsh-analysis-view bundle layer.
 #
-# Inserts the plugin row into the web profile bundle roster. The plugin is a
-# pure client half (browser-only): the host entry is a no-op stub that keeps
-# the package loadable by the dsh CLI's cordis loader; all behavior lives in
-# the `dsh.client` web entry (`exports["./client"]`), which the harness web
-# app loads via the ModuleLoader handoff.
+# The host entry exposes the view routes and native configuration schema.
+# The browser entry registers the settings page and conversation views.
 - insert:
     - id: dsh-analysis-view
       name: dsh-analysis-view

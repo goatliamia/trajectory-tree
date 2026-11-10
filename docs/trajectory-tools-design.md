@@ -1,6 +1,6 @@
 # 查询与诊断取证设计
 
-本文件集中记录实现口径、分析方法、优化方案与开发约束。安装、参数和调用示例见 [查询工具使用说明](../plugin/trajectory-tools/README.md)。早期历史查询与压缩后对账的设计记录见 [项目设计记录](design.md)。
+本文件集中记录实现口径、分析方法、优化方案与开发约束。安装、参数和调用示例见 [查询工具使用说明](../plugin/trajectory-tools/README.md)。早期历史查询与压缩后对账的设计记录见 [项目设计记录](archive/design.md)。
 
 ## 诊断取证与常驻工具定义
 
@@ -35,7 +35,7 @@ request/context 仅计为 metadataChanges，已移除虚假的请求/曝光累�
 
 分析使用项目可统计的运行数据；上下文趋势图和 Skill 标注只是可能的证据来源。固定工具负责取证，模型负责解释、提出可执行动作和验证办法。
 
-v2 试跑未达到用户要求。复盘见 [方法与工具设计](diagnostic-method-and-tools.md)，当前使用提示见 [诊断提示词](diagnostic-prompts.md)。正面场景方法已进入 inspect-methods.js，逐主题按需返回；构成、组装、投递和回执继续作为解释剖面，不新建平行工具。历史查询和诊断分布共用 usage.js；inspect 的 settlement 计数与旧 search 的兼容字段分别标注。
+v2 试跑未达到用户要求。复盘见 [方法与工具设计](archive/diagnostic-method-and-tools.md)，当前使用提示见 [诊断提示词](diagnostic-prompts.md)。正面场景方法已进入 inspect-methods.js，逐主题按需返回；构成、组装、投递和回执继续作为解释剖面，不新建平行工具。历史查询和诊断分布共用 usage.js；inspect 的 settlement 计数与旧 search 的兼容字段分别标注。
 
 | 主题 | 核查内容 | 可提出的行动与结论边界 |
 |---|---|---|

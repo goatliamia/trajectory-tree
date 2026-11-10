@@ -138,6 +138,7 @@ window.__geistBoot = () => {
   }
 
   function callKind(c){
+    if(c.classification?.kind)return c.classification.kind;
     if(/^(read|grep|glob|read_image)$/.test(c.name))return 'read';
     if(/^(edit|write|apply_patch)$/.test(c.name))return 'write';
     if(/^(pwsh|bash)$/.test(c.name))return 'run';
@@ -1625,6 +1626,9 @@ function fileChangeHistory(operations, path) {
   overviewLayers.add('context'); overviewLayers.add('files');
   const reviewTokens = value => Math.abs(value) >= 1000 ? (value / 1000).toFixed(1) + 'k' : Math.round(value).toLocaleString();
   const reviewSigned = value => (value > 0 ? '+' : value < 0 ? '−' : '') + reviewTokens(Math.abs(value));
+  const reviewReportedInput = sample => Number.isFinite(sample?.reportedInput)
+    ? '<p class="review-quiet">' + ui('宿主上报的请求输入（含缓存）') + ' <b>' + sample.reportedInput.toLocaleString() + ' tokens</b></p>'
+    : '';
   function reviewDuration(ms) {
     const seconds = Math.max(0, Math.round(ms / 1000));
     if (seconds < 60) return seconds + ui('秒');
@@ -1778,6 +1782,7 @@ function fileChangeHistory(operations, path) {
     const first = reviewContextRequests.find(r => r.turn === row.turn);
     const max = Math.max(1, ...CONTEXT_CATEGORIES.map(c => Math.abs(row.parts[c.key][row.isBaseline ? 'after' : 'delta'])));
     let html = '<div class="review-context-headline"><strong>' + (row.isBaseline ? reviewTokens(row.total) : reviewSigned(row.net)) + '</strong><span>' + (row.isBaseline ? ui('首轮末次请求 · 已有上下文') : ui('tokens · 净变化')) + '</span></div>';
+    html += reviewReportedInput(reviewContextRequests.findLast(sample => sample.turn === row.turn));
     if (row.isBaseline) html += ui('<p class="review-context-change-note">首次请求已经带着约 ') + reviewTokens(CONTEXT_CATEGORIES.reduce((n, c) => n + (first[c.key] || 0), 0)) + ui(' tokens，并不是空白。下面同时列出首次请求与本轮末次请求的构成。</p>');
     if (!row.isBaseline && (row.increase || row.decrease)) html += '<div class="review-context-totals">' +
       (row.increase ? ui('<span>增加 <b>') + reviewSigned(row.increase) + '</b></span>' : '') +
@@ -1850,6 +1855,7 @@ function fileChangeHistory(operations, path) {
     let html = info.initial
       ? '<div class="review-context-headline"><strong>≈' + reviewTokens(info.total) + '</strong><span>' + ui('tokens · 首次请求已有量') + '</span></div>'
       : '<div class="review-context-headline"><strong>' + reviewSigned(info.amount) + '</strong><span>' + ui('tokens · 本步净变化') + '</span></div>';
+    html += reviewReportedInput(info.current);
     if (!info.initial && (increase || decrease)) html += '<div class="review-context-totals">' +
       (increase ? ui('<span>增加 <b>') + reviewSigned(increase) + '</b></span>' : '') +
       (decrease ? ui('<span>减少 <b>') + reviewSigned(-decrease) + '</b></span>' : '') + '</div>';
@@ -2735,7 +2741,8 @@ function fileChangeHistory(operations, path) {
   function closeDrawer() { $('canvas').classList.remove('drawer-open');activeGroup=null;$('graph').querySelectorAll('.active').forEach(g=>g.classList.remove('active')); }
   function block(value) { return value?`<pre class="excerpt">${esc(value.text)}</pre>${value.omitted?ui`<span class="truncated">节选 · 另有 ${value.omitted.toLocaleString()} 个字符未载入此 demo</span>`:''}`:ui('<span class="muted">未记录文本</span>'); }
   function callEntry(c) {
-    return ui`<details class="entry" ${c.status==='error'?'open':''}><summary><span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span><div class="entry-head"><div class="entry-top"><span class="entry-name">${esc(c.name)}</span><span class="entry-status ${c.status==='error'?'bad':''}">${c.status==='error'?ui('工具报错'):c.status==='returned'?ui('已返回'):ui('尚无结果记录')}</span><span class="spacer"></span><span class="mono muted" style="font-size:10px">${c.end===null?'—':dur(c.end-c.start)}</span></div><div class="entry-time">${clock(c.start)}${c.end===null?'':` → ${clock(c.end)}`} · seq ${c.seq}${c.resultSeq===null?'':` → ${c.resultSeq}`}</div></div></summary>${c.error?ui`<span class="code-label">错误类型</span><div class="mono" style="font-size:11px;color:var(--error)">${esc(c.error.code||c.error.name||'')}</div>`:''}<span class="code-label">调用参数</span>${block(c.args)}<span class="code-label">返回原文</span>${block(c.result)}</details>`;
+    const attribution = globalThis.__trajectoryFailureText?.(c.attribution);
+    return ui`<details class="entry" ${c.status==='error'?'open':''}><summary><span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span><div class="entry-head"><div class="entry-top"><span class="entry-name">${esc(c.name)}</span><span class="entry-status ${c.status==='error'?'bad':''}">${c.status==='error'?ui('工具报错'):c.status==='returned'?ui('已返回'):ui('尚无结果记录')}</span><span class="spacer"></span><span class="mono muted" style="font-size:10px">${c.end===null?'—':dur(c.end-c.start)}</span></div><div class="entry-time">${clock(c.start)}${c.end===null?'':` → ${clock(c.end)}`} · seq ${c.seq}${c.resultSeq===null?'':` → ${c.resultSeq}`}</div></div></summary>${attribution ? `<p class="review-quiet">${esc(attribution)}</p>` : ''}${c.error?ui`<span class="code-label">错误类型</span><div class="mono" style="font-size:11px;color:var(--error)">${esc(c.error.code||c.error.name||'')}</div>`:''}<span class="code-label">调用参数</span>${block(c.args)}<span class="code-label">返回原文</span>${block(c.result)}</details>`;
   }
   function showGroup(index) {
     try {
@@ -2801,7 +2808,7 @@ function collectToolResults(session, facts, fileOperations) {
       else if (file?.kind === 'change') kind = 'change';
       else if (file?.kind === 'read') kind = 'read';
       else if (/^(?:trajectory|session|session_event)_(?:read|search)$/.test(call.name) && /(?:返回|命中) \d+ 条/.test(fact?.outcome || '')) kind = 'query';
-      else if (['grep', 'glob', 'web_search', 'web_fetch'].includes(call.name) && fact?.outcome && !/已收到工具返回|工具已返回/.test(fact.outcome)) kind = 'query';
+      else if ((call.classification?.kind === 'query' || ['grep', 'glob', 'web_search', 'web_fetch'].includes(call.name)) && fact?.outcome && !/已收到工具返回|工具已返回/.test(fact.outcome)) kind = 'query';
       if (!kind) continue;
       const key = operation ? call.name + ':' + kind : kind;
       let group = groups.get(key);
@@ -3423,8 +3430,8 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     vp.scrollLeft = left; vp.scrollTop = top;
   });
 
-  let geistOfficialStats = data.officialStats?.snapshot;
-  let geistStatsByStep = new Map((geistOfficialStats?.turns || []).flatMap(t => t.steps.map(s => [t.turn + ':' + s.step, s])));
+  let geistModelTiming = data.recordedModelTiming ?? data.officialStats?.snapshot;
+  let geistStatsByStep = new Map((geistModelTiming?.turns || []).flatMap(t => t.steps.map(s => [t.turn + ':' + s.step, s])));
   let geistOutcomes = collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations);
   let geistOutcomeBranches = [];
   const geistOutcomeLayoutCache = new Map();
@@ -3700,7 +3707,10 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       .filter(([, value]) => value !== null && value >= 0)
       .map(([name, value, kind]) => '<div class="geist-timing-row ' + kind + '"><dt><i></i>' + name + '</dt><dd>' + preciseTime(value) + '</dd></div>');
     let html = ui('<dl class="geist-timing-facts"><div class="geist-timing-row total"><dt>这一步</dt><dd>') + preciseTime(total) + '</dd></div>' + rows.join('') + '</dl>';
-    html += ui('<p class="review-quiet">覆盖时间把重叠执行的区间只算一次') + (timing.cumulative != null && timing.coverage != null && Math.abs(timing.cumulative - timing.coverage) > 1 ? ui('；累计时间把每次调用分别相加,重叠部分会重复计入') : ui('；本步调用之间没有重叠,累计与覆盖相同')) + ui('。全部直接读取官方统计结果。</p>');
+    const timingBasis = tool === null ? ui('本步缺少可用的工具耗时记录。')
+      : Number.isFinite(stats.toolWall) || Number.isFinite(stats.tool) ? ui('工具耗时来自 DSH 官方统计。')
+      : ui('工具耗时根据本步已记录的调用时间计算。');
+    html += '<p class="review-quiet">' + timingBasis + (tool === null ? '' : ui('覆盖时间会合并重叠区间，累计时间逐次相加。')) + '</p>';
     html += ui('<div class="drawer-actions"><button class="action-button" id="geist-timing-path">查看这一步 ↗</button></div>');
     openDrawer(ui('工具执行时间'), ui('第 ') + number + ui(' 轮 · ') + stepNumber + ui(' 步'), html);
     $('geist-timing-path').onclick = () => { closeDrawer(); reviewEnterPath(number, stepNumber); };
@@ -4172,8 +4182,11 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
 ﻿  // 勾选状态按会话记住:切回对话再回来,不应该被重置成默认全开。
   (function () {
     const key = 'geist.layers.' + (data.mainSession || 'local');
+    const managed = ['context', 'files'].filter(name => typeof data.traceViewDefaults?.[name] === 'boolean');
+    for (const name of managed) if (!data.traceViewDefaults[name]) overviewLayers.delete(name);
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch { saved = null; }
+    const explicit = new Set(Object.keys(saved?.layers || {}));
     if (saved && typeof saved === 'object') {
       for (const [name, on] of Object.entries(saved.layers || {})) { if (on) overviewLayers.add(name); else overviewLayers.delete(name); }
       if (typeof geistActorLayers === 'object') for (const [name, on] of Object.entries(saved.actors || {})) geistActorLayers[name] = on;
@@ -4181,14 +4194,23 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     let timer = 0;
     const save = () => {
       const layers = {}, actors = {};
-      document.querySelectorAll('[data-br-layer]').forEach(input => { layers[input.dataset.brLayer] = input.checked; });
+      document.querySelectorAll('[data-br-layer]').forEach(input => {
+        const name = input.dataset.brLayer;
+        if (!managed.includes(name)) layers[name] = input.checked;
+      });
+      for (const name of managed) if (explicit.has(name)) layers[name] = overviewLayers.has(name);
       document.querySelectorAll('[data-actor-layer]').forEach(input => { actors[input.dataset.actorLayer] = input.checked; });
       try { localStorage.setItem(key, JSON.stringify({ layers, actors })); } catch { /* 存不下就算了 */ }
     };
     document.addEventListener('change', event => {
       const input = event.target;
-      if (!input || !input.matches || !input.matches('[data-br-layer],[data-actor-layer]')) return;
-      if (input.dataset.brLayer) { input.checked ? overviewLayers.add(input.dataset.brLayer) : overviewLayers.delete(input.dataset.brLayer); }
+      if (!input?.matches) return;
+      const name = input.dataset.brLayer ?? input.dataset.actionLayer;
+      if (!input.matches('[data-br-layer],[data-actor-layer]') && !managed.includes(name)) return;
+      if (name) {
+        explicit.add(name);
+        input.checked ? overviewLayers.add(name) : overviewLayers.delete(name);
+      }
       else if (typeof geistActorLayers === 'object') geistActorLayers[input.dataset.actorLayer] = input.checked;
       clearTimeout(timer); timer = setTimeout(save, 120);
     }, true);
@@ -4315,7 +4337,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const before = { requests: reviewContextData.requests, history: reviewContextData.historyRequests,
       files: reviewContextData.fileOperations, facts: reviewContextData.callFacts,
       branches: reviewContextData.agentBranches, skills: reviewContextData.skillEvents, analysis: reviewContextData.skillAnalysis,
-      stats: data.officialStats?.snapshot };
+      stats: data.recordedModelTiming ?? data.officialStats?.snapshot };
     if (patch.sessions) {
       for (const incoming of patch.sessions) {
         const current = data.sessions.find(row => row.id === incoming.id);
@@ -4351,7 +4373,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     if (reviewContextData.fileOperations !== before.files || patch.context?.fileOperations) geistDirty.add('files');
     if (reviewContextData.callFacts !== before.facts || patch.context?.callFacts) geistDirty.add('facts');
     if (reviewContextData.agentBranches !== before.branches || reviewContextData.skillEvents !== before.skills || reviewContextData.skillAnalysis !== before.analysis) geistDirty.add('actors');
-    if (data.officialStats?.snapshot !== before.stats || patch.officialStats?.snapshot) geistDirty.add('stats');
+    if ((data.recordedModelTiming ?? data.officialStats?.snapshot) !== before.stats) geistDirty.add('stats');
     if (patch.context?.current || patch.context?.route || patch.officialStats?.context) geistDirty.add('summary');
     geistProgressStatus();
     if (!geistDirty.size) { geistContextCoverage(); return; }
@@ -4388,8 +4410,8 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       }
       if (changed('actors') || changed('files') || sessionChanged) geistSkillScopeCache.clear();
       if (changed('stats')) {
-        geistOfficialStats = data.officialStats?.snapshot;
-        geistStatsByStep = new Map((geistOfficialStats?.turns || []).flatMap(t => t.steps.map(s => [t.turn + ':' + s.step, s])));
+        geistModelTiming = data.recordedModelTiming ?? data.officialStats?.snapshot;
+        geistStatsByStep = new Map((geistModelTiming?.turns || []).flatMap(t => t.steps.map(s => [t.turn + ':' + s.step, s])));
         geistUpdateCounts.stats++;
       }
       const graph = sessionChanged || ['context', 'files', 'facts', 'actors', 'stats'].some(changed);

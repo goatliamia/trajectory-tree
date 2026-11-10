@@ -1,6 +1,7 @@
 import { summarizeToolOutcomes } from '../trace/shared/io-outcome.mjs';
 import { callDurationMs, callTimingSummary } from '../trace/shared/tool-intervals.mjs';
 import { scopeByTurn } from '../trace/shared/scope-index.mjs';
+import { failureCategories, failureCategoryIndex, failureCondition, failureLabels, powerShellEdition, summarizeFailureAttributions } from '../trace/shared/tool-attribution.mjs';
 
 const longCallMs = 30_000;
 const bins = [
@@ -41,64 +42,71 @@ function measure(calls, host) {
     slowest: rows.slice(0, 3) };
 }
 
-function toolErrorDetails(episodes, names) {
-  const byTool = new Map();
+function toolErrorDetails(episodes, calls, attributions) {
+  const byTool = new Map(), related = new Map();
   for (const episode of episodes) {
-    const condition = episode.condition ?? 'TOOL_ERROR';
-    const code = condition.startsWith('TOOL_ERROR:') ? 'TOOL_ERROR' : condition;
     const returnedByFailure = new Map(episode.pairs.map(pair => [pair.failedSeq, pair.successSeq]));
     for (const failed of episode.failureSeqs) {
-      const tool = names.get(failed);
-      if (tool === undefined) continue;
-      if (!byTool.has(tool)) byTool.set(tool, new Map());
-      const conditions = byTool.get(tool);
-      if (!conditions.has(code)) conditions.set(code, { code, calls: 0, matched: 0, paired: null, unpaired: null });
-      const row = conditions.get(code);
-      const returned = returnedByFailure.get(failed) ?? null;
-      const read = episode.failedCount === 1 ? episode.readSeqs[0] : undefined;
-      const sample = { turn: episode.turn, failed, returned, read };
-      const key = returned == null ? 'unpaired' : 'paired';
-      row.calls++;
-      row.matched += Number(returned != null);
-      if (!row[key] || row[key].failed < failed) row[key] = sample;
+      related.set(failed, { condition: episode.condition, returned: returnedByFailure.get(failed),
+        read: episode.failedCount === 1 ? episode.readSeqs[0] : undefined });
     }
+  }
+  for (const { call, turn, name } of calls) {
+    if (call.status !== 'error') continue;
+    const pair = related.get(call.seq);
+    const parserDetail = attributions?.get(call.seq);
+    const attribution = parserDetail ?? call.attribution;
+    const code = failureCondition(call.attribution, pair?.condition ?? call.error?.code);
+    if (!byTool.has(name)) byTool.set(name, new Map());
+    const conditions = byTool.get(name);
+    if (!conditions.has(code)) conditions.set(code, { code, category: failureCategoryIndex(code), calls: 0, matched: 0, paired: null, unpaired: null });
+    const row = conditions.get(code), returned = pair?.returned ?? null;
+    const namedPowerShell = !/[\\/]/.test(name) && powerShellEdition(name) !== null;
+    const powerShell = namedPowerShell || call.powerShellEdition || attribution?.program === 'PowerShell' || parserDetail?.site != null;
+    const sample = { turn, failed: call.seq, returned, read: pair?.read, result: call.resultSeq, attribution,
+      ...(powerShell ? { powerShell: true } : {}) };
+    const key = returned == null ? 'unpaired' : 'paired';
+    row.calls++;
+    row.matched += Number(returned != null);
+    if (!row[key] || row[key].failed < call.seq) row[key] = sample;
   }
   return byTool;
 }
 
-function execution(turns, episodes, host) {
-  const groups = new Map(), names = new Map(), calls = [];
+function execution(turns, episodes, host, attributions) {
+  const groups = new Map(), calls = [];
   for (const turn of turns) for (const step of turn.steps) for (const call of step.calls) {
     const name = (host === 'dsh' ? call.name : call.nativeName || call.name) ?? '';
     if (!groups.has(name)) groups.set(name, []);
-    const row = { call, turn: turn.number };
+    const row = { call, turn: turn.number, name };
     groups.get(name).push(row);
-    names.set(call.seq, name);
     calls.push(row);
   }
-  const details = toolErrorDetails(episodes, names);
+  const details = toolErrorDetails(episodes, calls, attributions);
   const tools = [...groups].map(([name, rows]) => ({
     name, ...summarizeToolOutcomes(rows.map(({ call }) => call)), ...measure(rows, host),
     errorConditions: [...(details.get(name)?.values() ?? [])]
       .sort((a, b) => b.calls - a.calls || a.code.localeCompare(b.code))
       .map(({ paired, unpaired, ...condition }) => ({ ...condition, examples: [paired, unpaired].filter(Boolean) })),
   }));
-  return { outcomes: summarizeToolOutcomes(calls.map(({ call }) => call)), tools, callTiming: measure(calls, host).timing };
+  const allCalls = calls.map(({ call }) => call);
+  const attributionCoverage = summarizeFailureAttributions(allCalls.filter(call => call.status === 'error').map(call => call.attribution));
+  return { outcomes: summarizeToolOutcomes(allCalls), attributionCoverage, tools, callTiming: measure(calls, host).timing };
 }
 
 // Presentation adapter. All evidence is already projected from one source cut.
-export function buildEvalData(session, runtime, { host = 'dsh', title = session.title, turnLimit, synthetic = false } = {}) {
+export function buildEvalData(session, runtime, { host = 'dsh', title = session.title, turnLimit, synthetic = false, attributions } = {}) {
   const episodesIn = scopeByTurn(session.overview?.episodes ?? []);
   const scope = (turns, number) => {
     const { timing, usage, files, task, context, repeats, parameters } = runtime(turns, number);
-    const { outcomes, tools, callTiming } = execution(turns, episodesIn(number), host);
+    const { outcomes, attributionCoverage, tools, callTiming } = execution(turns, episodesIn(number), host, attributions);
     const official = timing.official;
     return {
-      outcomes, tools,
+      outcomes, attributionCoverage, tools,
       usage: { output: usage.output, outputRecords: usage.coverage.output, requests: usage.requests },
       timing: { turns: timing.turns, steps: timing.steps, toolSteps: timing.toolSteps, calls: callTiming,
-        model: official ? { steps: official.steps, total: official.fields.model,
-          firstToken: official.fields.ttft, decode: official.fields.decode } : null },
+        model: timing.recordedModel ?? (official ? { steps: official.steps, total: official.fields.model,
+          firstToken: official.fields.ttft, decode: official.fields.decode } : null) },
       files: { count: files.files, paired: files.pairedWriteFiles, before: files.readBeforeFirstWrite, after: files.readAfterLastWrite },
       task: { deliveries: task.deliveries, files: task.deliveredFiles, changes: task.workspaceObservations,
         evidence: task.evidence.filter(row => ['deliverables/presented', 'workspace/changes'].includes(row.type))
@@ -111,6 +119,7 @@ export function buildEvalData(session, runtime, { host = 'dsh', title = session.
   const turns = turnLimit ? session.turns.slice(-turnLimit) : session.turns;
   return { title, host, sourceLabel: hostNames[host] + (synthetic ? ' 模拟记录' : ' 实录'),
     cut: session.lastSeq, longCallMs, totalTurns: session.turns.length,
+    failureLabels, failureCategories: failureCategories.map(([zh, en]) => [zh, en]),
     durationBins: bins.map(([, label, unit]) => ({ label, unit })),
     whole: scope(session.turns, null), turns: turns.map(turn => ({ number: turn.number, metrics: scope([turn], turn.number) })) };
 }

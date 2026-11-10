@@ -2,8 +2,8 @@
 
 本稿已整合到正式 skill，方法正文只在源文件维护：
 
-- [综合诊断与专项入口](../skill/trace-analysis/SKILL.md)
-- [当前上下文与能力配置剖面](../skill/context-profile/SKILL.md)
+- [综合诊断与专项入口](../../skill/trace-analysis/SKILL.md)
+- [当前上下文与能力配置剖面](../../skill/context-profile/SKILL.md)
 
 评审后删除了工具使用章节和主题参数表；综合诊断直接写入 skill，专项通过链接复用能力取舍、组装与恢复的方法。宿主差异由生成脚本附加。
 

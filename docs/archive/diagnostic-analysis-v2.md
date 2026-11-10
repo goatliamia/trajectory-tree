@@ -1,6 +1,6 @@
 # 会话诊断分析与提示词方案 v2
 
-历史草稿。当前工具与提示词见 [诊断入口](diagnostics.md)。
+历史草稿。当前工具与提示词见 [诊断入口](../diagnostics.md)。
 
 后续：仓库 0.5.0 已采用按需正面方法与 [v3 共同提示](diagnostic-analysis-v3.md)，再试见 [实验记录](diagnostic-experiment-v3-results.md)。本文作为未达用户目标的旧草稿保留。
 

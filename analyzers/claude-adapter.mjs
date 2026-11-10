@@ -2,6 +2,7 @@
 // structure reuses the Pi renderer; it does not imply Pi request semantics.
 import { createHash } from 'node:crypto';
 import { win32, posix } from 'node:path';
+import { isShellTool } from '../plugin/trajectory-tools/lib/tool-attribution.js';
 
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const messageKey = row => row.message?.id || row.uuid || 'line:' + row.__trajectoryLine;
@@ -21,7 +22,7 @@ function visible(value, parameters = false) {
   return Object.fromEntries(Object.entries(value).filter(([k]) => k !== '__trajectoryLine' && (parameters || !/^(signature|encrypted_content|encryptedContent)$/.test(k))).map(([k, v]) => [k, visible(v, parameters || k === 'input')]).filter(([, v]) => v !== undefined));
 }
 export function projectClaudeTranscript(native) {
-  const entries = [], seenCalls = new Set(), seenResults = new Set(); let parentId = null, started = false, serial = 0;
+  const entries = [], seenCalls = new Map(), seenResults = new Set(); let parentId = null, started = false, serial = 0;
   let unmatchedResults = 0, duplicateResults = 0;
   const add = (row, message, block = null) => {
     const id = 'claude-' + (++serial), timestamp = row.timestamp || null;
@@ -31,13 +32,21 @@ export function projectClaudeTranscript(native) {
     if (!['user', 'assistant'].includes(row.type) || !row.message) continue;
     const content = typeof row.message.content === 'string' ? [{ type: 'text', text: row.message.content }] : Array.isArray(row.message.content) ? row.message.content : [];
     if (row.type === 'user') {
-      for (const b of content.filter(b => b.type === 'tool_result')) {
+      const toolResults = content.filter(b => b.type === 'tool_result');
+      for (const b of toolResults) {
         const paired = seenResults.has(b.tool_use_id);
         const matched = seenCalls.has(b.tool_use_id) && !paired;
         if (matched) seenResults.add(b.tool_use_id);
         else if (paired) duplicateResults++;
         else unmatchedResults++;
-        add(row, { role: 'toolResult', toolCallId: matched ? b.tool_use_id : null, content: typeof b.content === 'string' ? [{ type: 'text', text: b.content }] : (b.content || []), isError: b.is_error === true }, b);
+        // Row-level metadata can be joined only to a single, paired shell result.
+        const nativeResult = matched && toolResults.length === 1 && isShellTool(seenCalls.get(b.tool_use_id)) ? row.toolUseResult : null;
+        const details = {};
+        if (Number.isInteger(nativeResult?.exitCode)) details.exitCode = nativeResult.exitCode;
+        if (typeof nativeResult?.stderr === 'string' && nativeResult.stderr) details.stderr = nativeResult.stderr;
+        if (nativeResult?.interrupted === true) details.interrupted = true;
+        add(row, { role: 'toolResult', toolCallId: matched ? b.tool_use_id : null, content: typeof b.content === 'string' ? [{ type: 'text', text: b.content }] : (b.content || []), isError: b.is_error === true,
+          ...(Object.keys(details).length ? { details } : {}) }, b);
       }
       const visible = content.filter(b => b.type === 'text');
       if (visible.length) { add(row, { role: 'user', content: visible }); started = true; }
@@ -45,7 +54,7 @@ export function projectClaudeTranscript(native) {
       const blocks = content.filter(b => {
         if (b.type !== 'tool_use') return b.type === 'text';
         if (!b.id || !b.name || seenCalls.has(b.id)) return false;
-        seenCalls.add(b.id); return true;
+        seenCalls.set(b.id, b.name); return true;
       }).map(b => b.type === 'tool_use' ? { type: 'toolCall', id: b.id, name: b.name, arguments: toolInput(b) || {} } : b);
       if (blocks.length) add(row, { role: 'assistant', content: blocks, model: row.message.model || null });
     }
@@ -91,7 +100,8 @@ export function finalizeClaudeDataset(data, native, projected = projectClaudeTra
     if (record.kind === 'result') { const found = results.get(record.native?.callId); item = found?.entry; block = found?.block; }
     if (!item) { const event = events.get(record.seq); item = byEntry.get(event?.id); }
     if (!item) continue;
-    const row = item.claudeRow, body = block || row;
+    const row = item.claudeRow, details = record.kind === 'result' ? item.message.details : null;
+    const body = details ? { ...block, toolUseResult: details } : block || row;
     record.body = visible(body); record.nativeHash = hash(body); record.source = 'claude-transcript';
     record.native = nativeLocation(row, block?.id || block?.tool_use_id);
     if (record.kind === 'call') { record.name = block.name; record.arguments = visible(toolInput(block), true); }

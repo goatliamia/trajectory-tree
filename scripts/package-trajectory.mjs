@@ -24,6 +24,7 @@ function copy(path){
  }
 }
 for(const entry of ['scripts/trajectory-view.mjs','scripts/trajectory-query.mjs','scripts/trajectory-report.mjs',...(host==='pi'?['plugin/portable-tools/pi.mjs']:[])])copy(entry);
+for(const file of ['view/commands.html','view/commands.js'])copy(file);
 for(const file of ['report/base.css','report/style.css','report/layout.css','report/assembly.css','report/runtime.js','report/AUTHORING.md','report/WRITING.md','design/primitives.css','design/DESIGN.md','design/icons.svg','LICENSE'])copy(file);
 for (const name of ['page.html', 'page.js', 'shared/visual-tokens.css', 'shared/context-observation.css', 'shared/context-observation.js',
   'shared/context-trend-geometry.js', 'fonts/Geist-Variable.woff2', 'fonts/GeistMono-Variable.woff2', 'fonts/LICENSE.txt']) {
@@ -31,6 +32,7 @@ for (const name of ['page.html', 'page.js', 'shared/visual-tokens.css', 'shared/
 }
 for(const name of ['pi-host.js','codex-host.js','claude-host.js'])copy('view/assets/'+name);
 for(const name of ['index.html','style.css','views.css','themes.css','editor.css','editor.html','diagnosis.js','dashboard.js'])copy('plugin/analysis-view/lib/eval/'+name);
+for(const name of ['page.html','style.css','session-view.js','app.js'])copy('plugin/analysis-view/lib/eval/overview/'+name);
 if(host==='codex'||host==='claude')for(const name of [...DIAGNOSIS_SKILLS.map(s=>s.name),'trajectory-view','trajectory-eval']){
  const sourceRoot=join(root,'plugin',host,'skills',name);
  for(const sourceFile of files(sourceRoot)){

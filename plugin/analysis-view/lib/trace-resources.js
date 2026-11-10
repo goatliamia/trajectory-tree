@@ -51,7 +51,7 @@ export class TraceQueue {
 // Shared objects are counted once; serialized JSON is never retained alongside
 // the parsed payload once compression has completed.
 export function traceBytes(entry) {
-  const seen = new Set(), keys = new Set(), stack = [entry.payload, entry.core, entry.actorData, entry.historyData, entry.html];
+  const seen = new Set(), keys = new Set(), stack = [entry.payload, entry.core, entry.actorData, entry.contextData, entry.contextPatch, entry.modelData, entry.html];
   let bytes = entry.encodedBytes || 0;
   while (stack.length) {
     const value = stack.pop();
@@ -75,7 +75,7 @@ export class TraceResources {
   constructor({ maxEntries = 4, maxBytes = 64 * 1024 * 1024, idleMs = 120000, now = Date.now } = {}) {
     Object.assign(this, { maxEntries, maxBytes, idleMs, now });
     this.entries = new Map(); this.timer = null;
-    this.main = new TraceQueue(1); this.actors = new TraceQueue(1); this.children = new TraceQueue(2); this.history = new TraceQueue(1);
+    this.main = new TraceQueue(1); this.actors = new TraceQueue(1); this.children = new TraceQueue(2);
     this.encoding = new TraceQueue(2);
   }
   get bytes() { return [...this.entries.values()].reduce((sum, row) => sum + row.bytes, 0); }
@@ -119,7 +119,7 @@ export class TraceResources {
   dispose() {
     clearTimeout(this.timer);
     for (const key of [...this.entries.keys()]) this.remove(key);
-    this.main.dispose(); this.actors.dispose(); this.children.dispose(); this.history.dispose();
+    this.main.dispose(); this.actors.dispose(); this.children.dispose();
     this.encoding.dispose();
   }
 }

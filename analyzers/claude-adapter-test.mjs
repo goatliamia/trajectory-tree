@@ -6,6 +6,7 @@ import { readClaudeTranscript } from './claude-reader.mjs';
 import { projectClaudeTranscript, finalizeClaudeDataset } from './claude-adapter.mjs';
 import { datasetFromNative } from '../plugin/portable-tools/sources.mjs';
 import { PortableService } from '../plugin/portable-tools/service.mjs';
+import { commandReport } from '../plugin/portable-tools/command-diagnosis.mjs';
 
 const dir = await mkdtemp(join(tmpdir(), 'trajectory-claude-'));
 try {
@@ -100,7 +101,26 @@ try {
   assert.equal(pendingCall.status, 'unknown');
   assert.equal(pendingCall.resultNative, null);
   assert.ok(pendingCall.signature);
+  assert.equal(pendingCall.attribution, undefined);
   assert.equal(evalData.payload.context.fileOperations.find(row => row.seq === failedCall.seq).path, join(ownCwd, 'a.txt'));
+  const shellFile = join(dir, 'shell.jsonl');
+  const bash = id => ({ type: 'tool_use', id, name: 'Bash', input: { command: 'git ls-remote local' } });
+  const failure = id => ({ type: 'tool_result', tool_use_id: id, is_error: true, content: '' });
+  const toolUseResult = { exitCode: 1, stderr: 'fatal: failed to connect to local' };
+  await writeFile(shellFile, [rows[0], assistant('shell', [bash('shell'), bash('parallel-a'), bash('parallel-b')]),
+    { ...base, type: 'user', toolUseResult, message: { content: [failure('shell')] } },
+    { ...base, type: 'user', toolUseResult, message: { content: [failure('parallel-a'), failure('parallel-b')] } },
+  ].map(JSON.stringify).join('\n'));
+  const shellData = datasetFromNative('claude', await readClaudeTranscript(shellFile));
+  const [shellCall, ...parallelCalls] = shellData.payload.sessions[0].turns[0].steps[0].calls;
+  assert.equal(shellCall.error.code, 'CLAUDE_TOOL_ERROR');
+  assert.equal(shellCall.attribution.code, 'COMMAND_CONNECTION_FAILED');
+  assert.equal(shellCall.attribution.basis, 'native-stderr');
+  assert.deepEqual(shellData.records.find(record => record.seq === shellCall.resultSeq).body.toolUseResult, toolUseResult);
+  assert.ok(parallelCalls.every(call => call.attribution.basis === 'no-output' && call.attribution.exitCode === null));
+  const shellReport = await commandReport(shellData, { seqs: [shellCall.seq] });
+  assert.equal(shellReport.rows[0].exitCode, 1);
+  assert.equal(shellReport.rows[0].attribution.code, 'COMMAND_CONNECTION_FAILED');
   assert.deepEqual(evalData.payload.context.usage.map(row => row.usage), [
     { input: 0, output: 5, cacheRead: null, cacheWrite: null },
     { input: null, output: null, cacheRead: 3, cacheWrite: null },

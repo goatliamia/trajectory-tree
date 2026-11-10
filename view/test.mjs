@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
+import * as zlib from 'node:zlib';
 import {createPiSample} from '../analyzers/pi-sample.mjs';
+import {readCodexSnapshot} from '../analyzers/codex-reader.mjs';
+import {readCodexRollout} from '../analyzers/codex-rollout.mjs';
+import {parseCodexRollout} from '../analyzers/codex-adapter.mjs';
+import {datasetFromNative,loadPortableSource} from '../plugin/portable-tools/sources.mjs';
 import {generateTraceView} from './generate.mjs';
 import {startViewServer} from './serve.mjs';
 import {readBoundedFile} from '../lib/bounded-file.mjs';
@@ -34,6 +39,45 @@ try{
  await assert.rejects(()=>readSample(bytes.length-1),/Input budget exceeded/);
  await assert.rejects(()=>readSample(bytes.length,cancelled.signal),{name:'AbortError'});
  await assert.rejects(()=>generateTraceView({host:'codex',snapshot:{thread:{id:'one',path:join(directory,'missing')}},rollout:join(directory,'missing')}),/ENOENT/);
+ const sessionFile=join(directory,'codex.json'),rolloutFile=join(directory,'codex.jsonl');
+ const at='2026-01-01T00:00:00Z',time=Date.parse(at)/1000;
+ const encoded='iVBORw0KGgo'+'AB/'.repeat(24*1024),url='data:image/png;base64,'+encoded;
+ const source={capturedAt:at,thread:{id:'media',path:rolloutFile,createdAt:time,turns:[{
+   id:'turn',startedAt:time,completedAt:time+1,status:'completed',items:[
+     {type:'userMessage',id:'user',content:[{type:'text',text:'用户原文\u2028仍在同一条记录'},{type:'image',url}]},
+     {type:'imageGeneration',id:'image',status:'completed',result:encoded,savedPath:'/fixture/image.png'},
+     {type:'mcpToolCall',id:'tool',server:'fixture',tool:'screen',status:'completed',result:{content:[{type:'text',text:'截图'}, {type:'image',mimeType:'image/png',data:encoded}]}},
+   ],
+ }]}};
+ const rows=[
+   {timestamp:at,type:'session_meta',payload:{id:'media'}},
+   {timestamp:at,type:'turn_context',payload:{turn_id:'turn',model:'fixture'}},
+   {timestamp:at,type:'response_item',payload:{type:'function_call_output',output:[
+     {type:'input_text',text:'保留的文本'}, {type:'input_image',image_url:url},
+   ]}},
+   {timestamp:at,type:'event_msg',payload:{type:'item_completed',item:{id:'image',result:encoded},turn_id:'turn',started_at_ms:time*1000,completed_at_ms:time*1000+1}},
+   {timestamp:at,type:'token_usage_record',payload:{turn_id:'turn',response_id:'sample',usage:{input_tokens:1234,output_tokens:98}}},
+ ];
+ const rawRollout=rows.map(JSON.stringify).join('\r\n');
+ await writeFile(sessionFile,JSON.stringify(source).replaceAll('/','\\/'));
+ await writeFile(rolloutFile,rawRollout);
+ const stored=await readCodexSnapshot(sessionFile),local=await readCodexRollout(rolloutFile);
+ assert.ok(!JSON.stringify(stored).includes(encoded) && !local.includes(encoded));
+ assert.equal(local.split('\r\n').length,rows.length,'Physical line anchors survive compaction');
+ const projected=parseCodexRollout(local);
+ assert.equal(projected.usage[0].line,5);
+ assert.equal(projected.usage[0].usage.input_tokens,1234);
+ assert.equal(projected.completed.get('image').ordinal,4);
+ assert.deepEqual(projected.current,parseCodexRollout(rawRollout).current);
+ const fromMemory=datasetFromNative('codex',source,{rollout:rawRollout});
+ const fromFile=await loadPortableSource({host:'codex',file:sessionFile});
+ assert.equal(fromFile.logId,fromMemory.logId,'Image-bearing evidence has one cut across snapshot and file inputs');
+ assert.equal(fromFile.records.find(row=>row.kind==='imageGeneration').body.savedPath,'/fixture/image.png');
+ assert.ok(!JSON.stringify(fromFile.records).includes(encoded));
+ if(typeof zlib.zstdCompressSync==='function'){
+  await writeFile(rolloutFile+'.zst',zlib.zstdCompressSync(Buffer.from(rawRollout)));
+  assert.equal(await readCodexRollout(rolloutFile+'.zst'),local);
+ }
  console.log('View entry passed: native input preserved, bundled assets, exact-file localhost serving, read-only routes and cancellation.');
 }finally{
  serving?.close();

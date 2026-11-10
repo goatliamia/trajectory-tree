@@ -7,7 +7,7 @@
   const official = {}, pendingTurns = new Map(), readyTurns = new Set(), pendingStages = new Map();
   const timing = window.__traceStages = { shell: performance.now() };
   const viewer = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
-  let booted = false, cut = null, officialKey = '', active = true, generation = 0, controller = new AbortController(), coreWork;
+  let booted = false, cut = null, contextCut = null, officialKey = '', active = true, generation = 0, controller = new AbortController(), coreWork;
   const cancelled = () => new DOMException('Trace view paused', 'AbortError');
   const merge = (target, patch) => {
     for (const [key, value] of Object.entries(patch)) {
@@ -18,7 +18,7 @@
     return target;
   };
   const announce = () => {
-    if (window.parent !== window) window.parent.postMessage({ type: 'analysis-trace-ready', sessionId, version: payload.traceVersion ?? null, assets: payload.traceAssets ?? null }, location.origin);
+    if (window.parent !== window) window.parent.postMessage({ type: 'analysis-trace-ready', sessionId, version: payload.traceVersion ?? null, assets: loading?.assets ?? payload.traceAssets ?? null }, location.origin);
   };
   const boot = () => {
     if (booted) return;
@@ -43,6 +43,7 @@
     const value = new URLSearchParams({ session: sessionId, stage, view: viewer });
     if (token) value.set('cut', token);
     if (turn !== undefined) value.set('turn', turn);
+    if (stage === 'details' && token && contextCut === token) value.set('context', 'loaded');
     return '/analysis-view/trace-data?' + value;
   };
   const release = token => { if (loading && token) fetch(query('release', undefined, token), { credentials: 'same-origin', keepalive: true }).catch(() => {}); };
@@ -69,24 +70,21 @@
     }
     return pendingTurns.get(number);
   };
-  window.__traceLoadHistory = async before => {
-    if (payload.traceStatus?.history === 'loading' || !active) return;
-    apply({ traceStatus: { history: 'loading' } });
-    try { apply(await read('history', before), 'history'); }
-    catch (error) { if (error.name !== 'AbortError') apply({ traceStatus: { history: 'error' } }); }
-  };
   const enrich = (stage, force = false) => {
-    if (!active || pendingStages.has(stage) || (!force && payload.traceStage?.[stage] === 'ready')) return;
+    if (!active || (!force && payload.traceStage?.[stage] === 'ready')) return;
+    if (pendingStages.has(stage)) return pendingStages.get(stage);
     const job = read(stage).then(value => {
       apply(value, stage);
+      if (stage === 'context') contextCut = cut;
       if (stage === 'actors') announce();
     }).catch(error => {
       if (error.name !== 'AbortError' && active) { timing[stage + 'Error'] = String(error.message); apply({ traceStage: { [stage]: 'error' } }); }
     }).finally(() => {
       if (pendingStages.get(stage) === job) pendingStages.delete(stage);
-      if (!pendingStages.size) apply({ traceStatus: { refresh: 'ready' } });
+      if (!pendingStages.size && stage !== 'context') apply({ traceStatus: { refresh: 'ready' } });
     });
     pendingStages.set(stage, job);
+    return job;
   };
   async function start(force = false) {
     if (coreWork) return coreWork;
@@ -94,11 +92,17 @@
     const job = (async () => {
       try {
         const core = await read('core');
-        if (!payload.sessions?.some(session => session.turns.length)) apply(core, 'core');
+        const initial = !payload.sessions?.some(session => session.turns.length);
+        if (initial) apply(core, 'core');
         else apply({ traceVersion: core.traceVersion, traceAssets: core.traceAssets, traceCapabilities: core.traceCapabilities, traceStatus: { refresh: 'loading' } });
         timing.core = performance.now(); announce();
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-          timing.corePaint = performance.now(); enrich('details', force); enrich('actors', force);
+        const coreGeneration = generation;
+        requestAnimationFrame(() => requestAnimationFrame(async () => {
+          if (!active || generation !== coreGeneration) return;
+          timing.corePaint = performance.now();
+          if (initial && core.traceCapabilities?.requestContext) await enrich('context', force);
+          if (generation !== coreGeneration) return;
+          enrich('details', force); enrich('actors', force);
         }));
       } catch (error) {
         if (error.name !== 'AbortError' && active) { timing.coreError = String(error.message); apply({ traceStage: { core: 'error' } }); }

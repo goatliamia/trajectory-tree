@@ -77,6 +77,7 @@
   }
 
   function callKind(c){
+    if(c.classification?.kind)return c.classification.kind;
     if(/^(read|grep|glob|read_image)$/.test(c.name))return 'read';
     if(/^(edit|write|apply_patch)$/.test(c.name))return 'write';
     if(/^(pwsh|bash)$/.test(c.name))return 'run';

@@ -34,7 +34,7 @@
 | 文件 | 内容 |
 | --- | --- |
 | [scripts/sync-host-skills.mjs](../scripts/sync-host-skills.mjs) | 生成 Codex、Pi、Claude 和 DSH 的宿主资源 |
-| [docs/skill-tool-review.md](../docs/skill-tool-review.md) | 方法去重、宿主适配与安装检查记录 |
+| [docs/skill-tool-review.md](archive/skill-tool-review.md) | 方法去重、宿主适配与安装检查记录 |
 | [analyzers/claude-reader.mjs](../analyzers/claude-reader.mjs) | 显式读取 Claude transcript，验证会话身份与完整行 |
 | [analyzers/claude-adapter.mjs](../analyzers/claude-adapter.mjs) | 原生参数、结果与去重用量适配 |
 | [analyzers/claude-adapter-test.mjs](../analyzers/claude-adapter-test.mjs) | 完整参数、续读、重复记录及身份检查 |
@@ -45,7 +45,7 @@
 | [plugin/portable-tools/analysis.mjs](../plugin/portable-tools/analysis.mjs) | 按宿主解释单位与用量 |
 | [plugin/portable-tools/report-data.mjs](../plugin/portable-tools/report-data.mjs) | 报告数据保留宿主语义 |
 | [scripts/trajectory-query.mjs](../scripts/trajectory-query.mjs) | 共享 CLI 与工具声明发现 |
-| [docs/diagnostic-methods-draft.md](../docs/diagnostic-methods-draft.md) | 评审稿转到正式方法与编写依据 |
+| [docs/diagnostic-methods-draft.md](archive/diagnostic-methods-draft.md) | 评审稿转到正式方法与编写依据 |
 
 ## 各宿主生成资源
 

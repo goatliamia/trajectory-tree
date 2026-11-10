@@ -1,10 +1,11 @@
-import { traceContext, applyGoalEvents } from './trace-context.js';
+import { traceContextDetails, applyGoalEvents } from './trace-context.js';
 import { readGoalChanges } from './goal-events.js';
 import { CONTEXT_CATEGORIES } from './trace/models/context-model.mjs';
 import { fileId } from './trace/models/tool-operation-model.mjs';
 import { recordedStepTimings } from './trace/shared/tool-intervals.mjs';
 import { costRequests, costTotals, costCoverage } from './trace/shared/usage.mjs';
 import { scopeByTurn } from './trace/shared/scope-index.mjs';
+import { readRecordedModelTiming, readRequestContext, requestContextSource } from './trace/shared/request-context.mjs';
 
 const known = value => Number.isFinite(value) && value >= 0;
 const replacement = event => event.surfaceOp && typeof event.surfaceOp === 'object';
@@ -35,7 +36,7 @@ function spanSummary(rows) {
   return { total: rows.length, measured: measured.length, ms: sumKnown(measured.map(row => row.end - row.start)) };
 }
 
-function timingMetrics(turns, official, officialTurns) {
+function timingMetrics(turns, official, officialTurns, modelTurns) {
   const steps = [], calls = [];
   for (const turn of turns) for (const step of turn.steps) {
     const location = { turn: turn.number, step: step.number };
@@ -50,6 +51,14 @@ function timingMetrics(turns, official, officialTurns) {
       pairedCalls: recorded.reduce((total, step) => total + step.pairedCalls, 0),
       cumulativeMs: sumKnown(paired.map(step => step.cumulativeMs)), coveredMs: sumKnown(paired.map(step => step.coveredMs)) },
     official: null };
+  const model = modelTurns?.flatMap(turn => turn.steps);
+  if (model?.length) {
+    const measure = key => {
+      const values = model.map(step => step[key]).filter(known);
+      return { value: sumKnown(values), samples: values.length };
+    };
+    summary.recordedModel = { steps: model.length, total: measure('model'), firstToken: measure('ttft'), decode: measure('decode') };
+  }
   if (official) {
     const native = officialTurns.flatMap(turn => turn.steps);
     const fields = Object.fromEntries(['wall', 'ttft', 'model', 'decode', 'tool', 'toolWall', 'retries', 'toolErrors'].map(key => {
@@ -158,7 +167,7 @@ function contextMetrics(events, skills, retainedSkills, { requests, source, pres
     childSessions: branches.size, handoffMessages: count(events, event => event.type === 'user/message' &&
       ['agent-message', 'team-message', 'subagent-settled'].includes(sourceOf(event))),
     settledMessages: count(events, event => event.type === 'user/message' && sourceOf(event) === 'subagent-settled'),
-    requestComposition: requests === null ? null : { source, requests: requests.length,
+    requestComposition: !requests?.length ? null : { source, requests: requests.length,
       measured: measured.length, peakTokens: totals.reduce((peak, value) => Math.max(peak ?? 0, value), null),
       netTokens: totals.length >= 2 ? totals.at(-1) - totals[0] : null },
     pressure: pressure ? { reportedTokens: known(pressure.pressureTokens) ? pressure.pressureTokens : null,
@@ -170,7 +179,7 @@ function contextMetrics(events, skills, retainedSkills, { requests, source, pres
   };
 }
 
-export function createRuntimeMetrics(session, { events, official, checks, projections, retainedSkills, goals = [] }) {
+export function createRuntimeMetrics(session, { events, official, checks, projections, requestContext, modelTiming, retainedSkills, goals = [] }) {
   const eventTurns = eventTurnIndex(events);
   const turnStarts = new Map(session.turns.map(turn => [turn.number, turn.seq]));
   const calls = new Map(), callStart = new Map();
@@ -182,7 +191,8 @@ export function createRuntimeMetrics(session, { events, official, checks, projec
   }
   const observed = events.filter(event => !replacement(event));
   const bySeq = new Map(observed.map(event => [event.seq, event]));
-  const payload = { sessions: [session], context: traceContext(events, { sessions: [session] }) };
+  const payload = { sessions: [session] };
+  payload.context = traceContextDetails(events, payload);
   applyGoalEvents(payload, [...new Map([...goalEvents(events), ...goals].map(goal => [goal.seq, goal])).values()]);
   for (const marker of payload.context.goal?.markers ?? []) eventTurns.set(marker.seq, marker.turn);
   const eventsIn = scopeByTurn(observed, event => eventTurns.get(event.seq));
@@ -192,8 +202,8 @@ export function createRuntimeMetrics(session, { events, official, checks, projec
   const goalsIn = scopeByTurn(payload.context.goal?.markers ?? []);
   const checksIn = checks ? scopeByTurn(checks.calls, call => eventTurns.get(call.seq)) : null;
   const officialIn = official ? scopeByTurn(official.snapshot.turns) : null;
-  const timeline = projections?.values?.contextTimeline;
-  const requestsIn = !timeline?.unsupported && Array.isArray(timeline?.requests) ? scopeByTurn(timeline.requests) : null;
+  const modelIn = modelTiming ? scopeByTurn(modelTiming) : null;
+  const requestsIn = requestContext ? scopeByTurn(requestContext.requests) : null;
   const pointer = seq => {
     const turn = eventTurns.get(seq) ?? null;
     return { seq, turn, startSeq: turnStarts.get(turn) ?? null, callId: calls.get(seq) ?? null };
@@ -210,14 +220,14 @@ export function createRuntimeMetrics(session, { events, official, checks, projec
         .slice(-8).map(call => ({ ...pointer(call.seq), tool: call.name })) };
     }
     return {
-      timing: timingMetrics(turns, official, officialIn?.(turnNumber)),
+      timing: timingMetrics(turns, official, officialIn?.(turnNumber), modelIn?.(turnNumber)),
       usage: { ...costTotals(ownUsage), coverage: costCoverage(ownUsage) },
       files: fileMetrics(filesIn(turnNumber), pointer, callStart),
       task: taskMetrics(ownEvents, turns, goalsIn(turnNumber), pointer),
       context: contextMetrics(ownEvents, skillsIn(turnNumber), retainedSkills, {
         requests: requestsIn?.(turnNumber) ?? null,
-        source: projections?.source,
-        pressure: turnNumber == null ? projections?.values?.contextPressure : null,
+        source: requestContextSource,
+        pressure: turnNumber == null ? projections?.values?.contextPressure ?? requestContext?.pressure : null,
       }, pointer),
       repeats: { groups: repeats.length, calls: repeats.reduce((total, group) => total + group.calls.length, 0),
         rows: repeats.slice(-8).map(({ calls: group }) => ({ tool: group[0].name, calls: group.length, ...pointer(group.at(-1).seq) })) },
@@ -226,28 +236,15 @@ export function createRuntimeMetrics(session, { events, official, checks, projec
   };
 }
 
-async function readProjections(ctx, entry, events, cut, signal) {
+function readProjections(ctx, entry, cut) {
   const registry = ctx.get('sessionProjections');
   if (!registry) return null;
   const live = ctx.get('sessions')?.get?.(entry.sessionId);
   if (live && typeof registry.snapshot === 'function') {
-    try {
-      const snapshot = registry.snapshot(live, ['contextTimeline', 'contextPressure']);
-      if (snapshot?.asOfSeq === cut) return { source: 'sessionProjections.snapshot', values: snapshot.values };
-    } catch { signal.throwIfAborted(); }
+    const snapshot = registry.snapshot(live, ['contextPressure']);
+    if (snapshot?.asOfSeq === cut) return { source: 'sessionProjections.snapshot', values: snapshot.values };
   }
-  if (!entry.header || !registry.restore || !events.every((event, index) => event.seq === index)) return null;
-  let checkpoint = {}, snapshot;
-  const deadline = performance.now() + 2000;
-  for (let i = 0; i < events.length; i += 1000) {
-    signal.throwIfAborted();
-    if (performance.now() > deadline) return null;
-    const restored = registry.restore(checkpoint, events.slice(i, i + 1000), i, entry.header, entry.inherited);
-    checkpoint = restored.checkpoint;
-    snapshot = restored.snapshot;
-    await new Promise(resolve => setImmediate(resolve));
-  }
-  return snapshot?.asOfSeq === cut ? { source: 'sessionProjections.restore', values: snapshot.values } : null;
+  return null;
 }
 
 async function readRetainedSkills(entry, events) {
@@ -272,17 +269,19 @@ export async function readRuntimeEvidence(ctx, entry, events, signal) {
   const optional = async read => {
     try { return await read(); } catch (error) { signal.throwIfAborted(); return null; }
   };
-  const [official, checks, projections, retainedSkills, goals] = await Promise.all([
+  const [official, checks, projections, requestContext, modelTiming, retainedSkills, goals] = await Promise.all([
     optional(async () => (await import('./trace/shared/official-stats.mjs')).replayOfficialStats(events)),
     optional(async () => {
       const { checkRecordedToolCalls, summarizeRecordedToolChecks } = await import('./trace/shared/tool-call-checks.mjs');
       const { calls } = checkRecordedToolCalls(events);
       return { calls, summarize: summarizeRecordedToolChecks };
     }),
-    optional(() => readProjections(ctx, entry, events, cut, signal)),
+    optional(() => readProjections(ctx, entry, cut)),
+    optional(() => entry.requestContext ? entry.requestContext(events) : readRequestContext(events, signal, ctx.get?.('sessions')?.messageProjections)),
+    optional(() => entry.modelTiming ? entry.modelTiming(events) : readRecordedModelTiming(events, signal)),
     optional(() => readRetainedSkills(entry, events)),
     optional(() => readSupplementalGoals(ctx, entry, cut, signal)),
   ]);
   signal.throwIfAborted();
-  return { events, official, checks, projections, retainedSkills, goals: goals ?? [] };
+  return { events, official, checks, projections, requestContext, modelTiming, retainedSkills, goals: goals ?? [] };
 }

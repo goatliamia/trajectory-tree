@@ -42,11 +42,11 @@ const events = [event('turn/start', { turn: 1 }), event('step/start', { turn: 1,
   event('step/end', { turn: 1, step: 3 }), event('turn/end', { turn: 1, reason: { kind: 'completed' } }),
 ];
 const loaded = { events, header: { id: 'fixture', cwd: 'D:/work', version: 4 } };
-const projections = { source: 'test-registered-official-projection', values: { contextTimeline: { requests: [
+const contextSeries = { requests: [
   { seq: 3, turn: 1, step: 1, total: 30, system: 10, tools: 10, tool: 10 },
   { seq: 10, turn: 1, step: 2, total: 30, system: 10, tools: 5, tool: 15 },
-] } } };
-const index = buildInspection(loaded, 'fixture', { projections });
+] };
+const index = buildInspection(loaded, 'fixture', { contextSeries });
 const official = replayOfficialStats(events).snapshot;
 assert.equal(index.coverage.statistics.status, 'available');
 assert.equal(index.summary.steps, official.stepCount);
@@ -104,8 +104,9 @@ for (const row of index.views.io) {
 }
 const ioPointers = evidencePointers(inspectionPage(index, 'io', 0, 10));
 assert.ok(index.views.io.every(row => ioPointers.some(ref => ref.seq === row.callSeq)), 'read pointers include every actual IO call anchor');
-assert.equal(index.views.context[0].net, 0);
-assert.equal(index.views.context[0].categoryNetChange.tool, 5, 'net-zero is not no additions');
+const contextItem = inspectionPage(index, 'context', 0, 1).items[0];
+assert.equal(contextItem.net, 0);
+assert.equal(contextItem.categoryNetChange.tool, 5, 'net-zero is not no additions');
 assert.equal(inspectionPage(index, 'latency', 0, 1).items.length, 1);
 const openEvents = events.slice(0, 13);
 const nativeOnly = buildInspection({ ...loaded, events: openEvents }, 'fixture', {
@@ -122,19 +123,20 @@ assert.equal(inspectionPage(index, 'cost', 0, 1).largestDefinitions.length, 1);
 assert.equal(index.views.latency.length, index.stepEntries.length, 'views retain compact references to one step evidence table');
 assert.equal(readFileSync(new URL('./skills/trajectory-query/SKILL.md',import.meta.url),'utf8').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/,''),SKILL_BODY,'runtime skill is loaded from its packaged source');
 
-let restored = 0;
-const large = { ...loaded, inherited: 20, events: Array.from({ length: 1002 }, (_, seq) => ({ seq, type: 'test/sample', data: {} })) };
-const folded = await readOfficialProjections({ get: name => name === 'sessionProjections' ? {
-  restore(checkpoint, batch, floor, sessionHeader, inherited) {
-    assert.equal(floor, restored ? 1000 : 0); assert.equal(inherited, 20); assert.equal(sessionHeader, loaded.header);
-    assert.equal(checkpoint.count || 0, restored ? 1000 : 0); restored++;
-    const count = (checkpoint.count || 0) + batch.length;
-    return { checkpoint: { count }, snapshot: { asOfSeq: batch.at(-1).seq, values: { tokenUsage: { officialSample: count } } } };
+const live = {};
+const projectionsCtx = { get: name => name === 'sessionProjections' ? {
+  snapshot(session, keys) {
+    assert.equal(session, live);
+    assert.deepEqual(keys, ['tokenUsage', 'contextBreakdown', 'contextPressure']);
+    return { asOfSeq: events.at(-1).seq, values: { tokenUsage: { officialSample: 1 }, other: {} } };
   },
-} : undefined }, large);
-assert.equal(restored, 2); assert.equal(folded.asOfSeq, 1001); assert.equal(folded.values.tokenUsage.officialSample, 1002);
+} : name === 'sessions' ? new Map([['fixture', live]]) : undefined };
+const folded = await readOfficialProjections(projectionsCtx, loaded);
+assert.equal(folded.asOfSeq, events.at(-1).seq);
+assert.deepEqual(folded.values, { tokenUsage: { officialSample: 1 } });
+assert.equal((await readOfficialProjections(projectionsCtx, { ...loaded, events: events.slice(0, -1) })).source, 'unavailable');
 const stopped = new AbortController(); stopped.abort();
-await assert.rejects(readOfficialProjections({ get: () => ({ restore() { assert.fail('aborted restore must not run'); } }) }, loaded, stopped.signal), /abort/i);
+await assert.rejects(readOfficialProjections({ get() { assert.fail('aborted read must not run'); } }, loaded, stopped.signal), /abort/i);
 
 let now = 0, reads = 0;
 const service = new InspectionService({ load: async () => { reads++; return loaded; }, identify: logIdentity,

@@ -29,7 +29,8 @@ const services = {
   } },
   webServer: { register(route) { handler = route.handler; return () => {}; } },
 };
-apply({ get: name => services[name], effect: fn => fn() });
+let traceFiles = true;
+apply({ get: name => services[name], effect: fn => fn() }, { traceFiles: { get: () => traceFiles } });
 const server = http.createServer((req, res) => handler(req, res));
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const origin = 'http://127.0.0.1:' + server.address().port;
@@ -45,6 +46,12 @@ try {
   assert.equal(core.cut, same.cut);
   assert.equal(mainReads, 1, 'all stages and concurrent core requests share one main observation');
   assert.ok(core.payload.sessions[0].turns[0].steps[0].calls[0].args.text.length <= 96);
+  assert.equal(core.payload.traceCapabilities.requestContext, true);
+  const context = await (await get(query + 'context&cut=' + core.cut)).json();
+  assert.equal(context.cut, core.cut);
+  assert.ok(Array.isArray(context.payload.context.requests));
+  assert.equal(context.payload.sessions, undefined, 'context does not ship the conversation or tool bodies');
+  assert.equal(mainReads, 1, 'context reads the same observed cut');
   const actorResponse = get(query + 'actors&cut=' + core.cut);
   await childStarted.promise;
   const detailResponse = await get(query + 'details&cut=' + core.cut);
@@ -53,6 +60,9 @@ try {
   assert.equal(childReads, 1);
   const expected = JSON.parse(JSON.stringify(buildTracePayload(rows, 'main').sessions[0].turns[0]));
   assert.deepEqual(detail.payload.sessions[0].turns[0], expected, 'eager details retain all original parameters/results/replies');
+  const compact = await (await get(query + 'details&context=loaded&cut=' + core.cut)).json();
+  assert.equal(compact.payload.context.requests, undefined, 'already-loaded context is not sent again');
+  assert.deepEqual(compact.payload.sessions, detail.payload.sessions);
   const turn = await (await get(query + 'turn&turn=1&cut=' + core.cut)).json();
   assert.deepEqual(turn.payload.sessions[0].turns[0], expected, 'priority detail works before any child has finished');
   assert.equal(mainReads, 1);
@@ -66,6 +76,12 @@ try {
   assert.equal(leases, 0);
   const metadata = await (await get('trace-version?staged=1&session=main')).json();
   assert.equal(metadata.version, actors.payload.traceVersion);
+  traceFiles = false;
+  const reconfigured = await (await get('trace-version?staged=1&session=main')).json();
+  assert.equal(reconfigured.version, metadata.version, 'view preferences keep the same evidence cut');
+  assert.notEqual(reconfigured.assets, metadata.assets, 'retained trace page refreshes after a default changes');
+  const newShell = await (await get('trace?staged=1&session=main')).text();
+  assert.match(newShell, /"traceViewDefaults":\{"context":true,"files":false\}/);
   const cached = await (await get(query + 'core')).json();
   assert.equal(cached.cut, core.cut);
   assert.equal(mainReads, 1);

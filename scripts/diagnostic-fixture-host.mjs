@@ -4,32 +4,21 @@ import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, mkdirSync, appendFileSync, readdirSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { resolve, join, dirname } from 'node:path';
+import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { apply } from '../plugin/trajectory-tools/lib/index.js';
 import { projectToolSchema } from '@deepseek-ai/dsh-tools';
 import { decodeZstdSession } from '../experiments/corpus/decode-session.mjs';
 import { buildInjectionIndex } from '../analyzers/context-evidence.mjs';
 
-const [fixturesArg = '.dsh/diagnostic-pilot', outputArg = '.dsh/diagnostic-experiment-v3', portArg = '3093', reasoningArg = 'max', promptArg = 'docs/diagnostic-analysis-v3.md'] = process.argv.slice(2);
+const [fixturesArg = '.dsh/diagnostic-pilot', outputArg = '.dsh/diagnostic-experiment-v3', portArg = '3093', reasoningArg = 'max', promptArg = 'docs/archive/diagnostic-analysis-v3.md'] = process.argv.slice(2);
 const fixtures = resolve(fixturesArg), output = resolve(outputArg), port = Number(portArg);
 const manifest = JSON.parse(readFileSync(join(fixtures, 'manifest.json')));
 mkdirSync(output, { recursive: true });
 const sdk = createRequire(import.meta.resolve('@deepseek-ai/dsh-token-meter/package.json'));
 const imp = file => import(pathToFileURL(file).href);
-const tokenRoot = dirname(sdk.resolve('@deepseek-ai/dsh-token-meter/package.json'));
-const breakdown = await imp(join(tokenRoot, 'lib/types/breakdown-projection.js'));
-const usage = await imp(join(tokenRoot, 'lib/types/usage-projection.js'));
 const { SessionQueryEngine } = await imp(sdk.resolve('@deepseek-ai/dsh-session-query'));
 const { SurfaceManager } = await imp(sdk.resolve('@deepseek-ai/dsh-session/surface'));
-const definitions = [breakdown.contextBreakdownProjectionDefinition, usage.contextPressureProjectionDefinition, usage.tokenUsageProjectionDefinition];
-try {
-  const contextRoot = join(process.env.USERPROFILE, '.dsh/profiles/web/node_modules/dsh-context');
-  const plugin = await imp(join(contextRoot, 'lib/index.js'));
-  plugin.apply({ fiber: { name: 'offline-diagnostic-experiment' }, get() {}, inject() {}, on() {}, effect() {},
-    sessionProjections: { register(d) { if (d.key === 'contextTimeline') definitions.push(d); return () => {}; } } }, {});
-} catch { /* optional community projection */ }
-
 const cases = new Map(), token = randomBytes(24).toString('hex');
 function openCase(key) {
   if (cases.has(key)) return cases.get(key);
@@ -49,17 +38,8 @@ function openCase(key) {
     traceEvent(request, signal) { return SessionQueryEngine.prototype.traceEvent.call({ _corpus: corpus }, request, signal); },
     traceSession(id, signal) { return SessionQueryEngine.prototype.traceSession.call({ _corpus: corpus }, id, signal); },
   };
-  const projections = { restore(checkpoint, batch, floor, h, inherited) {
-    const next = {}, values = {};
-    for (const d of definitions) {
-      let value = checkpoint[d.key] ?? d.init(h, inherited);
-      for (const e of batch) value = d.apply(value, e);
-      next[d.key] = value; values[d.key] = d.wire.view(value);
-    }
-    return { checkpoint: next, snapshot: { asOfSeq: batch.at(-1)?.seq ?? -1, values } };
-  } };
   apply({ tools: { register(t) { tools.set(t.name, t); return () => {}; } }, effect(fn) { disposers.push(fn()); },
-    get(name) { return name === 'sessionQuery' ? query : name === 'sessionProjections' ? projections : undefined; } }, { reconcile: false });
+    get(name) { return name === 'sessionQuery' ? query : undefined; } }, { reconcile: false });
   mkdirSync(join(output, key), { recursive: true });
   cases.set(key, state);
   return state;
@@ -75,7 +55,7 @@ const server = createServer(async (req, res) => {
     state = openCase(key);started=performance.now();
     let result;
     if (tool === 'schema') result = { case: key, session: state.spec.session, tools: [...state.tools.values()].map(t => projectToolSchema(t, true)),
-      scope: 'Actual registered tool execute functions over frozen sources; offline projection registry replays unchanged installed definitions.',
+      scope: 'Actual registered tool execute functions over frozen sources, with context estimates reconstructed from the same event cut.',
       notes: ['Only this frozen case is visible.', 'No original task or proposed optimization is executed.', 'Copy snapshot, expand, reads and nextRead from results.'] };
     else if(tool==='report/structure'){
       const {source,cuts}=args;

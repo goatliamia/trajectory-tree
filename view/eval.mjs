@@ -41,10 +41,10 @@ function portableRuntime(payload) {
   };
 }
 
-export function writeHostEvalPage(dataset, output, { locale } = {}) {
+export function writeHostEvalPage(dataset, output, { locale, attributions } = {}) {
   const { payload, logId, host } = datasetAtCut(dataset, dataset.payload.sessions[0].lastSeq);
   const session = payload.sessions[0];
-  const data = buildEvalData(session, portableRuntime(payload), { host, synthetic: payload.synthetic, turnLimit: EVAL_DETAIL_TURNS });
+  const data = buildEvalData(session, portableRuntime(payload), { host, synthetic: payload.synthetic, turnLimit: EVAL_DETAIL_TURNS, attributions });
   const html = renderEvalPage(data, { integrated: true, mode: host, locale,
     diagnosis: diagnosisSource(session, data, { host, logId, file: session.source?.file }) });
   const path = resolve(output);

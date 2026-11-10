@@ -1,6 +1,6 @@
 # 会话诊断提示词方案草案
 
-历史草稿。当前工具与提示词见 [诊断入口](diagnostics.md)，下文不作为当前接口说明。
+历史草稿。当前工具与提示词见 [诊断入口](../diagnostics.md)，下文不作为当前接口说明。
 
 > 已由 [会话诊断分析与提示词方案 v2](diagnostic-analysis-v2.md) 取代。本文保留为上一版对照。新版将上下文构成/组装作为五类分析共享的剖面，取消本文第 13 节作为独立分析场景的组织方式；运行时方法尚未替换。
 
@@ -282,7 +282,7 @@ Shell 命令需要按实际参数与结果核实，不能只从工具名称补�
 
 ## 13. 高级场景：内容从哪条路径进入上下文
 
-旧 runtime 研究与本机 `0.2.2-alpha.2` 的复核见 [注入来源与位置研究](injection-provenance-research.md)。此主题尚未封装成诊断 view；当前只能在明确的小窗口内通过既有 search/read 查看原始事件，不能调用虚构的 `injections` view。
+旧 runtime 研究与本机 `0.2.2-alpha.2` 的复核见 [注入来源与位置研究](../injection-provenance-research.md)。此主题尚未封装成诊断 view；当前只能在明确的小窗口内通过既有 search/read 查看原始事件，不能调用虚构的 `injections` view。
 
 拟采用的场景方法：
 

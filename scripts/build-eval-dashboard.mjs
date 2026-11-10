@@ -1,7 +1,6 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { loadSession } from '../analyzers/load-session.mjs';
 import { buildTracePayload } from '../plugin/analysis-view/lib/trace-build.js';
@@ -25,29 +24,10 @@ const title = options.title ?? (options.source ? 'DSH 会话' : '插件修复与
 const { id, events } = loadSession(source);
 if (!id || !events.length) throw new Error('Expected a recorded DSH session with events');
 
-async function readFrozenContext(events) {
-  const entry = join(homedir(), '.dsh/profiles/web/node_modules/dsh-context/lib/index.js');
-  if (!existsSync(entry)) return null;
-  const plugin = await import(pathToFileURL(entry));
-  let projection;
-  plugin.apply({ fiber: { name: 'offline-diagnosis-demo' }, get() {}, inject() {}, on() {}, effect() {},
-    sessionProjections: { register(definition) {
-      if (definition.key === 'contextTimeline') projection = definition;
-      return () => {};
-    } },
-  }, {});
-  if (!projection) return null;
-  let state = projection.init();
-  for (const event of events) state = projection.apply(state, event);
-  const contextTimeline = projection.wire.view(state);
-  return contextTimeline.unsupported ? null : { source: 'dsh-context/contextTimeline', values: { contextTimeline } };
-}
-
 const payload = buildTracePayload(events, id);
 const [session] = payload.sessions;
 if (!session.turns.length) throw new Error('The recorded session has no turns');
 const evidence = await readRuntimeEvidence({ get: () => undefined }, { payload }, events, new AbortController().signal);
-if (options.diagnosis) evidence.projections ??= await readFrozenContext(events);
 const data = buildEvalData(session, createRuntimeMetrics(session, evidence), { title });
 const outcomes = data.whole.outcomes;
 const page = renderEvalPage(data, { integrated: options.diagnosis, script: options.diagnosis ? demoBridge : "" });
@@ -57,7 +37,7 @@ if (options.diagnosis) {
     throw Error('Trace and Eval disagree on the source cut or call counts');
   }
   const assets = readTracePresentation();
-  const context = traceContext(events, payload, evidence.projections?.values?.contextTimeline);
+  const context = traceContext(events, payload, evidence.requestContext);
   const extension = [demoBridge, evalAsset('diagnosis-gesture.js'), evalAsset('diagnosis-trace.js')].join('\n');
   const trace = renderTraceDocument({ ...payload, context, officialStats: evidence.official }, assets, {
     template: inlineTraceFonts(assets.template), locale: 'zh-CN', extension,
