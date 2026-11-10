@@ -174,8 +174,12 @@ export function adaptCodexThread(snapshot, options = {}) {
   const turns = thread.turns.map((turn, index) => {
     const start = turn.startedAt != null ? turn.startedAt * 1000 : stamp(turn.items?.[0])?.start ?? thread.createdAt * 1000;
     const end = turn.completedAt != null ? turn.completedAt * 1000 : turn.durationMs != null ? start + turn.durationMs : null;
+    const observedSpan = Number.isFinite(turn.startedAt) && Number.isFinite(turn.completedAt) && turn.completedAt >= turn.startedAt;
+    const durationMs = Number.isFinite(turn.durationMs) && turn.durationMs >= 0 ? turn.durationMs
+      : observedSpan ? end - start : null;
     const prompts = [], steps = [], markers = [], compactions = [];
-    const output = { id: turn.id, number: index + 1, seq: ++seq, start, end, endSeq: null, reason: { kind: turn.status === 'inProgress' ? 'running' : turn.status }, prompts, steps, retries: [], markers, title: '', errors: 0 };
+    const output = { id: turn.id, number: index + 1, seq: ++seq, start, end, endObserved: observedSpan, durationMs,
+      endSeq: null, reason: { kind: turn.status === 'inProgress' ? 'running' : turn.status }, prompts, steps, retries: [], markers, title: '', errors: 0 };
     let ordinalPosition = start;
     const extra = (local?.collaboration || []).filter(e => e.turnId === turn.id && !(turn.items || []).some(item => item.id === e.id || item.id === e.callId)).map(e => ({ type: 'collabAgentToolCall', id: e.id, tool: e.tool, taskName: e.taskName, taskPath: e.taskPath, status: e.end == null ? 'inProgress' : 'completed', receiverThreadIds: [], localTiming: { start: e.start, end: e.end }, evidenceSource: 'local-rollout' }));
     // The API's native order is authoritative even when timestamps are absent.
@@ -212,7 +216,15 @@ export function adaptCodexThread(snapshot, options = {}) {
       const call = { id: item.id, seq: itemSeq, name: names[cls.kind], nativeName: ['mcpToolCall', 'dynamicToolCall'].includes(item.type) ? [item.server || item.namespace, item.tool].filter(Boolean).join('/') : item.type, classification: cls, signature: hash(JSON.stringify([item.type, args])), target, args: excerpt(JSON.stringify(args), 22000), start: a, end: state === 'unknown' ? null : b, resultSeq, status: state, error: state === 'error' ? { code: item.exitCode != null ? 'EXIT_' + item.exitCode : 'TOOL_ERROR', message: short(item.error || result, 180) } : null, result: excerpt(result, 18000), durationMs: Number.isFinite(item.durationMs) && item.durationMs >= 0 ? item.durationMs : precise ? b - a : null, timingSource: step.timingSource, source: cls.source };
       if (item.evidenceSource === 'local-rollout' && item.type === 'collabAgentToolCall') call.nativeName = 'collaboration.' + item.tool;
       step.calls.push(call); step.errors = state === 'error' ? 1 : 0; output.errors += step.errors;
-      let outcome = state === 'error' ? '操作未成功' + (item.exitCode != null ? '，退出码 ' + item.exitCode : '') + '。' : state === 'unknown' ? '尚未记录完成结果。' : item.type === 'fileChange' ? 'Codex 记录文件改动已完成。' : item.type === 'commandExecution' ? '命令退出码 0' + (String(result || '').trim() ? '，已返回输出。' : '，没有文字输出。') : '已收到工具返回。';
+      let outcome = '已收到工具返回。';
+      if (state === 'error') outcome = '操作未成功' + (item.exitCode != null ? '，退出码 ' + item.exitCode : '') + '。';
+      else if (state === 'unknown') outcome = '尚未记录完成结果。';
+      else if (item.type === 'fileChange') outcome = 'Codex 记录文件改动已完成。';
+      else if (item.type === 'commandExecution') {
+        const exit = Number.isInteger(item.exitCode) ? '命令退出码 ' + item.exitCode : '命令退出码未记录';
+        const output = typeof result !== 'string' ? '未记录文字输出' : result.trim() ? '已返回输出' : '文字输出为空';
+        outcome = exit + '，' + output + '。';
+      }
       if (item.type !== 'fileChange' && state === 'returned' && /\b(?:passed|PASS|self-test.*ok|tests?\s+ok)\b/i.test(result || '')) outcome += ' 输出包含检查通过标记。';
       if (cls.reads?.length && state === 'returned') outcome += ' 读取目标来自命令参数；未逐条证明每个脚本分支执行。';
       callFacts[itemSeq] = { seq: itemSeq, title: cls.title, outcome, detail: '来源：' + cls.evidence + (precise ? '；起止：本地 rollout 对应 item.id' : '；轮内起止未记录，仅保留动作顺序'), tone: state === 'error' ? 'bad' : state === 'unknown' ? 'unknown' : 'normal', target, preview: null, resultSeq, evidence: cls, source: item.evidenceSource || 'official-api', ...(item.type === 'fileChange' ? { diffChanges: item.changes.map(c => ({ path: c.path, kind: c.kind, diff: excerpt(c.diff, 40000) })) } : {}) };
@@ -252,7 +264,11 @@ export function adaptCodexThread(snapshot, options = {}) {
   for (const episode of episodes) {
     const t = turns[episode.turn - 1], original = t.steps.flatMap(s => s.calls).find(c => c.seq === episode.failureSeqs[0]);
     const later = t.steps.flatMap(s => s.calls).find(c => c.seq > original.seq && c.signature === original.signature && c.status === 'returned' && c.start >= original.end);
-    if (later) Object.assign(episode, { pairs: [{ failedSeq: original.seq, successSeq: later.seq, successTime: later.end, successStart: later.start }], complete: true, confirmedCount: 1, unconfirmedCount: 0, resolvedAt: later.end, continuationMs: later.end - original.end, summary: '同参操作随后返回成功', sequence: [...episode.sequence.slice(0, 1), { kind: 'success', time: later.end, label: '同参操作随后成功', seqs: [later.seq] }] });
+    if (later) Object.assign(episode, { pairs: [{ failedSeq: original.seq, successSeq: later.seq, successTime: later.end, successStart: later.start }],
+      complete: true, confirmedCount: 1, unconfirmedCount: 0, resolvedAt: later.end,
+      continuationMs: original.timingSource === 'local-rollout' && later.timingSource === 'local-rollout' ? later.end - original.end : null,
+      summary: '同参操作随后返回成功', sequence: [...episode.sequence.slice(0, 1),
+        { kind: 'success', time: later.end, label: '同参操作随后成功', seqs: [later.seq] }] });
   }
   const totals = { turns: turns.length, steps: turns.reduce((n, t) => n + t.steps.length, 0), calls: turns.reduce((n, t) => n + t.calls, 0), errors: episodes.length };
   const current = local?.current ?? null;

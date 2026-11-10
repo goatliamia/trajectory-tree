@@ -69,7 +69,7 @@ both on purpose: accounting counts everything.
 
 Matching is also normalized by default (`filter.normalize: false` turns it off): runs of backslashes
 collapse and ASCII/typographic quotes are interchangeable, so a query written the human way
-(`C:\Users\14100\.dsh`) finds the escaped form in the log (`C:\\Users\\14100\\.dsh`). Only matching
+(`C:\Users\example\.dsh`) finds the escaped form in the log (`C:\\Users\\example\\.dsh`). Only matching
 is normalized — quoted evidence stays verbatim — and the response reports `normalized`.
 
 ### Cost
@@ -92,6 +92,7 @@ the spend was worth it stays the model's interpretation.
 | `view` | `overview` (default), `latency`, `cost`, `repeats`, `io`, `context` |
 | `session` | Session ID; defaults to the current session |
 | `turns` | Inclusive `{from,to}`; may change while reusing a snapshot |
+| `seqs` | `io` only. Select up to 500 exact invocation sequence numbers from the graph |
 | `focus` | `{tool: exactName}` or `{file: exactReturnedPath}` |
 | `outcome` | `io` only. `error` selects recorded errors. `abnormal` includes recorded errors and calls with unconfirmed results. Omit for all calls. |
 | `groupBy` | overview: turn/tool/file; latency/cost: turn; io: tool/file |
@@ -252,7 +253,7 @@ trajectory_search(view="cost", session=<id>)             # tokens + cache effici
 两者都可关闭;无论开关,返回里都带 `filtered: { injected, self }`。`cost` 刻意两个都不用:记账要记全量。
 
 匹配默认归一化(`filter.normalize: false` 可关):连续反斜杠折叠为一个、中英文引号互认 —— 用人类习惯写的
-`C:\Users\14100\.dsh` 能查到日志里转义过的 `C:\\Users\\14100\\.dsh`。归一化只作用于匹配,
+`C:\Users\example\.dsh` 能查到日志里转义过的 `C:\\Users\\example\\.dsh`。归一化只作用于匹配,
 引文仍是原文 verbatim,返回里带 `normalized`。
 
 ### 成本
@@ -271,6 +272,7 @@ trajectory_search(view="cost", session=<id>)             # tokens + cache effici
 | `view` | `overview` 总览（默认）、`latency` 耗时、`cost` 消耗与工具定义、`repeats` 重复候选、`io` 工具文件、`context` 上下文 |
 | `session` | 会话 ID，省略为当前会话 |
 | `turns` | 轮次闭区间 `{from,to}`；沿用 snapshot 时可更换范围 |
+| `seqs` | 仅 `io`。按图上的调用序号精确选取，最多 500 个 |
 | `focus` | `{tool:精确工具名}` 或 `{file:返回过的完整路径}` |
 | `outcome` | 仅 `io`。`error` 只看明确报错，`abnormal` 也包含结果未确认的调用。省略时查询所有调用。 |
 | `groupBy` | overview 支持 turn/tool/file；latency、cost 支持 turn；io 支持 tool/file |
@@ -280,8 +282,9 @@ trajectory_search(view="cost", session=<id>)             # tokens + cache effici
 | `cursor` | 照抄 `nextCursor`，继续同一主题 |
 
 结果包含统计、证据片段和可直接调用的 `trajectory_read` 参数。
-成本主题还提供大工具定义和选定范围内未调用的定义。估算与实测 usage 分别标注；
-缺失的插件归属或历史记录保持未知。快照过期后重新发起查询。
+成本主题还提供选定轮次内的工具声明版本和调用记录。指定 `focus.tool` 时，声明和优先原文指针跟随所选工具。
+配合 `samples:false` 时，摘要保留所选范围的统计、声明和步骤指针。完整摘要另提供整会话投影与未调用清单。
+定义体积的估算与步骤的实测 usage 分别标注，缺失的插件归属或历史记录保持未知。快照过期后重新发起查询。
 
 关联阅读使用 `trajectory_read({session,seq,format:"linked",snapshot})`，返回调用、状态、正式结果及后续消息。
 照抄 `body`、`more` 或 `nextRead` 可继续读取正文。`field:"data.arguments"` 按 seq 读取一个字段，

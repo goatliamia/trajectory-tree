@@ -4,7 +4,21 @@ import { datasetFromNative } from './sources.mjs';
 import {generateTraceView} from '../../view/generate.mjs';
 import {serveViewFile,openViewBrowser} from '../../view/serve.mjs';
 
-// No prompt injection, session writes, tool replacement, or full-history watcher.
+const trajectoryUsage = '用法：/trajectory [--eval] [--no-open] 或 /trajectory --draft <内容>';
+
+function readEvalDraft(encoded) {
+  if (!encoded || encoded.length > 16 * 1024 || !/^[A-Za-z0-9_-]+$/.test(encoded)) throw Error('无效的 Eval 草稿命令。');
+  const bytes = Buffer.from(encoded, 'base64url');
+  if (bytes.toString('base64url') !== encoded) throw Error('无效的 Eval 草稿命令。');
+  let draft;
+  try { draft = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
+  catch { throw Error('无效的 Eval 草稿命令。'); }
+  if (typeof draft?.session !== 'string' || !draft.session || typeof draft.prompt !== 'string' ||
+      !draft.prompt.trim() || Buffer.byteLength(draft.prompt, 'utf8') > 8 * 1024) throw Error('无效的 Eval 草稿命令。');
+  return draft;
+}
+
+// The extension reads session evidence and only stages drafts on explicit user commands.
 export default function trajectoryExtension(pi) {
   const sessions = new Map(), timing = new Map();
   function viewInput(ctx){
@@ -27,13 +41,35 @@ export default function trajectoryExtension(pi) {
   pi.on('tool_execution_start', observe); pi.on('tool_execution_end', observe);
   pi.on('session_shutdown', () => { for (const entry of sessions.values()) entry.service.dispose(); sessions.clear(); timing.clear(); });
   pi.registerCommand?.('trajectory',{
-    description:'打开当前分支的轨迹树视图（路径、上下文、工具与文件）',
+    description:'打开当前分支的轨迹树或 Eval，或载入 Eval 草稿',
     async handler(args,ctx){
-      if(args.trim()&&!['--no-open'].includes(args.trim())){ctx.ui.notify('用法：/trajectory [--no-open]','warning');return;}
+      const flags = args.trim().split(/\s+/).filter(Boolean);
+      if (flags[0] === '--draft') {
+        if (flags.length !== 2) { ctx.ui.notify(trajectoryUsage, 'warning'); return; }
+        try {
+          const draft = readEvalDraft(flags[1]);
+          if (draft.session !== ctx.sessionManager.getSessionId()) throw Error('草稿属于另一个 Pi 会话。请切换到原会话。');
+          // RPC can emit set_editor_text, but its getEditorText always returns an empty string.
+          if (ctx.mode !== 'tui' || !ctx.hasUI || typeof ctx.ui.setEditorText !== 'function' || typeof ctx.ui.getEditorText !== 'function') {
+            ctx.ui.notify('当前客户端无法载入 Eval 草稿。可在 Eval 页面复制提示词。', 'warning');
+          } else if (ctx.ui.getEditorText()) {
+            ctx.ui.notify('已保留输入框中的草稿。可在 Eval 页面复制提示词。', 'warning');
+          } else {
+            ctx.ui.setEditorText(draft.prompt);
+            ctx.ui.notify('Eval 草稿已载入输入框。', 'info');
+          }
+        } catch (error) { ctx.ui.notify(error.message, 'warning'); }
+        return;
+      }
+      if (new Set(flags).size !== flags.length || flags.some(flag => !['--eval', '--no-open'].includes(flag))) {
+        ctx.ui.notify(trajectoryUsage, 'warning'); return;
+      }
       try{
-        const view=await generateTraceView({host:'pi',input:viewInput(ctx)}),{url}=await serveViewFile(view.output);
-        if(args.trim()!=='--no-open')await openViewBrowser(url);
-        ctx.ui.notify('轨迹树 · '+url,'info');
+        const evalView = flags.includes('--eval');
+        const view = await generateTraceView({ host: 'pi', input: viewInput(ctx), initialView: evalView ? 'eval' : undefined });
+        const { url } = await serveViewFile(view.output);
+        if (!flags.includes('--no-open')) await openViewBrowser(url);
+        ctx.ui.notify((evalView ? 'Eval' : '轨迹树') + ' · ' + url, 'info');
       }catch(error){ctx.ui.notify('轨迹树：'+error.message,'error');}
     },
   });

@@ -5,12 +5,15 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { gzip, gunzip } from "node:zlib";
 import { promisify } from "node:util";
+import { summarizeCacheEfficiency } from "./cache-efficiency.js";
 import { incident } from "./incident-shape.js";
-import { buildTracePayload } from "./trace-build.js";
-import { readContextTimeline, traceActors, traceContext } from "./trace-context.js";
-import { TraceCache, traceSource, observationSource } from "./trace-cache.js";
+import { TraceCache, traceSource } from "./trace-cache.js";
 import { TraceStages } from "./trace-stages.js";
 import { TraceResources, abortable, abortError } from "./trace-resources.js";
+import { summarizeTrajectoryEval } from "./eval-metrics.js";
+import { createRuntimeMetrics, readRuntimeEvidence } from "./eval-evidence.js";
+import { buildEvalData, diagnosisSource, EVAL_DETAIL_TURNS } from "./eval/data.mjs";
+import { editorMarkup, renderEvalPage } from "./eval/render.mjs";
 import { hostCapabilities } from './trace/shared/host-capabilities.mjs';
 import { readTracePresentation, renderTraceDocument, traceAssetVersion } from './trace/presentation.mjs';
 
@@ -22,12 +25,29 @@ const TRACE_FONTS = { "Geist-Variable.woff2": "font/woff2", "GeistMono-Variable.
 
 let traceAssets;
 const dshAssets = ['dsh-bridge.js', 'dsh-presentation.js'].map(name => new URL('./trace/' + name, import.meta.url));
+const diagnosisAssets = ['diagnosis.js', 'diagnosis-gesture.js', 'diagnosis-trace.js', 'editor.css', 'editor.html']
+  .map(name => new URL('./eval/' + name, import.meta.url));
 function readTraceAssets() {
   const presentation = readTracePresentation();
-  const version = presentation.version + '|' + traceAssetVersion(dshAssets);
+  const version = presentation.version + '|' + traceAssetVersion([...dshAssets, ...diagnosisAssets]);
   if (traceAssets?.version !== version) {
-    const [boot, extension] = dshAssets.map(file => readFileSync(file, 'utf8'));
-    traceAssets = { ...presentation, version, boot, extension };
+    const [boot, dshExtension] = dshAssets.map(file => readFileSync(file, 'utf8'));
+    const source = `
+      window.__trajectoryDiagnosisOptions = { mode: 'dsh', source: () => {
+        if (!session?.turns?.length || session.id !== data.mainSession) return null;
+        const rounds = session.turns.map(t => {
+          const output = t.steps.filter(step => Number.isFinite(step.outTok));
+          return { number: t.number, ms: Number.isSafeInteger(t.endSeq) ? recordDuration(t) : null,
+            calls: t.calls, errors: t.errors, output: output.length ? output.reduce((n, step) => n + step.outTok, 0) : null,
+            outputRecords: output.length, requests: t.steps.length };
+        });
+        return { host: 'dsh', session: session.id, cut: session.lastSeq, rounds,
+          episodes: session.overview?.episodes ?? [], maxCallSelection: 500 };
+      } };
+    `;
+    const extension = [dshExtension, source, ...diagnosisAssets.slice(0, 3).map(file => readFileSync(file, 'utf8'))].join('\n');
+    const template = presentation.template.replace('<script id="trace-data"', () => editorMarkup() + '\n<script id="trace-data"');
+    traceAssets = { ...presentation, template, version, boot, extension };
   }
   return traceAssets;
 }
@@ -224,6 +244,7 @@ export function computeCost(events) {
   const requests = [];
   for (const e of events || []) {
     if (!e || e.type !== "assistant/message") continue;
+    if (e.surfaceOp && typeof e.surfaceOp === "object") continue;
     const d = e.data || {};
     const u = d.usage;
     const unknown = u === undefined || u === null || typeof u !== "object";
@@ -243,7 +264,6 @@ export function computeCost(events) {
       reasoning: pick("reasoningTokens"),
       total: pick("totalTokens"),
     };
-    row.cacheEfficiency = row.cacheRead === null || row.input === null || row.cacheRead + row.input === 0 ? null : row.cacheRead / (row.cacheRead + row.input);
     requests.push(row);
   }
   const sum = (field) => {
@@ -269,7 +289,7 @@ export function computeCost(events) {
       input: turnInput,
       cacheRead: turnCacheRead,
       output: turnOutput,
-      cacheEfficiency: turnCacheRead === null || turnInput === null || turnCacheRead + turnInput === 0 ? null : turnCacheRead / (turnCacheRead + turnInput),
+      ...summarizeCacheEfficiency(list),
     };
   });
   const pricing = computePricing(requests);
@@ -282,7 +302,7 @@ export function computeCost(events) {
     output: sum("output"),
     reasoning: sum("reasoning"),
     total: sum("total"),
-    cacheEfficiency: cacheRead === null || input === null || cacheRead + input === 0 ? null : cacheRead / (cacheRead + input),
+    ...summarizeCacheEfficiency(requests),
     // 只有"每一条请求都是官方 API 且都有 usage"才给价格;混了任何一条就别算,免得给出不完整的金额。
     pricing: pricing.priced > 0 && pricing.unpriced === 0 ? pricing : null,
     byTurn,
@@ -475,9 +495,11 @@ export function costEvidenceLine(cost) {
     .sort((a, b) => b.input - a.input)
     .slice(0, 3)
     .map((turn) => "turn " + turn.turn + "(in " + compact(turn.input) + ")");
+  const paired = cost.cacheEfficiencySample?.records;
   return "cost: " + cost.requestCount + " requests" + (cost.unknownRequests > 0 ? " (+" + cost.unknownRequests + " unknown)" : "") +
     ", in " + compact(cost.input) + " / cached " + compact(cost.cacheRead) + " / out " + compact(cost.output) +
     ", cache " + (cost.cacheEfficiency === null ? "n/a" : (cost.cacheEfficiency * 100).toFixed(1) + "%") +
+    (paired != null ? " (" + paired + "/" + cost.requestCount + " paired usage records)" : "") +
     (expensive.length > 0 ? "; 最贵输入:" + expensive.join(", ") : "");
 }
 
@@ -791,7 +813,6 @@ function summarizeSession(events) {
 const CONTEXT_SCAN_TTL_MS = 30 * 60 * 1000;
 const CONTEXT_SESSION_CAP = 80;
 const CONTEXT_CONCURRENCY = 3;
-const contextScans = new Map();
 
 function emptyContextScan() {
   return {
@@ -1146,6 +1167,25 @@ export function apply(ctx) {
         }
         const sessionId = url.searchParams.get("session");
         if (!sessionId) return send(400, { error: "missing session" });
+        if (url.pathname === ROUTE_PATH + "/eval") {
+          const page = url.searchParams.get("format") === "page";
+          const viewer = Symbol("eval");
+          const entry = await traceStages.load(sessionId, readTraceAssets().version, disconnected.signal, viewer);
+          try {
+            const evaluation = await withAbortTimeout(signal => entry.withEvents(async (events, stop) => {
+              const evidence = await readRuntimeEvidence(ctx, entry, events, stop);
+              const session = entry.payload.sessions[0];
+              if (!page) return summarizeTrajectoryEval(session, evidence);
+              const data = buildEvalData(session, createRuntimeMetrics(session, evidence), { turnLimit: EVAL_DETAIL_TURNS });
+              return renderEvalPage(data, { integrated: true, mode: 'dsh', diagnosis: diagnosisSource(session, data) });
+            }, signal), 8000, disconnected.signal);
+            if (page) {
+              await sendHtml(res, req, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, { html: evaluation });
+              return;
+            }
+            return send(200, { ...evaluation, revision: entry.source?.revision ?? null });
+          } finally { traceStages.release(entry, viewer); }
+        }
         if (url.pathname === ROUTE_PATH + "/trace" && url.searchParams.get("staged") === "1") {
           const html = renderTracePage({ traceLoad: { sessionId } });
           await sendHtml(res, req, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, { html });

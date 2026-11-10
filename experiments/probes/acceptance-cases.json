@@ -1,0 +1,23 @@
+{
+  "client-self-test": {
+    "fixture": "repair",
+    "cut": 4242,
+    "anchors": [4215, 4221, 4227, 4229, 4237, 4239],
+    "withheld": [4242],
+    "criteria": [
+      { "id": "edit-recovered", "question": "对同一测试文件的编辑是否在保护拒绝后恢复？" },
+      { "id": "current-check-passes", "question": "修改断言后运行的最后一次客户端自检是否通过？" },
+      { "id": "same-assertion-passes", "question": "最后一次自检是否保留了先前失败的断言条件并通过？" }
+    ]
+  },
+  "long-session-browser": {
+    "fixture": "repair",
+    "cut": 10635,
+    "anchors": [10263, 10575, 10635],
+    "withheld": [10578],
+    "criteria": [
+      { "id": "exported-browser-check", "question": "这次导出页在浏览器中是否通过了无阻断 JavaScript 错误的探针？" },
+      { "id": "host-page-verified", "question": "本轮修复后，用户要求的超长会话在 DSH 宿主页面中是否已通过实际加载验收？" }
+    ]
+  }
+}

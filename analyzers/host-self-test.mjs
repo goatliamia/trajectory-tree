@@ -1,6 +1,7 @@
 // Host-half mechanical self-test: the host incident computation must obey the same pinned semantics.
 // Usage: node analyzers/host-self-test.mjs   (failure exits 1)
 import { classifyTool, computeCost, computeIncidents, computeWorkPath, deriveHarnessResponse } from '../plugin/analysis-view/lib/index.js';
+import { cost } from './cost.mjs';
 
 let failed = 0;
 const check = (name, cond, extra) => {
@@ -96,6 +97,18 @@ const noUsage = computeCost([{
   data: { message: { source: { kind: 'model', provider: 'deepseek-account', model: 'deepseek-flash' } } },
 }]);
 check('cost: 缺 usage 的官方请求也不出价', noUsage.pricing === null, noUsage.pricing);
+const partialUsage = [
+  ev('assistant/message', 1, { turn: 1, usage: { inputTokens: 30 } }),
+  ev('assistant/message', 2, { turn: 1, usage: { cacheReadTokens: 60 } }),
+  ev('assistant/message', 3, { turn: 2, usage: { inputTokens: 20, cacheReadTokens: 80 } }),
+  { ...ev('assistant/message', 4, { turn: 2, usage: { inputTokens: 500, cacheReadTokens: 0 } }), surfaceOp: { op: 'replace' } },
+];
+for (const result of [computeCost(partialUsage), cost.run(partialUsage)]) {
+  const totals = result.totals ?? result;
+  check('cost: 整会话和按轮使用同一组真实成对记录',
+    totals.input === 50 && totals.cacheRead === 140 && totals.cacheEfficiency === 0.8 &&
+    totals.cacheEfficiencySample.records === 1 && result.byTurn[0].cacheEfficiency === null && result.byTurn[1].cacheEfficiency === 0.8, totals);
+}
 check('work: endReason 记录', work.turns[1].endReason === 'error', work.turns[1].endReason);
 const timed = computeWorkPath([
   { type: 'turn/start', seq: 0, time: 1000, data: {} },

@@ -5,6 +5,7 @@ import { adaptPiSession, piSessionPath } from '../../analyzers/pi-adapter.mjs';
 import { readPiSession } from '../../analyzers/pi-reader.mjs';
 import { adaptCodexThread } from '../../analyzers/codex-adapter.mjs';
 import { readCodexThread } from '../../analyzers/codex-reader.mjs';
+import { readCodexRollout, validateCodexRollout } from '../../analyzers/codex-rollout.mjs';
 import { readClaudeTranscript } from '../../analyzers/claude-reader.mjs';
 import { projectClaudeTranscript, finalizeClaudeDataset } from '../../analyzers/claude-adapter.mjs';
 
@@ -18,6 +19,38 @@ export function visible(value, parameters = false) {
 }
 const strings = value => typeof value === 'string' ? value : Array.isArray(value) ? value.map(strings).join('\n') : value && typeof value === 'object' ? Object.values(value).map(strings).filter(Boolean).join('\n') : '';
 export const recordText = record => strings(record.body);
+
+// An Eval draft can be sent after the host has appended another turn. Verify
+// the same projected prefix instead of treating any append as a new log.
+export function datasetAtCut(data, cut) {
+  const source = data.payload.sessions[0], context = data.payload.context;
+  if (!Number.isSafeInteger(cut) || cut < 0 || cut > source.lastSeq) throw Error('The selected log cut is unavailable; reopen Eval');
+  const inside = seq => Number.isSafeInteger(seq) && seq <= cut;
+  const turns = source.turns.filter(t => inside(t.seq));
+  if (turns.some(t => t.steps.some(s => !inside(s.seq) || s.calls.some(c => !inside(c.seq) || c.resultSeq != null && !inside(c.resultSeq))))) {
+    throw Error('The selected turn changed after the cut; reopen Eval');
+  }
+  const numbers = new Set(turns.map(t => t.number)), ids = new Set(turns.map(t => t.id));
+  const records = data.records.filter(r => inside(r.seq));
+  const scoped = {
+    ...context, cutoffSeq: cut, current: null, scope: null,
+    usage: context.usage.filter(r => data.host === 'codex' ? ids.has(r.turnId) : numbers.has(r.turn) && inside(r.seq)),
+    requests: context.requests.filter(r => numbers.has(r.turn) && inside(r.seq)),
+    fileOperations: context.fileOperations.filter(r => numbers.has(r.turn) && inside(r.seq)),
+    boundaries: context.boundaries.filter(r => inside(r.seq)),
+    skillEvents: context.skillEvents.filter(r => inside(r.seq)),
+  };
+  const episodes = (source.overview?.episodes ?? []).filter(r => numbers.has(r.turn) &&
+    r.failureSeqs.every(inside) && r.pairs.every(p => inside(p.successSeq)));
+  const fingerprint = hash({ host: data.host, session: data.session, cut,
+    records: records.map(r => [r.seq, r.kind, r.native, r.nativeHash]),
+    timings: turns.map(t => [t.id, t.start, t.end, t.durationMs, t.endObserved, t.reason, t.steps.map(s =>
+      [s.seq, s.start, s.end, s.stopReason, s.calls.map(c => [c.seq, c.resultSeq, c.startSeq, c.start, c.end, c.durationMs, c.status])])]),
+    usage: scoped.usage, requests: scoped.requests });
+  const logId = data.host + ':' + data.session + ':cut:' + fingerprint.slice(0, 24);
+  const session = { ...source, lastSeq: cut, turns, overview: { ...source.overview, episodes } };
+  return { ...data, cut, logId, fingerprint, records, payload: { ...data.payload, sessions: [session], context: scoped } };
+}
 
 export function datasetFromNative(host, native, options = {}) {
   if (host === 'claude') {
@@ -141,16 +174,7 @@ export async function loadPortableSource(spec, signal) {
   if (spec.host !== 'codex') throw Error('Supported hosts: pi, codex, claude');
   const snapshot = spec.snapshot || (spec.file ? JSON.parse(await boundedRead(resolve(spec.file))) : await readCodexThread(spec.thread, { signal }));
   let rollout = spec.rolloutText;
-  if (!spec.apiOnly && rollout === undefined) {
-    const path = spec.rollout || snapshot.thread.path;
-    if (path) {
-      try { rollout = await boundedRead(path); }
-      catch (error) { if (spec.rollout || error.code !== 'ENOENT') throw error; }
-    }
-  }
-  if (rollout) {
-    const first = JSON.parse(rollout.split(/\r?\n/).find(line => line.trim()));
-    if (first.type !== 'session_meta' || first.payload?.id !== snapshot.thread.id) throw Error('Local rollout identity does not match official thread');
-  }
+  if (!spec.apiOnly && rollout === undefined) rollout = await readCodexRollout(spec.rollout || snapshot.thread.path, { required: !!spec.rollout, signal });
+  if (!spec.apiOnly) validateCodexRollout(rollout, snapshot.thread.id);
   return datasetFromNative('codex', snapshot, { rollout: spec.apiOnly ? null : rollout });
 }

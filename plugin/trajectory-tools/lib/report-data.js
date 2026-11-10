@@ -1,7 +1,9 @@
 // The evidence service owns measurements; renderers receive this compact,
 // versioned table without excerpts, methods, or a second statistics formula.
 import { createHash } from 'node:crypto';
-import { matchesIoOutcome } from './io-outcome.js';
+import { summarizeToolOutcomes, TOOL_OUTCOME_BASIS } from './io-outcome.js';
+import { groupInspectionCalls, selectInspectionCalls } from './inspection-io.js';
+import { callDurationMs, recordedStepTimingBasis, recordedStepTimings } from './tool-intervals.js';
 
 export const REPORT_DATA_VERSION = 'trajectory-data/1';
 export const REPORT_COLUMNS = {
@@ -9,6 +11,12 @@ export const REPORT_COLUMNS = {
   time: ['记录时间', 'timestamp-ms', 'observed'], start: ['开始时间', 'timestamp-ms', 'observed'], end: ['返回时间', 'timestamp-ms', 'observed'],
   wallMs: ['活动耗时', 'ms', 'official'], ttftMs: ['首字等待', 'ms', 'official'], modelMs: ['模型耗时', 'ms', 'official'],
   toolMs: ['工具累计耗时', 'ms', 'official'], toolCoveredMs: ['工具覆盖时间', 'ms', 'official'],
+  recordedStepSpanMs: ['实录步骤区间', 'ms', 'derived'],
+  clippedToolMs: ['步内工具累计耗时', 'ms', 'derived'], clippedToolCoveredMs: ['步内工具覆盖时间', 'ms', 'derived'],
+  pairedToolCalls: ['有起止记录的工具调用', 'count', 'derived'], crossStepToolCalls: ['超出所属步的工具调用', 'count', 'derived'],
+  durationMs: ['调用耗时', 'ms', 'derived'], timingPairedCalls: ['有起止记录的调用', 'count', 'derived'],
+  timingMissingCalls: ['缺少有效起止的调用', 'count', 'derived'], timingCoverage: ['耗时样本覆盖率', 'ratio', 'derived'],
+  durationSumMs: ['调用累计耗时', 'ms', 'derived'], durationP50Ms: ['调用耗时 P50', 'ms', 'derived'], durationP95Ms: ['调用耗时 P95', 'ms', 'derived'],
   contextTokens: ['步骤输入记录', 'tokens', 'official'], uncachedInputTokens: ['未缓存输入', 'tokens', 'reported'],
   cacheHit: ['输入缓存比例', 'ratio', 'official'],
   cacheReadTokens: ['缓存读取', 'tokens', 'reported'], cacheWriteTokens: ['缓存写入', 'tokens', 'reported'], outputTokens: ['输出', 'tokens', 'reported'],
@@ -47,17 +55,7 @@ export const reportRef = (index, seq) => Number.isSafeInteger(seq) ? [{ session:
 
 export function inspectionReportData(index, query, source) {
   const inRange = turn => !query.turns || turn >= query.turns.from && turn <= query.turns.to;
-  const pathKey = value => { const normalized = value.replace(/\\+/g, '/').replace(/\/+/g, '/'); return /^[a-z]:\//i.test(normalized) ? normalized.toLowerCase() : normalized; };
-  const match = call => !query.focus || (query.focus.tool ? call.name === query.focus.tool
-    : call.files.some(file => pathKey(file.path) === pathKey(query.focus.file)));
-  const calls = index.views.io.filter(c => inRange(c.turn) && match(c));
-  if (query.focus?.tool) for (const root of index.relations?.calls || []) {
-    if (root.name !== query.focus.tool || calls.some(c => c.seq === root.callSeq)) continue;
-    const [turn, step] = index.relations.locations[root.callSeq] || [];
-    if (inRange(turn)) calls.push({ seq: root.callSeq, resultSeq: root.resultSeq, turn, step, name: root.name,
-      files: [], status: root.resultSeq == null ? 'unknown' : 'returned', outputCharacters: null, start: null, end: null });
-  }
-  const selectedCalls = query.outcome ? calls.filter(c => matchesIoOutcome(c.status, query.outcome)) : calls;
+  const { scopedCalls, calls: selectedCalls, callSelection } = selectInspectionCalls(index, query);
   selectedCalls.sort((a, b) => a.seq - b.seq);
   const keys = query.focus ? new Set(selectedCalls.map(c => c.turn + ':' + c.step)) : null;
   const selected = row => inRange(row.turn) && (!keys || keys.has(row.turn + ':' + row.step));
@@ -79,23 +77,42 @@ export function inspectionReportData(index, query, source) {
   })), ['turn', 'step', 'uncachedInputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'outputTokens']);
   if (query.view === 'io' || query.view === 'repeats') {
     if (query.view === 'repeats') throw Error('Use the repeats summary and linked reads to select an evidence-backed sequence; no inferred attempt graph');
+    coverage.toolOutcomeBasis = TOOL_OUTCOME_BASIS;
+    if (callSelection) coverage.callSelection = callSelection;
+    coverage.toolOutcomes = coverage.native?.status === 'unavailable' ? null : summarizeToolOutcomes(scopedCalls);
+    coverage.callTiming = 'Observed start and result timestamps; duration includes recorded errors and cancellations when paired. P50/P95 use nearest rank; overlap is counted in each call. Missing is not zero. Groups follow outcome filtering.';
     if (query.groupBy) {
-      const groups = new Map();
-      for (const c of selectedCalls) for (const label of new Set(query.groupBy === 'tool' ? [c.name] : c.files.map(f => f.path))) {
-        if (!groups.has(label)) groups.set(label, { id: 'group:' + label, name: query.groupBy === 'tool' ? label : null, file: query.groupBy === 'file' ? label : null, calls: 0, errors: 0, returnedCharacters: 0, evidence: [] });
-        const g = groups.get(label); g.calls++; g.errors += c.status === 'error' ? 1 : 0;
-        g.returnedCharacters = g.returnedCharacters === null || c.outputCharacters == null ? null : g.returnedCharacters + c.outputCharacters;
-        if (g.evidence.length < 6) g.evidence.push(...reportRef(index, c.seq));
-      }
-      return table('groups', [...groups.values()], [query.groupBy === 'tool' ? 'name' : 'file', 'calls', 'errors', 'returnedCharacters']);
+      const byTool = query.groupBy === 'tool';
+      const rows = groupInspectionCalls(selectedCalls, query.groupBy, 6).map(group => ({
+        id: 'group:' + group[query.groupBy], name: group.tool, file: group.file,
+        calls: group.calls, errors: group.errors, returnedCharacters: group.returnedCharacters,
+        timingPairedCalls: group.timing.pairedCalls, timingMissingCalls: group.timing.missingCalls,
+        timingCoverage: group.timing.coverage, durationSumMs: group.timing.cumulativeMs,
+        durationP50Ms: group.timing.p50Ms, durationP95Ms: group.timing.p95Ms,
+        evidence: group.examples.flatMap(example => [...reportRef(index, example.startSeq ?? example.seq), ...reportRef(index, example.resultSeq)]),
+      }));
+      return table('groups', rows, [byTool ? 'name' : 'file', 'calls', 'errors', 'returnedCharacters', 'timingPairedCalls', 'timingMissingCalls', 'timingCoverage', 'durationSumMs', 'durationP50Ms', 'durationP95Ms']);
     }
-    return table('calls', selectedCalls.map(c => ({ ...c, id: 'call:' + c.seq, returnedCharacters: c.outputCharacters,
-      evidence: [...reportRef(index, c.seq), ...reportRef(index, c.resultSeq)] })), ['turn', 'step', 'name', 'status', 'start', 'end', 'returnedCharacters']);
+    return table('calls', selectedCalls.map(c => ({ ...c, id: 'call:' + c.seq, returnedCharacters: c.outputCharacters, durationMs: callDurationMs(c),
+      evidence: [...reportRef(index, c.startSeq ?? c.seq), ...reportRef(index, c.resultSeq)] })), ['turn', 'step', 'name', 'status', 'start', 'end', 'durationMs', 'returnedCharacters']);
   }
-  return table('steps', index.stepEntries.filter(selected).sort((a,b)=>(a.evidence.seq??Infinity)-(b.evidence.seq??Infinity)).map(s => ({ id: 'step:' + s.turn + ':' + s.step,
-    turn: s.turn, step: s.step, start: s.evidence.start, end: s.evidence.end,
-    wallMs: s.official.wall, ttftMs: s.official.ttft, modelMs: s.official.model, toolMs: s.official.tool,
-    toolCoveredMs: s.official.toolWall, contextTokens: s.official.context, cacheHit: s.official.cacheHit, outputTokens: s.official.output, retries: s.official.retries,
-    evidence: reportRef(index, s.evidence.assistantSeq ?? s.evidence.seq),
-  })), ['turn', 'step', 'start', 'end', 'wallMs', 'ttftMs', 'modelMs', 'toolMs', 'toolCoveredMs', 'contextTokens', 'cacheHit', 'outputTokens', 'retries']);
+  const fields = ['turn', 'step', 'start', 'end', 'wallMs', 'ttftMs', 'modelMs', 'toolMs', 'toolCoveredMs', 'contextTokens', 'cacheHit', 'outputTokens', 'retries'];
+  const steps = index.stepEntries.filter(selected).sort((a,b)=>(a.evidence.seq??Infinity)-(b.evidence.seq??Infinity));
+  const timings = query.view === 'latency' ? recordedStepTimings(steps, index.views.io) : null;
+  if (timings) {
+    fields.push('recordedStepSpanMs', 'calls', 'pairedToolCalls', 'crossStepToolCalls', 'clippedToolMs', 'clippedToolCoveredMs');
+    coverage.recordedToolTiming = recordedStepTimingBasis;
+  }
+  return table('steps', steps.map(s => {
+    const timing = timings?.get(s);
+    return { id: 'step:' + s.turn + ':' + s.step,
+      turn: s.turn, step: s.step, start: s.evidence.start, end: s.evidence.end,
+      wallMs: s.official.wall, ttftMs: s.official.ttft, modelMs: s.official.model, toolMs: s.official.tool,
+      toolCoveredMs: s.official.toolWall, contextTokens: s.official.context, cacheHit: s.official.cacheHit, outputTokens: s.official.output, retries: s.official.retries,
+      recordedStepSpanMs: timing?.stepSpanMs, calls: timing?.calls, pairedToolCalls: timing?.pairedCalls,
+      crossStepToolCalls: timing?.crossStepCalls, clippedToolMs: timing?.cumulativeMs, clippedToolCoveredMs: timing?.coveredMs,
+      evidence: timings ? [...reportRef(index, s.evidence.seq), ...reportRef(index, s.evidence.endSeq)]
+        : reportRef(index, s.evidence.assistantSeq ?? s.evidence.seq),
+    };
+  }), fields);
 }

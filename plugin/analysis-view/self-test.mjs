@@ -18,15 +18,18 @@ const check = (name, condition, detail) => {
 /* ---------------- React 垫片 ---------------- */
 const frames = [];
 const hookFrames = [];
+const renderedComponents = new Map();
 function currentFrame() {
   return hookFrames[hookFrames.length - 1];
 }
 let captureLocaleEffect = false, localeEffect = null, refreshCount = 0;
+let captureDraftEffect = false, draftEffect = null;
 const ReactShim = {
   createElement(type, props, ...children) {
     const merged = Object.assign({}, props || {});
     if (children.length > 0) merged.children = children.length === 1 ? children[0] : children;
     if (typeof type === "function") {
+      renderedComponents.set(type.name, type);
       const depth = hookFrames.length + 1;
       const frame = frames[frames.length - 1];
       hookFrames.push({ index: 0, seeds: depth === 1 && frame ? frame.seeds : null });
@@ -48,7 +51,10 @@ const ReactShim = {
     const value = seeded ? frame.seeds[index] : typeof initial === "function" ? initial() : initial;
     return [value, () => { if (captureLocaleEffect) refreshCount++; }];
   },
-  useEffect(effect) { if (captureLocaleEffect && String(effect).includes('MutationObserver')) localeEffect = effect; },
+  useEffect(effect) {
+    if (captureLocaleEffect && String(effect).includes('MutationObserver')) localeEffect = effect;
+    if (captureDraftEffect && String(effect).includes('receiveDiagnosisDraft')) draftEffect = effect;
+  },
   useLayoutEffect() {},
   useMemo(factory) {
     return factory();
@@ -96,21 +102,31 @@ const mod = moduleDef.factory((name) => {
 });
 check("client: 只依赖 react", required.length > 0 && required.every((name) => name === "react"), required);
 
-let Panel = null, ContextPanel = null;
+let EvalDashboard = null, ContextPanel = null;
+const conversationPanels = [];
+const draftRequests = [], binding = {};
+let canApplyDraft = true;
 const ctx = {
+  sessions: { binding(id) { return id === "session-fixture" ? binding : undefined; } },
+  conversation: { input: { requestDraftInitialization(target, options) {
+    draftRequests.push([target, options]); return canApplyDraft ? "applied" : "blocked";
+  } } },
   commandUi: { register(command) { check("client: /trajectory is a direct UI action", command.name === "trajectory" && command.ui.kind === "action"); } },
   uiConversation: { views: { register() {} }, binding() { return { target() { return { getSnapshot() { return null; }, subscribe() { return () => {}; } }; } }; } },
   slots: {
     inject(name, register) { register(); },
     register(definition, component) {
-      if (definition && definition.id === "analysis") Panel = component;
+      if (definition && definition.name === "conversation.view") conversationPanels.push([definition.id, definition.label(), definition.order]);
+      if (definition && definition.id === "analysis") EvalDashboard = component;
       if (definition && definition.name === "main" && definition.key === "context-manager") ContextPanel = component;
       return () => {};
     },
   },
 };
 mod.apply(ctx);
-check("client: 注册到 conversation.view 的 analysis", Panel !== null && typeof Panel === "function");
+check("client: 两个会话面板依次可打开", JSON.stringify(conversationPanels) === JSON.stringify([
+  ["path", "轨迹树", 30], ["analysis", "评估", 40],
+]));
 
 /* ---------------- 渲染工具 ---------------- */
 function render(component, props, seeds) {
@@ -166,7 +182,7 @@ const digest = {
     seqs: [70],
   }],
   cost: {
-    requestCount: 2,
+    requestCount: 3,
     unknownRequests: 0,
     input: 100,
     cacheRead: 900,
@@ -175,10 +191,11 @@ const digest = {
     reasoning: null,
     total: 1050,
     cacheEfficiency: 0.9,
+    cacheEfficiencySample: { records: 2, input: 100, cacheRead: 900 },
     pricing: {
       currency: "CNY",
       models: ["deepseek-flash"],
-      priced: 2,
+      priced: 3,
       unpriced: 0,
       peakRequests: 1,
       total: 2.02,
@@ -186,7 +203,7 @@ const digest = {
       rates: { cacheHit: [0.02, 0.04], cacheMiss: [1, 2], output: [4, 8] },
     },
     byTurn: [
-      { turn: 1, requests: 1, input: 60, cacheRead: 600, output: 30, cacheEfficiency: 0.909 },
+      { turn: 1, requests: 2, input: 60, cacheRead: 600, output: 30, cacheEfficiency: 0.909, cacheEfficiencySample: { records: 1, input: 60, cacheRead: 600 } },
       { turn: 2, requests: 1, input: 40, cacheRead: 300, output: 20, cacheEfficiency: 0.882 },
     ],
   },
@@ -203,6 +220,60 @@ const digest = {
 
 const readyState = { status: "ready", data: digest, error: null, at: Date.now() };
 const props = { sessionId: "session-fixture", openView() {}, useTrajectory: () => null };
+const origin = "http://127.0.0.1:3081", ack = [], draftJumps = [];
+let onDraft;
+sandbox.window.location = { origin };
+sandbox.window.addEventListener = (name, callback) => { if (name === "message") onDraft = callback; };
+sandbox.window.removeEventListener = () => {};
+const frame = { contentWindow: { postMessage(message, origin) { ack.push([message, origin]); } } };
+captureDraftEffect = true;
+const chartTree = render(EvalDashboard, { ...props, openView: (...args) => draftJumps.push(args) }, { 1: frame });
+captureDraftEffect = false;
+const detachDraft = draftEffect();
+const draftEvent = { origin, source: frame.contentWindow,
+  data: { type: "analysis-diagnosis-draft", sessionId: props.sessionId, prompt: "诊断草稿" } };
+onDraft({ ...draftEvent, origin: "http://127.0.0.1:4000" });
+onDraft({ ...draftEvent, source: {} });
+onDraft({ ...draftEvent, data: { ...draftEvent.data, sessionId: "other-session" } });
+check("client: Eval 打开同一会话的图表，拒绝外部或跨会话的草稿消息",
+  all(chartTree).some(node => node.type === "iframe" && node.props.src === "/analysis-view/eval?format=page&session=session-fixture")
+  && !draftRequests.length && !ack.length);
+onDraft(draftEvent);
+canApplyDraft = false;
+onDraft(draftEvent);
+detachDraft();
+check("client: 通过原生草稿接口追加文本，仅装填成功时切回对话",
+  draftRequests.length === 2 && draftRequests[0][0] === binding &&
+  draftRequests[0][1].prompt === draftEvent.data.prompt && draftRequests[0][1].whenDraftExists === "append" &&
+  JSON.stringify(draftJumps) === '[["chat",""]]' && ack[0][0].applied && !ack[1][0].applied && ack[0][1] === origin);
+
+render(EvalDashboard, props, { 0: props.sessionId });
+const EvalPanel = renderedComponents.get("EvalPanel");
+const evalJumps = [];
+const evalTree = render(EvalPanel, { ...props, openView: (...args) => evalJumps.push(args) }, {
+  1: { sessionId: "session-fixture", refresh: 0, data: {
+    cut: 99, turns: [{ turn: 2, startSeq: 41, label: "修复面板" }],
+    execution: { calls: 3, returned: 1, errors: 1, unknown: 1, known: 2, outcomeCoverage: 2 / 3, errorRate: 1 / 2, errorsByCondition: [{
+      code: "FS_NOT_OBSERVED", calls: 1, matched: 1, tools: [{ name: "edit", count: 1 }],
+      rows: [{ turn: 2, tool: "edit", startSeq: 41, failure: { seq: 70, callId: "call-err" }, retry: { seq: 72, callId: "call-retry" } }],
+    }], timing: { calls: 3, pairedCalls: 2, missingCalls: 1, coverage: 2 / 3, byTool: [{
+      name: "edit", calls: 2, pairedCalls: 2, cumulativeMs: 30, p50Ms: 10, p95Ms: 20,
+      rows: [{ turn: 2, startSeq: 41, durationMs: 20, record: { seq: 72, callId: "call-retry" }, resultSeq: 73 }],
+    }, { name: "read", calls: 1, pairedCalls: 0, rows: [] }] } },
+  } },
+  4: true,
+});
+const evalText = textOf(evalTree).join(" ");
+check("render: Eval 按工具和已有错误类型显示调用、恢复与缺失结果",
+  ["工具执行", "无结果记录 1", "修改前未读取文件", "同参恢复 1", "edit", "seq 99", "统计口径", "结果覆盖率 66.7%", "运行证据"].every(value => evalText.includes(value)));
+const evalLinks = all(evalTree).filter(item => item.props?.title === "打开原始记录");
+for (const node of evalLinks.filter(item => item.props.children !== "调用 #72")) node.props.onClick();
+check("render: Eval 报错和同参返回分别定位原调用", JSON.stringify(evalJumps) === '[["trajectory","call-err"],["trajectory","call-retry"]]');
+evalLinks.find(item => item.props.children === "调用 #72")?.props.onClick();
+check("render: Eval 耗时显示样本覆盖和可回查的调用", ["调用到结果的耗时", "有起止记录 2/3 (66.7%)",
+  "有起止记录 0/1", "P50 10ms", "结果 #73"].every(value => evalText.includes(value)) &&
+  !evalText.includes("P95 20ms") && evalJumps.length === 3 && evalJumps.at(-1)?.[1] === "call-retry");
+const Panel = renderedComponents.get("AnalysisPanel");
 
 const tree = render(Panel, props, { 0: readyState });
 const text = textOf(tree).join(" ");
@@ -216,7 +287,8 @@ check("render: 有失败的轮次靠 firstErrorCallId 可点(不依赖投影)", 
 check("render: 花费按轮画了两条", classes.filter((name) => name === "av-cost-row").length === 2);
 check("render: 花费把命中与未命中分开画", classes.filter((name) => name === "av-fill hit").length === 2 && classes.filter((name) => name === "av-fill miss").length === 2, classes.filter((name) => name.startsWith("av-fill")));
 check("render: 低命中率那一轮标 warn", classes.filter((name) => name === "av-rate warn").length === 1, classes.filter((name) => name.startsWith("av-rate")));
-check("render: 花费总览用未命中/命中", text.includes("未命中") && text.includes("命中率") && text.includes("缓存承担了"), text.slice(0, 260));
+check("render: 花费总览注明占比的成对记录范围", text.includes("未命中") && text.includes("命中率") && text.includes("2/3 条结算同时上报缓存读取与未缓存输入"), text.slice(0, 260));
+check("render: 轮次的提示按自身样本显示", nodes.some(node => node.props?.className === "av-cost-row" && node.props.title.includes("1/2 条结算")));
 check("render: 花费行可点跳对话", nodes.some((node) => node.props && node.props.className === "av-cost-row" && node.props.role === "button" && typeof node.props.onClick === "function"), classes.filter((name) => name === "av-cost-row"));
 check("render: 命中/未命中各自带花费,合计进 KPI 行", text.includes("¥0.42") && text.includes("¥0.89") && text.includes("¥0.71") && text.includes("≈ ¥2.02") && !text.includes("价目") && classes.filter((name) => name === "av-cost-cell").length === 5, classes.filter((name) => name === "av-cost-cell"));
 check("render: 工具画成环形图并按 host 类别分组", nodes.some((node) => node.type === "svg") && classes.filter((name) => name === "av-leg").length >= 2 && text.includes("文件") && text.includes("执行"), classes.filter((name) => name === "av-leg"));

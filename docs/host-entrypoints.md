@@ -2,12 +2,12 @@
 
 视图生成是确定性代码，不调用模型；报告由模型使用取证方法撰写，再交给组件渲染。
 
-| 宿主 | 查看会话 | 过程诊断 | 静态剖面 |
-| --- | --- | --- | --- |
-| Codex | 插件 skill `$trajectory-view` | `$trace-analysis` | `$context-profile` |
-| Pi | 原生命令 `/trajectory` | Pi 版 `trace-analysis` skill | Pi 版 `context-profile` skill |
-| Claude Code | `/trajectory-tree:trajectory-view` | `/trajectory-tree:trace-analysis` | `/trajectory-tree:context-profile` |
-| DSH Web | 客户端命令 `/trajectory` | runtime skill `trace-analysis` | runtime skill `context-profile` |
+| 宿主 | 查看会话 | Eval | 过程诊断 | 静态剖面 |
+| --- | --- | --- | --- | --- |
+| Codex | `$trajectory-view` | `$trajectory-eval` | `$trace-analysis` | `$context-profile` |
+| Pi | `/trajectory` | `/trajectory --eval` | Pi 版 `trace-analysis` skill | Pi 版 `context-profile` skill |
+| Claude Code | `/trajectory-tree:trajectory-view` | `/trajectory-tree:trajectory-eval` | `/trajectory-tree:trace-analysis` | `/trajectory-tree:context-profile` |
+| DSH Web | `/trajectory` | 会话「评估」标签 | `trace-analysis` | `context-profile` |
 
 Codex 使用官方推荐的 skills 入口，不新增已弃用的 custom prompt slash 文件。插件包使用根 `plugin.json`，从根 `skills/` 发现 skill；本地 marketplace 指向生成后的 Codex 包，不指向含私有日志的整个工作目录。它是本地可安装包，尚未提交公共插件目录。
 
@@ -17,7 +17,7 @@ Codex 使用官方推荐的 skills 入口，不新增已弃用的 custom prompt 
 
 `node scripts/sync-host-skills.mjs` 生成各宿主方法 skill；`--check` 检查同步状态。Codex 和 Claude Code 只补充各自 CLI 路径与会话来源，Pi 使用已注册的工具；工具声明由 CLI 的 `--tool schema` 读取。项目自身的 `.agents/skills` 保留通用分析方法。
 
-DSH 不套用 Codex 的文件元数据。它通过当前 SDK 的 `ctx.skills.register` 注册 `name`、`description`、`whenToUse`、`source: "runtime"`、`content` 和方法引用所在的 `resourceBase`；调用策略省略时由 SDK 默认同时开放用户与模型调用。Codex/Pi 分别使用普通 `SKILL.md` 的 name、description 和正文。正文写作共用 `report/WRITING.md`；HTML 组件绑定见 `report/AUTHORING.md`。
+DSH 在本项目优先读取 `.dsh/skills`，其中的 `description` 写用途，`whenToUse` 写适用时机。插件通过 `ctx.skills.register` 提供同一份元数据和资源目录，供其他项目使用。Codex、Pi 和 Claude Code 从共用正文生成各自的 `SKILL.md`。工具的用途在工具简介里，默认值与使用条件在参数声明里。
 
 ## 构建
 
@@ -30,13 +30,15 @@ node scripts/package-trajectory.mjs --host claude
 
 包分别位于 `dist/trajectory-tree-codex`、`dist/trajectory-tree-pi` 和 `dist/trajectory-tree-claude`，包含脚本、字体、组件与所需的 TypeBox 依赖。来源清单及内容哈希在各包的 `bundle-manifest.json`。
 
+用 `npm pack <包目录> --pack-destination <输出目录>` 生成归档。将三个便携包和 DSH 的 `plugin/trajectory-tools`、`plugin/analysis-view` 两个包放在同一输出目录，可用 `node scripts/test-trajectory-packages.mjs --dir <输出目录>` 验证解包后的入口。
+
 Codex：构建后刷新或重启客户端，在 Plugins Directory 选择 `Trajectory Tree 本地插件` 源并安装。缺少当前会话 ID 时生成器要求明确的 `--thread`，不改选最近会话。
 
 Pi：`pi -e ./dist/trajectory-tree-pi`。`/trajectory` 从 SessionManager 读取选定分支及当前作用域，生成后打开系统浏览器；`--no-open` 返回链接。没有向会话发送额外分析提示词。
 
 Claude Code：`claude --plugin-dir ./dist/trajectory-tree-claude`。原生 `SessionStart` hook 在启动、恢复、清空、压缩或 fork 时提供当前 `session_id` 与 `transcript_path`，不在每轮提示重复注入；CLI 显式读取该文件。支持可见消息、工具参数与结果及已记录用量，详情见 [Claude 插件](../plugin/claude/README.md)。
 
-DSH：`dsh-analysis-view` 0.10.32 的 `/trajectory` 打开当前会话 staged trace 路由，带来源多选和默认关闭的总趋势。其共享资源由 `node scripts/sync-view-assets.mjs` 生成，打包前自动同步。`dsh-trajectory-tools` 0.6.0 附带两项方法 skill 及其引用资源。
+DSH：`/trajectory` 打开当前会话的轨迹树，「评估」使用同一数据管线。两种视图都能生成诊断草稿并填入对话。共享资源由 `node scripts/sync-view-assets.mjs` 生成，打包前自动同步。取证插件附带两项诊断 skill 及其引用资源。
 
 ## 运行与资源
 

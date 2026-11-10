@@ -86,6 +86,7 @@ export class TraceStages {
       const cut = observationSource(this.ctx, observation, source), token = hash([sessionId, cut?.revision, assets, ++this.serial]);
       const toSeq = observation.source === 'live' && Number.isSafeInteger(observation.cursor) ? observation.cursor : undefined;
       const entry = { sessionId, source: cut, assets, token, resourceKey: 'staged:' + token,
+        cursor: toSeq,
         children: new Map(), retryAt: Infinity, bodies: new Map(), encodedBytes: 0, viewers: new Map(), controller,
         version: hash([cut?.revision, assets, []]), payload, actorData: null,
         header: observation.header || observation.session, inherited: observation.inheritedEventCount ?? 0,
@@ -101,6 +102,19 @@ export class TraceStages {
           events = observation.events || [];
         })().finally(() => { reopening = null; }));
         return events;
+      };
+      entry.withEvents = (read, signal) => {
+        const stop = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
+        return this.resources.main.run(async () => {
+          if (!events && !cut) throw new Error('trace cut expired');
+          rawUsers++;
+          try {
+            const rows = await ensureEvents();
+            stop.throwIfAborted();
+            if ((rows.at(-1)?.seq ?? null) !== (payload.sessions[0].lastSeq ?? null)) throw new Error('trace cut expired');
+            return await read(rows, stop);
+          } finally { rawUsers--; }
+        }, stop, 1);
       };
       entry.startDetails = () => entry.details ||= this.resources.main.run(async () => {
         const rows = await ensureEvents(), at = Date.now();

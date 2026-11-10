@@ -32,12 +32,14 @@ jobs:
       - name: Check shared assets and host skills are synchronized
         run: |
           node scripts/sync-view-assets.mjs --check
+          node scripts/sync-inspect-models.mjs --check
           node scripts/sync-host-skills.mjs --check
       - name: Run synthetic observations and actual package loading
         run: node --test plugin/analysis-view/goal-events-test.mjs plugin/analysis-view/stages-test.mjs plugin/analysis-view/resources-test.mjs
       - name: Smoke test host adapters, language and presentation
         run: >-
           node --test
+          analyzers/host-self-test.mjs
           analyzers/pi-adapter-test.mjs
           analyzers/codex-adapter-test.mjs
           analyzers/claude-adapter-test.mjs
@@ -47,6 +49,8 @@ jobs:
           view/assets/codex-host-test.mjs
           lib/i18n-test.mjs
           plugin/analysis-view/self-test.mjs
+          plugin/analysis-view/eval-test.mjs
+          experiments/corpus/acceptance-eval-test.mjs
           plugin/analysis-view/presentation-test.mjs
           docs/demo/layout-review/geist-interaction-test.mjs
           view/test.mjs

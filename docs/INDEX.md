@@ -26,6 +26,10 @@
 ## 文档导航（`docs/`）
 
 **总体与接入**
+
+- [运行时分析路线图](ROADMAP.md) — 现有基础、方法目录、对象诊断与阶段验收
+- [指标框架](metric-framework.md) — 原始证据、确定性口径、宿主范围与 Eval 转化
+- [运行轨迹的 Eval 指标与方法](runtime-analysis-research.md) — 已有证据、评价判据与冻结案例复核
 - [宿主兼容与自动语言选择](host-compatibility.md) — 共享报告、能力降级、中文／英文、验证入口
 - [宿主接入与命令](host-entrypoints.md) — 四个宿主各自的入口、构建与分发
 - [宿主接入文件清单](host-integration-files.md) — hook、插件清单、打包内容

@@ -1,9 +1,9 @@
 // Shared usage extraction for history queries and diagnostic distributions.
+import { cacheEfficiency, summarizeCacheEfficiency } from './inspect-models/cache-efficiency.js';
+export { cacheEfficiency };
+
 const number = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 const sum = values => { const known = values.filter(v => v != null); return known.length ? known.reduce((a, b) => a + b, 0) : null; };
-export function cacheEfficiency(cacheRead, input) {
-  return cacheRead == null || input == null || cacheRead + input <= 0 ? null : cacheRead / (cacheRead + input);
-}
 export function costRequests(events) {
   return (events || []).filter(e => e.type === 'assistant/message' && !(e.surfaceOp && typeof e.surfaceOp === 'object')).map(event => {
     const data = event.data || {}, source = data.message?.source || {}, usage = data.usage;
@@ -21,7 +21,7 @@ export function costRequests(events) {
 export function costTotals(rows = []) {
   const totals = Object.fromEntries(['input', 'cacheRead', 'cacheWrite', 'output', 'reasoning', 'total'].map(k => [k, sum(rows.map(r => r[k]))]));
   return { requests: rows.length, unknownRequests: rows.filter(r => r.unknown).length, ...totals,
-    cacheEfficiency: cacheEfficiency(totals.cacheRead, totals.input) };
+    ...summarizeCacheEfficiency(rows) };
 }
 export function costCoverage(rows = []) {
   return Object.fromEntries(['input', 'cacheRead', 'cacheWrite', 'output', 'reasoning', 'total'].map(k => [k, rows.filter(r => r[k] != null).length]));

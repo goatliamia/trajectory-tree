@@ -9,6 +9,12 @@ const assets={
  'visual-tokens.css':visualTokenCss({legacyAliases:true}),
  'i18n.mjs':i18nModuleSource(),
  'host-capabilities.mjs':readFileSync(new URL('lib/host-capabilities.mjs',root),'utf8'),
+ 'io-outcome.mjs':readFileSync(new URL('plugin/trajectory-tools/lib/io-outcome.js',root),'utf8'),
+ 'tool-intervals.mjs':readFileSync(new URL('plugin/trajectory-tools/lib/tool-intervals.js',root),'utf8'),
+ 'tool-call-checks.mjs':readFileSync(new URL('plugin/trajectory-tools/lib/tool-call-checks.js',root),'utf8'),
+ 'official-stats.mjs':readFileSync(new URL('plugin/trajectory-tools/lib/official-stats.js',root),'utf8'),
+ 'usage.mjs':readFileSync(new URL('plugin/trajectory-tools/lib/usage.js',root),'utf8').replace('./inspect-models/cache-efficiency.js','../../cache-efficiency.js'),
+ 'scope-index.mjs':readFileSync(new URL('lib/scope-index.mjs',root),'utf8'),
 };
 let changed=false;
 for(const [name,content] of Object.entries(assets)){

@@ -1,0 +1,24 @@
+{
+  "client-self-test": {
+    "full": {
+      "edit-recovered": { "status": "met", "evidence": [4216, 4228] },
+      "current-check-passes": { "status": "met", "evidence": [4237, 4238, 4239, 4242] },
+      "same-assertion-passes": { "status": "not_met", "evidence": [4232, 4237, 4238, 4239] }
+    },
+    "withheld": {
+      "edit-recovered": { "status": "met", "evidence": [4216, 4228] },
+      "current-check-passes": { "status": "unknown", "evidence": [4239] },
+      "same-assertion-passes": { "status": "not_met", "evidence": [4232, 4237, 4238, 4239] }
+    }
+  },
+  "long-session-browser": {
+    "full": {
+      "exported-browser-check": { "status": "not_met", "evidence": [10575, 10578] },
+      "host-page-verified": { "status": "unknown", "evidence": [10263, 10575] }
+    },
+    "withheld": {
+      "exported-browser-check": { "status": "unknown", "evidence": [10575] },
+      "host-page-verified": { "status": "unknown", "evidence": [10263, 10575] }
+    }
+  }
+}

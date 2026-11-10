@@ -166,6 +166,21 @@ window.__ModuleLoader__.load({
 @media (prefers-reduced-motion:reduce){.av-btn,.av-seg,.av-chip{transition-duration:.01ms}}
 .av-interp{font-size:13px;white-space:pre-wrap}
 .av-foot{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}
+.av-eval-turn{font:inherit;color:inherit;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;padding:4px 6px;min-width:0;max-width:100%}
+.av-eval-counts{display:flex;gap:8px 16px;flex-wrap:wrap;color:var(--dsw-alias-label-secondary);font-size:12px}
+.av-eval-list{display:grid;gap:0;list-style:none;margin:0;padding:0}
+.av-eval-list li{border-top:1px solid var(--dsw-alias-border-l1);padding:10px 0;display:grid;gap:5px}
+.av-eval-item{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.av-eval-item strong{overflow-wrap:anywhere;font-weight:550}
+.av-eval-group{border-top:1px solid var(--dsw-alias-border-l1);padding:8px 0}
+.av-eval-group>summary{cursor:pointer;overflow-wrap:anywhere}
+.av-eval-group>summary span{margin-inline-start:10px;color:var(--dsw-alias-label-secondary);font-size:12px}
+.av-eval-records{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.av-eval-proof>summary{cursor:pointer;font-size:12px;color:var(--dsw-alias-label-secondary)}
+.av-eval-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr));gap:10px 14px;margin:12px 0}
+.av-eval-metrics dt{color:var(--dsw-alias-label-secondary);font-size:12px}
+.av-eval-metrics dd{margin:3px 0 0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.av-eval-list code{overflow-wrap:anywhere}
 `;
     const ensureStyle = () => {
       if (typeof document === "undefined") return () => {};
@@ -481,13 +496,17 @@ window.__ModuleLoader__.load({
       const maxInput = shown.reduce((acc, turn) => Math.max(acc, (turn.input || 0) + (turn.cacheRead || 0)), 0);
       const maxOutput = shown.reduce((acc, turn) => Math.max(acc, turn.output || 0), 0);
       const width = (value, max) => (max === 0 ? 0 : Math.max(0, (value / max) * 100));
-      const rows = shown.map((turn, position) => {
+      const cacheSampleNote = (sample, total) => sample
+        ? sample.records + "/" + total + cmUi(" 条结算同时上报缓存读取与未缓存输入", " usage records reported both cached reads and uncached input")
+        : null;
+      const sampleNote = cacheSampleNote(cost.cacheEfficiencySample, cost.requestCount);
+      const rows = shown.map((turn) => {
         const miss = turn.input || 0;
         const hit = turn.cacheRead || 0;
         const out = turn.output || 0;
         const rate = turn.cacheEfficiency;
-        const first = position === 0;
-        const title = cmUi("第 ", "Turn ") + turn.turn + cmUi(" 轮 · 未命中 ", " · cache miss ") + fmt(turn.input) + cmUi(" · 命中 ", " · cache hit ") + fmt(turn.cacheRead) + cmUi(" · 输出 ", " · output ") + fmt(turn.output) + cmUi(" · 命中率 ", " · hit rate ") + pct(rate) + (first ? cmUi(" · 首轮缓存是空的,命中率低属正常", " · the first turn has an empty cache, so a low hit rate is normal") : "");
+        const paired = cacheSampleNote(turn.cacheEfficiencySample, turn.requests);
+        const title = cmUi("第 ", "Turn ") + turn.turn + cmUi(" 轮 · 未命中 ", " · cache miss ") + fmt(turn.input) + cmUi(" · 命中 ", " · cache hit ") + fmt(turn.cacheRead) + cmUi(" · 输出 ", " · output ") + fmt(turn.output) + cmUi(" · 命中率 ", " · hit rate ") + pct(rate) + (paired ? " · " + paired : "");
         return h("div", {
           key: String(turn.turn),
           className: "av-cost-row",
@@ -538,8 +557,7 @@ window.__ModuleLoader__.load({
             h("div", { className: "av-cost-label" }, cmUi("合计", "Total")),
           ]),
         ]),
-        cost.cacheEfficiency === null ? null : h("div", { key: "note", className: "av-hint", style: { marginBottom: 8 } },
-          cmUi("缓存承担了 ", "Cache handled ") + pct(cost.cacheEfficiency) + cmUi(" 的输入处理,实际新处理 ", " of input processing; newly processed ") + fmt(cost.input)),
+        sampleNote ? h("div", { key: "note", className: "av-hint", style: { marginBottom: 8 } }, sampleNote) : null,
         rows.length > 0 ? h("div", { key: "rows", className: "av-cost-rows", ref: list }, rows) : null,
         worst.length > 0 && turns.length > 1
           ? h("div", { key: "worst", className: "av-hint", style: { marginTop: 6 } },
@@ -1120,6 +1138,29 @@ window.__ModuleLoader__.load({
     // Removing or reparenting an iframe destroys its browsing context. Keep one
     // connected layer; the view's placeholder supplies its bounds while visible.
     const traceFrame = { element: null, layer: null, session: null, ready: false, version: null, assets: null, active: false, expiry: null, postedDetail: null };
+    function receiveDiagnosisDraft(event, frame, sessionId, ctx, openView) {
+      const message = event.data;
+      if (event.origin !== window.location.origin || event.source !== frame?.contentWindow ||
+          message?.type !== "analysis-diagnosis-draft" || message.sessionId !== sessionId ||
+          !sessionId || typeof message.prompt !== "string" || !message.prompt.trim() || message.prompt.length > 65536) return;
+      let applied = false;
+      try {
+        const binding = ctx?.sessions?.binding(sessionId);
+        if (binding && typeof openView === "function") {
+          applied = ctx.conversation.input.requestDraftInitialization(binding, { prompt: message.prompt, whenDraftExists: "append" }) === "applied";
+        }
+      } catch {}
+      event.source.postMessage({ type: "analysis-diagnosis-ack", sessionId, applied }, event.origin);
+      if (applied) openView("chat", "");
+    }
+    function useDiagnosisDraft(frame, sessionId, openView, enabled = true) {
+      React.useEffect(() => {
+        if (!frame || !sessionId || !enabled) return;
+        const onMessage = event => receiveDiagnosisDraft(event, frame, sessionId, clientCtx, openView);
+        window.addEventListener("message", onMessage);
+        return () => window.removeEventListener("message", onMessage);
+      }, [frame, sessionId, openView, enabled]);
+    }
     function PathView(props) {
       useLocaleRefresh();
       React.useEffect(() => ensureStyle(), []);
@@ -1150,6 +1191,7 @@ window.__ModuleLoader__.load({
       );
       const shell = React.useRef(null);
       const [frame, setFrame] = React.useState(null);
+      useDiagnosisDraft(frame, sessionId, props.openView);
       // 挂载时复用上一次的 iframe;只有换会话才重新加载。
       React.useLayoutEffect(() => {
         const host = shell.current;
@@ -1368,6 +1410,335 @@ window.__ModuleLoader__.load({
       ]);
     }
 
+    const toolErrorLabels = {
+      FS_NOT_OBSERVED: ["修改前未读取文件", "File not read before editing"],
+      FS_STALE_VERSION: ["文件版本已变化", "File version changed"],
+      FS_EDIT_NOT_FOUND: ["未找到待替换文本", "Edit target text not found"],
+      FS_NOT_FOUND: ["文件未找到", "File not found"],
+      FS_NOT_TEXT: ["目标文件不是文本", "Non-text file"],
+      SESSION_QUERY_PERSISTENCE_FAILED: ["历史存储不可用", "Session history storage unavailable"],
+      TOOL_TIMEOUT: ["工具调用超时", "Tool call timed out"],
+      CODE_RUN_FAILED: ["Code Mode 执行失败", "Code Mode execution failed"],
+      SEARCH_FAILED: ["搜索失败", "Search failed"],
+      WEB_UNSUPPORTED_CONTENT_TYPE: ["网页内容类型不支持", "Unsupported web content type"],
+      WEB_PROVIDER_ERROR: ["网页服务报错", "Web provider error"],
+      WEB_REDIRECT_BLOCKED: ["网页重定向受阻", "Web redirect blocked"],
+      ABORTED: ["执行中止", "Execution aborted"],
+      ABORTED_BEFORE_DISPATCH: ["调度前取消", "Cancelled before dispatch"],
+      TOOL_OUTCOME_UNKNOWN: ["宿主无法确认执行结果", "Outcome unknown to host"],
+      TOOL_ERROR: ["无细分错误码", "Unspecified tool error"],
+    };
+
+    function toolErrorLabel(code) {
+      return Object.hasOwn(toolErrorLabels, code) ? cmUi(...toolErrorLabels[code]) : code;
+    }
+
+    function EvalToolTiming({ timing, recordLink }) {
+      if (!timing?.byTool?.length) return null;
+      const minP95Samples = 20;
+      const coverage = value => cmUi("有起止记录 ", "Paired samples ") + value.pairedCalls + "/" + value.calls;
+      return h("details", { className: "av-eval-group" },
+        h("summary", null, cmUi("调用到结果的耗时", "Call-to-result timing"),
+          h("span", null, coverage(timing) + " (" + pct(timing.coverage) + ")")),
+        h("p", { className: "av-hint" }, cmUi(
+          "记录的耗时可能包含调度和等待。并发调用的耗时分别计入累计值。P95 至少需要 " + minP95Samples + " 个成对样本。",
+          "Recorded durations may include scheduling and waiting. Overlapping calls each contribute to the total. P95 requires at least " + minP95Samples + " paired samples.")),
+        h("ul", { className: "av-eval-list" }, timing.byTool.map(tool => h("li", { key: tool.name },
+          h("div", { className: "av-eval-item" },
+            h("strong", null, tool.name || cmUi("工具名缺失", "Unnamed tool")),
+            h("span", { className: "av-hint" }, coverage(tool))),
+          tool.pairedCalls ? h("div", { className: "av-eval-counts" },
+            h("span", null, cmUi("累计 ", "Total ") + ms(tool.cumulativeMs)),
+            h("span", null, "P50 " + ms(tool.p50Ms)),
+            tool.pairedCalls >= minP95Samples ? h("span", null, "P95 " + ms(tool.p95Ms)) : null) : null,
+          tool.rows.length ? h("details", { className: "av-eval-proof" },
+            h("summary", null, cmUi("最慢的有记录调用", "Slowest recorded calls")),
+            tool.rows.map(row => h("div", { key: row.record.seq, className: "av-eval-records" },
+              h("span", { className: "av-hint" }, "T" + row.turn + " · " + ms(row.durationMs)),
+              recordLink(cmUi("调用", "Call"), row.record, row),
+              h("span", { className: "av-hint" }, cmUi("结果 #", "Result #") + row.resultSeq)))) : null))));
+    }
+
+    const evalNumber = value => Number.isFinite(value) ? value.toLocaleString(cmUi("zh-CN", "en-US")) : "—";
+    const evalRatio = (count, total) => total ? evalNumber(count) + "/" + evalNumber(total) : "—";
+    const evalSample = (value, samples, total) => value + " · " + evalRatio(samples, total);
+    const evalEvidenceLabels = {
+      "user/message": ["用户消息", "User message"], "assistant/message": ["模型回复", "Assistant reply"],
+      "deliverables/presented": ["交付登记", "Delivery record"], "workspace/changes": ["工作区观测", "Workspace observation"],
+      "turn/end": ["轮次结束", "Turn end"], goal: ["目标", "Goal"], "goal/change": ["目标变更", "Goal change"],
+      "todo/write": ["待办更新", "Todo update"], "compaction/end": ["压缩结束", "Compaction end"],
+      "compaction/prune": ["工具结果裁短", "Result prune"], "subagent/catalog": ["子会话", "Child session"],
+      "session-log-deepseek/delivery-accepted": ["投递回执", "Delivery receipt"],
+    };
+
+    function evalEvidenceLinks(rows, recordLink) {
+      if (!rows?.length) return null;
+      return h("div", { className: "av-eval-records" }, rows.map(row => {
+        const label = evalEvidenceLabels[row.type];
+        return recordLink(label ? cmUi(...label) : cmUi("记录", "Record"), row, row);
+      }));
+    }
+
+    function EvalMetricGroup({ title, summary, values, children }) {
+      return h("details", { className: "av-eval-group" },
+        h("summary", null, title, summary ? h("span", null, summary) : null),
+        h("dl", { className: "av-eval-metrics" }, values.map(([label, value]) =>
+          h("div", { key: label }, h("dt", null, label), h("dd", null, value)))),
+        children);
+    }
+
+    const evalTurnReasons = {
+      completed: ["正常结束", "Completed turn"], aborted: ["中止", "Aborted"],
+      interrupted: ["打断", "Interrupted"], error: ["报错结束", "Ended with error"],
+      open: ["未记录结束", "Open"], unknown: ["结束原因缺失", "Missing end reason"],
+    };
+
+    function EvalRuntimeMetrics({ metrics, recordLink }) {
+      const { timing, usage, files, task, context } = metrics;
+      const item = (zh, en, value) => [cmUi(zh, en), evalNumber(value)];
+      const span = row => evalSample(ms(row.ms), row.measured, row.total);
+      const official = timing.official;
+      const officialLabels = {
+        wall: ["官方墙钟", "Official wall time"], ttft: ["首字延迟", "Time to first token"],
+        model: ["模型时间", "Model time"], decode: ["解码时间", "Decode time"],
+        tool: ["官方工具累计", "Official tool total"], toolWall: ["官方工具区间", "Official tool wall time"],
+        retries: ["官方重试", "Official retries"], toolErrors: ["官方工具报错", "Official tool errors"],
+      };
+      const usageLabels = {
+        input: ["未缓存输入", "Uncached input"], cacheRead: ["缓存读取", "Cache reads"],
+        cacheWrite: ["缓存写入", "Cache writes"], output: ["输出", "Output"],
+        reasoning: ["推理", "Reasoning"], total: ["总量", "Total"],
+      };
+      const composition = context.requestComposition;
+      return h("section", { className: "av-section" },
+        h("h3", { className: "av-section-title" }, cmUi("范围指标", "Scope metrics")),
+        h(EvalMetricGroup, { title: cmUi("执行时长", "Execution timing"), summary: span(timing.turns), values: [
+          [cmUi("轮次起止", "Observed turn spans"), span(timing.turns)],
+          [cmUi("步骤起止", "Observed step spans"), span(timing.steps)],
+          [cmUi("步内工具累计", "Tool time summed within steps"), evalSample(ms(timing.toolSteps.cumulativeMs), timing.toolSteps.measured, timing.toolSteps.total)],
+          [cmUi("步内工具并集", "Tool interval union within steps"), evalSample(ms(timing.toolSteps.coveredMs), timing.toolSteps.measured, timing.toolSteps.total)],
+          [cmUi("步内调用起止配对", "Paired tool calls in recorded steps"), evalRatio(timing.toolSteps.pairedCalls, timing.toolSteps.calls)],
+          ...Object.entries(official?.fields ?? {}).map(([key, field]) => [
+            cmUi(...officialLabels[key]), evalSample(["retries", "toolErrors"].includes(key) ? evalNumber(field.value) : ms(field.value),
+              field.samples, official.steps),
+          ]),
+          ...(official ? [] : [item("官方步骤统计", "Official step statistics", null)]),
+        ] }, h("p", { className: "av-hint" }, cmUi(
+          "步内区间裁剪到已记录的步骤边界。并集只算一次重叠时间。官方项来自宿主统计重放。",
+          "Tool intervals are clipped to observed step boundaries. The union counts overlap once. Official fields use host replay."))),
+        h(EvalMetricGroup, { title: cmUi("用量与缓存", "Usage and cache"), summary: evalNumber(usage.requests) + cmUi(" 条结算", " settlements"), values: [
+          ...Object.entries(usageLabels).map(([key, labels]) => [
+            cmUi(...labels), evalSample(evalNumber(usage[key]), usage.coverage[key], usage.requests),
+          ]),
+          [cmUi("缓存读取占比", "Cache-read share"), evalSample(pct(usage.cacheEfficiency), usage.cacheEfficiencySample.records, usage.requests)],
+          [cmUi("缓存成对分母", "Paired cache denominator"), evalNumber(usage.cacheEfficiencySample.cacheRead) + " + " + evalNumber(usage.cacheEfficiencySample.input)],
+        ] }, h("p", { className: "av-hint" }, cmUi("用量单位为 token。每项附有记录数，缓存占比使用同时上报的两项。", "Usage is in tokens. Each total includes its reporting coverage. The cache share uses paired fields."))),
+        h(EvalMetricGroup, { title: cmUi("文件与信息", "Files and information"), summary: evalNumber(files.files) + cmUi(" 个文件", " files"), values: [
+          item("涉及文件", "Distinct files", files.files), item("有文件关联的调用", "Calls with file evidence", files.calls),
+          item("读取关联", "Read associations", files.access.read), item("搜索命中关联", "Search-match associations", files.access.match),
+          item("写入关联", "Write associations", files.access.write), item("非报错写入返回", "Non-error write returns", files.returnedWriteCalls),
+          [cmUi("首次写入前有读取", "Read before first write"), evalRatio(files.readBeforeFirstWrite, files.pairedWriteFiles)],
+          [cmUi("末次写入后有读回", "Read after last write"), evalRatio(files.readAfterLastWrite, files.pairedWriteFiles)],
+        ] }, h("p", { className: "av-hint" }, cmUi(
+          "前读与读回只比较范围内有起止且非报错的读取和写入，按涉及文件计数。",
+          "Read order uses paired, non-error reads and writes within the selected scope, counted by file.")),
+          files.rows.length ? h("ul", { className: "av-eval-list" }, files.rows.map(row =>
+          h("li", { key: row.path }, h("code", null, row.path),
+            h("div", { className: "av-eval-records" }, evalNumber(row.calls) + cmUi(" 次调用", " calls"),
+              recordLink(cmUi("最近记录", "Latest record"), row, row))))) : null),
+        h(EvalMetricGroup, { title: cmUi("任务与成果", "Tasks and deliverables"), summary: evalNumber(task.deliveries) + cmUi(" 条交付登记", " delivery records"), values: [
+          item("用户消息", "User messages", task.prompts), item("目标变更", "Goal changes", task.goalChanges),
+          item("目标工具记录", "Goal tool records", task.goalToolRecords),
+          item("待办更新", "Todo updates", task.todoUpdates),
+          item("工作区变更观测", "Workspace change observations", task.workspaceObservations),
+          item("交付登记", "Delivery records", task.deliveries), item("登记文件次数", "Listed file occurrences", task.deliveredFiles),
+          ...Object.entries(task.turnReasons).map(([reason, value]) => [
+            Object.hasOwn(evalTurnReasons, reason) ? cmUi(...evalTurnReasons[reason]) : reason, evalNumber(value),
+          ]),
+          ...Object.entries(task.goalPhases).map(([phase, value]) => [
+            cmUi("目标状态 · ", "Goal phase · ") + phase, evalNumber(value),
+          ]),
+        ] }, h("p", { className: "av-hint" }, cmUi("结束原因和交付登记来自宿主，验收需核对产物与检查结果。", "Turn endings and delivery records come from the host. Acceptance requires checking the deliverable and verification results.")),
+        evalEvidenceLinks(task.evidence, recordLink)),
+        h(EvalMetricGroup, { title: cmUi("上下文、Skill 与协作", "Context, skills and collaboration"),
+          summary: evalNumber(context.receipts) + cmUi(" 条投递回执", " delivery receipts"), values: [
+            item("请求头记录", "Request header records", context.headers), item("请求上下文更新", "Request context updates", context.contextUpdates),
+            item("投递回执", "Delivery receipts", context.receipts),
+            item("最近回执覆盖到序号", "Latest receipt through seq", context.deliveredThroughSeq),
+            item("压缩开始", "Compaction starts", context.compactionsStarted), item("压缩结束", "Compaction endings", context.compactionsEnded),
+            [cmUi("压缩上报 token", "Reported compaction tokens"), evalSample(evalNumber(context.compactionUsage.total),
+              context.compactionUsage.measured, context.compactionUsage.summaries)],
+            item("工具结果裁短", "Tool result prunes", context.toolResultPrunes),
+            item("Skill 目录", "Skill catalogs", context.skillCatalogs), item("Skill 引用", "Skill references", context.skillReferences),
+            item("Skill 正文加载", "Skill body loads", context.skillLoads),
+            item("切点仍保留的加载结果", "Load results retained at cut", context.retainedSkillLoads),
+            item("子会话目录", "Catalogued child sessions", context.childSessions),
+            item("协作消息", "Handoff messages", context.handoffMessages), item("子任务结束消息", "Child settled messages", context.settledMessages),
+            [cmUi("完整样本 / 分类记录", "Complete samples / composition records"), composition ? evalRatio(composition.measured, composition.requests) : "—"],
+            item("请求构成估算峰值", "Peak estimated request composition", composition?.peakTokens),
+            item("完整请求样本首末差", "First-to-last complete composition change", composition?.netTokens),
+            ...(context.pressure ? [
+              item("切点上报占用", "Reported context pressure", context.pressure.reportedTokens),
+              item("切点预计占用", "Projected context pressure", context.pressure.projectedTokens),
+              item("上下文窗口", "Context window", context.pressure.contextWindow),
+            ] : []),
+          ] }, h("p", { className: "av-hint" }, cmUi("请求构成来自 dsh-context 的分类估算。投递回执和宿主上报用量另计。", "Request composition uses dsh-context category estimates. Delivery receipts and reported usage are counted separately.")),
+          evalEvidenceLinks(context.evidence, recordLink)));
+    }
+
+    function EvalToolChecks({ execution, metrics, recordLink }) {
+      if (!metrics) return null;
+      const { repeats, parameters } = metrics, recovery = execution.recovery;
+      const item = (zh, en, value) => [cmUi(zh, en), evalNumber(value)];
+      return h(EvalMetricGroup, { title: cmUi("同参重试与参数检查", "Retry candidates and parameter checks"), values: [
+        item("受阻段", "Blocked episodes", recovery?.episodes),
+        item("全部有同参返回", "All failures have a same-input return", recovery?.allSameInputReturned),
+        item("部分有同参返回", "Some failures have a same-input return", recovery?.partiallyMatched),
+        item("未见同参返回", "No same-input return observed", recovery?.noSameInputReturn),
+        item("同轮同参候选组", "Same-turn same-input groups", repeats.groups), item("候选组内调用", "Calls in candidate groups", repeats.calls),
+        [cmUi("直接调用可校验", "Direct calls checkable"), parameters ? evalRatio(parameters.schema.checkable, parameters.scope.directCalls) : "—"],
+        item("定义匹配", "Schema conforming", parameters?.schema.conforming),
+        item("定义未匹配", "Schema nonconforming", parameters?.schema.nonconforming),
+        item("定义待核验", "Schema status unknown", parameters?.schema.unknown),
+        item("参数 JSON 有效", "Valid JSON arguments", parameters?.json.valid),
+        item("参数 JSON 无效", "Invalid JSON arguments", parameters?.json.invalid),
+        item("空参数", "Empty arguments", parameters?.json.empty),
+        item("参数缺失", "Missing arguments", parameters?.json.unknown),
+      ] }, h("p", { className: "av-hint" }, cmUi(
+        "直接调用使用已记录的请求头和宿主校验器核对。是否有推进还要看每次调用取得的反馈和状态变化。",
+        "Direct calls are checked against recorded headers with the host validator. Assess progress using the feedback and state changes from each attempt.")),
+      repeats.rows.length ? h("div", { className: "av-eval-records" }, repeats.rows.map(row =>
+        recordLink(row.tool + " ×" + row.calls, row, row))) : null,
+      parameters?.evidence.length ? h("div", { className: "av-eval-records" }, parameters.evidence.map(row =>
+        recordLink(cmUi("参数检查", "Parameter check") + " · " + row.tool, row, row))) : null);
+    }
+
+    function EvalDashboardPanel(props) {
+      React.useEffect(() => ensureStyle(), []);
+      const { sessionId, openView } = props;
+      const [detailsSession, setDetailsSession] = React.useState(null);
+      const [frame, setFrame] = React.useState(null);
+      const details = Boolean(sessionId && sessionId === detailsSession);
+      useDiagnosisDraft(frame, sessionId, openView, !details);
+      React.useEffect(() => {
+        if (!frame || details) return;
+        const onMessage = event => {
+          if (event.origin === window.location.origin && event.source === frame.contentWindow &&
+              event.data?.type === "analysis-eval-details" && event.data.sessionId === sessionId) setDetailsSession(sessionId);
+        };
+        window.addEventListener("message", onMessage);
+        return () => window.removeEventListener("message", onMessage);
+      }, [frame, sessionId, details]);
+      if (!sessionId) return h(Notice, { text: cmUi("还没有选中会话", "No session selected") });
+      return details ? h(EvalPanel, { ...props, backToCharts: () => setDetailsSession(null) }) :
+        h("div", { className: "av-root av-trace" }, h("iframe", { key: sessionId, ref: setFrame, className: "av-trace-frame",
+          title: cmUi("运行评估", "Session evaluation"), src: "/analysis-view/eval?format=page&session=" + encodeURIComponent(sessionId) }));
+    }
+
+    function EvalPanel(props) {
+      React.useEffect(() => ensureStyle(), []);
+      useLocaleRefresh();
+      const { sessionId, openView } = props;
+      const [loaded, setLoaded] = React.useState(null);
+      const [refresh, setRefresh] = React.useState(0);
+      const [selection, select] = React.useState(null);
+      const [expanded, setExpanded] = React.useState(false);
+      const current = loaded?.sessionId === sessionId && loaded.refresh === refresh ? loaded : null;
+
+      React.useEffect(() => {
+        if (!sessionId) return;
+        const controller = new AbortController();
+        async function load() {
+          try {
+            const response = await fetch("/analysis-view/eval?session=" + encodeURIComponent(sessionId),
+              { cache: "no-store", signal: controller.signal });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data?.error || "HTTP " + response.status);
+            if (!controller.signal.aborted) setLoaded({ sessionId, refresh, data });
+          } catch (error) {
+            if (!controller.signal.aborted) setLoaded({ sessionId, refresh, error: String(error.message || error) });
+          }
+        }
+        load();
+        return () => controller.abort();
+      }, [sessionId, refresh]);
+
+      const data = current?.data;
+      const turn = selection?.sessionId === sessionId ? data?.turns?.find(item => item.turn === selection.turn) : null;
+      const execution = turn?.execution ?? data?.execution;
+      const metrics = turn ? turn.metrics : data?.metrics;
+      const reload = () => setRefresh(value => value + 1);
+      const recordLink = (label, record, row) => h("button", { key: record.seq, className: "av-chip", type: "button",
+        disabled: typeof openView !== "function" || !record.callId && !Number.isSafeInteger(row.turn),
+        onClick: () => record.callId ? openView("trajectory", record.callId) : jumpToChatTurn(openView, sessionId, row),
+        title: record.callId ? cmUi("打开原始记录", "Open original record") : cmUi("打开所在轮次", "Open containing turn") }, label + " #" + record.seq);
+
+      return h("div", { className: "av-root" }, [
+        h("div", { key: "head", className: "av-head" }, [
+          h("h2", { key: "title", className: "av-title" }, cmUi("评估", "Eval")),
+          Number.isSafeInteger(data?.cut) ? h("span", { key: "cut", className: "av-meta" }, "seq " + data.cut) : null,
+          h("span", { key: "space", className: "av-spacer" }),
+          props.backToCharts ? h("button", { key: "charts", type: "button", className: "av-btn", onClick: props.backToCharts },
+            cmUi("返回图表", "Back to charts")) : null,
+          h("button", { key: "refresh", type: "button", className: "av-btn", disabled: !sessionId || !current,
+            onClick: reload }, cmUi("刷新", "Refresh")),
+        ]),
+        !sessionId ? h(Notice, { key: "session", text: cmUi("还没有选中会话", "No session selected") }) : null,
+        sessionId && !current ? h(Notice, { key: "load", text: cmUi("正在读取轨迹统计", "Loading trajectory metrics") }) : null,
+        current?.error ? h(Notice, { key: "error", text: current.error, action: { label: cmUi("重试", "Retry"), onClick: reload } }) : null,
+        data?.turns?.length ? h("select", { key: "turn", className: "av-eval-turn", value: turn?.turn ?? "",
+          "aria-label": cmUi("选择统计范围", "Select a metric scope"),
+          onChange: event => select(event.target.value === "" ? null : { sessionId, turn: Number(event.target.value) }) }, [
+          h("option", { key: "all", value: "" }, cmUi("整段会话", "Whole session")),
+          ...data.turns.map(option => h("option", { key: option.turn, value: option.turn }, "T" + option.turn + (option.label ? " · " + option.label : ""))),
+        ]) : null,
+        metrics ? h(EvalRuntimeMetrics, { key: "metrics", metrics, recordLink }) : null,
+        execution ? h("section", { key: "execution", className: "av-section" }, [
+          h("h3", { key: "h", className: "av-section-title" }, cmUi("工具执行", "Tool execution")),
+          h("div", { key: "counts", className: "av-eval-counts" },
+            h("span", null, cmUi("调用 ", "Calls ") + execution.calls),
+            h("span", null, cmUi("非报错返回 ", "Non-error returns ") + execution.returned),
+            h("span", null, cmUi("有报错记录 ", "Recorded errors ") + execution.errors),
+            h("span", null, cmUi("无结果记录 ", "No recorded result ") + execution.unknown)),
+          execution.errorsByCondition.length ? h("div", { key: "groups" }, execution.errorsByCondition.map(group =>
+            h("details", { key: group.code, className: "av-eval-group" },
+              h("summary", null, toolErrorLabel(group.code),
+                h("span", null, group.calls + cmUi(" 次 · 同参恢复 ", " calls · Same-input recovery ") + group.matched)),
+              h("p", { className: "av-hint" }, h("code", null, group.code), " · ",
+                group.tools.map(tool => tool.name + " ×" + tool.count).join(" · ")),
+              h("ul", { className: "av-eval-list" }, group.rows.map(row =>
+                h("li", { key: row.failure.seq },
+                  h("div", { className: "av-eval-item" }, h("strong", null, "T" + row.turn + " · " + row.tool)),
+                  h("div", { className: "av-eval-records" },
+                    recordLink(cmUi("报错", "Error"), row.failure, row),
+                    row.retry ? recordLink(cmUi("同参返回", "Same-input return"), row.retry, row)
+                      : h("span", { className: "av-hint" }, cmUi("未见同参返回", "No same-input return recorded")))))),
+              group.calls > group.rows.length ? h("p", { className: "av-hint" },
+                cmUi("仅列最近 " + group.rows.length + " 次", "Showing the " + group.rows.length + " most recent calls")) : null)))
+            : h("p", { key: "empty", className: "av-hint" }, execution.errors
+              ? cmUi("报错分类暂不可用", "Error breakdown unavailable")
+              : cmUi("这个范围内未记录工具报错", "No tool errors were recorded in this scope")),
+          h(EvalToolTiming, { key: "timing", timing: execution.timing, recordLink }),
+          h(EvalToolChecks, { key: "checks", execution, metrics, recordLink }),
+          h("details", { key: "basis", className: "av-eval-proof" }, [
+            h("summary", { key: "s" }, cmUi("统计口径", "How this is counted")),
+            h("p", { key: "rates", className: "av-eval-counts" },
+              h("span", null, cmUi("结果覆盖率 ", "Result coverage ") + pct(execution.outcomeCoverage),
+                execution.calls ? " (" + execution.known + "/" + execution.calls + ")" : ""),
+              h("span", null, cmUi("已知结果中报错占比 ", "Error share among known results ") + pct(execution.errorRate),
+                execution.known ? " (" + execution.errors + "/" + execution.known + ")" : "")),
+            h("p", { key: "text", className: "av-hint" }, cmUi(
+              "按轨迹树记录的调用计数。报错按已有分类分组。每条报错只在同轮、同工具、完整参数相同的后续调用有非报错返回时计一次同参恢复。",
+              "Counts calls recorded in Trajectory Tree. Errors use the existing categories. Each error counts as recovered when a later call in the same turn uses the same tool and full arguments and records a non-error return.")),
+          ]),
+        ]) : null,
+        sessionId ? h("details", { key: "ops", className: "av-eval-proof", onToggle: event => setExpanded(event.currentTarget.open) }, [
+          h("summary", { key: "s" }, cmUi("运行证据", "Runtime evidence")),
+          expanded ? h(AnalysisPanel, { ...props, key: "digest" }) : null,
+        ]) : null,
+      ]);
+    }
+
     /* ---------------- 注册 ---------------- */
     function AnalysisSnapshotBuilder() {
       this.snap = { order: [], nodes: new Map(), locations: new Map(), navigation: null, timeline: null, counts: { nodes: 0, upserts: 0 } };
@@ -1377,7 +1748,7 @@ window.__ModuleLoader__.load({
     AnalysisSnapshotBuilder.prototype.snapshot = function () { return this.snap; };
 
     return {
-      inject: ["slots", "uiConversation", "commandUi"],
+      inject: ["slots", "uiConversation", "commandUi", "sessions", "conversation"],
       apply(ctx) {
         clientCtx = ctx;
         ctx.commandUi.register({
@@ -1413,21 +1784,21 @@ window.__ModuleLoader__.load({
           name: "conversation.view",
           id: "path",
           order: 30,
-          label: () => cmUi("路径", "Path"),
+          label: () => cmUi("轨迹树", "Trajectory Tree"),
           children: {},
           inject: (sessionId) => ({ sessionId }),
         }, PathView));
         slots.inject("conversation.view", () => slots.register({
           name: "conversation.view",
           id: "analysis",
-          order: 20,
-          label: () => cmUi("分析", "Analysis"),
+          order: 40,
+          label: () => cmUi("评估", "Eval"),
           children: {},
           inject: (sessionId) => {
             const target = ctx.uiConversation.binding(sessionId).target("trajectory");
             return { hooks: { trajectory: { getSnapshot: () => target.getSnapshot(), subscribe: (listener) => target.subscribe(listener) } }, sessionId };
           },
-        }, AnalysisPanel));
+        }, EvalDashboardPanel));
       },
     };
   },

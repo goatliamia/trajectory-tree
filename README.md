@@ -1,7 +1,7 @@
-﻿<h1 align="center">Trajectory Tree · 轨迹树</h1>
+﻿<h1 align="center"><img src="docs/media/trajectory-tree-cover.png" alt="Trajectory Tree · 轨迹树"></h1>
 
 <p align="center"><strong>从对话日志，看见 Agent 怎样工作。</strong></p>
-<p align="center">执行路径 · 上下文变化 · 工具证据 · 可视化诊断报告</p>
+<p align="center">轨迹树 · Eval · 点选诊断 · 可视化报告</p>
 
 <p align="center">
   <a href="README.en.md">English</a> ·
@@ -14,29 +14,34 @@
 
 开发与审查：[PR 关系诊断与原生回归](docs/relation-ci.md)。
 
+> 界面截图使用同一个公开合成会话。查看[素材说明](docs/media/README.md)。
+
+## 轨迹树
+
+从会话主线进入任意一轮，查看工具参数、返回、文件变化和上下文增量。
+
 ![执行路径：轮次主干、工具分支、文件变化与上下文增量](docs/media/trajectory-overview.jpg)
 
-从全程主线进入某一轮，查看工具参数、返回、文件变化和反馈。长对话先显示实际主线，再逐步补齐详情。
+## Eval
 
-> 以下图片和动图使用示例数据，由项目现有视图与报告组件渲染。
+Eval 和轨迹树共用轨迹数据。用真实任务里的记录对照轮次耗时与输出 token，查看哪些工具耗时多、哪些报错反复出现。可切换整段会话或某一轮；图表会标出统计覆盖范围。
 
-## 追踪上下文怎样变化
+![Eval：用散点图对照输出 token、轮次耗时和工具报错](docs/media/eval-overview.jpg)
 
-点选一种或多种来源，追踪它们的保留量和增减。路径页只显示每轮的增量。
+## 点选诊断
 
-![上下文层：按来源查看保留量与每轮增减](docs/media/context-trend.jpg)
+在 DSH 轨迹树上长按选中对象，按住后拖动可圈选，也可单选上下文增量柱。Eval 从图表详情发起诊断，也可以查 DSH 工具声明的来源与调用。选好问题后，页面生成带会话、选区和取证入口的草稿，编辑确认后再发送。
 
-## 看见上下文逐轮装配
+![在 DSH 行动路径上选中一步，打开可编辑诊断草稿](docs/media/diagnosis-draft.jpg)
 
-保留的材料留在原位，新内容逐轮接入，历史改写时定位发生变化的片段。组件可嵌入报告，按已有结构记录回放。
+<details>
+<summary>更多示例：上下文与诊断报告</summary>
 
-![上下文装配概念序列：逐轮追加、保留与历史改写](docs/media/context-assembly.gif)
+- [上下文趋势](docs/media/context-trend.jpg)：按来源看保留量和每轮增减。
+- [上下文装配动图](docs/media/context-assembly.gif)：回放追加、保留和历史改写。
+- [诊断报告](docs/media/diagnostic-report.jpg)：AI 撰写判断与证据，组件将 Markdown 与图表装配成可交互 HTML。
 
-## 把诊断变成一篇可读的报告
-
-把关键判断、证据和下一次行动放在一起，配合数值、分布、趋势及原文位置阅读。**报告由 AI 撰写**，Markdown 与图表组件装配为可交互 HTML。
-
-![示例诊断报告：关键读数、阶段分布和输入构成](docs/media/diagnostic-report.jpg)
+</details>
 
 ## 快速开始
 
@@ -48,10 +53,10 @@
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.4.tgz ./dsh-analysis-view-0.10.142.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.5.tgz ./dsh-analysis-view-0.10.143.tgz
 ```
 
-重启 `dsh web`，在「分析」中查看统计，或用 `/trajectory` 打开当前会话路径。已运行的实例先退出，避免端口冲突。插件面向 DSH 0.2.2 系列，逐包核对见[兼容与语言说明](docs/host-compatibility.md#dsh-version)。
+重启 `dsh web`，在会话里打开「评估」或用 `/trajectory` 打开轨迹树。选好诊断问题后，点「填入对话」把草稿追加到当前输入框。插件面向 DSH 0.2.2 系列，逐包核对见[兼容与语言说明](docs/host-compatibility.md#dsh-version)。
 
 在路径总览中，点击目标线可查看对应目标。点击事件点可查看那次变更，并从详情进入对应轮次的行动路径或对话。
 
@@ -69,7 +74,7 @@ npm ci --prefix plugin/portable-tools --ignore-scripts
 pi -e ./plugin/portable-tools
 ```
 
-使用 `/trajectory` 打开当前选中分支。`trace-analysis` 分析会话过程，`context-profile` 查看当前上下文与工具配置。
+使用 `/trajectory` 查看当前分支，或用 `/trajectory --eval` 打开 Eval。可复制 Pi 装填指令回终端；如果输入框已有草稿，可以复制提示词正文并自行合并。`trace-analysis` 分析会话过程，`context-profile` 查看当前上下文与工具配置。
 
 [Pi 使用说明](plugin/portable-tools/README.md#pi)
 
@@ -84,7 +89,7 @@ node scripts/sync-host-skills.mjs
 node scripts/package-trajectory.mjs --host codex
 ```
 
-从本地插件目录安装 `dist/trajectory-tree-codex`，使用 `$trajectory-view`、`$trace-analysis` 或 `$context-profile`。
+从本地插件目录安装 `dist/trajectory-tree-codex`。使用 `$trajectory-view` 打开轨迹树，`$trajectory-eval` 打开 Eval，或用 `$trace-analysis` 和 `$context-profile` 分析。Eval 草稿可复制回 Codex 输入框。
 
 也可以直接生成当前会话视图；读取本机会话需要官方 `codex app-server`：
 
@@ -108,7 +113,7 @@ node scripts/package-trajectory.mjs --host claude
 claude --plugin-dir ./dist/trajectory-tree-claude
 ```
 
-使用 `/trajectory-tree:trajectory-view`、`/trajectory-tree:trace-analysis` 或 `/trajectory-tree:context-profile`。插件在会话启动、恢复等时机提供当前 transcript 路径。
+使用 `/trajectory-tree:trajectory-view` 或 `/trajectory-tree:trajectory-eval` 打开视图，再把诊断草稿复制回 Claude Code。插件在会话启动、恢复等时机提供当前 transcript 路径。
 
 [Claude Code 使用说明](plugin/claude/README.md)
 
@@ -118,12 +123,12 @@ claude --plugin-dir ./dist/trajectory-tree-claude
 
 ```sh
 node scripts/trajectory-view.mjs --host pi --file /absolute/session.jsonl --open
-node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl --open
+node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl --eval --lang zh-CN --open
 ```
 
 生成过程不调用模型。命令返回独立 HTML 文件和本地预览地址；页面包含字体，可离线保存。
 
-界面默认自动跟随宿主或浏览器语言，可在“自动 / 中文 / English”中选择，也可加 `--lang en` 或 `--lang zh-CN` 固定语言。报告正文跟随用户的沟通语言，日志原文、路径和参数保持原样。各宿主的功能与证据边界见[兼容与语言说明](docs/host-compatibility.md)。
+轨迹树、Eval 和诊断草稿默认跟随宿主或浏览器语言。可在轨迹树中切换“自动 / 中文 / English”，也可加 `--lang en` 或 `--lang zh-CN` 固定独立视图的语言。日志原文、路径和参数保持原样。各宿主的功能与证据边界见[兼容与语言说明](docs/host-compatibility.md)。
 
 ## 同一组取证工具
 

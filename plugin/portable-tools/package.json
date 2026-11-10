@@ -1,6 +1,6 @@
 {
   "name": "trajectory-portable-tools",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "description": "Read-only Pi and Codex trajectory evidence using the shared diagnostic methods",

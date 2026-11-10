@@ -1,0 +1,28 @@
+#diagnosis-editor { --line: #e6e6e6; --ink: #171717; --muted: #5e5e5e; --action: #0068d6; box-sizing: border-box; color: var(--ink); font: 14px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; position: fixed; z-index: 300; width: min(392px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
+padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 8px 28px #00000016; }
+#diagnosis-editor .editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+#diagnosis-editor .editor-head p { margin: 0; color: var(--muted); font-size: 11px; }
+#diagnosis-editor .editor-head h2 { margin: 1px 0 0; font-size: 15px; overflow-wrap: anywhere; }
+#diagnosis-editor .editor-head button { margin: -2px -2px 0 0; border-color: transparent; }
+#diagnosis-editor .intents { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+#diagnosis-editor #questions { display: contents; }
+#diagnosis-editor .intents button { padding: 3px 6px; font-size: 12px; }
+#diagnosis-editor .intents button[aria-pressed="true"] { color: #005bbb; border-color: #b8d7ff; background: #eef6ff; }
+#diagnosis-editor #ask-custom { color: var(--action); border-color: transparent; }
+#diagnosis-editor textarea, #diagnosis-editor input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+#diagnosis-editor textarea { display: block; width: 100%; height: 148px; resize: vertical; font-size: 12px; line-height: 1.6; }
+#diagnosis-editor #custom { display: flex; gap: 6px; margin: 0 0 8px; }
+#diagnosis-editor #custom input { flex: 1; min-width: 0; font-size: 12px; }
+#diagnosis-editor #custom button { font-size: 12px; }
+
+#diagnosis-editor [hidden], #diagnosis-editor[hidden] { display: none !important; }
+#diagnosis-editor * { box-sizing: border-box; }
+#diagnosis-editor button, #diagnosis-editor input, #diagnosis-editor textarea { color: inherit; font-family: inherit; }
+#diagnosis-editor button { padding: 4px 8px; border: 1px solid var(--line); border-radius: 5px; background: #fff; cursor: pointer; }
+#diagnosis-editor button:hover { color: var(--action); }
+#diagnosis-editor button:focus-visible, #diagnosis-editor textarea:focus-visible, #diagnosis-editor input:focus-visible { outline: 2px solid var(--action); outline-offset: 1px; }
+#diagnosis-editor .editor-head button { border-color: transparent; }
+#diagnosis-editor .editor-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+#diagnosis-editor .editor-actions button { font-size: 12px; }
+#diagnosis-editor #diagnosis-apply { color: #fff; background: var(--action); border-color: var(--action); }
+#diagnosis-editor #diagnosis-status { font-size: 11px; color: var(--muted); }

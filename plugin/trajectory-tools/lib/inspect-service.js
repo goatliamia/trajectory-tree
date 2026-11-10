@@ -3,6 +3,7 @@ import { buildInspection, readOfficialProjections, inspectionPage, evidencePoint
 import { linkedPlan, linkedRecord } from './linked-read.js';
 import { inspectionReportData, reportPage } from './report-data.js';
 import { validateIoOutcome } from './io-outcome.js';
+import { MAX_IO_SELECTION } from './inspection-io.js';
 
 const GROUPS = { overview: ['turn', 'tool', 'file'], latency: ['turn'], cost: ['turn'], io: ['tool', 'file'], repeats: [], context: [] };
 const SORTS = { overview: ['time', 'wall', 'input', 'output', 'returned', 'count'], latency: ['time', 'wall', 'input', 'output'], cost: ['time', 'wall', 'input', 'output'], io: ['time', 'returned', 'count'], repeats: ['time', 'count'], context: ['time', 'change'] };
@@ -15,6 +16,15 @@ function selection(args, previous = {}) {
   const outcome = args.outcome === undefined ? previous.outcome : args.outcome;
   validateIoOutcome(q.view, outcome);
   if (outcome !== undefined) q.outcome = outcome;
+  const seqs = args.seqs === undefined ? previous.seqs : args.seqs;
+  if (seqs !== undefined) {
+    if (q.view !== 'io') throw Error('seqs requires view=io');
+    if (!Array.isArray(seqs) || !seqs.length || seqs.length > MAX_IO_SELECTION ||
+        seqs.some(seq => !Number.isSafeInteger(seq) || seq < 0)) {
+      throw Error('seqs requires 1–' + MAX_IO_SELECTION + ' nonnegative call sequence numbers');
+    }
+    q.seqs = [...new Set(seqs)].sort((a, b) => a - b);
+  }
   // 白名单外的新参数默认值在这里归一:null 会被下游当成 false,误省原文。
   if (q.samples === null || q.samples === undefined) q.samples = true;
   if (typeof q.samples !== 'boolean') throw Error('samples must be a boolean');
@@ -42,21 +52,28 @@ export class InspectionService {
     this.timer = setTimeout(() => { this.expire(); this.arm(); }, Math.max(1, due - this.now())); this.timer.unref?.();
   }
   expire() { for (const [id, e] of this.entries) if (this.now() - e.at >= this.idleMs) this.entries.delete(id); }
-  async prepare(id, session, signal) {
+  async prepare(id, session, signal, cut) {
     if (this.closed) throw Error('Inspection service disposed');
+    if (cut !== undefined && (!Number.isSafeInteger(cut) || cut < 0)) throw Error('cut must be a nonnegative event sequence');
     signal?.throwIfAborted(); this.expire();
     if (id) {
       const entry = this.entries.get(id);
       if (!entry) throw Error('Snapshot expired; request a new inspection');
       if (session && session !== entry.session) throw Error('Snapshot belongs to another session');
+      if (cut !== undefined && cut !== entry.index.scope.toSeq) throw Error('Snapshot does not match cut');
       this.entries.delete(id); this.entries.set(id, entry); entry.at = this.now(); this.arm();
       return { id, entry };
     }
     if (!session) throw Error('A session is required outside a conversation');
     const job = this.serial.then(async () => {
       signal?.throwIfAborted(); if (this.closed) throw Error('Inspection service disposed');
-      const loaded = await this.load(session, signal);
+      let loaded = await this.load(session, signal);
       signal?.throwIfAborted();
+      if (cut !== undefined) {
+        const last = loaded.events.findIndex(event => event.seq === cut);
+        if (last < 0) throw Error('The selected log cut is unavailable; reopen the view');
+        loaded = { ...loaded, events: loaded.events.slice(0, last + 1) };
+      }
       let projections;
       try { projections = await readOfficialProjections(this.ctx, loaded, signal); }
       catch (error) { if (signal?.aborted) throw error; projections = { values: {}, source: 'unavailable', error: String(error.message) }; }
@@ -76,7 +93,7 @@ export class InspectionService {
   async query(args, current, signal) {
     let id = args.snapshot, offset = 0, prior = null;
     if (args.cursor) {
-      if (typeof args.cursor !== 'string' || args.cursor.length > 8192) throw Error('Invalid cursor');
+      if (typeof args.cursor !== 'string' || args.cursor.length > 24000) throw Error('Invalid cursor');
       const parts = args.cursor.split(':');
       if (parts.length !== 3 || !/^\d+$/.test(parts[2])) throw Error('Invalid cursor');
       if (id && id !== parts[0]) throw Error('Cursor does not match snapshot');
@@ -88,21 +105,26 @@ export class InspectionService {
     if (prior && digest(q) !== digest(prior)) throw Error('Cursor does not match view or query');
     const limit = args.limit ?? (q.format === 'data' ? 250 : q.view === 'overview' ? 6 : 3);
     if (!Number.isInteger(limit) || limit < 1 || limit > (q.format === 'data' ? 500 : 10)) throw Error('limit exceeds this format’s page size');
-    const prepared = await this.prepare(id, args.session || (id ? undefined : current), signal);
+    const prepared = await this.prepare(id, args.session || (id ? undefined : current), signal, args.cut);
     id = prepared.id; const entry = prepared.entry;
     if (q.format === 'data') {
       if (q.sort && q.sort !== 'time') throw Error('Data format keeps source order; choose ranking in the figure');
       if (q.groupBy && !(q.view === 'io' && ['tool', 'file'].includes(q.groupBy))) throw Error('Data groupBy is available only for io tool/file; other data keeps source rows');
       const source = { host: 'dsh', session: entry.session, snapshot: id, log: entry.index.log?.id ?? entry.index.log,
         cut: entry.index.scope.toSeq, query: { view: q.view, turns: q.turns, focus: q.focus, groupBy: q.groupBy,
-          ...(q.outcome ? { outcome: q.outcome } : {}) } };
+          ...(q.outcome ? { outcome: q.outcome } : {}), ...(q.seqs ? { seqs: q.seqs } : {}) } };
       const page = reportPage(inspectionReportData(entry.index, q, source), offset, limit);
       return { ok: true, ...page, nextCursor: page.nextOffset == null ? null : id + ':' + Buffer.from(JSON.stringify(q)).toString('base64url') + ':' + page.nextOffset };
     }
     const page = inspectionPage(entry.index, q.view, offset, limit, q);
     page.log = entry.index.log;
-    const primary = page.items.map(row => row.callSeq ?? row.evidence?.calls?.[0]?.seq ?? row.seq).filter(Number.isSafeInteger);
-    const pointers = [...new Set([...primary, ...evidencePointers(page).map(ref => ref.seq)])].slice(0, 6);
+    const primary = page.items.map(row => row.callSeq ?? row.evidence?.calls?.[0]?.seq ?? row.seq);
+    const definitionTool = q.view === 'cost' ? q.focus?.tool : undefined;
+    const declarations = definitionTool
+      ? page.largestDefinitions.flatMap(row => row.versions === 1 ? [row.lastHeaderSeq] : [row.firstHeaderSeq, row.lastHeaderSeq]) : [];
+    const supporting = definitionTool && !q.samples
+      ? page.items.map(row => row.evidence?.seq ?? row.evidence?.assistantSeq) : evidencePointers(page).map(ref => ref.seq);
+    const pointers = [...new Set([...declarations, ...primary, ...supporting].filter(Number.isSafeInteger))].slice(0, 6);
     page.reads = pointers.map(seq => ({ tool: 'trajectory_read',
       args: { session: entry.session, seq, format: 'linked', snapshot: id } }));
     if (q.view === 'overview' && !q.groupBy) for (const row of page.items) row.expand = { tool: 'trajectory_inspect',
@@ -115,7 +137,7 @@ export class InspectionService {
     if (!Number.isSafeInteger(args.seq) || args.seq < 0) throw Error('linked requires seq');
     const offset = args.offset ?? 0;
     if (!Number.isSafeInteger(offset) || offset < 0) throw Error('offset must be a nonnegative integer');
-    const { id, entry } = await this.prepare(args.snapshot, args.session, signal);
+    const { id, entry } = await this.prepare(args.snapshot, args.session, signal, args.cut);
     const plan = linkedPlan(entry.index, args.seq), selected = plan.records.slice(offset, offset + 10);
     if (offset > plan.records.length) throw Error('offset exceeds linked records');
     const loaded = await this.load(entry.session, signal);

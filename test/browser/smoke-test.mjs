@@ -73,6 +73,11 @@ before(async () => {
     const view = await generateTraceView({ ...spec, locale: 'en', output: join(directory, spec.host + '.html') });
     assets.set('/' + spec.host, ['text/html; charset=utf-8', await readFile(view.output)]);
   }
+  for (const locale of ['en', 'zh-CN']) {
+    const name = 'eval-' + locale;
+    const view = await generateTraceView({ ...portable[0], initialView: 'eval', locale, output: join(directory, name + '.html') });
+    assets.set('/' + name, ['text/html; charset=utf-8', await readFile(view.output)]);
+  }
   for (const host of ['dsh', 'codex']) assets.set('/host-' + host, ['text/html; charset=utf-8', hostDocument('/' + host)]);
   server = createServer((req, res) => {
     const asset = assets.get(new URL(req.url, 'http://localhost').pathname);
@@ -119,6 +124,19 @@ async function checkDsh(page) {
   await trace.locator('[data-goal-select="4"]').click();
   assert.match(await trace.locator('#drawer-description').textContent(), /seq 4$/);
   await trace.locator('#drawer-close').click();
+
+  const segment = trace.locator('#graph [data-context-turn="2"] [data-context-segment="skill"]');
+  const mark = await segment.boundingBox();
+  assert.ok(mark);
+  await page.mouse.move(mark.x + mark.width / 2, mark.y + mark.height / 2);
+  await page.mouse.down();
+  await trace.locator('#graph-scroll.diagnosis-holding').waitFor();
+  await page.mouse.up();
+  await trace.locator('#diagnosis-confirm').click();
+  const contextDraft = await trace.locator('#draft').inputValue();
+  assert.match(contextDraft, /"view":"context"/);
+  assert.match(contextDraft, /"turns":\{"from":1,"to":2\}/);
+  await trace.locator('#close-editor').click();
 
   const files = trace.locator('#graph-caption [data-br-layer="files"]');
   await files.uncheck();
@@ -186,8 +204,33 @@ async function checkCodex(page) {
   assert.equal(await trace.locator('[data-br-layer="goal"]').count(), 0);
 }
 
+async function checkEval(page) {
+  const queries = [];
+  for (const [locale, title, fullSession, question, scope] of [
+    ['en', 'Tool comparison', 'Full session', 'Ask about tool timing', 'Scope: session'],
+    ['zh-CN', '工具对照', '整段会话', '问工具耗时', '范围为会话'],
+  ]) {
+    await page.goto(origin + '/eval-' + locale);
+    assert.equal(await page.locator('html').getAttribute('lang'), locale);
+    await page.getByRole('heading', { name: title, exact: true }).waitFor();
+    assert.equal(await page.locator('#scope option[value=""]').textContent(), fullSession);
+    await page.locator('#scope').selectOption('1');
+    await page.locator('#tool-rows').getByRole('button', { name: /^read[,，]/ }).click();
+    await page.getByRole('button', { name: question, exact: true }).click();
+    const draft = await page.locator('#draft').inputValue();
+    assert.ok(draft.includes(scope));
+    assert.equal(await page.locator('#diagnosis-apply').isVisible(), true, 'Pi provides a draft command');
+    queries.push(JSON.parse(draft.match(/trajectory_inspect\((\{[^\n]*?\})\)/)[1]));
+  }
+  const [query, translated] = queries;
+  assert.deepEqual(query, translated, 'Localized drafts preserve the same evidence coordinates');
+  assert.ok(Number.isSafeInteger(query.cut) && query.logId, 'Eval draft identifies its frozen source');
+  assert.deepEqual(query.turns, { from: 1, to: 1 });
+  assert.deepEqual(query.focus, { tool: 'read' });
+}
+
 for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
-  test(name + ' opens the shared trace and keeps host actions scoped', { timeout: 60_000 }, async t => {
+  test(name + ' opens the shared trace and Eval with scoped host actions', { timeout: 60_000 }, async t => {
     const browser = await engine.launch();
     t.after(() => browser.close());
     const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
@@ -206,6 +249,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
       assert.equal(await page.locator('#graph-caption [data-br-layer="files"]').count(), 1);
       assert.equal(await page.locator('[data-br-layer="goal"], [data-chat-jump]').count(), 0);
     }
+    await checkEval(page);
     assert.deepEqual(dshRequests, [], 'Frozen and portable pages do not request live DSH stages');
     assert.deepEqual(errors, [], 'No renderer errors');
   });

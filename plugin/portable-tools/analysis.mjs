@@ -1,6 +1,11 @@
 import { hash } from './sources.mjs';
 import { estimateVisibleTokens } from '../../analyzers/codex-adapter.mjs';
-import { matchesIoOutcome } from '../trajectory-tools/lib/io-outcome.js';
+import { matchesIoOutcome, summarizeToolOutcomes, TOOL_OUTCOME_BASIS } from '../trajectory-tools/lib/io-outcome.js';
+import { callDurationMs, intervalUnion } from '../trajectory-tools/lib/tool-intervals.js';
+import { groupRows } from '../../lib/scope-index.mjs';
+import { usageRow, usageSettlements } from './usage.mjs';
+
+export { intervalUnion, usageRow };
 
 export const CATEGORIES = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
 export const VIEWS = ['overview', 'latency', 'cost', 'repeats', 'io', 'context'];
@@ -8,22 +13,8 @@ const valid = value => typeof value === 'number' && Number.isFinite(value) && va
 const sum = values => { const known = values.filter(valid); return known.length ? known.reduce((n, v) => n + v, 0) : null; };
 const compact = text => String(text || '').replace(/\s+/g, ' ').slice(0, 180);
 const self = name => /(?:^|[/_.])trajectory_(?:inspect|search|read|graph)$/.test(name);
-const pointer = (data, seq) => ({ session: data.session, seq, logId: data.logId });
+const pointer = (data, seq) => ({ session: data.session, seq, logId: data.logId, ...(data.cut === undefined ? {} : { cut: data.cut }) });
 export const toolName = call => call.nativeName || call.name;
-export function intervalUnion(spans) {
-  let end = -Infinity, total = 0;
-  for (const [a, b] of spans.filter(([a, b]) => valid(a) && valid(b) && b >= a).sort((x, y) => x[0] - y[0])) { total += Math.max(0, b - Math.max(a, end)); end = Math.max(end, b); }
-  return total;
-}
-export function usageRow(host, row) {
-  const u = row.usage || {};
-  if (host === 'pi' || host === 'claude') {
-    const input = ['input', 'cacheRead', 'cacheWrite'].every(k => valid(u[k])) ? u.input + u.cacheRead + u.cacheWrite : null;
-    return { input, uncachedInput: valid(u.input) ? u.input : null, cachedInput: valid(u.cacheRead) ? u.cacheRead : null, cacheWrite: valid(u.cacheWrite) ? u.cacheWrite : null, output: valid(u.output) ? u.output : null, reportedCost: valid(u.cost?.total) ? u.cost.total : null };
-  }
-  const cached = u.cached_input_tokens ?? u.input_tokens_details?.cached_tokens;
-  return { input: valid(u.input_tokens) ? u.input_tokens : null, uncachedInput: valid(u.input_tokens) && valid(cached) && cached <= u.input_tokens ? u.input_tokens - cached : null, cachedInput: valid(cached) ? cached : null, cacheWrite: null, output: valid(u.output_tokens) ? u.output_tokens : null, reportedCost: null };
-}
 function usageTotal(host, rows) {
   const values = rows.map(row => usageRow(host, row));
   return { records: rows.length, ...Object.fromEntries(['input', 'uncachedInput', 'cachedInput', 'cacheWrite', 'output', 'reportedCost'].map(k => [k, sum(values.map(v => v[k]))])), fieldCoverage: Object.fromEntries(['input', 'uncachedInput', 'cachedInput', 'output'].map(k => [k, values.filter(v => valid(v[k])).length])) };
@@ -50,54 +41,79 @@ export function selectPortableEvidence(data, q) {
   const p = data.payload, session = p.sessions[0], context = p.context;
   const range = q.turns || { from: session.turns[0]?.number || 1, to: session.turns.at(-1)?.number || 1 };
   let turns = session.turns.filter(t => t.number >= range.from && t.number <= range.to);
-  const allCalls = turns.flatMap(t => t.steps.flatMap(s => s.calls.map(c => ({ ...c, turn: t.number, step: s.number, precise: c.timingSource?.endsWith('-capture') || c.timingSource === 'local-rollout' || s.endObserved && data.host === 'codex' }))));
-  let calls = allCalls.filter(c => (q.includeSelf || !self(toolName(c))) && matchesIoOutcome(c.status, q.outcome));
+  const allCalls = turns.flatMap(t => t.steps.flatMap(s => s.calls.map(c => ({
+    ...c, turn: t.number, step: s.number,
+    precise: callDurationMs({ ...c, startSeq: c.startSeq === null || ['ordinal-only', 'unrecorded-start'].includes(c.timingSource) ? null : c.startSeq ?? c.seq }) !== null,
+  }))));
+  let scopedCalls = allCalls.filter(c => q.includeSelf || !self(toolName(c)));
+  const selected = q.seqs && new Set(q.seqs);
+  if (selected) scopedCalls = scopedCalls.filter(c => selected.has(c.seq));
   const bySeq = new Map(data.records.map(r => [r.seq, r]));
   let files = context.fileOperations.filter(f => f.turn >= range.from && f.turn <= range.to);
-  if (q.focus?.tool) calls = calls.filter(c => toolName(c) === q.focus.tool || c.name === q.focus.tool);
-  if (q.focus?.file) { const seqs = new Set(files.filter(f => f.path === q.focus.file).map(f => f.seq)); calls = calls.filter(c => seqs.has(c.seq)); }
+  if (q.focus?.tool) scopedCalls = scopedCalls.filter(c => toolName(c) === q.focus.tool || c.name === q.focus.tool);
+  if (q.focus?.file) { const seqs = new Set(files.filter(f => f.path === q.focus.file).map(f => f.seq)); scopedCalls = scopedCalls.filter(c => seqs.has(c.seq)); }
   if (q.focus?.skill) {
     const seqs = new Set(context.skillEvents.filter(s => s.name === q.focus.skill || s.path === q.focus.skill).map(s => s.seq));
     const touched = new Set(turns.filter(t => seqs.has(t.seq) || t.prompts.some(r => seqs.has(r.seq)) || t.steps.some(s => seqs.has(s.seq) || s.calls.some(c => seqs.has(c.seq)))).map(t => t.number));
-    calls = calls.filter(c => touched.has(c.turn));
+    scopedCalls = scopedCalls.filter(c => touched.has(c.turn));
   }
-  const focusTurns = q.focus && new Set(calls.map(c => c.turn));
+  const calls = q.outcome === undefined ? scopedCalls : scopedCalls.filter(c => matchesIoOutcome(c.status, q.outcome));
+  const focusTurns = (q.focus || selected) && new Set(calls.map(c => c.turn));
   if (focusTurns) turns = turns.filter(t => focusTurns.has(t.number));
   const turnIds = new Set(turns.map(t => t.id)), turnNumbers = new Set(turns.map(t => t.number));
   const callSeqs = new Set(calls.map(c => c.seq)); files = files.filter(f => callSeqs.has(f.seq));
   const rawUsage = (context.usage || []).filter(u => data.host !== 'codex' ? turnNumbers.has(u.turn) : turnIds.has(u.turnId));
-  // A response ID can be re-emitted by telemetry; it is one usage settlement.
-  const usage = [...new Map(rawUsage.map((u, i) => [u.responseId || 'record:' + i, u])).values()];
-  return { p, session, context, range, turns, allCalls, calls, bySeq, files, usage, turnIds, turnNumbers };
+  const usage = usageSettlements(rawUsage);
+  const found = selected && new Set(scopedCalls.map(c => c.seq));
+  const callSelection = found && { requested: selected.size, matched: found.size, unmatched: [...selected].filter(seq => !found.has(seq)) };
+  return { p, session, context, range, turns, allCalls, scopedCalls, calls, bySeq, files, usage, turnIds, turnNumbers, callSelection };
 }
 
 export function inspectData(data, q) {
-  const { p, session, context, range, turns, allCalls, calls, bySeq, files, usage, turnIds, turnNumbers } = selectPortableEvidence(data, q);
+  const { p, session, context, range, turns, allCalls, scopedCalls, calls, bySeq, files, usage, turnIds, turnNumbers, callSelection } = selectPortableEvidence(data, q);
   const totals = usageTotal(data.host, usage);
-  const nativeSpan = t => valid(t.start) && valid(t.end) && t.end >= t.start ? t.end - t.start : null;
+  const nativeSpan = t => valid(t.durationMs) ? t.durationMs : t.endObserved === true && valid(t.start) && valid(t.end) && t.end >= t.start ? t.end - t.start : null;
   const measured = calls.filter(c => c.precise && valid(c.start) && valid(c.end) && c.end >= c.start);
   const nativeTurns = new Map(turns.map(t => [t.number, t]));
-  const boundedIntervals = measured.flatMap(c => { const t = nativeTurns.get(c.turn); return valid(t?.start) && valid(t?.end) ? [[Math.max(c.start, t.start), Math.min(c.end, t.end)]] : []; }).filter(([a, b]) => b >= a);
+  const boundedIntervals = measured.flatMap(c => { const t = nativeTurns.get(c.turn); return t?.endObserved === true && valid(t.start) && valid(t.end) ? [[Math.max(c.start, t.start), Math.min(c.end, t.end)]] : []; }).filter(([a, b]) => b >= a);
   const read = seq => ({ tool: 'trajectory_read', ...pointer(data, seq), linked: true });
   const summary = { host: data.host, unit: data.host === 'pi' ? 'assistant-cycle' : data.host === 'claude' ? 'assistant-record' : 'visible-action', turns: turns.length, actions: turns.reduce((n, t) => n + t.steps.length, 0), calls: calls.length, errors: calls.filter(c => c.status === 'error').length,
     observedTurnSpanMs: sum(turns.map(nativeSpan)), nativeToolDurationMs: sum(calls.map(c => c.durationMs)), measuredToolIntervals: measured.length, toolCoveredMs: boundedIntervals.length ? intervalUnion(boundedIntervals) : null, returnedTextCharacters: calls.reduce((n, c) => n + (c.result?.text.length || 0) + (c.result?.omitted || 0), 0), usage: totals };
   const coverage = { usageUnit: data.host === 'pi' ? 'recorded assistant usage' : data.host === 'claude' ? 'recorded assistant message usage, deduplicated by message ID' : 'local response usage records; not all request attempts', callUnit: 'recorded native calls; inner Code Mode activity only when separately recorded', errorUnit: 'tool-result errors; turn failures and assistant stopReason remain separate', focusedUsage: q.focus ? 'whole owning turns, not attributed to the selected tool/file/skill' : 'selected turns', excludedDiagnosticCalls: allCalls.length - allCalls.filter(c => q.includeSelf || !self(toolName(c))).length, unknownTimingCalls: calls.length - measured.length, toolCoverage: 'union of recorded intervals clipped to owning turn bounds; native durations remain separate', crossTurnToolIntervals: measured.filter(c => { const t = nativeTurns.get(c.turn); return c.start < t.start || c.end > t.end; }).length, context: p.evidence.context, synthetic: data.synthetic };
-  summary.failedTurns = turns.filter(t => t.reason?.kind === 'failed').length;
-  summary.assistantErrorCycles = turns.flatMap(t => t.steps).filter(s => s.stopReason === 'error' || s.stopReason === 'aborted').length;
+  coverage.toolOutcomeBasis = TOOL_OUTCOME_BASIS;
+  summary.toolOutcomes = summarizeToolOutcomes(scopedCalls);
+  summary.failedTurns = data.host === 'codex' ? turns.filter(t => t.reason?.kind === 'failed').length : null;
+  summary.assistantErrorCycles = data.host === 'pi' ? turns.flatMap(t => t.steps).filter(s => s.stopReason === 'error' || s.stopReason === 'aborted').length : null;
+  if (callSelection) coverage.focusedUsage = 'whole owning turns, not attributed to the selected calls';
   // Share one materialization per query, and skip it for views that never use it.
   let cachedTurnRows;
-  const turnRows = () => cachedTurnRows ??= turns.map(t => {
-    const own = calls.filter(c => c.turn === t.number), ownUsage = usage.filter(u => data.host !== 'codex' ? u.turn === t.number : u.turnId === t.id);
-    return { turn: t.number, title: compact(t.title || t.prompts[0]?.text), actions: t.steps.length, calls: own.length, errors: own.filter(c => c.status === 'error').length, wallMs: nativeSpan(t), usage: usageTotal(data.host, ownUsage), tools: [...new Set(own.map(toolName))], returnedTextCharacters: own.reduce((n, c) => n + (c.result?.text.length || 0) + (c.result?.omitted || 0), 0), read: read(t.prompts[0]?.seq ?? t.steps[0]?.seq ?? t.seq) };
-  });
+  const turnRows = () => {
+    if (cachedTurnRows) return cachedTurnRows;
+    const callsByTurn = groupRows(calls, call => call.turn);
+    const codex = data.host === 'codex';
+    const usageByTurn = groupRows(usage, row => codex ? row.turnId : row.turn);
+    cachedTurnRows = turns.map(t => {
+      const own = callsByTurn.get(t.number) ?? [];
+      const ownUsage = usageByTurn.get(codex ? t.id : t.number) ?? [];
+      return { turn: t.number, title: compact(t.title || t.prompts[0]?.text), actions: t.steps.length, calls: own.length,
+        errors: own.filter(c => c.status === 'error').length, wallMs: nativeSpan(t), usage: usageTotal(data.host, ownUsage),
+        tools: [...new Set(own.map(toolName))],
+        returnedTextCharacters: own.reduce((n, c) => n + (c.result?.text.length || 0) + (c.result?.omitted || 0), 0),
+        read: read(t.prompts[0]?.seq ?? t.steps[0]?.seq ?? t.seq) };
+    });
+    return cachedTurnRows;
+  };
   function toolRows() {
-    return [...new Set(calls.map(toolName))].map(name => {
-      const own = calls.filter(c => toolName(c) === name);
+    return Array.from(groupRows(calls, toolName), ([name, own]) => {
       return { tool: name, count: own.length, errors: own.filter(c => c.status === 'error').length, operationKinds: Object.fromEntries([...new Set(own.map(c => c.semanticKind || c.classification?.kind || 'other'))].map(k => [k, own.filter(c => (c.semanticKind || c.classification?.kind || 'other') === k).length])), nativeDurationMs: sum(own.map(c => c.durationMs)), returnedTextCharacters: own.reduce((n, c) => n + (c.result?.text.length || 0) + (c.result?.omitted || 0), 0), positions: own.slice(0, 8).map(c => ({ turn: c.turn, step: c.step, status: c.status, read: read(c.seq) })) };
     });
   }
   function fileRows() {
-    return [...new Set(files.map(f => f.path))].map(path => { const own = files.filter(f => f.path === path); return { file: path, count: own.length, reads: own.filter(f => f.kind === 'read').length, changes: own.filter(f => f.kind === 'change').length, errors: own.filter(f => f.status === 'error').length, sources: [...new Set(own.map(f => f.source))], read: read(own[0].seq) }; });
+    return Array.from(groupRows(files, file => file.path), ([path, own]) => ({
+      file: path, count: own.length, reads: own.filter(f => f.kind === 'read').length,
+      changes: own.filter(f => f.kind === 'change').length, errors: own.filter(f => f.status === 'error').length,
+      sources: [...new Set(own.map(f => f.source))], read: read(own[0].seq),
+    }));
   }
   let rows, extra = {};
   if (['overview', 'latency', 'cost'].includes(q.view)) {
@@ -119,11 +135,14 @@ export function inspectData(data, q) {
       if (q.groupBy === 'definition') rows = (context.scope?.tools || []).filter(t => !q.focus?.tool || t.name === q.focus.tool).map(t => ({ tool: t.name, active: t.active, exposure: t.exposure ?? null, reachesTools: t.reachesTools ?? null, origin: t.source ?? null, schemaTextEstimate: estimateVisibleTokens(JSON.stringify({ name: t.name, description: t.description, parameters: t.parameters })), directCallsInRange: calls.filter(c => toolName(c) === t.name).length, read: read(data.records.find(r => r.kind === 'definition' && r.name === t.name).seq) }));
       if (q.groupBy === 'definition' && !context.scope) rows = historical.filter(t => !q.focus?.tool || t.tool === q.focus.tool).map(t => ({ tool: t.tool, active: null, basis: 'historical declaration', schemaTextEstimate: estimateVisibleTokens(JSON.stringify(t.raw)), directCallsInRange: calls.some(c => toolName(c) === t.tool) || data.host === 'pi' ? calls.filter(c => toolName(c) === t.tool).length : null, read: read(t.seq) }));
     }
-  } else if (q.view === 'io') rows = q.groupBy === 'turn' ? turnRows() : q.groupBy === 'file' ? fileRows() : toolRows();
+  } else if (q.view === 'io') rows = q.groupBy === 'turn' ? turnRows() : q.groupBy === 'file' ? fileRows() :
+    q.seqs && !q.groupBy ? calls.map(c => ({ turn: c.turn, step: c.step, seq: c.seq, tool: toolName(c), status: c.status,
+      native: bySeq.get(c.seq)?.native, nativeDurationMs: c.durationMs, read: read(c.seq) })) : toolRows();
   else if (q.view === 'repeats') {
     const groups = new Map();
     for (const c of calls) {
-      let args = bySeq.get(c.seq)?.body?.arguments;
+      const record = bySeq.get(c.seq);
+      let args = record?.arguments ?? record?.body?.arguments;
       if (c.nativeName === 'commandExecution') args = { command: args?.command, cwd: args?.cwd };
       // Incomplete adapter excerpts are never evidence of identical parameters.
       if (args === undefined) continue;
@@ -148,5 +167,6 @@ export function inspectData(data, q) {
     };
     rows = withoutSamples(rows); extra = withoutSamples(extra);
   }
-  return { summary, coverage, range, focus: q.focus ?? null, ...(q.outcome ? { outcome: q.outcome } : {}), ...extra, rows };
+  return { summary, coverage, range, focus: q.focus ?? null, ...(callSelection ? { scope: { callSelection } } : {}),
+    ...(q.outcome ? { outcome: q.outcome } : {}), ...extra, rows };
 }

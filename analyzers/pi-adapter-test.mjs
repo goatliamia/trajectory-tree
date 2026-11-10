@@ -18,6 +18,7 @@ assert.equal(input.capture[input.capture.findIndex(row => row.event.type === 'ag
 assert.ok(graph.context.requests.every(r => r.synthetic && r.source === 'estimate'));
 assert.ok(Object.values(graph.context.callFacts).every(f => f.synthetic));
 assert.ok(session.overview.episodes.every(e => e.complete && e.pairs.length === 1));
+assert.ok(session.turns.flatMap(t => t.steps).flatMap(s => s.calls).every(c => c.startSeq === c.seq));
 assert.deepEqual(graph.context.skillEvents.map(e => e.kind).sort(), ['catalog', 'explicit-skill-reference', 'skill-file-read']);
 assert.ok(graph.context.boundaries[0].firstKeptEntryId);
 assert.equal(graph.officialStats.context.pressure.contextWindow, null, 'unknown model capacity is never invented');
@@ -27,7 +28,8 @@ assert.ok(fileObjects(graph.context.fileOperations).some(f => f.failed.length &&
 assert.ok(collectToolResults(session, graph.context.callFacts, graph.context.fileOperations).length >= 4);
 assert.ok(contextByTurn(graph.context.requests).some(r => r.decrease > 0), 'compaction produces a source-estimate reduction');
 const noCapture = adaptPiSession({ ...input, capture: [] });
-assert.ok(noCapture.sessions[0].turns.flatMap(t => t.steps).flatMap(s => s.calls).every(c => c.timingSource === 'unrecorded-start'));
+assert.ok(noCapture.sessions[0].turns.flatMap(t => t.steps).flatMap(s => s.calls).every(c =>
+  c.timingSource === 'unrecorded-start' && c.startSeq === null && c.durationMs > 0), 'native duration does not imply an observed start');
 const latestMissingUsage = structuredClone(input);
 const lastMessage = latestMissingUsage.entries.findLast(e => e.type === 'message' && e.message.role === 'assistant').message;
 delete lastMessage.usage;

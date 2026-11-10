@@ -38,6 +38,31 @@ try {
   assert.ok(commands.has('trajectory'),'Pi has a native /trajectory command');
   let notice;await commands.get('trajectory').handler('--unknown',{ui:{notify:text=>{notice=text;}}});assert.ok(notice.startsWith('用法：/trajectory'));
   const ctx = { cwd: input.header.cwd, model: { id: 'pi-demo-model', provider: 'synthetic-provider', contextWindow: 200000 }, getSystemPrompt: () => 'Current assembled system prompt', sessionManager: { getSessionId: () => input.header.id, getSessionFile: () => file, getEntries: () => input.entries, getLeafId: () => input.entries.at(-1).id } };
+  const handler = commands.get('trajectory').handler;
+  let editorText = '', writes = 0;
+  const draftCtx = { ...ctx, mode: 'tui', hasUI: true, ui: {
+    notify: text => { notice = text; }, getEditorText: () => editorText,
+    setEditorText: text => { editorText = text; writes++; },
+  } };
+  const command = (session, prompt) => '--draft ' + Buffer.from(JSON.stringify({ session, prompt })).toString('base64url');
+  const prompt = '请检查第 2 轮的工具调用。\n先核对原始记录。';
+  const draft = command(input.header.id, prompt);
+  await handler('--draft invalid', draftCtx);
+  assert.match(notice, /无效/);
+  await handler(command('other-session', prompt), draftCtx);
+  assert.match(notice, /另一个/);
+  await handler(command(input.header.id, '长'.repeat(2800)), draftCtx);
+  assert.match(notice, /无效/);
+  await handler(draft, { ...draftCtx, mode: 'rpc' });
+  assert.match(notice, /复制提示词/);
+  assert.equal(writes, 0);
+  await handler(draft, draftCtx);
+  assert.equal(editorText, prompt);
+  assert.equal(writes, 1);
+  await handler(command(input.header.id, '替换'), draftCtx);
+  assert.match(notice, /已保留/);
+  assert.equal(editorText, prompt);
+  assert.equal(writes, 1);
   for (const row of input.capture) if (hooks.has(row.event.type)) hooks.get(row.event.type)(row.event, ctx);
   const result = await registered.get('trajectory_inspect').execute('analysis', { view: 'cost', groupBy: 'definition' }, undefined, undefined, ctx), native = JSON.parse(result.content[0].text);
   assert.equal(native.rows.length, 2); assert.equal(native.rows.find(r => r.tool === 'rare_but_needed').active, false); assert.equal(native.scope.configuredTools, 2);

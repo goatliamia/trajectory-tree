@@ -11,6 +11,7 @@ The four hosts use the same trajectory document, renderer and report components.
 | Request usage | Official statistics | Recorded assistant usage | Optional local response telemetry | Message usage, deduplicated by message ID |
 | Child execution history | Load on demand when available | No invented history | Delegation metadata; child completion remains unknown | No invented history |
 | Jump to host conversation | Supported in native frame | Disabled | Disabled | Disabled |
+| Bring a diagnostic draft back | Append to the composer | Load with the copied Pi command or paste the text | Copy and paste | Copy and paste |
 
 `lib/host-capabilities.mjs` describes these boundaries. Frame embedding alone does not authorize DSH-specific actions. Missing evidence is not zero. A cumulative duration does not supply an execution interval; interval coverage unions overlaps and excludes idle gaps. Unknown model timing is not classified as “other” time.
 
@@ -18,7 +19,7 @@ Portable pages retain the shared light/dark theme rules and responsive viewport 
 
 ## Automatic language selection
 
-The trajectory page chooses its language automatically. Pass `?lang=en` or `?lang=zh-CN` in the URL, or set `--lang` when exporting a portable page. Selection order:
+The trajectory tree, Eval and their diagnostic drafts choose a language automatically. Pass `?lang=en` or `?lang=zh-CN` in the URL, or set `--lang` when exporting a portable page. Selection order:
 
 1. Explicit `?lang=en|zh-CN` or CLI `--lang en|zh-CN`.
 2. A saved manual interface preference.
@@ -28,13 +29,13 @@ The trajectory page chooses its language automatically. Pass `?lang=en` or `?lan
 
 `?lang=auto` returns to automatic selection, bypassing a fixed export language and a saved manual preference. Chinese variants use Simplified Chinese and English variants use English.
 
-DSH's locale service synchronizes `document.documentElement.lang`. Its panel observes that attribute and preference changes; its trajectory frame observes the same-origin host language. Independent HTML files need no host API or model call. When the host/browser language changes in automatic mode, a trajectory page reloads in the new language.
+DSH's locale service synchronizes `document.documentElement.lang`. Its panel observes that attribute and preference changes, and the two view frames follow the same-origin host language. Independent HTML files need no host API or model call. When the host or browser language changes in automatic mode, the view reloads in the new language.
 
 This follows the explicit-preference and browser-fallback pattern used by [i18next](https://github.com/i18next/i18next-browser-languageDetector) and [next-intl](https://next-intl.dev/docs/routing/middleware). The implementation remains dependency-free for offline HTML.
 
 ```sh
 node scripts/trajectory-view.mjs --host codex --serve --lang auto
-node scripts/trajectory-view.mjs --host pi --file session.jsonl --lang en
+node scripts/trajectory-view.mjs --host pi --file session.jsonl --eval --lang en
 node scripts/trajectory-report.mjs render --markdown report.md --bundle bundle.json --output report.html --lang en
 ```
 

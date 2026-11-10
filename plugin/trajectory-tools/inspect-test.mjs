@@ -2,14 +2,24 @@ import assert from 'node:assert/strict';
 import { buildInspection, inspectionPage, readOfficialProjections, evidencePointers } from './lib/inspect.js';
 import { InspectionService } from './lib/inspect-service.js';
 import { replayOfficialStats, estimateToolsTokens } from './lib/official-stats.js';
-import { apply } from './lib/index.js';
+import { apply, logIdentity } from './lib/index.js';
 import { projectToolSchema } from '@deepseek-ai/dsh-tools';
 import { readFileSync } from 'node:fs';
 import { SKILL_BODY } from './lib/skill.js';
+import { callTimingSummary } from './lib/tool-intervals.js';
+
+const timed = (start, end, status = 'returned') => ({ startSeq: 1, resultSeq: 2, start, end, status });
+assert.deepEqual(callTimingSummary([timed(0, 10), timed(0, 30, 'error'), timed(0, 20, 'cancelled'),
+  { startSeq: null, resultSeq: 3, start: 5, end: 5 }, { startSeq: 4, resultSeq: null, start: 5, end: null }]),
+  { calls: 5, pairedCalls: 3, missingCalls: 2, coverage: 0.6, cumulativeMs: 60, p50Ms: 20, p95Ms: 30 });
+assert.equal(callTimingSummary([{ startSeq: null, resultSeq: 1, start: 1, end: 1 }]).p50Ms, null);
+assert.equal(callTimingSummary([]).coverage, null);
 
 let n = 0;
 const event = (type, data, surfaceOp) => ({ seq: n++, time: n * 100, type, data, ...(surfaceOp ? { surfaceOp } : {}) });
 const content = value => [{ type: 'text', text: value }];
+const matches = Array.from({ length: 10 }, (_, i) => ({ path: 'src/match-' + i + '.txt', matches: [{ lineNumber: 8, line: 'hello' }] }));
+matches.push({ ...matches[9], path: 'D:/WORK/SRC/MATCH-9.TXT' });
 const header = { tools: [
   { name: 'read', description: 'Read a file', parameters: { type: 'object' } },
   { name: 'unused_plugin_tool', description: 'Long documented tool. '.repeat(80), parameters: { type: 'object' }, deferLoading: true },
@@ -27,7 +37,8 @@ const events = [event('turn/start', { turn: 1 }), event('step/start', { turn: 1,
   event('tool/result', { turn: 1, step: 2, message: { source: { kind: 'tool', callId: 'r2' }, content: content('1: hello\n2: world') } }),
   event('step/end', { turn: 1, step: 2 }), event('step/start', { turn: 1, step: 3 }),
   event('tool/call', { turn: 1, step: 3, callId: 'g', name: 'grep', arguments: '{"path":"src","pattern":"hello"}' }),
-  event('tool/result', { turn: 1, step: 3, message: { source: { kind: 'tool', callId: 'g' }, content: content('Found 1 matches\n\nsrc/a.txt\nLine 8: hello') } }),
+  event('tool/result', { turn: 1, step: 3, message: { source: { kind: 'tool', callId: 'g' }, content: content('Found 11 matches') },
+    meta: { shape: 'matches', total: 11, files: matches } }),
   event('step/end', { turn: 1, step: 3 }), event('turn/end', { turn: 1, reason: { kind: 'completed' } }),
 ];
 const loaded = { events, header: { id: 'fixture', cwd: 'D:/work', version: 4 } };
@@ -53,6 +64,39 @@ assert.equal(index.definitionItems[0].deferredRequested, true);
 assert.equal(index.views.repeats[0].sameReturnedText, true);
 assert.equal(index.views.repeats[0].classification, 'repeat-candidate');
 assert.equal(index.views.io.find(r => r.name === 'grep').files[0].access, 'match');
+const tailFile = 'D:/work/src/match-9.txt';
+const focusedGrep = inspectionPage(index, 'io', 0, 1, { focus: { file: tailFile } }).items[0];
+assert.equal(focusedGrep.name, 'grep');
+assert.equal(focusedGrep.files.length, 8);
+assert.equal(focusedGrep.omittedFiles, 3);
+assert.ok(focusedGrep.files.some(f => f.path === tailFile), 'a match outside the first eight remains queryable and appears in its preview');
+const fileGroups = inspectionPage(index, 'io', 0, 20, { focus: { tool: 'grep' }, groupBy: 'file' }).items;
+assert.equal(fileGroups.length, 10);
+assert.equal(fileGroups.find(row => row.file === tailFile).calls, 1, 'path spellings within a call do not duplicate the file-group count');
+const readGroup = inspectionPage(index, 'io', 0, 10, { focus: { tool: 'read' }, groupBy: 'tool' }).items[0];
+assert.deepEqual(readGroup.timing, { calls: 2, pairedCalls: 2, missingCalls: 0, coverage: 1, cumulativeMs: 200, p50Ms: 100, p95Ms: 100 });
+const wrapperGroup = inspectionPage(index, 'io', 0, 10, { focus: { tool: 'run_code' }, groupBy: 'tool' }).items[0];
+assert.equal(wrapperGroup.timing.pairedCalls, 0, 'synthetic focused wrapper has no observed timing');
+assert.equal(wrapperGroup.timing.p50Ms, null);
+let q = 100;
+const item = (type, data) => ({ type, data, seq: q++, time: q * 10 });
+const partialEvents = [item('turn/start', { turn: 1 }), item('step/start', { turn: 1, step: 1 }),
+  item('tool/call', { turn: 1, step: 1, callId: 'wrap', name: 'run_code', arguments: {} }),
+  item('tool/ptc-dispatch', { rootCallId: 'wrap', subCallId: 'no-start', name: 'read', arguments: {}, content: content('x') }),
+  item('tool/call', { turn: 1, step: 1, callId: 'bad', name: 'read', arguments: {} }),
+  item('tool/result', { turn: 1, step: 1, callId: 'bad', error: 'cancelled', message: { isError: true, content: [] } }),
+  item('tool/call', { turn: 1, step: 1, callId: 'open', name: 'read', arguments: {} }),
+  item('step/end', { turn: 1, step: 1 }), item('turn/end', { turn: 1, reason: { kind: 'aborted' } }),
+  item('turn/start', { turn: 2 }), item('step/start', { turn: 2, step: 1 }),
+  item('tool/call', { turn: 2, step: 1, callId: 'later', name: 'read', arguments: {} }),
+  item('tool/result', { turn: 2, step: 1, callId: 'later', message: { content: [] } }),
+  item('step/end', { turn: 2, step: 1 }), item('turn/end', { turn: 2, reason: { kind: 'completed' } })];
+const partialIndex = buildInspection({ ...loaded, events: partialEvents }, 'fixture', { statsReader() { throw Error('none'); } });
+const partial = inspectionPage(partialIndex, 'io', 0, 10, { turns: { from: 1, to: 1 }, groupBy: 'tool' }).items.find(row => row.tool === 'read');
+assert.deepEqual(partial.timing, { calls: 3, pairedCalls: 1, missingCalls: 2, coverage: 1 / 3, cumulativeMs: 10, p50Ms: 10, p95Ms: 10 });
+const abnormal = inspectionPage(partialIndex, 'io', 0, 10, { turns: { from: 1, to: 1 }, groupBy: 'tool', outcome: 'abnormal' });
+assert.equal(abnormal.items.find(row => row.tool === 'read').timing.calls, 2, 'timing group follows outcome filtering');
+assert.equal(abnormal.summary.toolOutcomes.calls, 3, 'outcome coverage remains before outcome filtering');
 for (const row of index.views.io) {
   assert.ok(['tool/call', 'tool/ptc-dispatch-start', 'tool/ptc-dispatch'].includes(events[row.seq].type), 'IO seq must open the actual invocation, not its step start');
   assert.equal(row.callSeq, row.seq);
@@ -63,6 +107,17 @@ assert.ok(index.views.io.every(row => ioPointers.some(ref => ref.seq === row.cal
 assert.equal(index.views.context[0].net, 0);
 assert.equal(index.views.context[0].categoryNetChange.tool, 5, 'net-zero is not no additions');
 assert.equal(inspectionPage(index, 'latency', 0, 1).items.length, 1);
+const openEvents = events.slice(0, 13);
+const nativeOnly = buildInspection({ ...loaded, events: openEvents }, 'fixture', {
+  statsReader() { throw Error('statistics unavailable'); },
+});
+const nativeLatency = inspectionPage(nativeOnly, 'latency', 0, 10);
+assert.equal(nativeLatency.coverage.statistics.status, 'unavailable');
+assert.equal(nativeLatency.items[0].recordedToolTiming.coveredMs, events[6].time - events[5].time);
+assert.equal(nativeLatency.items[1].recordedToolTiming.pairedCalls, 1);
+assert.equal(nativeLatency.items[1].recordedToolTiming.coveredMs, null, 'open step has no observed right boundary');
+assert.equal(nativeLatency.items[1].evidence.end, null);
+assert.equal(nativeLatency.summary.official.wall, null);
 assert.equal(inspectionPage(index, 'cost', 0, 1).largestDefinitions.length, 1);
 assert.equal(index.views.latency.length, index.stepEntries.length, 'views retain compact references to one step evidence table');
 assert.equal(readFileSync(new URL('./skills/trajectory-query/SKILL.md',import.meta.url),'utf8').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/,''),SKILL_BODY,'runtime skill is loaded from its packaged source');
@@ -82,8 +137,37 @@ const stopped = new AbortController(); stopped.abort();
 await assert.rejects(readOfficialProjections({ get: () => ({ restore() { assert.fail('aborted restore must not run'); } }) }, loaded, stopped.signal), /abort/i);
 
 let now = 0, reads = 0;
-const service = new InspectionService({ load: async () => { reads++; return loaded; }, ctx: { get: () => undefined }, now: () => now });
+const service = new InspectionService({ load: async () => { reads++; return loaded; }, identify: logIdentity,
+  ctx: { get: () => undefined }, now: () => now });
 const first = await service.query({ view: 'latency', limit: 1 }, 'fixture');
+const grepTable = await service.query({ snapshot: first.snapshot, view: 'io', format: 'data', focus: { file: tailFile }, groupBy: 'file' }, 'fixture');
+assert.deepEqual(grepTable.rows.map(row => [row.file, row.calls]), fileGroups.map(row => [row.file, row.calls]));
+assert.equal(grepTable.coverage.toolOutcomes.calls, 1);
+assert.equal(grepTable.rows[0].timingPairedCalls, 1);
+assert.equal(grepTable.rows[0].durationP95Ms, 100);
+const picked = index.views.io.slice(0, 2).map(call => call.seq).sort((a, b) => a - b);
+const exact = await service.query({ snapshot: first.snapshot, view: 'io', seqs: [...picked, picked[0], 99999], sort: 'time', limit: 1 }, 'fixture');
+assert.deepEqual(exact.scope.callSelection, { requested: 3, matched: 2, unmatched: [99999] });
+assert.equal(exact.summary.calls, 2);
+const nextExact = await service.query({ cursor: exact.nextCursor, limit: 1 }, 'fixture');
+assert.deepEqual([...exact.items, ...nextExact.items].map(call => call.seq), picked);
+const exactTable = await service.query({ snapshot: first.snapshot, view: 'io', seqs: picked, format: 'data' }, 'fixture');
+assert.deepEqual(exactTable.rows.map(row => row.id), picked.map(seq => 'call:' + seq));
+await assert.rejects(service.query({ snapshot: first.snapshot, view: 'context', seqs: picked }, 'fixture'), /requires view=io/);
+await assert.rejects(service.query({ cursor: exact.nextCursor, seqs: [picked[0]] }, 'fixture'), /does not match/);
+const cut = events.at(-1).seq;
+const appended = new InspectionService({ ctx: { get: () => undefined }, load: async () => ({ ...loaded,
+  events: [...events, { seq: cut + 1, type: 'turn/start', time: events.at(-1).time + 1, data: { turn: 999 } }],
+}) });
+try {
+  const pinned = await appended.query({ cut, view: 'io', seqs: picked }, 'fixture');
+  assert.equal(pinned.scope.toSeq, cut);
+  assert.equal(pinned.scope.callSelection.matched, picked.length);
+  const linked = await appended.readLinked({ session: 'fixture', cut, seq: picked[0] });
+  assert.equal(linked.cut, cut);
+  assert.ok(linked.records.every(row => row.seq <= cut));
+  await assert.rejects(appended.query({ cut: cut + 2 }, 'fixture'), /cut is unavailable/);
+} finally { appended.dispose(); }
 assert.ok(first.snapshot); assert.ok(first.nextCursor); assert.ok(first.reads.length);
 const continued = await service.query({ view: 'latency', cursor: first.nextCursor, limit: 1 }, 'fixture');
 for (const view of ['overview', 'latency', 'cost', 'repeats', 'io', 'context']) {

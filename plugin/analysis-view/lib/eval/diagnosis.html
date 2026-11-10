@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>图上诊断 · DSH 实录</title>
+  <style>
+    :root { color-scheme: light; --line: #e6e6e6; --ink: #171717; --muted: #5e5e5e; --action: #0068d6; }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; color: var(--ink); background: #fff; font: 14px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; }
+    .app { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; height: 100dvh; }
+    .app > header { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 18px; min-height: 48px; padding-inline: clamp(12px, 3vw, 28px); border-bottom: 1px solid var(--line); }
+    .source, .hint { color: var(--muted); font-size: 12px; }
+    .source { margin-inline-start: auto; }
+    nav { display: flex; gap: 14px; }
+    button, input, textarea { color: inherit; font: inherit; }
+    button { padding: 4px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
+    button:hover { border-color: var(--action); color: var(--action); }
+    :focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+    nav button { padding: 11px 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0; white-space: nowrap; }
+    nav button[aria-pressed="true"] { border-bottom-color: var(--ink); font-weight: 650; }
+    main, iframe { min-height: 0; height: 100%; width: 100%; }
+    iframe { display: block; border: 0; }
+    @media (max-width: 700px) {
+      .app > header { gap: 1px 12px; }
+      .source { flex-basis: 100%; margin: 0 0 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <nav id="tabs" aria-label="切换图表">
+        <button type="button" data-view="trace" aria-pressed="true">轨迹树</button>
+        <button type="button" data-view="eval" aria-pressed="false">Eval</button>
+      </nav>
+      <span id="view-hint" class="hint"></span>
+      <span id="source" class="source"></span>
+    </header>
+    <main>
+      <iframe id="trace-view" title="轨迹树" sandbox="allow-scripts"></iframe>
+      <iframe id="eval-view" title="Eval 看板" sandbox="allow-scripts" hidden></iframe>
+    </main>
+  </div>
+  <!-- diagnosis:editor -->
+  <!-- diagnosis:data -->
+  <!-- diagnosis:script -->
+</body>
+</html>

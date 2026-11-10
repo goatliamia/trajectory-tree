@@ -27,6 +27,8 @@ import { defineTool } from "@deepseek-ai/dsh-tools";
 import { SKILL_BODY, SKILL_DESCRIPTION, SKILL_NAME, SKILL_WHEN_TO_USE, loadDiagnosticSkills } from "./skill.js";
 import { InspectionService } from "./inspect-service.js";
 import { IO_OUTCOMES } from "./io-outcome.js";
+import { MAX_IO_SELECTION } from "./inspection-io.js";
+import { CUT_DESCRIPTION, INSPECT_DESCRIPTIONS, TOOL_DESCRIPTIONS } from "./tool-descriptions.js";
 import { readField } from "./linked-read.js";
 import { costRequests, costTotals, costCoverage, costByTurn } from "./usage.js";
 export { cacheEfficiency, costRequests, costTotals, costCoverage, costByTurn } from "./usage.js";
@@ -1104,6 +1106,7 @@ export function apply(ctx, config = {}) {
         if (args.field !== undefined) throw Error('linked and field cannot be combined');
         return await inspections.readLinked(args, exec?.signal);
       }
+      if (args.cut !== undefined) throw Error('cut requires format=linked; for a window, pass an inspection snapshot');
       const sessionId = String(args.session);
       if (args.field !== undefined) {
         if (!Number.isSafeInteger(args.seq) || args.seq < 0) throw Error('field requires seq');
@@ -1212,14 +1215,14 @@ export function apply(ctx, config = {}) {
 
   register({
     name: "trajectory_search",
-    description: "查会话日志的事实与数字:字面命中、会话清单、token 花费。结果带 (session, seq@logId) 与逐字片段。",
+    description: TOOL_DESCRIPTIONS.trajectory_search,
     parameters: {
-      view: { type: "string", required: true, enum: ["events", "catalog", "sessions", "cost"], description: "定位用:events=字面命中;catalog=计数与范围;sessions=有哪些会话。cost 是兼容别名,等价于 trajectory_inspect view=cost,新调用请直接用 inspect。" },
+      view: { type: "string", required: true, enum: ["events", "catalog", "sessions", "cost"], description: "events 字面命中，catalog 计数与范围，sessions 会话清单。cost 为旧用量入口。" },
       session: { type: "string", description: "会话 id；events 省略=当前+live+最近，cost 省略=当前" },
       query: { type: "string", description: "字面词,events 用" },
       filter: { type: "object", additionalProperties: true, description: "events:types/from/to/timeFrom/timeTo/sessionCount/normalize/excludeInjected/excludeSelf；catalog:cwd/timeFrom/timeTo/type/tool/breakdown；cost:from/to/groupBy(request或turn)；sessions:liveOnly" },
       limit: { type: "integer", description: "行数上限,默认 " + DEFAULT_ROWS },
-      offset: { type: "integer", description: "跳过前 N 条(events 用);返回 nextOffset,没有更多就是 null" },
+      offset: { type: "integer", description: "events 翻页时传入返回的 nextOffset。" },
     },
     output: OUTPUT,
     // search 故意不标并发安全:默认扫描集要读多份会话,并行只会把成本乘起来。
@@ -1228,20 +1231,22 @@ export function apply(ctx, config = {}) {
 
   register({
     name: "trajectory_inspect",
-    description: "查询会话统计、步骤、工具文件操作和上下文构成，返回原文位置。",
+    description: TOOL_DESCRIPTIONS.trajectory_inspect,
     parameters: {
-      view: { type: "string", enum: ["overview", "latency", "cost", "repeats", "io", "context"], description: "overview=时间过程(默认);latency=等待;cost=用量和定义;repeats=同参候选;io=操作;context=变化" },
-      outcome: { type: "string", enum: IO_OUTCOMES, description: "仅 io。error=明确报错；abnormal=明确报错或结果未确认。省略时包含所有调用。" },
+      view: { type: "string", enum: ["overview", "latency", "cost", "repeats", "io", "context"], description: INSPECT_DESCRIPTIONS.view },
+      outcome: { type: "string", enum: IO_OUTCOMES, description: INSPECT_DESCRIPTIONS.outcome },
       format: { type: "string", enum: ["summary", "data"], description: "summary(默认)返回摘要；data返回表格，保持来源顺序；repeats仅支持summary" },
       session: { type: "string", description: "会话 id，省略为当前会话" },
-      turns: { type: "object", additionalProperties: true, description: "轮次闭区间 {from,to}，省略为全会话；沿用 snapshot 时可换范围" },
+      cut: { type: "integer", description: CUT_DESCRIPTION },
+      turns: { type: "object", additionalProperties: true, description: "轮次闭区间 {from,to}，省略为全会话。" },
+      seqs: { type: "array", items: { type: "integer" }, description: "仅 io。按图表给出的调用序号筛选，最多 " + MAX_IO_SELECTION + " 个。省略 groupBy 可看逐次调用。" },
       focus: { type: "object", additionalProperties: true, description: "{tool:精确工具名} 或 {file:返回过的完整路径}，二选一；时间/用量为包含该对象的完整步骤" },
       groupBy: { type: "string", enum: ["turn", "tool", "file"], description: "summary:overview用turn/tool/file，latency和cost用turn，io用tool/file；data仅io可用tool/file，其余保留原始行" },
       sort: { type: "string", enum: ["time", "wall", "input", "output", "returned", "count", "change"], description: "overview窗口/turn及latency/cost:time/wall/input/output；tool/file及io:time/returned/count；repeats:time/count；context:time/change" },
-      limit: { type: "integer", description: "summary 每页1–10项(默认6/3)；data每页1–500行(默认250)" },
-      snapshot: { type: "string", description: "沿用日志切点" },
+      limit: { type: "integer", description: "summary 1–10 项，overview 默认 6、其他默认 3。data 1–500 行，默认 250。" },
+      snapshot: { type: "string", description: "沿用返回的快照，可在同一切点换查询范围。" },
       cursor: { type: "string", description: "照抄 nextCursor 继续同一查询" },
-      samples: { type: "boolean", description: "默认 true；传 false 时不返回原文摘录(prompt/following)与证据正文,只留数字,用于只看排名/规模" },
+      samples: { type: "boolean", description: INSPECT_DESCRIPTIONS.samples },
     },
     output: OUTPUT,
     execute: async (args, exec) => {
@@ -1252,17 +1257,18 @@ export function apply(ctx, config = {}) {
 
   register({
     name: "trajectory_read",
-    description: "读取历史原文或某次调用的前因后果(linked)。要看正文或它前后的消息用本工具;要看替换链、引用、派生、会话谱系这些结构用 trajectory_graph。",
+    description: TOOL_DESCRIPTIONS.trajectory_read,
     parameters: {
       session: { type: "string", required: true, description: "会话 id" },
-      seq: { type: "integer", description: "中心事件；text/json 取前后各5条，linked 取关联记录，field 只读该事件" },
+      seq: { type: "integer", description: "事件序号。text/json 取前后各 5 条，field 仅读此事件。" },
+      cut: { type: "integer", description: "仅 linked。" + CUT_DESCRIPTION },
       from: { type: "integer", description: "区间起点，含" },
       to: { type: "integer", description: "区间终点，含；最多 " + MAX_WINDOW + " 条" },
       raw: { type: "boolean", description: "text 模式包含无正文事件" },
       format: { type: "string", enum: ["text", "json", "linked"], description: "text=正文(默认);json=完整事件;linked=按 seq 读调用/状态/正式返回及后续消息" },
       field: { type: "string", description: "按 seq 读事件内字段，如 data.arguments；与 linked 分开使用，文本每页12000字符" },
       offset: { type: "integer", description: "linked 的记录偏移或 field 的字符偏移，默认0；优先照抄 nextRead" },
-      snapshot: { type: "string", description: "沿用 inspect 切点并校验原文" },
+      snapshot: { type: "string", description: "沿用 trajectory_inspect 返回的快照。" },
     },
     output: OUTPUT,
     isConcurrencySafe: () => true,
@@ -1271,10 +1277,10 @@ export function apply(ctx, config = {}) {
 
   register({
     name: "trajectory_graph",
-    description: "关系结构:事件的替换/引用/派生,或会话谱系(祖先/子会话/子代理)。这里只出结构,要读正文用 trajectory_read。",
+    description: TOOL_DESCRIPTIONS.trajectory_graph,
     parameters: {
       session: { type: "string", required: true, description: "会话 id" },
-      seq: { type: "integer", description: "事件 seq;省略=会话谱系" },
+      seq: { type: "integer", description: "传事件序号查替换、引用和派生关系。省略时查会话谱系。" },
       full: { type: "boolean", description: "true=给完整数组,默认只给计数与首尾" },
     },
     output: OUTPUT,

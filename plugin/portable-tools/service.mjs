@@ -1,15 +1,15 @@
 import { inspectData, VIEWS } from './analysis.mjs';
-import { hash, recordText } from './sources.mjs';
+import { datasetAtCut, hash, recordText } from './sources.mjs';
 import { portableReportData } from './report-data.mjs';
 import { reportPage } from '../trajectory-tools/lib/report-data.js';
 import { validateIoOutcome } from '../trajectory-tools/lib/io-outcome.js';
 
-const queryKeys = ['view', 'turns', 'focus', 'groupBy', 'sort', 'includeSelf', 'query', 'format', 'samples', 'outcome'];
+const queryKeys = ['view', 'turns', 'focus', 'groupBy', 'sort', 'includeSelf', 'query', 'format', 'samples', 'outcome', 'seqs', 'cut'];
 const pick = args => Object.fromEntries(queryKeys.filter(k => args[k] !== undefined).map(k => [k, args[k]]));
 const preview = text => String(text || '').slice(0, 320);
 function cursorEncode(value) { const text = JSON.stringify(value); return Buffer.from(text).toString('base64url') + '.' + hash(text).slice(0, 16); }
 function cursorDecode(token) {
-  if (typeof token !== 'string' || token.length > 12000) throw Error('Invalid cursor');
+  if (typeof token !== 'string' || token.length > 24000) throw Error('Invalid cursor');
   const [body, digest, extra] = token.split('.'), text = Buffer.from(body, 'base64url').toString();
   if (extra || hash(text).slice(0, 16) !== digest) throw Error('Invalid cursor');
   const value = JSON.parse(text); if (!Number.isSafeInteger(value.offset) || value.offset < 0) throw Error('Invalid cursor offset');
@@ -25,18 +25,19 @@ export class PortableService {
     if (!this.entries.size) return;
     this.timer = setTimeout(() => { const now = Date.now(); for (const [id, item] of this.entries) if (now - item.at >= this.idleMs) this.entries.delete(id); this.arm(); }, this.idleMs); this.timer.unref();
   }
-  async prepare(id, session, signal) {
+  async prepare(id, session, signal, cut) {
     if (this.closed) throw Error('Service disposed'); signal?.throwIfAborted();
     const now = Date.now(); for (const [key, item] of this.entries) if (now - item.at >= this.idleMs) this.entries.delete(key);
     if (id && this.entries.has(id)) {
       const item = this.entries.get(id);
       if (session && session !== item.data.session && session !== item.alias) throw Error('Snapshot belongs to another session');
+      if (cut !== undefined && item.data.cut !== cut) throw Error('Snapshot does not match cut');
       item.at = now; this.entries.delete(id); this.entries.set(id, item); this.arm(); return item;
     }
     if (id && !this.rebuildSnapshots) throw Error('Snapshot expired; start a new inspection');
     const work = this.queue.then(async () => {
       signal?.throwIfAborted();
-      const loaded = await this.load(session, signal), data = structuredClone(loaded);
+      const loaded = await this.load(session, signal), data = structuredClone(cut === undefined ? loaded : datasetAtCut(loaded, cut));
       signal?.throwIfAborted();
       const key = 'portable:' + data.fingerprint.slice(0, 32), bytes = Buffer.byteLength(JSON.stringify(data)) * 2;
       if (id && id !== key) throw Error('Source changed; use a new snapshot or the persistent MCP/Pi tool');
@@ -61,14 +62,20 @@ export class PortableService {
     if (name === 'trajectory_inspect' || name === 'trajectory_search') { q.view ||= name === 'trajectory_inspect' ? 'overview' : 'events'; q.sort ||= 'time'; q.includeSelf ??= false; }
     if (name === 'trajectory_inspect') { q.format ||= 'summary'; if (!['summary', 'data'].includes(q.format)) throw Error('format must be summary or data'); }
     validateIoOutcome(name === 'trajectory_inspect' ? q.view : null, q.outcome);
+    if (q.seqs !== undefined) {
+      if (name !== 'trajectory_inspect' || q.view !== 'io') throw Error('seqs requires view=io');
+      if (!Array.isArray(q.seqs) || !q.seqs.length || q.seqs.length > 500 ||
+          q.seqs.some(seq => !Number.isSafeInteger(seq) || seq < 0)) throw Error('seqs requires 1–500 nonnegative call sequence numbers');
+      q.seqs = [...new Set(q.seqs)].sort((a, b) => a - b);
+    }
     if (q.samples !== undefined && typeof q.samples !== 'boolean') throw Error('samples must be a boolean');
     if (q.turns) { if (!Number.isSafeInteger(q.turns.from) || !Number.isSafeInteger(q.turns.to) || q.turns.from < 1 || q.turns.to < q.turns.from) throw Error('turns requires an inclusive {from,to} range'); q.turns = { from: q.turns.from, to: q.turns.to }; }
     if (q.focus && (Object.keys(q.focus).length !== 1 || !Object.values(q.focus)[0])) throw Error('Select one exact tool, file, or skill in focus');
     if (previous && hash(q) !== hash(previous.query)) throw Error('Cursor does not match selection');
-    const item = await this.prepare(args.snapshot || previous?.snapshot, args.session, signal), { data } = item;
+    const item = await this.prepare(args.snapshot || previous?.snapshot, args.session, signal, q.cut), { data } = item;
     if (args.logId && args.logId !== data.logId) throw Error('Log identity does not match snapshot');
-    const base = { snapshot: item.id, session: data.session, host: data.host, logId: data.logId, synthetic: data.synthetic };
-    const pointer = seq => ({ tool: 'trajectory_read', snapshot: item.id, session: data.session, logId: data.logId, seq });
+    const base = { snapshot: item.id, session: data.session, host: data.host, logId: data.logId, synthetic: data.synthetic, ...(data.cut === undefined ? {} : { cut: data.cut }) };
+    const pointer = seq => ({ tool: 'trajectory_read', snapshot: item.id, session: data.session, logId: data.logId, seq, ...(data.cut === undefined ? {} : { cut: data.cut }) });
     const paginate = (rows, limit = args.limit ?? 6) => {
       if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw Error('limit must be 1..20');
       return { rows: rows.slice(offset, offset + limit), total: rows.length, ...(offset + limit < rows.length ? { cursor: cursorEncode({ tool: name, snapshot: item.id, query: q, offset: offset + limit }) } : {}) };
@@ -80,8 +87,8 @@ export class PortableService {
         if (q.sort !== 'time') throw Error('Data format preserves source order; rank in the figure');
         if (q.groupBy && !(view === 'io' && ['tool', 'file'].includes(q.groupBy))) throw Error('Data groupBy is available for io tool/file only');
         const source = { host: data.host, session: data.session, snapshot: item.id, log: data.logId,
-          cut: data.records.at(-1)?.seq ?? null, query: { view, turns: q.turns || null, focus: q.focus || null, groupBy: q.groupBy || null,
-            includeSelf: q.includeSelf, ...(q.outcome ? { outcome: q.outcome } : {}) } };
+          cut: data.cut ?? data.records.at(-1)?.seq ?? null, query: { view, turns: q.turns || null, focus: q.focus || null, groupBy: q.groupBy || null,
+            includeSelf: q.includeSelf, ...(q.outcome ? { outcome: q.outcome } : {}), ...(q.seqs ? { seqs: q.seqs } : {}) } };
         const page = reportPage(portableReportData(data, { ...q, view }, source), offset, args.limit ?? 250);
         return { ok: true, ...page, nextCursor: page.nextOffset == null ? null : cursorEncode({ tool: name, snapshot: item.id, query: q, offset: page.nextOffset }) };
       }

@@ -30,7 +30,8 @@ for (const name of ['page.html', 'page.js', 'shared/visual-tokens.css', 'shared/
   copy('plugin/analysis-view/lib/trace/' + name);
 }
 for(const name of ['pi-host.js','codex-host.js','claude-host.js'])copy('view/assets/'+name);
-if(host==='codex'||host==='claude')for(const name of [...DIAGNOSIS_SKILLS.map(s=>s.name),'trajectory-view']){
+for(const name of ['index.html','style.css','views.css','themes.css','editor.css','editor.html','diagnosis.js','dashboard.js'])copy('plugin/analysis-view/lib/eval/'+name);
+if(host==='codex'||host==='claude')for(const name of [...DIAGNOSIS_SKILLS.map(s=>s.name),'trajectory-view','trajectory-eval']){
  const sourceRoot=join(root,'plugin',host,'skills',name);
  for(const sourceFile of files(sourceRoot)){
   const target=join(out,'skills',name,relative(sourceRoot,sourceFile)),text=readFileSync(sourceFile,'utf8').replaceAll('../../../../','../../');
@@ -64,4 +65,4 @@ if(existsSync(destination)){
  rmSync(destination,{recursive:true,force:true});
 }
 renameSync(out,destination);
-console.log(JSON.stringify({ok:true,host,output:destination,sourceFiles:copied.size,skills:DIAGNOSIS_SKILLS.length+(host!=='pi'?1:0),dependencies:[...external]}));
+console.log(JSON.stringify({ok:true,host,output:destination,sourceFiles:copied.size,skills:DIAGNOSIS_SKILLS.length+(host!=='pi'?2:0),dependencies:[...external]}));

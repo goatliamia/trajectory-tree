@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>运行评估 · 轨迹树</title>
+  <!-- eval:styles -->
+</head>
+<body data-view="classic">
+  <header class="app-header">
+    <div class="header-inner">
+      <!-- eval:details -->
+      <div class="brand">
+        <span>轨迹树</span><i class="brand-divider" aria-hidden="true"></i><span class="brand-context">Eval</span>
+      </div>
+      <div class="scope-control"><label for="scope">统计范围</label><select id="scope"></select></div>
+      <div class="scope-control appearance-control"><label for="view-switch">外观</label>
+        <select id="view-switch">
+          <optgroup label="轮次总览">
+            <option value="white" data-layout="overview" selected>白底</option>
+            <option value="blueprint" data-layout="overview">深蓝图</option>
+            <option value="sage" data-layout="overview">灰绿</option>
+          </optgroup>
+          <optgroup label="之前的布局">
+            <option value="classic">原版</option>
+            <option value="monitor">工具监控</option>
+            <option value="evidence">证据工作台</option>
+          </optgroup>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <header class="workspace-head">
+      <div class="workspace-heading">
+        <h1 id="view-title">运行评估</h1>
+        <p class="workspace-meta"><span id="workspace-context"></span><span id="snapshot-range" class="mono"></span></p>
+      </div>
+      <div class="source">
+        <span class="source-badge"><i aria-hidden="true"></i><span id="source-label"></span></span><code id="source-cut" title="日志切点"></code>
+      </div>
+    </header>
+
+    <aside class="workspace-rail" aria-label="会话概况与导航">
+      <nav id="section-nav" class="section-nav" aria-label="证据工作台导航" hidden>
+        <a href="#tool-errors"><code>01</code>报错记录</a>
+        <a href="#turn-usage"><code>02</code>轮次样本</a>
+        <a href="#tool-comparison"><code>03</code>工具调用</a>
+      </nav>
+      <section class="run-context" aria-label="运行概况">
+        <div id="summary"></div>
+        <div id="outcome-chart" class="outcome-strip"></div>
+      </section>
+    </aside>
+
+    <section id="tool-comparison" class="panel comparison" aria-labelledby="tools-title">
+      <header class="section-head comparison-head">
+        <div><h2 id="tools-title" tabindex="-1">工具对照</h2><p id="tool-caption"></p></div>
+        <div class="segmented" id="tool-sort" role="group" aria-label="工具排序">
+          <button type="button" data-sort="time" aria-pressed="true">累计耗时</button>
+          <button type="button" data-sort="errors" aria-pressed="false">报错数</button>
+          <button type="button" data-sort="calls" aria-pressed="false">调用量</button>
+        </div>
+      </header>
+
+      <div class="comparison-layout">
+        <div class="comparison-chart">
+          <div class="compare-columns" aria-hidden="true">
+            <span>工具</span>
+            <span><i class="swatch swatch-time"></i>累计耗时</span>
+            <span><i class="swatch swatch-error"></i>报错次数</span>
+          </div>
+          <div id="tool-rows" class="compare-rows" role="group" aria-label="选择工具查看详情"></div>
+          <footer class="comparison-foot">
+            <p id="tool-footnote"></p>
+            <button type="button" class="text-action" id="tool-more" aria-controls="tool-rows" hidden></button>
+          </footer>
+        </div>
+
+        <aside id="tool-inspector" class="tool-inspector" aria-labelledby="selected-tool-title">
+          <header class="inspector-head">
+            <h3 id="selected-tool-title" tabindex="-1" aria-live="polite"></h3>
+            <button type="button" class="text-action" id="show-all-latency">全体耗时分布</button>
+          </header>
+          <div id="tool-evidence"></div>
+          <button type="button" class="text-action" id="tool-error-link" aria-controls="error-example" hidden>查看此工具报错</button>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tool-errors" class="panel error-panel" aria-labelledby="errors-title">
+      <header class="section-head comparison-head">
+        <div><h2 id="errors-title">工具报错分布</h2><p id="error-caption"></p></div>
+      </header>
+      <div id="error-layout" class="error-layout">
+        <div class="matrix-section">
+          <div id="error-matrix"></div>
+          <p id="matrix-note" class="matrix-note" hidden>每格为报错次数。点选查看调用记录。</p>
+        </div>
+        <aside id="error-example" class="error-example" aria-label="报错样本" aria-live="polite" tabindex="-1" hidden></aside>
+      </div>
+    </section>
+
+    <section id="turn-usage" class="panel usage-panel" aria-labelledby="usage-title">
+      <header class="section-head comparison-head">
+        <div><h2 id="usage-title">输出 token × 轮次耗时</h2><p id="usage-caption"></p></div>
+        <span id="usage-coverage" class="usage-coverage" title="有轮次起止，且每条已记录的模型响应都有输出 token"></span>
+      </header>
+      <div id="usage-layout" class="usage-layout">
+        <div class="usage-chart-wrap">
+          <div id="usage-chart"></div>
+        </div>
+        <aside id="usage-inspector" class="usage-inspector" aria-label="轮次样本" hidden>
+          <div id="usage-evidence" aria-live="polite"></div>
+          <button type="button" class="text-action" id="usage-open-turn" aria-controls="tool-rows">查看该轮工具</button>
+          <div id="usage-examples" class="usage-examples" role="group" aria-label="选取代表轮次" hidden></div>
+        </aside>
+      </div>
+    </section>
+
+    <details id="eval-basis" class="basis">
+      <summary>其他运行指标与统计口径</summary>
+      <section class="supporting-metrics" aria-labelledby="file-title">
+        <h3 id="file-title">文件与交付</h3>
+        <div id="files"></div>
+      </section>
+      <section class="supporting-metrics" aria-labelledby="timing-title">
+        <h3 id="timing-title">时间口径</h3>
+        <div id="time-basis"></div>
+      </section>
+      <div id="more-metrics"></div>
+      <ul class="basis-notes">
+        <li>各轮耗时、各步耗时按各自的实录起止求和。模型处理使用 DSH 的步骤统计，含首字延迟和解码。</li>
+        <li>输出 token 按每轮模型响应上报的 <code>outputTokens</code> 相加，包含中间响应。交叉图以整段会话为参照，仅绘制有轮次起止且已记录的模型响应均上报输出量的轮次。</li>
+        <li>工具累计耗时按调用发起到结果逐次相加，含观测到的调度和等待，重叠调用分别计时。步内工具覆盖把调用区间裁到所属步骤，重叠部分计一次。</li>
+        <li>耗时分布的档位含左边界。首档低于 20 ms，末档含 30 s 及以上。</li>
+        <li>结果覆盖率以全部调用为分母。报错占比以已记录结果的调用为分母。</li>
+        <li>报错优先按实录中的错误码分类，其余沿用轨迹归类。同参返回指同一轮内同工具、同完整参数的后续非报错返回。</li>
+        <li>文件前读和读回按有配对写入记录的文件计算，搜索命中单独计数。</li>
+      </ul>
+    </details>
+  </main>
+
+  <!-- eval:data -->
+  <!-- eval:script -->
+</body>
+</html>

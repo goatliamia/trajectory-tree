@@ -1,7 +1,7 @@
-<h1 align="center">Trajectory Tree</h1>
+<h1 align="center"><img src="docs/media/trajectory-tree-cover.png" alt="Trajectory Tree · 轨迹树"></h1>
 
 <p align="center"><strong>See how your agent gets the work done.</strong></p>
-<p align="center">Execution paths · Context changes · Tool evidence · Visual diagnosis reports</p>
+<p align="center">Trajectory tree · Eval · Diagnosis from a selection · Visual reports</p>
 
 <p align="center">
   <a href="README.md">中文</a> ·
@@ -12,29 +12,34 @@
 
 <p align="center"><code>DSH</code> &nbsp; <code>Pi</code> &nbsp; <code>Codex</code> &nbsp; <code>Claude Code</code></p>
 
-![Execution path with turns, tool branches, file changes and context deltas](docs/media/trajectory-overview.jpg)
+> The screenshots use the same public synthetic session. See the [media notes](docs/media/README.md).
 
-Start with the whole session, then open a turn to inspect arguments, results, file changes and feedback. Long conversations show the actual trunk first and fill in details progressively.
+## Trajectory tree
 
-> Images and animation below use synthetic examples rendered by the project's existing views and report components.
+Start with the session's main path, then open any turn to inspect tool arguments, results, file changes and context deltas.
 
-## Follow context as it changes
+![Execution path with turns, tool branches, file changes and context deltas](docs/media/trajectory-overview-en.jpg)
 
-Select one or more sources to follow their retained size and changes. The path view shows per-turn deltas only.
+## Eval
 
-![Context component showing retained content and per-turn changes by source](docs/media/context-trend.jpg)
+Eval uses the same trace data as the trajectory tree. Compare turn duration with output tokens, see which tools take the most time, and spot recurring errors. Switch between the full session and an individual turn. Charts indicate how much of the session was measured.
 
-## Watch context come together
+![Eval scatter plot comparing output tokens, turn duration and tool errors](docs/media/eval-overview-en.jpg)
 
-Retained material stays in place, new content joins turn by turn, and historical rewrites identify the changed fragments. The same component can replay recorded structure inside a report.
+## Diagnose a selection
 
-![Concept sequence showing context retention, appends and a historical rewrite](docs/media/context-assembly.gif)
+In the DSH tree, hold to select an item or hold and drag to select a region. Context change bars are selectable too. In Eval, start from the chart details, including DSH tool sources and calls. Pick a question to get an editable draft with the session, selection and evidence queries. Review it before sending.
 
-## Read findings alongside their evidence
+![A selected step in the DSH action path opens an editable diagnosis draft](docs/media/diagnosis-draft-en.jpg)
 
-Bring findings, evidence and next actions into one report, using metrics, distributions, trends and original record locations. **The AI authors the report**; Markdown and chart components assemble into interactive HTML.
+<details>
+<summary>More examples: context and reports</summary>
 
-![Example diagnosis report with metrics, stage distribution and input composition](docs/media/diagnostic-report.jpg)
+- [Context trends](docs/media/context-trend.jpg) show retained material and per-turn changes by source.
+- [Context assembly](docs/media/context-assembly.gif) replays appends, retention and rewrites.
+- [Diagnostic report](docs/media/diagnostic-report.jpg) combines AI-authored findings with the charts and original records.
+
+</details>
 
 ## Quick start
 
@@ -46,10 +51,10 @@ Run commands from the repository root. The plugin packages declare Node.js 18+, 
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.4.tgz ./dsh-analysis-view-0.10.142.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.5.tgz ./dsh-analysis-view-0.10.143.tgz
 ```
 
-Restart `dsh web`, open Analysis, or use `/trajectory` for the current session's path. Stop an existing instance before restarting to avoid a port conflict. The plugins target the DSH 0.2.2 line; the package-by-package check is in [Shared views, host capabilities and language](docs/host-compatibility.md#dsh-version).
+Restart `dsh web`, then open **Eval** or use `/trajectory` for the current session's path. Choose a diagnostic question and select **Fill conversation** to append the draft to the composer. The plugins target the DSH 0.2.2 line; see the [host compatibility notes](docs/host-compatibility.md#dsh-version).
 
 Select a goal line in the overview to open that goal. Select an event marker to inspect that change and open the associated turn in the action path or conversation.
 
@@ -67,7 +72,7 @@ npm ci --prefix plugin/portable-tools --ignore-scripts
 pi -e ./plugin/portable-tools
 ```
 
-Use `/trajectory` for the selected branch, `trace-analysis` for the session process, and `context-profile` for current context and tool configuration.
+Use `/trajectory` for the selected branch or `/trajectory --eval` for Eval. Copy the Pi draft command back into the terminal. If the editor already contains a draft, copy the prompt text and merge it yourself. Use `trace-analysis` for the session process and `context-profile` for current context and tool configuration.
 
 [Pi setup](plugin/portable-tools/README.md#pi)
 
@@ -82,7 +87,7 @@ node scripts/sync-host-skills.mjs
 node scripts/package-trajectory.mjs --host codex
 ```
 
-Install `dist/trajectory-tree-codex` from the local plugin directory, then use `$trajectory-view`, `$trace-analysis`, or `$context-profile`.
+Install `dist/trajectory-tree-codex` from the local plugin directory. Use `$trajectory-view` for the tree, `$trajectory-eval` for Eval, or `$trace-analysis` and `$context-profile` for analysis. Copy an Eval draft back into the Codex composer.
 
 Generate a view directly for the current session; local session reads require the official `codex app-server`:
 
@@ -106,7 +111,7 @@ node scripts/package-trajectory.mjs --host claude
 claude --plugin-dir ./dist/trajectory-tree-claude
 ```
 
-Use `/trajectory-tree:trajectory-view`, `/trajectory-tree:trace-analysis`, or `/trajectory-tree:context-profile`. The plugin provides the current transcript path at session startup, resume and related lifecycle events.
+Use `/trajectory-tree:trajectory-view` or `/trajectory-tree:trajectory-eval` to open a view, then copy a diagnosis draft back into Claude Code. The plugin provides the current transcript path at session startup, resume and related lifecycle events.
 
 [Claude Code setup](plugin/claude/README.md)
 
@@ -116,12 +121,12 @@ Use `/trajectory-tree:trajectory-view`, `/trajectory-tree:trace-analysis`, or `/
 
 ```sh
 node scripts/trajectory-view.mjs --host pi --file /absolute/session.jsonl --open
-node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl --open
+node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl --eval --lang en --open
 ```
 
 Generation does not call a model. The command returns a standalone HTML file and a local preview URL; fonts are embedded for offline viewing.
 
-The interface automatically follows the host or browser language. Choose Auto / 中文 / English in the page, or pass `--lang en` or `--lang zh-CN`. Report prose follows the user's request; quoted logs, paths and arguments remain unchanged. See [host compatibility and language selection](docs/host-compatibility.md) for evidence boundaries and supported capabilities.
+The trajectory tree, Eval and diagnostic drafts follow the host or browser language. Choose Auto / 中文 / English in the tree, or pass `--lang en` or `--lang zh-CN` for a standalone view. Quoted logs, paths and arguments keep their original text. See [host compatibility and language selection](docs/host-compatibility.md) for available evidence and supported capabilities.
 
 ## One set of evidence tools
 

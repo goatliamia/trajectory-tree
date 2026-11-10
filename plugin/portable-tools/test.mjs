@@ -5,7 +5,7 @@ import { join, dirname, resolve, basename } from 'node:path';
 import { createPiSample } from '../../analyzers/pi-sample.mjs';
 import { readPiSession } from '../../analyzers/pi-reader.mjs';
 import { readCodexHistory } from '../../analyzers/codex-reader.mjs';
-import { datasetFromNative } from './sources.mjs';
+import { datasetAtCut, datasetFromNative } from './sources.mjs';
 import { PortableService } from './service.mjs';
 import { executeTool } from './tools.mjs';
 
@@ -23,6 +23,7 @@ try {
   assert.equal(first.summary.unit, 'assistant-cycle'); assert.equal(first.summary.usage.input, 111300);
   assert.equal(first.summary.usage.cachedInput, 31800); assert.equal(first.synthetic, true);
   assert.equal(first.summary.measuredToolIntervals, 12); assert.ok(first.summary.toolCoveredMs <= first.summary.observedTurnSpanMs);
+  assert.equal(first.summary.toolOutcomes.known + first.summary.toolOutcomes.unknown, first.summary.calls);
   const terse = await executeTool(service, 'trajectory_inspect', { snapshot: first.snapshot, samples: false, limit: 2 });
   assert.deepEqual(terse.summary, first.summary, 'Suppressing excerpts preserves the statistics');
   assert.equal(terse.rows[0].firstTask, undefined); assert.equal(terse.rows[0].lastTask, undefined);
@@ -86,6 +87,8 @@ const codex = new PortableService({ load: async () => datasetFromNative('codex',
 try {
   const report = await codex.call('trajectory_inspect', { view: 'cost' });
   assert.equal(report.summary.calls, 4); assert.equal(report.summary.errors, 1);
+  assert.deepEqual(report.summary.toolOutcomes, { calls: 4, returned: 2, errors: 1, unknown: 1,
+    known: 3, outcomeCoverage: 3 / 4, errorRate: 1 / 3 });
   assert.equal(report.summary.usage.records, 1); assert.equal(report.summary.usage.input, 100); assert.equal(report.summary.usage.uncachedInput, 40); assert.equal(report.summary.usage.output, 15);
   assert.equal(report.summary.toolCoveredMs, 10000); assert.equal(report.coverage.crossTurnToolIntervals, 1);
   const io = { snapshot: report.snapshot, view: 'io' };
@@ -94,11 +97,14 @@ try {
   assert.deepEqual(errors.rows.map(r => [r.tool, r.count, r.errors]), [['extension/check', 1, 1]]);
   const abnormal = await executeTool(codex, 'trajectory_inspect', { ...io, outcome: 'abnormal', groupBy: 'tool', limit: 1 });
   assert.equal(abnormal.summary.calls, 2); assert.equal(abnormal.summary.errors, 1);
+  assert.deepEqual(abnormal.summary.toolOutcomes, report.summary.toolOutcomes);
   const abnormalNext = await executeTool(codex, 'trajectory_inspect', { cursor: abnormal.cursor });
   assert.deepEqual(abnormalNext.rows.map(r => [r.tool, r.count, r.errors, r.positions[0].status]), [['commandExecution', 1, 0, 'unknown']]);
   await assert.rejects(executeTool(codex, 'trajectory_inspect', { cursor: abnormal.cursor, outcome: 'error' }), /Cursor/);
   const table = await executeTool(codex, 'trajectory_inspect', { ...io, format: 'data', outcome: 'abnormal', focus: { tool: 'commandExecution' } });
   assert.equal(table.source.query.outcome, 'abnormal');
+  assert.deepEqual(table.coverage.toolOutcomes, { calls: 2, returned: 1, errors: 0, unknown: 1,
+    known: 1, outcomeCoverage: 1 / 2, errorRate: 0 });
   assert.deepEqual(table.rows.map(r => [r.name, r.status]), [['commandExecution', 'unknown']]);
   await assert.rejects(executeTool(codex, 'trajectory_inspect', { view: 'overview', outcome: 'error' }), /only available for the io view/);
   const raw = await codex.call('trajectory_search', { snapshot: report.snapshot, query: 'output without parameters' }); assert.equal(raw.rows.length, 1);
@@ -108,6 +114,28 @@ try {
   const api = new PortableService({ load: async () => datasetFromNative('codex', snapshot) });
   const partial = await api.call('trajectory_inspect', { view: 'cost' }); assert.equal(partial.summary.usage.input, null); assert.equal(partial.summary.toolCoveredMs, null); api.dispose();
 } finally { codex.dispose(); }
+const prior = datasetFromNative('codex', snapshot, { rollout });
+const cut = prior.payload.sessions[0].lastSeq;
+const anchored = datasetAtCut(prior, cut);
+const appended = structuredClone(snapshot);
+appended.thread.turns.push({ id: 'diagnosis-turn', status: 'inProgress', startedAt: 1767225620,
+  items: [{ id: 'diagnosis-prompt', type: 'userMessage', content: [{ type: 'text', text: 'Diagnose the selected calls' }] }] });
+const readLive = () => datasetFromNative('codex', appended, { rollout });
+const evidence = new PortableService({ load: async () => readLive(), rebuildSnapshots: true });
+const stateless = new PortableService({ load: async () => readLive(), rebuildSnapshots: true });
+try {
+  const selected = anchored.records.filter(r => r.kind === 'call').slice(0, 2).map(r => r.seq);
+  const first = await executeTool(evidence, 'trajectory_inspect', { cut, logId: anchored.logId, view: 'io', seqs: [...selected, 5000], limit: 1 });
+  assert.deepEqual(first.scope.callSelection, { requested: 3, matched: 2, unmatched: [5000] });
+  assert.equal(first.summary.turns, 1, 'diagnosis does not include the turn that sent the prompt');
+  const second = await executeTool(stateless, 'trajectory_inspect', { cursor: first.cursor });
+  assert.deepEqual([...first.rows, ...second.rows].map(r => r.seq), selected);
+  const { tool, ...pointer } = second.rows[0].read;
+  assert.equal((await executeTool(stateless, tool, pointer)).logId, anchored.logId);
+  appended.thread.turns[0].items[1].aggregatedOutput = 'a changed earlier record';
+  await assert.rejects(executeTool(evidence, 'trajectory_inspect', { cut, logId: anchored.logId }), /Log identity/);
+} finally { evidence.dispose(); stateless.dispose(); }
+
 const manyTurns = structuredClone(snapshot);
 manyTurns.thread.turns = Array.from({ length: 13 }, (_, i) => ({ ...snapshot.thread.turns[0], id: 'turn-' + i, items: snapshot.thread.turns[0].items.map(item => ({ ...item, id: item.id + '-' + i })) }));
 const allHistory = new PortableService({ load: async () => datasetFromNative('codex', manyTurns) });

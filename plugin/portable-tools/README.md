@@ -20,7 +20,11 @@ pi -e ./plugin/portable-tools
 
 扩展读取当前会话选中的分支、当前 SDK 工具清单与系统提示，并从加载之后记录工具开始/结束时间。不会补造加载前的时间，也不会替换工具、调用模型或写回历史。包内同时提供短 skill。
 
-使用 `/trajectory` 直接生成并打开当前分支视图；`/trajectory --no-open` 只返回链接。过程诊断与静态配置方法分别由 Pi 版 `trace-analysis`、`context-profile` skill 提供，报告仍由模型撰写。
+使用 `/trajectory` 打开当前分支的轨迹，或用 `/trajectory --eval` 直接打开 Eval。两个命令都可加 `--no-open` 只返回链接。
+
+可从 Eval 页面复制草稿命令，回到同一 Pi 会话的终端输入框运行。扩展会在输入框为空时载入草稿，之后可以编辑并手动发送。其他客户端可从 Eval 页面复制提示词。
+
+过程诊断与静态配置方法分别由 Pi 版 `trace-analysis`、`context-profile` skill 提供，报告仍由模型撰写。
 
 离线分析原生 Session v3 JSONL：
 
@@ -32,14 +36,14 @@ node scripts/trajectory-query.mjs --host pi --file /absolute/session.jsonl --req
 
 ## Codex
 
-也可在仓库根目录运行 `node scripts/package-trajectory.mjs --host codex`，从仓库的本地插件源安装 Trajectory Tree。插件内 `$trajectory-view` 生成视图，`$trace-analysis` 和 `$context-profile` 提供方法；未配置 MCP 时使用随包 CLI。
+也可在仓库根目录运行 `node scripts/package-trajectory.mjs --host codex`，从仓库的本地插件源安装 Trajectory Tree。插件内 `$trajectory-view` 打开轨迹，`$trajectory-eval` 打开 Eval；未配置 MCP 时使用随包 CLI。Eval 草稿里的 `cut` 和 `logId` 固定所看的记录切点，回到对话继续查时原样保留。
 
 需要本机可用的官方 `codex app-server`。下面是 MCP 配置示例，将仓库路径替换为自己的绝对路径，按需要加入 Codex 的配置；本仓库不会自动修改全局配置：
 
 ```toml
 [mcp_servers.trajectory]
 command = "node"
-args = ["D:/projects/sql event/plugin/portable-tools/mcp.mjs", "--host", "codex"]
+args = ["C:/path/to/trajectory-tree/plugin/portable-tools/mcp.mjs", "--host", "codex"]
 ```
 
 未绑定线程时先用 `trajectory_search(view="sessions", cwd="项目绝对路径")` 找原生会话 ID，后续传 `session`。也可在启动参数中加 `--thread ID` 固定一个线程。已有同名工具时只启用一套，避免重复注册。
@@ -51,7 +55,7 @@ node scripts/trajectory-query.mjs --host codex --thread THREAD_ID --request /abs
 node scripts/trajectory-query.mjs --host codex --file /absolute/snapshot.json --request /absolute/query.json
 ```
 
-只使用官方读取/列表接口；可选结合属于该线程、且不晚于快照的本地 rollout。`--api-only` 禁用本地补充。官方快照通过 `node scripts/export-codex-thread.mjs --thread THREAD_ID` 导出。
+只使用官方读取/列表接口；可选结合属于该线程、且不晚于快照的本地 rollout。支持有 Zstandard 解压能力的 Node 读取 `.jsonl.zst` 归档。`--api-only` 禁用本地补充。官方快照通过 `node scripts/export-codex-thread.mjs --thread THREAD_ID` 导出。
 
 ## Claude Code
 
@@ -60,7 +64,7 @@ node scripts/package-trajectory.mjs --host claude
 claude --plugin-dir ./dist/trajectory-tree-claude
 ```
 
-使用 `/trajectory-tree:trajectory-view` 生成视图，`/trajectory-tree:trace-analysis` 分析过程。插件在会话生命周期开始时绑定当前 transcript，查询 CLI 使用 `--host claude --file <transcript_path>`。它保留原生工具名、参数与结果，已有用量按消息 ID 去重；完整请求上下文与未记录的执行起止保持未知。见 [Claude 插件说明](../claude/README.md)。
+使用 `/trajectory-tree:trajectory-view` 打开轨迹，`/trajectory-tree:trajectory-eval` 打开 Eval。插件在会话生命周期开始时绑定当前 transcript，查询 CLI 使用 `--host claude --file <transcript_path>`。它保留原生工具名、参数与结果，已有用量按消息 ID 去重；完整请求上下文与未记录的执行起止保持未知。见 [Claude 插件说明](../claude/README.md)。
 
 ## 查询与追查
 

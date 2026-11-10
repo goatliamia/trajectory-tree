@@ -1,11 +1,17 @@
 ---
 name: trace-analysis
-description: 分析会话推进、耗时、用量、反复尝试、工具文件使用和上下文变化，找到值得优先调整的做法。
+description: 从会话轨迹或 Eval 选区诊断推进、耗时、用量、反复尝试、工具文件使用和上下文变化，找到可验证的改法。
 ---
 
-诊断这次工作怎样取得结果、哪些投入有价值、哪些做法拖累了推进，以及下次先改什么。使用全部可取得的运行证据；用户指定问题时直接深入，不必遍历所有主题。
+诊断这次工作怎样取得结果、哪些投入有价值、哪些做法拖累了推进，以及下次先改什么。从用户指定的问题和范围出发，按需读取能支撑判断的运行证据。
 
 Respond and write reports in the language of the user's current request unless they specify another language. Keep source quotations, paths, identifiers and tool arguments verbatim; the language of this skill or the logs does not set the report language.
+
+## 从轨迹树或 Eval 的选区开始
+
+从草稿给出的查询和日志切点开始。选中多轮时，对照关键转折。选中多条枝条时，先核对查询匹配了多少所选调用，再沿与问题相关的记录追读原文。切点无法校验时，说明哪些记录还未核实，并从原视图重新取得选区。
+
+按用户选的关注点组织回答，引用关键记录，串起行动、反馈和实际结果。引用指标时交代样本覆盖，未记录的时长、用量和结果保留为未知。
 
 ## 综合诊断
 
@@ -15,7 +21,7 @@ Respond and write reports in the language of the user's current request unless t
 
 **从值得解释的现象追到可调整的原因。** 围绕同一个问题串起“当时掌握什么—采取什么动作—得到什么反馈—怎样处理—结果怎样”。从明显损失往前追，找到仍有机会改变后续的环节：前提缺失、工具选择或参数、反馈利用、状态交接、环境限制，还是验收太晚。结合当时已经可用的信息判断，不要求模型提前知道后来才暴露的事实。选择相近的成功尝试、前后阶段或不同对象作对照，检查解释能否同时说明它们的差异。
 
-**选能改变下一次工作的建议。** 对每个主要问题，想清楚：如果改变这个动作、材料供给或任务安排，后面哪段等待、补查或返工会减少，什么必要能力仍需保留。优先考虑影响范围大、重复发生、改变成本低的环节。证据支持流程判断时可以先提出改法，精确收益交给验证。
+**选能改变下一次工作的建议。** 将宿主官方工具的语义、权限和保护机制作为固定约束。把建议落在可调整的调用方式、参数、工作流程、工作区约定或项目自有实现。交代改法的适用前提、预期减少的等待或返工，以及要保留的能力。优先考虑影响范围大、重复发生、改变成本低的环节。证据支持流程判断时可以先提出改法，精确收益交给验证。
 
 ### 验证改法
 
@@ -33,6 +39,6 @@ Respond and write reports in the language of the user's current request unless t
 | 查找、读取、修改是否支持了正确判断 | [工具与文件使用](references/io.md) |
 | 材料如何保留、更新和恢复，是否支持后续工作 | [上下文持续使用](references/context.md) |
 
-交付按[报告写作](../../../report/WRITING.md)组织。
+需要交付报告时，按[报告写作](../../../report/WRITING.md)组织。
 
 需要 HTML 报告时读[组件用法](../../../report/AUTHORING.md)；其中报告 CLI 位于本目录相对路径 `../../../scripts/trajectory-report.mjs`。

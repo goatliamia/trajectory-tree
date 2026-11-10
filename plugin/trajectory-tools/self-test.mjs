@@ -568,11 +568,17 @@ eq("cost(fold): totals 只加已上报的值", costTotals(costRows), {
   reasoning: 150,
   total: 16046,
   cacheEfficiency: 14848 / 15667,
+  cacheEfficiencySample: { records: 2, input: 819, cacheRead: 14848 },
 });
 eq("cost(fold): 缺 usage 保持 null", [costRows[2].input, costRows[2].total, costRows[2].cacheEfficiency], [null, null, null]);
 eq("cost(fold): 单字段缺失记 null 且不按 0 求和", [costRows[1].cacheWrite, costTotals(costRows).cacheWrite], [null, 0]);
 check("cost(fold): cache 效率 = cacheRead/(cacheRead+input)", Math.abs(costRows[0].cacheEfficiency - 7168 / 7772) < 1e-12);
 eq("cost(fold): 都没有上报时效率为 null", cacheEfficiency(null, 100), null);
+const unpaired = [{ input: 30, cacheRead: null }, { input: null, cacheRead: 60 }];
+const withoutPairs = costTotals(unpaired);
+eq("cost(fold): 分开上报的用量只进入各自总量", [withoutPairs.input, withoutPairs.cacheRead, withoutPairs.cacheEfficiency], [30, 60, null]);
+eq("cost(fold): 占比与用量样本成对", costTotals([...unpaired, { input: 20, cacheRead: 80 }]).cacheEfficiency, 0.8);
+eq("cost(fold): 两项都为零时无占比", costTotals([{ input: 0, cacheRead: 0 }]).cacheEfficiency, null);
 eq("cost(fold): 按 turn 分组保留 unknown 桶", costByTurn(costRows).map((group) => [group.turn, group.requests]), [[1, 2], [2, 1]]);
 
 const costTool = await search({ view: "cost", session: COST_ID });

@@ -1,0 +1,20 @@
+  <section id="diagnosis-editor" class="editor" role="dialog" aria-labelledby="selection-title" hidden>
+    <div class="editor-head">
+      <div><p id="diagnosis-mode">诊断草稿</p><h2 id="selection-title"></h2></div>
+      <button id="close-editor" type="button" aria-label="关闭草稿">×</button>
+    </div>
+    <div class="intents" aria-label="关注点">
+      <div id="questions"></div>
+      <button id="ask-custom" type="button">自己问</button>
+    </div>
+    <form id="custom" hidden>
+      <input id="question" aria-label="自己的问题" placeholder="想查什么？" maxlength="180" required>
+      <button type="submit">装填</button>
+    </form>
+    <textarea id="draft" aria-label="诊断提示词" spellcheck="false"></textarea>
+    <div class="editor-actions" hidden>
+      <button id="diagnosis-apply" type="button" hidden></button>
+      <button id="diagnosis-copy" type="button">复制草稿</button>
+      <span id="diagnosis-status" role="status"></span>
+    </div>
+  </section>

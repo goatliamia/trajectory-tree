@@ -1,8 +1,9 @@
 import { selectPortableEvidence, inspectData, usageRow, toolName } from './analysis.mjs';
 import { reportTable } from '../trajectory-tools/lib/report-data.js';
+import { summarizeToolOutcomes, TOOL_OUTCOME_BASIS } from '../trajectory-tools/lib/io-outcome.js';
 
 export function portableReportData(data, query, source) {
-  const { session, context, turns, calls, usage, turnNumbers } = selectPortableEvidence(data, query);
+  const { session, context, turns, scopedCalls, calls, usage, turnNumbers } = selectPortableEvidence(data, query);
   const coverage = { host: data.host, context: data.payload.evidence?.context,
     grain: data.host === 'pi' ? 'assistant-cycle / recorded native calls' : data.host === 'claude' ? 'assistant-record / message usage deduplicated by ID' : 'visible-action / response usage; not hidden model steps',
     focusedMetrics: query.focus ? 'Owning turns, not tool/file/skill attribution' : null };
@@ -20,6 +21,8 @@ export function portableReportData(data, query, source) {
   }), ['turn', 'step', 'uncachedInputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'outputTokens']);
   if (query.view === 'repeats') throw Error('Select repeats in the summary, then bind original records to a sequence figure');
   if (query.view === 'io') {
+    coverage.toolOutcomeBasis = TOOL_OUTCOME_BASIS;
+    coverage.toolOutcomes = summarizeToolOutcomes(scopedCalls);
     if (query.groupBy) {
       const rows = inspectData(data, query).rows;
       return table('groups', rows.map((r, i) => ({ id: 'group:' + i, name: r.tool, file: r.file,

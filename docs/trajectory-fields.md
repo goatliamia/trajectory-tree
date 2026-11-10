@@ -2,7 +2,7 @@
 
 本文只描述 **DSH 宿主**上这一套工具与页面的实现，以及每个数字的单位、来源与已知边界。凡标注"估算"的都不是计费数据。
 
-> Pi 与 Codex 走的是另一份实现（`plugin/portable-tools`，读各自的会话文件），字段与行模型不同；本文的字段、参数与口径**不适用于那两个宿主**。Claude Code 没有面向模型的轨迹工具，只有生成视图的斜杠命令。
+> Pi、Codex 和 Claude Code 通过便携取证实现读取各自的原生记录。它们与 DSH 共用工具结果分布口径，各自的时间、用量与步骤字段见宿主说明。 [指标框架](metric-framework.md) · [宿主能力](host-compatibility.md)
 
 - 工具实现：`plugin/trajectory-tools`（DSH 宿主，经 `ctx.tools.register`）
 - 页面实现：`plugin/analysis-view`（`/trajectory` 打开的执行路径页）
@@ -38,6 +38,7 @@
 | 字段 | 单位 | 口径 |
 |---|---|---|
 | `turns` / `steps` / `calls` | 个 | 覆盖区间内实际记录的轮、步、工具调用数 |
+| `toolOutcomes` | 对象 | 轮次和对象范围内筛选前的工具结果分布。含已返回、报错、未知、结果覆盖率和已知结果中的报错占比 |
 | `official.wall` | ms | 官方统计的活动时长：各步 `wall` 之和，**不是**会话墙上时间（会话可能跨天） |
 | `official.model` | ms | 模型处理时间，含首字延迟与解码 |
 | `official.ttft` | ms | 首字延迟合计，已包含在 `model` 内，不可与 `model` 相加 |
@@ -46,13 +47,14 @@
 | `official.toolWall` | ms | 官方逐项 `toolWall` 之和；每项是调用区间的并集（重叠只算一次），跨步调用时可能大于活动步时长，不再置空 |
 | `official.retries` / `toolErrors` | 个 | 重试次数、工具报错次数 |
 | `official.output` | tokens | 输出 token 合计 |
-| `usage.settlements` | 条 | 结算条数；`unknownSettlements` 是缺字段的条数 |
+| `usage.settlements` | 条 | 原始 `assistant/message` 记录数。`unknownSettlements` 计入整条 usage 缺失的记录 |
 | `usage.input` | tokens | 未缓存输入（每次请求的 prompt 中未命中缓存的部分） |
 | `usage.cacheRead` | tokens | 命中缓存读入的 token（**不是**重复计费的部分） |
-| `usage.cacheWrite` | tokens | 写缓存的 token；本会话为 0 |
+| `usage.cacheWrite` | tokens | 已上报的缓存写入量，未上报时为 `null` |
 | `usage.output` | tokens | 输出 |
-| `usage.total` | tokens | `input + cacheRead + cacheWrite + output` |
-| `usage.cacheEfficiency` | 0–1 | `cacheRead / (cacheRead + input)`；不含 output |
+| `usage.total` | tokens | 原始 `totalTokens` 的已上报值之和 |
+| `usage.cacheEfficiency` | 0–1 | 仅在同时上报 `cacheRead` 和 `input` 的记录上，计算 `sum(cacheRead) / (sum(cacheRead) + sum(input))`。缓存写入和输出另列。没有成对记录或分母为零时为 `null` |
+| `usage.cacheEfficiencySample` | 对象 | `records` 是成对记录数，`input` 与 `cacheRead` 是同批记录的分母组成。各用量桶总数仍覆盖各自的已上报记录 |
 | `usage.coverage` | 对象 | 各字段有记录的结算条数，用于判断缺项 |
 | `tokenUsageWholeSession` | tokens | 整会话（不受 `turns` 限制）的四个用量桶 |
 | `contextBreakdownAtCut` | tokens | 切点时的构成：`systemTokens` / `toolsTokens` / `messageTokens`，**估算** |
@@ -80,11 +82,27 @@
 
 | 视图 | 主要字段 |
 |---|---|
-| `latency` | `waitBeforeMs`（上一步等到这一步）、`ttft`、`decode`、`wall`，按轮或按步 |
+| `latency` | 官方时长与 `recordedToolTiming` 分列，支持按轮或按步 |
 | `cost` | `requests[]`（每请求的 input/cacheRead/output）、汇总与 `coverage` |
 | `repeats` | 同参数候选：`key`、`count`、`seqs` |
 | `io` | 工具或文件维度：`returnedCharacters`、`count`、`errors` |
 | `context` | 上下文构成的变化：`change`、`components` |
+
+#### DSH 实录步内工具时长
+
+`view: "latency"` 以原生步骤起止事件为边界，将所属步骤内有起止事件的调用裁剪到该区间。Code Mode 子调用需要原生的 dispatch start 和返回。聚焦文件或工具时，统计范围仍是包含它的完整步骤。
+
+| 字段 | 口径 |
+|---|---|
+| `stepSpanMs` | 实录步骤边界之差 |
+| `calls` / `pairedCalls` | 该步记录的调用数和有起止时间的调用数 |
+| `crossStepCalls` | 有起止时间且越出所属步骤边界的调用数 |
+| `cumulativeMs` | 裁剪后各调用区间的长度之和 |
+| `coveredMs` | 裁剪后区间的并集长度，重叠只计一次 |
+
+缺少步骤边界，或有调用却缺少任何起止配对时，步内时长为 `null`。有实录边界且没有记录到调用的步骤记为 0。部分调用缺失时，时长只代表可配对的子集。`summary.recordedToolTiming` 与按轮结果提供 `measuredSteps` 和逐步求和后的 `sumStepCumulativeMs`、`sumStepCoveredMs`。这些量描述所属步骤内可观测的区间。判断模型或宿主在等待什么，需要另外的依赖或调度证据。
+
+`format: "data"` 将读数放在 `recordedStepSpanMs`、`calls`、`pairedToolCalls`、`crossStepToolCalls`、`clippedToolMs`、`clippedToolCoveredMs`，并引用步骤起止记录。官方 `toolMs` 和 `toolCoveredMs` 仍可用于复核官方投影。
 
 ### 2.5 参数
 
@@ -138,8 +156,8 @@ return 'user'   // 兜底
 ## 4. 已知边界（DSH）
 
 1. `wall`、`tool`、`ttft`、`decode` 都是官方记录的**活动步**之和，不与墙上时间对齐；会话跨天时差距会很大。
-2. `tool` 是配对时长求和，可能互相重叠；要墙钟覆盖看 `toolWall`，它为 `null` 时不要自己相加。
-3. `cacheRead` 不是重复费用，它表示命中缓存的读入量；判断缓存效果看 `cacheEfficiency`。
+2. `tool` 是官方配对时长求和，可能互相重叠。`toolWall` 汇总官方逐步并集。要比较同一实录步内的工具占用区间，使用 `recordedToolTiming`。
+3. `cacheRead` 表示上报的缓存读取量。比较 `cacheEfficiency` 时同时核对配对样本和输入桶定义。
 4. 上下文 token 是估算；与 `usage` 的实报值不同源，不要互相校验。
 5. `samples:false` 只影响**返回体积**，不改变任何统计；需要原文时按 `reads` 里的 seq 调 `trajectory_read`。
 6. `data` 格式保持来源顺序，与排名类 `sort` 互斥。
