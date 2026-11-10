@@ -53,14 +53,14 @@ Eval 和轨迹树共用轨迹数据。用真实任务里的记录对照轮次耗
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.5.tgz ./dsh-analysis-view-0.10.143.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.5.tgz ./dsh-analysis-view-0.10.144.tgz
 ```
 
 重启 `dsh web`，在会话里打开「评估」或用 `/trajectory` 打开轨迹树。选好诊断问题后，点「填入对话」把草稿追加到当前输入框。插件面向 DSH 0.2.2 系列，逐包核对见[兼容与语言说明](docs/host-compatibility.md#dsh-version)。
 
 在路径总览中，点击目标线可查看对应目标。点击事件点可查看那次变更，并从详情进入对应轮次的行动路径或对话。
 
-可另装 [对话搜索](plugin/conversation-search/README.md)，在右侧栏搜索并跳转到消息。DSH 的按需解读会调用当前模型；压缩后对账默认开启，可设 `config.reconcile: false` 关闭。
+可另装 [对话搜索](plugin/conversation-search/README.md)，在右侧栏搜整段会话，按需加载更早的结果，点击可跳到对应轮次。DSH 的按需解读会调用当前模型。压缩后对账默认开启，可设 `config.reconcile: false` 关闭。
 
 [分析面板](plugin/analysis-view/README.md) · [取证工具](plugin/trajectory-tools/README.md)
 

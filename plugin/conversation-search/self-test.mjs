@@ -57,16 +57,49 @@ check("limit: 只回一轮但 matchedTurns 照算", capped.turns.length === 1 &&
 const hit = searchTurns(events, "package.json").turns[0].matches[0];
 check("片段: matchAt 指向命中词", hit.text.slice(hit.matchAt, hit.matchAt + 12).toLowerCase() === "package.json", hit);
 
+const long = Array.from({ length: 24 }, (_, i) => {
+  const turn = i + 1;
+  return [
+    ev("turn/start", i * 5, { turn }),
+    ev("user/message", i * 5 + 1, { content: [{ type: "text", text: "Review the release" }] }),
+    ev("assistant/message", i * 5 + 2, { message: { content: [
+      { type: "text", text: "İ — RELEASE checks for src/[fixture].js" },
+      { type: "reasoning", text: "private-thought" },
+    ] } }),
+    ev("user/message", i * 5 + 3, { source: { kind: "runtime-context" }, content: [{ type: "text", text: "runtime-only" }] }),
+    ev("turn/end", i * 5 + 4, {}),
+  ];
+}).flat();
+const first = searchTurns(long, "release");
+const older = searchTurns(long, "release", { before: first.nextBefore });
+const oldest = searchTurns(long, "release", { before: older.nextBefore });
+const turns = [...first.turns, ...older.turns, ...oldest.turns].map(group => group.turn);
+check("history: newest page starts at turn 24", first.turns[0].turn === 24 && first.nextBefore === 15);
+check("history: all 24 matching turns are reachable without repeats", turns.join(",") === Array.from({ length: 24 }, (_, i) => 24 - i).join(",") && oldest.nextBefore === null);
+check("history: each page counts the full matching session", [first, older, oldest].every(page => page.matchedTurns === 24 && page.totalMatches === 48));
+const terms = searchTurns(long, 'release "src/[fixture].js"');
+const excerpt = terms.turns[0].matches[0];
+check("keywords: all terms within a message, escaped file path and Unicode offsets", terms.totalMatches === 24 &&
+  excerpt.highlights.map(([start, end]) => excerpt.text.slice(start, end)).join("|") === "RELEASE|src/[fixture].js");
+check("phrases: only the exact phrase matches", searchTurns(long, '"review the release"').totalMatches === 24 &&
+  searchTurns(long, '"review release"').totalMatches === 0);
+check("messages: reasoning and runtime-only injections are excluded", searchTurns(long, "private-thought", { scope: "all" }).totalMatches === 0 &&
+  searchTurns(long, "runtime-only", { scope: "all" }).totalMatches === 0);
+
 const log = logIdentity("session-x", events);
 check("logIdentity: 12 位 id 与事件数", log.id.length === 12 && log.events === events.length, log);
 
 /* ---------------- 路由 ---------------- */
 const captured = {};
+let observationOptions, released = 0;
 const ctx = {
   get(name) {
     if (name === "webServer") return { register(route) { captured.route = route; return () => {}; } };
     if (name === "sessionQuery") {
-      return { async observeSession(sessionId) { return { sessionId, events, [Symbol.dispose]() {} }; } };
+      return { async observeSession(sessionId, options) {
+        observationOptions = options;
+        return { sessionId, events: sessionId === "long" ? long : events, [Symbol.dispose]() { released++; } };
+      } };
     }
     return undefined;
   },
@@ -92,6 +125,13 @@ check("route: 200 且按轮返回", found.status === 200 && found.json.matchedTu
 check("route: 轮里带 matches", found.json.turns[0].matches.every((match) => typeof match.seq === "number" && typeof match.text === "string" && typeof match.matchAt === "number"), found.json.turns[0].matches);
 const tools = await call("/conversation-search/search?session=s1&q=package.json&scope=all");
 check("route: scope=all 多一处", tools.json.totalMatches === 3, tools.json.totalMatches);
+const secondPage = await call("/conversation-search/search?session=long&q=release&before=15&limit=10");
+check("route: older pages use an exclusive turn cursor", secondPage.status === 200 &&
+  secondPage.json.turns[0].turn === 14 && secondPage.json.nextBefore === 5 && secondPage.json.matchedTurns === 24);
+check("route: reuses native observation without projection work and releases the lease",
+  observationOptions.projectionMode === "none" && observationOptions.signal instanceof AbortSignal && released === 3);
+check("route: invalid pagination is rejected", (await call("/conversation-search/search?session=s1&q=x&before=NaN")).status === 400 &&
+  (await call("/conversation-search/search?session=s1&q=x&limit=2.5")).status === 400);
 const missing = await call("/conversation-search/search?q=x");
 check("route: 缺 session 返回 400", missing.status === 400, missing.json);
 const noQuery = await call("/conversation-search/search?session=s1");

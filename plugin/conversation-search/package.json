@@ -1,9 +1,9 @@
 {
   "name": "dsh-conversation-search",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
-  "description": "右侧栏的对话搜索:在当前会话的事件日志里搜关键词,点结果跳到对话里对应的轮次",
+  "description": "右侧栏的对话搜索，覆盖当前会话的全部历史并定位匹配轮次",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",

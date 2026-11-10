@@ -1,244 +1,251 @@
-// dsh-conversation-search client half — 右侧栏的「对话搜索」tab。
-// 一次搜索按"轮次"给结果:第几轮、你问了什么、命中的那句话;点一轮滚到对话里对应的位置。
+// Right sidebar for finding recorded messages and jumping to their turns.
 window.__ModuleLoader__.load({
   id: "dsh-conversation-search",
   factory: (require) => {
     const React = require("react");
+    const h = React.createElement;
     let clientCtx = null;
-
-    const STYLE_ID = "dsh-conversation-search-style";
-    const CSS = `
-.cs-root{display:flex;flex-direction:column;height:100%;min-height:0;padding:10px;font-size:13px;color:var(--dsw-alias-label-primary)}
-.cs-bar{display:flex;align-items:center;gap:6px;margin-bottom:6px}
-.cs-input{flex:1;min-width:0;box-sizing:border-box;height:30px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit;padding:0 8px;outline:none}
-.cs-input::placeholder{color:var(--dsw-alias-label-secondary)}
-.cs-input:focus{border-color:var(--dsw-alias-brand-primary)}
-.cs-meta{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dsw-alias-label-secondary);margin-bottom:6px;min-height:14px}
-.cs-scope{margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
-.cs-scope input{margin:0}
-.cs-list{flex:1;min-height:0;overflow:auto;border-top:1px solid var(--dsw-alias-border-l1)}
-.cs-turn{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--dsw-alias-border-l1);padding:10px 8px;cursor:pointer;font:inherit;color:inherit}
-.cs-turn:hover{background:var(--dsw-alias-bg-layer-2)}
-.cs-turn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
-.cs-turn-head{display:flex;align-items:baseline;gap:6px;font-size:11px;color:var(--dsw-alias-label-secondary);margin-bottom:5px}
-.cs-count{margin-left:auto;font-variant-numeric:tabular-nums}
-.cs-match{display:flex;gap:8px;font-size:12px;line-height:1.65;margin-top:3px}
-.cs-role{flex:none;width:30px;text-align:right;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.7}
-.cs-prompt{flex:1;min-width:0;color:var(--dsw-alias-label-secondary);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.cs-text{flex:1;min-width:0;word-break:break-word}
-.cs-text mark{background:transparent;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 16%,transparent);color:inherit;font-weight:500;border-radius:2px;padding:0 1px}
-.cs-empty{padding:24px 8px;text-align:center;color:var(--dsw-alias-label-secondary);font-size:12px}
-.cs-hint{font-size:11px;color:var(--dsw-alias-label-secondary);padding:2px 0}
-`;
-
-    const ensureStyle = () => {
-      if (typeof document === "undefined") return;
-      if (document.getElementById(STYLE_ID) !== null) return;
-      const el = document.createElement("style");
-      el.id = STYLE_ID;
-      el.textContent = CSS;
-      document.head.appendChild(el);
+    const t = (zh, en) => /^zh(?:-|$)/i.test(document.documentElement.lang || window.navigator?.language || "") ? zh : en;
+    const turnLabel = turn => t("第 " + turn + " 轮", "Turn " + turn);
+    const roles = {
+      "user/message": ["你", "You"],
+      "assistant/message": ["助手", "Assistant"],
+      "tool/call": ["工具", "Tool"],
+      "tool/result": ["工具返回", "Tool result"],
+      "tool/ptc-dispatch": ["工具", "Tool"],
     };
 
-    const h = React.createElement;
+    const CSS = `
+.cs-root{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;box-sizing:border-box;padding:12px;color:var(--dsw-alias-label-primary);font-size:13px}
+.cs-field{display:flex;align-items:center;gap:8px;height:36px;flex:none;border:1px solid var(--dsw-alias-border-l1);border-radius:7px;padding:0 10px;color:var(--dsw-alias-label-secondary)}
+.cs-field:focus-within{border-color:var(--dsw-alias-brand-primary)}
+.cs-field svg{flex:none}
+.cs-input{width:100%;min-width:0;height:100%;border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;outline:none}
+.cs-input::placeholder{color:var(--dsw-alias-label-secondary)}
+.cs-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:10px 0 8px}
+.cs-filters{display:inline-flex;gap:8px}
+.cs-filter,.cs-more,.cs-retry{border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer}
+.cs-filter{min-height:26px;padding:2px 3px;border-bottom:2px solid transparent;font-size:12px;white-space:nowrap}
+.cs-filter[aria-pressed="true"]{border-bottom-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-primary);font-weight:600}
+.cs-meta,.cs-note{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.45}
+.cs-note{margin:0 0 8px}
+.cs-list{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;border-top:1px solid var(--dsw-alias-border-l1)}
+.cs-turn{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--dsw-alias-border-l1);padding:10px 6px;cursor:pointer;font:inherit;color:inherit}
+.cs-turn:hover,.cs-more:hover{background:var(--dsw-alias-bg-layer-2)}
+.cs-root button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
+.cs-turn-head{display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-bottom:4px;font-size:12px;font-weight:600}
+.cs-count{color:var(--dsw-alias-label-secondary);font-size:11px;font-weight:400;white-space:nowrap}
+.cs-prompt,.cs-text{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.cs-prompt{-webkit-line-clamp:1;color:var(--dsw-alias-label-secondary);font-size:11px;margin-bottom:6px}
+.cs-match{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px;margin-top:4px;line-height:1.5}
+.cs-role{font-size:11px;color:var(--dsw-alias-label-secondary);white-space:nowrap}
+.cs-text{-webkit-line-clamp:2;min-width:0;font-size:12px;white-space:pre-line}
+.cs-text mark{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 16%,transparent);color:inherit;font-weight:650;border-radius:2px}
+.cs-empty{padding:24px 6px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.55;text-align:center}
+.cs-more{display:block;width:100%;min-height:34px;color:var(--dsw-alias-brand-primary);font-size:12px}
+.cs-more:disabled{opacity:.6;cursor:default}
+.cs-retry{padding:0 4px;color:var(--dsw-alias-brand-primary)}
+.cs-target{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
+`;
 
-    function Mark(props) {
-      const at = props.matchAt;
-      const length = props.query.length;
-      const text = props.text;
-      if (at < 0 || at + length > text.length) return h(React.Fragment, null, text);
-      return h(React.Fragment, null, [text.slice(0, at), h("mark", { key: "m" }, text.slice(at, at + length)), text.slice(at + length)]);
+    function ensureStyle() {
+      if (document.getElementById("dsh-conversation-search-style")) return;
+      const element = document.createElement("style");
+      element.id = "dsh-conversation-search-style";
+      element.textContent = CSS;
+      document.head.appendChild(element);
     }
 
-    function waitForRow(turn, ms) {
-      const selector = '[data-chat-turn="' + turn + '"]';
-      const found = document.querySelector(selector);
-      if (found !== null) return Promise.resolve(found);
-      return new Promise((resolve) => {
+    function marked(match, query) {
+      const parts = [];
+      let start = 0;
+      const ranges = match.highlights ?? [[match.matchAt, match.matchAt + query.length]];
+      for (const [from, to] of ranges) {
+        if (from < start || to > match.text.length || from >= to) continue;
+        parts.push(match.text.slice(start, from), h("mark", { key: from }, match.text.slice(from, to)));
+        start = to;
+      }
+      parts.push(match.text.slice(start));
+      return parts;
+    }
+
+    function chatRow(turn) {
+      return [...document.querySelectorAll('[data-chat-turn="' + turn + '"]')]
+        .find(row => row.getClientRects().length > 0);
+    }
+
+    function waitForRow(turn, signal) {
+      const existing = chatRow(turn);
+      if (existing || signal.aborted) return Promise.resolve(existing);
+      return new Promise(resolve => {
         const observer = new MutationObserver(() => {
-          const row = document.querySelector(selector);
-          if (row !== null) {
-            observer.disconnect();
-            clearTimeout(timer);
-            resolve(row);
-          }
+          const row = chatRow(turn);
+          if (row) finish(row);
         });
-        const timer = setTimeout(() => {
+        const timer = setTimeout(() => finish(undefined), 1500);
+        function cancel() { finish(undefined); }
+        function finish(row) {
           observer.disconnect();
-          resolve(null);
-        }, ms);
+          clearTimeout(timer);
+          signal.removeEventListener("abort", cancel);
+          resolve(row);
+        }
         observer.observe(document.body, { childList: true, subtree: true });
+        signal.addEventListener("abort", cancel, { once: true });
       });
     }
 
-    function flash(row) {
-      const previous = row.style.outline;
-      const previousOffset = row.style.outlineOffset;
-      row.style.outline = "2px solid var(--dsw-alias-brand-primary)";
-      row.style.outlineOffset = "-2px";
-      setTimeout(() => {
-        row.style.outline = previous;
-        row.style.outlineOffset = previousOffset;
-      }, 1600);
-    }
-
-    /** 滚到对话里的那一轮;对话没开着时返回 false,由调用方给一句提示。 */
-    async function reveal(sessionId, group) {
-      const sessions = clientCtx && typeof clientCtx.get === "function" ? clientCtx.get("sessions") : undefined;
-      const binding = sessions && typeof sessions.binding === "function" ? sessions.binding(sessionId) : undefined;
-      const session = binding && binding.session;
-      const seq = group.matches.length > 0 ? group.matches[0].seq : group.promptSeq;
-      let row = document.querySelector('[data-chat-turn="' + group.turn + '"]');
-      if (row === null && seq !== null && seq !== undefined && session && typeof session.loadThrough === "function") {
-        try {
-          await session.loadThrough(seq);
-        } catch {
-          /* 分页失败就按当前已加载的找 */
+    async function reveal(sessionId, group, openView, signal) {
+      try { openView?.("chat", ""); } catch { /* Older hosts keep the current view. */ }
+      let row = chatRow(group.turn);
+      if (!row) {
+        const sessions = clientCtx?.sessions ?? clientCtx?.get?.("sessions");
+        const session = sessions?.binding?.(sessionId)?.session;
+        const seq = group.startSeq ?? group.promptSeq ?? group.matches[0]?.seq;
+        if (session && Number.isSafeInteger(seq)) {
+          try { await session.loadThrough?.(seq); } catch { /* The row may already be available. */ }
         }
-        row = await waitForRow(group.turn, 1500);
+        row = await waitForRow(group.turn, signal);
       }
-      if (row === null) return false;
+      if (!row || signal.aborted) return false;
       row.scrollIntoView({ block: "center", behavior: "smooth" });
-      flash(row);
+      row.classList.add("cs-target");
+      setTimeout(() => row.classList.remove("cs-target"), 1400);
       return true;
     }
 
-    function SearchPane(props) {
-      React.useEffect(() => ensureStyle(), []);
-      const sessionId = props.sessionId;
+    function SearchPane({ sessionId, openView }) {
+      React.useEffect(ensureStyle, []);
       const [query, setQuery] = React.useState("");
+      const [composing, setComposing] = React.useState(false);
       const [scope, setScope] = React.useState("chat");
-      const [state, setState] = React.useState({ status: "idle", data: null, error: null });
+      const [state, setState] = React.useState({ phase: "idle", data: null });
       const [notice, setNotice] = React.useState("");
-      const runId = React.useRef(0);
+      const [retry, setRetry] = React.useState(0);
+      const request = React.useRef(null);
+      const needle = query.trim();
+
+      async function fetchPage(job, before) {
+        if (job.loading || job.signal.aborted) return;
+        job.loading = true;
+        if (before != null) setState(previous => ({ ...previous, phase: "paging" }));
+        const params = new URLSearchParams({ session: sessionId, q: needle, scope });
+        if (before != null) params.set("before", String(before));
+        try {
+          const response = await fetch("/conversation-search/search?" + params, { signal: job.signal, cache: "no-store" });
+          if (!response.ok) throw new Error("Search failed");
+          const result = await response.json();
+          if (job.signal.aborted) return;
+          if (!result.ok || !Array.isArray(result.turns)) throw new Error("Invalid search result");
+          setState(previous => ({
+            phase: "ready",
+            data: before != null ? { ...result, turns: [...(previous.data?.turns ?? []), ...result.turns] } : result,
+          }));
+        } catch {
+          if (!job.signal.aborted) setState(previous => ({ ...previous, phase: "error" }));
+        } finally {
+          job.loading = false;
+        }
+      }
 
       React.useEffect(() => {
-        const needle = query.trim();
-        if (!sessionId || needle === "") {
-          setState({ status: "idle", data: null, error: null });
-          return void 0;
-        }
-        const id = ++runId.current;
         setNotice("");
-        const timer = setTimeout(() => {
-          setState((previous) => ({ status: "loading", data: previous.data, error: null }));
-          const url = "/conversation-search/search?session=" + encodeURIComponent(sessionId) +
-            "&q=" + encodeURIComponent(needle) + "&scope=" + scope;
-          fetch(url, { cache: "no-store" })
-            .then((response) => {
-              if (!response.ok) throw new Error("HTTP " + response.status);
-              return response.json();
-            })
-            .then((json) => {
-              if (id !== runId.current) return;
-              if (json && json.error) throw new Error(String(json.error));
-              setState({ status: "ready", data: json, error: null });
-            })
-            .catch((error) => {
-              if (id !== runId.current) return;
-              setState({ status: "error", data: null, error: String((error && error.message) || error) });
-            });
-        }, 280);
-        return () => clearTimeout(timer);
-      }, [sessionId, query, scope]);
+        const ready = Boolean(sessionId && needle && !composing);
+        setState({ phase: ready ? "loading" : "idle", data: null });
+        if (!ready) return;
+        const controller = new AbortController();
+        const job = { signal: controller.signal, loading: false };
+        request.current = job;
+        const timer = setTimeout(() => fetchPage(job), 220);
+        return () => {
+          clearTimeout(timer);
+          controller.abort();
+          if (request.current === job) request.current = null;
+        };
+      }, [sessionId, needle, scope, retry, composing]);
 
-      const open = (group) => async () => {
-        if (!sessionId) return;
+      const data = state.data && state.data.session === sessionId && state.data.query === needle && state.data.scope === scope ? state.data : null;
+      const busy = state.phase === "loading" || state.phase === "paging";
+      const meta = data ? t(data.matchedTurns + " 轮 · " + data.totalMatches + " 条匹配",
+        data.matchedTurns + " turns · " + data.totalMatches + " matches") : busy ? t("搜索中…", "Searching…") : "";
+
+      async function jump(group) {
+        const job = request.current;
+        if (!job) return;
         setNotice("");
-        const ok = await reveal(sessionId, group);
-        if (!ok) setNotice("没找到「对话」里的这一轮;切到「对话」再点一次");
-      };
+        const found = await reveal(sessionId, group, openView, job.signal);
+        if (!found && !job.signal.aborted) setNotice(t("切到对话后再点一次结果。", "Open the conversation, then select the result again."));
+      }
 
-      const data = state.data;
-      const groups = data && Array.isArray(data.turns) ? data.turns : [];
-      const meta = state.status === "error"
-        ? "搜索失败:" + state.error
-        : data
-          ? data.matchedTurns + " 轮 · " + data.totalMatches + " 处" + (data.truncated ? "(显示前 " + data.returnedTurns + " 轮)" : "")
-          : state.status === "loading" ? "搜索中…" : "";
+      const cards = (data?.turns ?? []).map(group => h("button", {
+        key: group.turn, type: "button", className: "cs-turn", onClick: () => jump(group),
+        title: t("跳到" + turnLabel(group.turn), "Jump to " + turnLabel(group.turn)),
+      },
+      h("div", { className: "cs-turn-head" },
+        h("span", null, turnLabel(group.turn)),
+        h("span", { className: "cs-count" }, t(group.count + " 条匹配", group.count + " matches"))),
+      group.prompt && !group.matches.some(match => match.seq === group.promptSeq)
+        ? h("div", { className: "cs-prompt" }, group.prompt) : null,
+      group.matches.map(match => h("div", { key: match.seq, className: "cs-match" },
+        h("span", { className: "cs-role" }, t(...(roles[match.type] ?? ["记录", "Record"]))),
+        h("span", { className: "cs-text" }, marked(match, data.query))))));
 
-      const cards = groups.map((group) => {
-        const promptIsMatch = group.matches.some((match) => match.seq === group.promptSeq);
-        return h("button", {
-          key: group.turn,
-          className: "cs-turn",
-          onClick: open(group),
-          title: "跳到第 " + group.turn + " 轮",
-        }, [
-          h("div", { key: "head", className: "cs-turn-head" }, [
-            h("span", { key: "t" }, "第 " + group.turn + " 轮"),
-            h("span", { key: "c", className: "cs-count" }, group.count + " 处"),
-          ]),
-          group.prompt !== "" && !promptIsMatch
-            ? h("div", { key: "prompt", className: "cs-match" }, [
-              h("span", { key: "r", className: "cs-role" }, "你"),
-              h("span", { key: "t", className: "cs-prompt" }, group.prompt),
-            ])
-            : null,
-          group.matches.map((match) => h("div", { key: match.seq, className: "cs-match" }, [
-            h("span", { key: "r", className: "cs-role" }, match.role),
-            h("span", { key: "t", className: "cs-text" }, h(Mark, { text: match.text, matchAt: match.matchAt, query: data.query })),
-          ])),
-        ]);
-      });
+      const empty = !sessionId ? t("先打开一个会话。", "Open a conversation first.")
+        : data && !data.turns.length ? t("没找到匹配。可以少输几个词，或选择「含工具」。", "No matches. Try fewer words or include tools.")
+        : !needle ? t("用空格分隔关键词，用引号匹配完整短语。", "Separate keywords with spaces. Quote an exact phrase.")
+        : null;
 
-      return h("div", { className: "cs-root" }, [
-        h("div", { key: "bar", className: "cs-bar" }, [
+      return h("section", { className: "cs-root", "aria-label": t("对话搜索", "Conversation search") },
+        h("label", { className: "cs-field" },
+          h("svg", { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", "aria-hidden": true },
+            h("circle", { cx: 6.8, cy: 6.8, r: 4.3, stroke: "currentColor", strokeWidth: 1.3 }),
+            h("path", { d: "m10 10 3.4 3.4", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round" })),
           h("input", {
-            key: "input",
-            className: "cs-input",
-            type: "search",
-            value: query,
-            autoFocus: true,
-            placeholder: "在对话里搜关键词",
-            "aria-label": "在对话里搜关键词",
-            onChange: (event) => setQuery(event.target.value),
-            onKeyDown: (event) => {
-              if (event.key === "Escape") setQuery("");
-            },
-          }),
-        ]),
-        h("div", { key: "meta", className: "cs-meta" }, [
-          h("span", { key: "m" }, sessionId ? meta : "还没有选中会话"),
-          h("label", { key: "scope", className: "cs-scope", title: "默认只搜你和助手说过的话" }, [
-            h("input", {
-              type: "checkbox",
-              checked: scope === "all",
-              onChange: (event) => setScope(event.target.checked ? "all" : "chat"),
-            }),
-            "也搜工具",
-          ]),
-        ]),
-        notice !== "" ? h("div", { key: "notice", className: "cs-hint" }, notice) : null,
-        h("div", { key: "list", className: "cs-list" }, [
-          cards.length > 0
-            ? cards
-            : h("div", { key: "empty", className: "cs-empty" },
-              state.status === "ready" ? "没有匹配的内容" : "输入关键词,停顿即搜索"),
-        ]),
-      ]);
+            className: "cs-input", type: "search", value: query, autoFocus: true, maxLength: 240, disabled: !sessionId,
+            placeholder: t("搜索当前会话", "Search this conversation"), "aria-label": t("搜索当前会话", "Search this conversation"),
+            onChange: event => setQuery(event.target.value),
+            onCompositionStart: () => setComposing(true),
+            onCompositionEnd: event => { setComposing(false); setQuery(event.currentTarget.value); },
+            onKeyDown: event => { if (event.key === "Escape" && query && !composing) { event.stopPropagation(); setQuery(""); } },
+          })),
+        h("div", { className: "cs-bar" },
+          h("div", { className: "cs-filters", role: "group", "aria-label": t("搜索范围", "Search scope") },
+            [["chat", t("消息", "Messages")], ["all", t("含工具", "Include tools")]].map(([id, label]) => h("button", {
+              key: id, type: "button", className: "cs-filter", "aria-pressed": scope === id, onClick: () => setScope(id),
+            }, label))),
+          h("span", { className: "cs-meta", role: "status" }, meta)),
+        notice ? h("p", { className: "cs-note", role: "status" }, notice) : null,
+        state.phase === "error" ? h("p", { className: "cs-note", role: "status" },
+          t("搜索未完成。", "Search could not finish."),
+          !data ? h("button", { type: "button", className: "cs-retry", onClick: () => setRetry(value => value + 1) }, t("重试", "Retry")) : null) : null,
+        h("div", { className: "cs-list", "aria-busy": busy },
+          empty ? h("div", { className: "cs-empty" }, empty) : null,
+          cards,
+          data?.nextBefore != null ? h("button", {
+            type: "button", className: "cs-more", disabled: busy,
+            onClick: () => request.current && fetchPage(request.current, data.nextBefore),
+          }, state.phase === "paging" ? t("正在加载…", "Loading…") : t("加载更早的结果", "Load older results")) : null));
     }
 
     return {
-      inject: ["slots", "sidebarRightTabs"],
+      inject: ["slots", "sidebarRightTabs", "sessions"],
       apply(ctx) {
         clientCtx = ctx;
         ctx.sidebarRightTabs.register({
           id: "dsh-conversation-search",
           kind: "conversation-search",
-          title: () => "对话搜索",
+          title: () => t("对话搜索", "Conversation search"),
           guide: [{
             id: "conversation-search",
             order: 30,
-            title: () => "对话搜索",
-            description: () => "在当前会话里搜关键词,点结果跳到那一轮",
+            title: () => t("对话搜索", "Conversation search"),
+            description: () => t("搜索当前会话的全部历史，点击结果回到对应轮次。", "Search the full conversation and jump to the matching turn."),
           }],
         });
-        const slots = ctx.slots;
-        if (!slots) return;
-        slots.inject("sidebar.right.pane.tab", () => slots.register({
+        ctx.slots?.inject("sidebar.right.pane.tab", () => ctx.slots.register({
           name: "sidebar.right.pane.tab",
           key: "dsh-conversation-search",
+          inject: sessionId => typeof sessionId === "string" ? { sessionId } : {},
         }, SearchPane));
       },
     };

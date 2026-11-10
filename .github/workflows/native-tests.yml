@@ -50,6 +50,7 @@ jobs:
           lib/i18n-test.mjs
           plugin/analysis-view/self-test.mjs
           plugin/analysis-view/eval-test.mjs
+          plugin/conversation-search/self-test.mjs
           experiments/corpus/acceptance-eval-test.mjs
           plugin/analysis-view/presentation-test.mjs
           docs/demo/layout-review/geist-interaction-test.mjs

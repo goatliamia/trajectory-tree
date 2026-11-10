@@ -38,7 +38,7 @@ Pi：`pi -e ./dist/trajectory-tree-pi`。`/trajectory` 从 SessionManager 读取
 
 Claude Code：`claude --plugin-dir ./dist/trajectory-tree-claude`。原生 `SessionStart` hook 在启动、恢复、清空、压缩或 fork 时提供当前 `session_id` 与 `transcript_path`，不在每轮提示重复注入；CLI 显式读取该文件。支持可见消息、工具参数与结果及已记录用量，详情见 [Claude 插件](../plugin/claude/README.md)。
 
-DSH：`/trajectory` 打开当前会话的轨迹树，「评估」使用同一数据管线。两种视图都能生成诊断草稿并填入对话。共享资源由 `node scripts/sync-view-assets.mjs` 生成，打包前自动同步。取证插件附带两项诊断 skill 及其引用资源。
+在 DSH 里，`/trajectory` 打开当前会话的轨迹树，「评估」使用同一数据管线。两种视图都能生成诊断草稿并填入对话。共享资源由 `node scripts/sync-view-assets.mjs` 生成，打包前自动同步。取证插件附带两项诊断 skill 及其引用资源。右栏搜索可单独安装。 [对话搜索](../plugin/conversation-search/README.md)
 
 ## 运行与资源
 

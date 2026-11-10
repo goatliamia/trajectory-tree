@@ -10,6 +10,8 @@
   const errorCells = new Map();
   let selectedError = null;
   let usageTurn = null;
+  const usagePair = [];
+  let usageSlot = 0;
   const state = { turn: null, sort: 'time', allTools: false, tool: null };
   const standardOrder = ['tool-comparison', 'tool-errors', 'turn-usage'];
   const views = {
@@ -408,7 +410,7 @@
     const distance = row => Math.abs(row.output - slowestBelowMedian.output);
     const closest = samples.filter(row => row !== slowestBelowMedian)
       .reduce((nearest, row) => !nearest || distance(row) < distance(nearest) ? row : nearest, null);
-    const peers = new Map(closest ? [[slowestBelowMedian.number, closest.number], [closest.number, slowestBelowMedian.number]] : []);
+    if (closest) usagePair.push(slowestBelowMedian.number, closest.number);
     const x = usageScale(ordered.at(-1).output, 1_000,
       [1, 3, 10, 30, 100, 300, 1_000, 3_000, 10_000, 30_000, 100_000, 300_000, 1_000_000, 3_000_000, 10_000_000]);
     const y = usageScale(Math.max(...samples.map(row => row.elapsed)), 10_000,
@@ -417,8 +419,7 @@
     const elapsedTick = ms => ms >= 3_600_000 ? `${ms / 3_600_000}h` : ms >= 60_000 ? `${ms / 60_000}m` : shortDuration(ms);
     const medianX = x.place(median);
     const peerLink = closest ? `<svg id="usage-peer-link" class="usage-peer-link" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" hidden>
-      <line x1="${x.place(slowestBelowMedian.output)}" y1="${100 - y.place(slowestBelowMedian.elapsed)}"
-        x2="${x.place(closest.output)}" y2="${100 - y.place(closest.elapsed)}" vector-effect="non-scaling-stroke" />
+      <line vector-effect="non-scaling-stroke" />
     </svg>` : '';
 
     $('usage-chart').innerHTML = `<div class="usage-chart-head">
@@ -444,7 +445,7 @@
             `Turn ${fmt(row.number)}, ${fmt(row.output)} output tokens, ${clockDuration(row.elapsed)} elapsed, ${fmt(row.errors)} tool errors`);
           const horizontal = x.place(row.output);
           return `<button type="button" class="usage-point" data-usage-turn="${row.number}" data-errors="${row.errors > 0}"
-            data-peer="${peers.get(row.number) ?? ''}" data-edge="${horizontal > 82}" style="left:${horizontal}%;bottom:${y.place(row.elapsed)}%" tabindex="-1"
+            data-edge="${horizontal > 82}" style="left:${horizontal}%;bottom:${y.place(row.elapsed)}%" tabindex="-1"
             aria-pressed="false" aria-controls="usage-evidence" aria-label="${label}" title="${label}">
             <span aria-hidden="true">${turnLabel(fmt(row.number))}</span></button>`;
         }).join('')}
@@ -459,32 +460,61 @@
     const examples = $('usage-examples');
     examples.hidden = !closest;
     if (closest) {
-      const elapsedGap = Math.abs(closest.elapsed - slowestBelowMedian.elapsed);
       examples.innerHTML = `<p><span class="usage-pair-label">${t('两轮对照', 'Turn comparison')}</span>
-        ${t('输出相差', 'Output difference')} <strong>${fmt(distance(closest))} ${t('token', 'tokens')}</strong> · ${t('耗时相差', 'Duration difference')} <strong>${clockDuration(elapsedGap)}</strong></p>` +
-        [slowestBelowMedian, closest].map(row =>
-        `<button type="button" data-usage-turn="${row.number}" aria-pressed="false" aria-controls="usage-evidence">
-          <span>${turnLabel(fmt(row.number))}</span><code><span class="usage-example-output">${fmt(row.output)} ${t('token', 'tokens')}</span><span class="usage-example-divider"> · </span><span class="usage-example-time">${clockDuration(row.elapsed)}</span></code>
-        </button>`).join('');
+        <span id="usage-pair-delta" aria-live="polite"></span></p>` +
+        usagePair.map(() => `<button type="button" data-usage-turn="" aria-pressed="false" aria-controls="usage-evidence">
+          <span class="usage-example-turn"></span><code><span class="usage-example-output"></span><span class="usage-example-divider"> · </span><span class="usage-example-time"></span></code>
+        </button>`).join('') +
+        `<p>${t('点轮次卡选中一侧，再点散点更换。', 'Select a turn card, then click a point to replace it.')}</p>`;
     }
     return slowestBelowMedian.number;
+  }
+
+  function updateUsagePair(points, comparing) {
+    if (usagePair.length !== 2) return;
+    const metrics = usagePair.map(turn => turns.get(turn).metrics);
+    const outputGap = Math.abs(metrics[0].usage.output - metrics[1].usage.output);
+    const elapsedGap = Math.abs(metrics[0].timing.turns.ms - metrics[1].timing.turns.ms);
+    $('usage-pair-delta').innerHTML = `${t('输出相差', 'Output difference')} <strong>${fmt(outputGap)} ${t('token', 'tokens')}</strong> · ${t('耗时相差', 'Duration difference')} <strong>${clockDuration(elapsedGap)}</strong>`;
+    const cards = $('usage-examples').querySelectorAll('button');
+    usagePair.forEach((turn, index) => {
+      const card = cards[index];
+      const point = points.find(button => Number(button.dataset.usageTurn) === turn);
+      card.dataset.usageTurn = turn;
+      card.querySelector('.usage-example-turn').textContent = turnLabel(fmt(turn));
+      card.querySelector('.usage-example-output').textContent = fmt(metrics[index].usage.output) + t(' token', ' tokens');
+      card.querySelector('.usage-example-time').textContent = clockDuration(metrics[index].timing.turns.ms);
+      if (point) {
+        const endpoint = index + 1;
+        const line = $('usage-peer-link').firstElementChild;
+        line.setAttribute('x' + endpoint, parseFloat(point.style.left));
+        line.setAttribute('y' + endpoint, 100 - parseFloat(point.style.bottom));
+      }
+    });
+    $('usage-peer-link').toggleAttribute('hidden', !comparing);
+    $('usage-peer-note').toggleAttribute('hidden', !comparing);
   }
 
   function selectUsageTurn(turn) {
     usageTurn = turn;
     const row = turns.get(turn);
-    const buttons = [...$('turn-usage').querySelectorAll('[data-usage-turn]')];
-    const points = buttons.filter(button => button.classList.contains('usage-point'));
+    const points = [...$('usage-chart').querySelectorAll('.usage-point')];
     const selectedPoint = points.find(button => Number(button.dataset.usageTurn) === turn);
     const focusPoint = selectedPoint ?? points[0];
-    const comparing = Boolean(selectedPoint?.dataset.peer);
-    for (const button of buttons) button.setAttribute('aria-pressed', String(Number(button.dataset.usageTurn) === turn));
+    const comparing = Boolean(selectedPoint && usagePair.length === 2);
+    if (comparing) {
+      const slot = usagePair.indexOf(turn);
+      if (slot >= 0) usageSlot = slot;
+      else usagePair[usageSlot] = turn;
+    }
+    updateUsagePair(points, comparing);
+    for (const button of $('turn-usage').querySelectorAll('[data-usage-turn]')) {
+      button.setAttribute('aria-pressed', String(Number(button.dataset.usageTurn) === turn));
+    }
     for (const point of points) {
       point.tabIndex = point === focusPoint ? 0 : -1;
-      point.classList.toggle('is-peer', point.dataset.peer === String(turn));
+      point.classList.toggle('is-peer', comparing && Number(point.dataset.usageTurn) === usagePair[1 - usageSlot]);
     }
-    $('usage-peer-link')?.toggleAttribute('hidden', !comparing);
-    $('usage-peer-note')?.toggleAttribute('hidden', !comparing);
     $('usage-inspector').classList.toggle('has-active-pair', comparing);
     $('usage-inspector').hidden = !row;
     $('usage-layout').classList.toggle('has-selection', Boolean(row));
@@ -516,7 +546,7 @@
     $('usage-open-turn').hidden = !outcomes.calls;
     diagnosisAction($('usage-evidence'), t('问这轮', 'Ask about this turn'), { kind: 'rounds', turns: [turn] }, 'latency');
     if (comparing) diagnosisAction($('usage-evidence'), t('对照这两轮', 'Compare these turns'),
-      { kind: 'rounds', turns: [turn, Number(selectedPoint.dataset.peer)] }, 'latency');
+      { kind: 'rounds', turns: [...usagePair] }, 'latency');
   }
 
   function renderSupporting({ context, files, task, outcomes, checks, timing }) {
@@ -567,7 +597,7 @@
     renderComparison(metrics);
     renderInspector(metrics);
     renderErrors(metrics);
-    selectUsageTurn(turn ?? defaultUsageTurn);
+    selectUsageTurn(turn ?? usageTurn ?? defaultUsageTurn);
     renderSupporting(metrics);
   }
 

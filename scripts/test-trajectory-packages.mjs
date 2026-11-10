@@ -93,7 +93,15 @@ try{
  const dshView=unpack('dsh-analysis-view',dshViewVersion);
  const {renderEvalPage}=await import(pathToFileURL(join(dshView,'lib/eval/render.mjs')).href);
  assert.ok(renderEvalPage({},{locale:'zh-CN',diagnosis:{session:'package-dsh'},mode:'dsh'}).includes('id="diagnosis-editor"'));
- console.log('Five archives passed independent extraction, resource allowlists, native metadata and view assets. Codex/Pi/Claude Eval cuts were verified by the packaged query CLI.');
+ const searchVersion=JSON.parse(readFileSync(join(root,'plugin/conversation-search/package.json'),'utf8')).version;
+ const searchName='dsh-conversation-search';
+ if(existsSync(join(release,searchName+'-'+searchVersion+'.tgz'))){
+  const search=unpack(searchName,searchVersion);
+  assert.ok(existsSync(join(search,'lib/client.js')));
+  execFileSync(process.execPath,[join(search,'self-test.mjs')],{cwd:search,windowsHide:true});
+  console.log('The optional DSH search archive passed its packaged route and full-history tests.');
+ }
+ console.log('Five core archives passed independent extraction, resource allowlists, native metadata and view assets. Codex/Pi/Claude Eval cuts were verified by the packaged query CLI.');
 }finally{
  if(!resolve(work).startsWith(resolve(tmpdir(),'trajectory-package-test-')))throw Error('Unexpected cleanup path');
  rmSync(work,{recursive:true,force:true});

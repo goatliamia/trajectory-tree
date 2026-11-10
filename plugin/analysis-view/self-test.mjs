@@ -102,8 +102,9 @@ const mod = moduleDef.factory((name) => {
 });
 check("client: 只依赖 react", required.length > 0 && required.every((name) => name === "react"), required);
 
-let EvalDashboard = null, ContextPanel = null;
+let EvalDashboard = null;
 const conversationPanels = [];
+const contextPanels = [];
 const draftRequests = [], binding = {};
 let canApplyDraft = true;
 const ctx = {
@@ -118,7 +119,7 @@ const ctx = {
     register(definition, component) {
       if (definition && definition.name === "conversation.view") conversationPanels.push([definition.id, definition.label(), definition.order]);
       if (definition && definition.id === "analysis") EvalDashboard = component;
-      if (definition && definition.name === "main" && definition.key === "context-manager") ContextPanel = component;
+      if (definition.id === "context-manager" || definition.key === "context-manager") contextPanels.push(definition.name);
       return () => {};
     },
   },
@@ -127,6 +128,7 @@ mod.apply(ctx);
 check("client: 两个会话面板依次可打开", JSON.stringify(conversationPanels) === JSON.stringify([
   ["path", "轨迹树", 30], ["analysis", "评估", 40],
 ]));
+check("client: 已移除左侧上下文管理入口", contextPanels.length === 0);
 
 /* ---------------- 渲染工具 ---------------- */
 function render(component, props, seeds) {
@@ -321,8 +323,6 @@ sandbox.window.document.documentElement.lang = 'en';
 mutationCallback();
 const englishText = textOf(render(Panel, props, { 0: readyState })).join(' ');
 check('locale: lang change requests render and translates categories without altering records', refreshCount === 1 && englishText.includes('Analysis') && englishText.includes('Files') && englishText.includes('调用失败') && englishText.includes('abcdef123456'));
-const rangeText = textOf(render(ContextPanel, {}, { 1: '30d', 2: { status: 'loading' } })).join(' ');
-check('locale: context ranges follow language on render', rangeText.includes('Last 30 days') && rangeText.includes('Today'));
 sandbox.window.localStorage = { getItem: () => 'zh' };
 storageCallback({ key: 'trajectory-language' });
 const preferredText = textOf(render(Panel, props, { 0: readyState })).join(' ');

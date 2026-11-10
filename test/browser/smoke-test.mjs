@@ -10,6 +10,8 @@ import { createPiSample } from '../../analyzers/pi-sample.mjs';
 import { adaptPiSession } from '../../analyzers/pi-adapter.mjs';
 import { renderTracePage } from '../../plugin/analysis-view/lib/index.js';
 import { generateTraceView } from '../../view/generate.mjs';
+import { datasetFromNative } from '../../plugin/portable-tools/sources.mjs';
+import { writeHostEvalPage } from '../../view/eval.mjs';
 
 const goalText = 'Check <limits> & results';
 const secondGoalText = 'Review changed files';
@@ -78,6 +80,10 @@ before(async () => {
     const view = await generateTraceView({ ...portable[0], initialView: 'eval', locale, output: join(directory, name + '.html') });
     assets.set('/' + name, ['text/html; charset=utf-8', await readFile(view.output)]);
   }
+  const comparison = datasetFromNative('pi', portable[0].input);
+  for (const [index, turn] of comparison.payload.sessions[0].turns.entries()) turn.durationMs = (index + 1) * 1000;
+  const comparisonView = writeHostEvalPage(comparison, join(directory, 'eval-comparison.html'), { locale: 'en' });
+  assets.set('/eval-comparison', ['text/html; charset=utf-8', await readFile(comparisonView.output)]);
   for (const host of ['dsh', 'codex']) assets.set('/host-' + host, ['text/html; charset=utf-8', hostDocument('/' + host)]);
   server = createServer((req, res) => {
     const asset = assets.get(new URL(req.url, 'http://localhost').pathname);
@@ -229,6 +235,34 @@ async function checkEval(page) {
   assert.deepEqual(query.focus, { tool: 'read' });
 }
 
+async function checkTurnComparison(page) {
+  await page.goto(origin + '/eval-comparison');
+  const cards = page.locator('#usage-examples button');
+  const point = number => page.locator('.usage-point[data-usage-turn="' + number + '"]');
+  const paired = () => cards.evaluateAll(buttons => buttons.map(button => Number(button.dataset.usageTurn)));
+  const initial = await paired();
+  assert.equal(initial.length, 2);
+  await point(2).click();
+  assert.deepEqual(await paired(), [2, initial[1]], 'A chart point replaces the active side');
+  await cards.nth(1).click();
+  await point(3).click();
+  assert.deepEqual(await paired(), [2, 3], 'Either side can be selected and replaced');
+  assert.equal(await point(3).getAttribute('aria-pressed'), 'true');
+  assert.ok(await point(2).evaluate(element => element.classList.contains('is-peer')));
+  const line = page.locator('#usage-peer-link line');
+  const x = async number => point(number).evaluate(element => parseFloat(element.style.left));
+  const y = async number => point(number).evaluate(element => 100 - parseFloat(element.style.bottom));
+  assert.equal(await page.locator('#usage-peer-link').isVisible(), true);
+  assert.equal(Number(await line.getAttribute('x1')), await x(2));
+  assert.equal(Number(await line.getAttribute('x2')), await x(3));
+  assert.equal(Number(await line.getAttribute('y1')), await y(2));
+  assert.equal(Number(await line.getAttribute('y2')), await y(3));
+  await page.getByRole('button', { name: 'Compare these turns', exact: true }).click();
+  const draft = await page.locator('#draft').inputValue();
+  const query = JSON.parse(draft.match(/trajectory_inspect\((\{[^\n]*?\})\)/)[1]);
+  assert.deepEqual(query.turns, { from: 2, to: 3 }, 'The draft uses the new comparison pair');
+}
+
 for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
   test(name + ' opens the shared trace and Eval with scoped host actions', { timeout: 60_000 }, async t => {
     const browser = await engine.launch();
@@ -250,6 +284,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
       assert.equal(await page.locator('[data-br-layer="goal"], [data-chat-jump]').count(), 0);
     }
     await checkEval(page);
+    await checkTurnComparison(page);
     assert.deepEqual(dshRequests, [], 'Frozen and portable pages do not request live DSH stages');
     assert.deepEqual(errors, [], 'No renderer errors');
   });

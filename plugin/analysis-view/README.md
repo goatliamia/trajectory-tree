@@ -18,7 +18,7 @@ English | [中文](#中文)
 A DSH Web GUI plugin providing two views for the current conversation.
 
 - **Trajectory Tree** shows the execution path, turn details and evidence layers.
-- **Eval** shows output against elapsed time, tool comparisons, and recorded errors. Scope the charts to the session or one of the latest 120 turns. Open **Detailed metrics** for the underlying metrics and records.
+- **Eval** shows output against elapsed time, tool comparisons, and recorded errors. Scope the charts to the session or one of the latest 120 turns. In the scatter plot, select either comparison card and click a point to replace that turn. Open **Detailed metrics** for the underlying metrics and records.
 - In the tree, hold to select an item or hold and drag to select a region. In Eval, start a diagnosis from the chart details. **Fill conversation** appends the editable draft to the current composer, where you can review and send it.
 
 ### Runtime evidence in Eval
@@ -47,9 +47,9 @@ Open **Detailed metrics** for the session overview and the optional interpretati
 Dynamic plugins are session-scoped and vanish on reload; this one is installed into the web profile.
 
 ```text
-1. npm pack                       # -> dsh-analysis-view-0.10.143.tgz
+1. npm pack                       # -> dsh-analysis-view-0.10.144.tgz
 2. add to ~/.dsh/profiles/web/package.json:
-     dependencies:  "dsh-analysis-view": "file:<abs path>/dsh-analysis-view-0.10.143.tgz"
+     dependencies:  "dsh-analysis-view": "file:<abs path>/dsh-analysis-view-0.10.144.tgz"
      dsh.profile.bundles: append "dsh-analysis-view"
 3. pnpm install                   # in ~/.dsh/profiles/web
 4. rebuild / restart `dsh web`    # so the new client module enters the bundle
@@ -96,7 +96,7 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
 为 DSH Web GUI 的当前会话提供两个视图。
 
 - **轨迹树**浏览执行路径、逐轮详情和证据图层。
-- **评估**展示输出量与轮次耗时、工具对照和报错分布。可选整段会话或最近 120 轮中的一轮。原有指标与证据可在「统计明细」查看。
+- **评估**展示输出量与轮次耗时、工具对照和报错分布。可选整段会话或最近 120 轮中的一轮。点一张对照卡，再点散点可更换这一侧的轮次。原有指标与证据可在「统计明细」查看。
 - 在轨迹图上长按可选中对象，长按后拖动可圈选。在 Eval 图表详情中直接提问。选择关注点并编辑草稿后，点「填入对话」会把草稿追加到当前会话的输入框，等你检查后发送。
 
 ### 评估里的运行证据
@@ -119,9 +119,9 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
 动态插件是会话级、刷新即失;这个是装进 web profile 的常驻插件。
 
 ```text
-1. npm pack                       # 生成 dsh-analysis-view-0.10.143.tgz
+1. npm pack                       # 生成 dsh-analysis-view-0.10.144.tgz
 2. 在 ~/.dsh/profiles/web/package.json 中:
-     dependencies 增加 "dsh-analysis-view": "file:<绝对路径>/dsh-analysis-view-0.10.143.tgz"
+     dependencies 增加 "dsh-analysis-view": "file:<绝对路径>/dsh-analysis-view-0.10.144.tgz"
      dsh.profile.bundles 追加 "dsh-analysis-view"
 3. 在 ~/.dsh/profiles/web 下执行 pnpm install
 4. 重建/重启 `dsh web`,让新的 client 模块进入前端包
