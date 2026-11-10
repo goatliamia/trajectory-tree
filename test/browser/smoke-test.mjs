@@ -163,11 +163,15 @@ async function checkDsh(page) {
   await page.mouse.up();
   assert.ok(await canvas.evaluate(el => el.scrollLeft) > left + 40);
 
+  const previousCanvasWidth = await canvas.evaluate(el => el.clientWidth);
   await page.setViewportSize({ width: 900, height: 650 });
-  await page.waitForFunction(() => {
-    const doc = document.querySelector('iframe').contentDocument;
-    return Math.abs(Number(doc.querySelector('#br-clip rect')?.getAttribute('width')) - doc.getElementById('graph-scroll').clientWidth) <= 1;
-  });
+  await page.waitForFunction(previousWidth => {
+    const frame = document.querySelector('iframe');
+    const doc = frame.contentDocument;
+    const width = doc.getElementById('graph-scroll').clientWidth;
+    return frame.contentWindow.innerWidth === 900 && width < previousWidth &&
+      Math.abs(Number(doc.querySelector('#br-clip rect')?.getAttribute('width')) - width) <= 1;
+  }, previousCanvasWidth);
   await trace.locator('#review-rounds').click();
   await trace.locator('[data-review-round-context="1"]').click();
   await trace.locator('[data-chat-jump="1"]').click();
