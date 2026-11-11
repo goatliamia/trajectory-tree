@@ -1,5 +1,12 @@
 // Overview interface copy. Session and tool evidence stays in its original language.
 export const overviewMessages = {
+  "段会话": "sessions",
+  "等待时间": "Wait time",
+  "查看轮次": "View turns",
+  "有计时": "timed",
+  "报错频次与后续返回": "Error frequency and later same-input returns",
+  "读取中断 · 已保留已读取会话": "Loading interrupted · loaded sessions retained",
+  "诊断线索": "Diagnosis signals",
   "，登记 #": ", registration #",
   "，末次状态变更 #": ", latest state change #",
   "· 按首 token 等待排序": "· sorted by time to first token",

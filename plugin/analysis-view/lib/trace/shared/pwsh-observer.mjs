@@ -163,7 +163,8 @@ function applySyntax(entry, observed, file) {
     if (sites.length === 1) {
       const site = commandSite(sites[0]);
       if (row.cause) row.cause.site = site;
-      if (matchingEdition && row.attribution?.certainty === 'confirmed') row.attribution = { ...row.attribution, site };
+      if (matchingEdition && row.attribution?.certainty === 'confirmed') row.attribution = row.attribution.site?.source === 'runtime-stack'
+        ? { ...row.attribution, commandSite: site } : { ...row.attribution, site };
     }
   }
 }

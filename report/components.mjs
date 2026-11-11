@@ -3,6 +3,7 @@ import { bindFigure, groupSum } from './contract.mjs';
 import { compactTrendPolyline } from '../lib/context-trend-geometry.mjs';
 import { CONTEXT_SERIES, VISUAL_TOKENS } from './palette.mjs';
 import { renderAssembly } from './assembly.mjs';
+import { renderFlow } from './flow.mjs';
 export { CONTEXT_SERIES } from './palette.mjs';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>n==null?ui('未记录'):Math.abs(n)>=1e6?(n/1e6).toFixed(2)+'M':Math.abs(n)>=1000?(n/1000).toFixed(1)+'k':Number(n.toFixed(2)).toString();
@@ -25,14 +26,17 @@ function unit(data,key){const u=data.columns[key].unit;return u==='timestamp-ms'
 function empty(message){return '<p class="report-data-unavailable">'+esc(message)+'</p>';}
 function measured(value,column){
  if(!known(value))return [ui('未记录'),''];
+ if(column.unit==='identifier')return [String(value),''];
+ if(column.unit==='turn')return [ui`第 ${value} 轮`,''];
+ if(column.unit==='step')return [ui`第 ${value} 步`,''];
  if(column.unit==='ms')return value>=3600000?[fmt(value/3600000),ui('小时')]:value>=60000?[fmt(value/60000),ui('分钟')]:value>=1000?[fmt(value/1000),ui('秒')]:[fmt(value),'ms'];
  if(column.unit==='ratio')return [fmt(value*100),'%'];
  return [column.unit==='count'?value.toLocaleString('en-US'):fmt(value),({tokens:'tokens',characters:ui('字符'),count:''})[column.unit]??column.unit];
 }
 function metrics(data,spec){
  return '<div class="report-metrics">'+spec.items.map(item=>{
-  const row=data.rows.find(r=>r.id===item.row),column=data.columns[item.field],[value,suffix]=measured(row[item.field],column);
-  return '<button class="report-metric" data-row="'+esc(row.id)+'" data-readout="'+esc((item.label||column.label)+' · '+value+' '+suffix+' · '+({official:ui('官方统计'),reported:ui('实报用量'),observed:ui('记录观测'),estimated:ui('估算')}[column.basis]||ui('已记录读数')))+'"><span>'+esc(item.label||column.label)+'</span><strong>'+esc(value)+'<small>'+esc(suffix)+'</small></strong></button>';
+  const row=data.rows.find(r=>r.id===item.row),column=data.columns[item.field],[value,suffix]=measured(row[item.field],column),label=item.label||ui(column.label);
+  return '<button class="report-metric" data-row="'+esc(row.id)+'" data-readout="'+esc(label+' · '+value+' '+suffix+' · '+({official:ui('官方统计'),reported:ui('实报用量'),observed:ui('记录观测'),estimated:ui('估算')}[column.basis]||ui('已记录读数')))+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'<small>'+esc(suffix)+'</small></strong></button>';
  }).join('')+'</div>';
 }
 
@@ -44,8 +48,8 @@ function bar(data,spec){
  const total=rows.length;rows=rows.slice(0,spec.limit||200);
  if(!rows.length)return empty(ui('这个范围没有已记录的')+ui(data.columns[value].label));
  const [min,max]=extent(rows.map(r=>r[value]));
- const rawUnit=unit(data,value),divisor=rawUnit==='ms'?(max>=3600000?3600000:max>=60000?60000:max>=1000?1000:1):1;
- const displayUnit=rawUnit==='ms'?({3600000:ui('小时'),60000:ui('分钟'),1000:ui('秒'),1:'ms'})[divisor]:rawUnit;
+ const rawUnit=unit(data,value),divisor=rawUnit==='ratio'?.01:rawUnit==='ms'?(max>=3600000?3600000:max>=60000?60000:max>=1000?1000:1):1;
+ const displayUnit=rawUnit==='ratio'?'%':rawUnit==='ms'?({3600000:ui('小时'),60000:ui('分钟'),1000:ui('秒'),1:'ms'})[divisor]:rawUnit;
  const number=n=>fmt(n/divisor);
  if(spec.orientation==='vertical'){
   const base=224,scale=n=>base-(n-min)/(max-min)*166,w=790/rows.length;
@@ -65,7 +69,8 @@ function histogram(data,spec){
  const bins=bounds.map((n,i)=>({id:'bin:'+i,from:n,to:bounds[i+1]??Infinity,count:values.filter(v=>v>=n&&v<(bounds[i+1]??Infinity)).length}));
  const max=Math.max(1,...bins.map(r=>r.count)),width=790/bins.length,bottom=218;
  let b='';for(let i=0;i<=3;i++){const n=Math.round(max*i/3),y=bottom-n/max*158;b+=rule(y)+tx(48,y+4,n,'plot-axis','end');}
- for(const [i,r]of bins.entries()){const x=73+i*width,h=r.count/max*158,label=(known(r.to)?fmt(r.from)+'–'+fmt(r.to):'≥'+fmt(r.from));b+='<g tabindex="0" class="plot-mark" data-readout="'+esc(label+' '+unit(data,key)+'：'+r.count+ui(' 条记录'))+'"><rect x="'+x+'" y="'+(bottom-h)+'" width="'+width*.66+'" height="'+Math.max(.7,h)+'" rx="2" fill="'+VISUAL_TOKENS.metric+'"/>'+tx(x+width*.33,bottom-h-8,r.count,'plot-label','middle')+tx(x+width*.33,246,label,'plot-axis','middle')+'</g>';}
+ const boundary=value=>data.columns[key].unit==='ms'?measured(value,data.columns[key]).join(''):fmt(value);
+ for(const [i,r]of bins.entries()){const x=73+i*width,h=r.count/max*158,label=(known(r.to)?boundary(r.from)+'–'+boundary(r.to):'≥'+boundary(r.from));b+='<g tabindex="0" class="plot-mark" data-readout="'+esc(label+' '+(data.columns[key].unit==='ms'?'':unit(data,key))+'：'+r.count+ui(' 条记录'))+'"><rect x="'+x+'" y="'+(bottom-h)+'" width="'+width*.66+'" height="'+Math.max(.7,h)+'" rx="2" fill="'+VISUAL_TOKENS.metric+'"/>'+tx(x+width*.33,bottom-h-8,r.count,'plot-label','middle')+tx(x+width*.33,246,label,'plot-axis','middle')+'</g>';}
  return svg(270,spec.title,b)+'<p class="chart-caption">'+esc(ui(data.columns[key].label)+'（'+unit(data,key)+'） · '+values.length+ui(' 条记录，另有 ')+(data.rows.length-values.length)+ui(' 条未记录；保留全部尾部。'))+'</p>';
 }
 function scatter(data,spec){
@@ -124,15 +129,23 @@ function context(data,spec){
   '<p class="chart-caption">'+esc(ui('来源构成估算 · ')+rows.length+ui(' 个记录位置')+(missing?ui('，其中 ')+missing+ui(' 处缺值留空'):'')+(data.coverage.context?.status==='partial'?ui('；来源记录从第 ')+data.coverage.context.firstRecordedTurn+ui(' 轮开始'):'')+'。')+'</p>';
 }
 function donut(data,spec){
- const row=selectedRows(data,spec)[0],parts=compositionParts(data,spec,row),total=partsTotal(parts),estimated=data.columns[spec.series[0]].basis==='estimated',prefix=estimated?'≈':'';
+ const categorical=!!spec.fields,row=categorical?null:selectedRows(data,spec)[0],valueKey=categorical?spec.fields.value:spec.series[0];
+ const shades=['#d3e6ff','#94beef','#5596df','#276fbf','#124b8c','#07305f'];
+ const parts=categorical?data.rows.map((item,index)=>({key:valueKey,row:item,label:data.columns[spec.fields.label].basis==='derived'?ui(item[spec.fields.label]):item[spec.fields.label],value:item[valueKey],color:shades[index%shades.length]}))
+   :compositionParts(data,spec,row).map(part=>({...part,row}));
+ if(!parts.length)return empty(ui('这个范围没有对应记录。'));
+ const total=partsTotal(parts),estimated=data.columns[valueKey].basis==='estimated',prefix=estimated?'≈':'';
+ const amount=value=>value==null?ui('未记录'):data.columns[valueKey].unit==='count'?value.toLocaleString('en-US'):fmt(value);
+ const position=categorical?ui(data.columns[valueKey].label):spec.rowLabels?.[0]||rowLabel(row);
+ const measure=data.columns[valueKey].unit==='count'?ui(data.columns[valueKey].label):unit(data,valueKey);
  let angle=-Math.PI/2,body='<circle cx="165" cy="150" r="98" fill="none" stroke="#f1f1f1" stroke-width="36"/>';
  const point=a=>[165+98*Math.cos(a),150+98*Math.sin(a)];
  if(total>0)for(const part of parts){if(!part.value)continue;const from=angle;angle+=part.value/total*Math.PI*2;const a=point(from),b=point(angle),shape=part.value===total?'<circle cx="165" cy="150" r="98" fill="none" stroke="'+part.color+'" stroke-width="36"/>':'<path d="M'+a.join(' ')+'A98 98 0 '+(angle-from>Math.PI?1:0)+' 1 '+b.join(' ')+'" fill="none" stroke="'+part.color+'" stroke-width="36"/>';
-  body+='<g class="plot-mark" tabindex="0" data-row="'+esc(row.id)+'" data-readout="'+esc(part.label+' · '+prefix+fmt(part.value)+' '+unit(data,part.key)+ui(' · 占所选构成 ')+percentage(part.value,total))+'"><title>'+esc(part.label+' '+percentage(part.value,total))+'</title>'+shape+'</g>';
+  body+='<g class="plot-mark" tabindex="0" data-row="'+esc(part.row.id)+'" data-readout="'+esc(part.label+' · '+prefix+amount(part.value)+' '+measure+ui(' · 占所选构成 ')+percentage(part.value,total))+'"><title>'+esc(part.label+' '+percentage(part.value,total))+'</title>'+shape+'</g>';
  }
- body+=tx(165,145,total===null?ui('记录不完整'):prefix+fmt(total),'composition-total','middle')+tx(165,169,unit(data,spec.series[0])+ui(' · 所选构成合计'),'plot-axis','middle');
- const list=parts.map(part=>'<button class="composition-item" data-row="'+esc(row.id)+'" data-readout="'+esc((spec.rowLabels?.[0]||rowLabel(row))+' · '+part.label+' · '+prefix+fmt(part.value)+' '+unit(data,part.key)+(total!==null?' · '+percentage(part.value,total):ui(' · 完整比例未知')))+'"><i style="background:'+part.color+'"></i><span>'+esc(part.label)+'</span><b>'+prefix+fmt(part.value)+'</b><small>'+esc(total!==null?percentage(part.value,total):'—')+'</small></button>').join('');
- return '<div class="report-donut"><svg viewBox="0 0 330 300" role="img" aria-label="'+esc(spec.title)+'">'+body+'</svg><div class="composition-list"><div class="composition-position">'+esc(spec.rowLabels?.[0]||rowLabel(row))+'</div>'+list+'</div></div>'+(total===null?ui('<p class="chart-caption">部分分项未记录，比例暂不显示。</p>'):'');
+ body+=tx(165,145,total===null?ui('记录不完整'):prefix+amount(total),'composition-total','middle')+tx(165,169,measure+ui(' · 所选构成合计'),'plot-axis','middle');
+ const list=parts.map(part=>'<button class="composition-item" data-row="'+esc(part.row.id)+'" data-readout="'+esc(position+' · '+part.label+' · '+prefix+amount(part.value)+' '+measure+(total!==null?' · '+percentage(part.value,total):ui(' · 完整比例未知')))+'"><i style="background:'+part.color+'"></i><span>'+esc(part.label)+'</span><b>'+prefix+amount(part.value)+'</b><small>'+esc(total!==null?percentage(part.value,total):'—')+'</small></button>').join('');
+ return '<div class="report-donut"><svg viewBox="0 0 330 300" role="img" aria-label="'+esc(spec.title)+'">'+body+'</svg><div class="composition-list"><div class="composition-position">'+esc(position)+'</div>'+list+'</div></div>'+(total===null?ui('<p class="chart-caption">部分分项未记录，比例暂不显示。</p>'):'');
 }
 function stacked(data,spec){
  const rows=selectedRows(data,spec),parts=rows.map(row=>compositionParts(data,spec,row)),totals=parts.map(partsTotal),max=Math.max(1,...totals.filter(known)),mode=spec.mode||'absolute',estimated=data.columns[spec.series[0]].basis==='estimated',prefix=estimated?'≈':'';
@@ -154,7 +167,61 @@ function comparison(data,spec){
  }).join('');
  return summary+ui('<div class="comparison-scroll"><table class="comparison-table"><thead><tr><th>来源 · ')+esc(measure)+'</th><th>'+esc(labels[0])+'</th><th>'+esc(labels[1])+ui('</th><th>净变化 · ')+esc(measure)+'</th></tr></thead><tbody>'+body+'</tbody></table></div>';
 }
-const renderers={metrics,bar,histogram,scatter,timeline,sequence,context,comparison,donut,stacked,assembly:renderAssembly};
+function table(data, spec) {
+  let rows = data.rows;
+  if (spec.sort === 'descending') rows = [...rows].sort((a, b) => (b[spec.fields.value] ?? -Infinity) - (a[spec.fields.value] ?? -Infinity));
+  const selected = rows.slice(0, spec.limit ?? 12);
+  const fields = [...new Set([spec.fields.label, ...spec.series])];
+  const cell = (row, key) => {
+    const value = row[key], column = data.columns[key];
+    if (value == null) return '<span class="report-missing">—</span>';
+    if (typeof value === 'number') return esc(measured(value, column).join(' ').trim());
+    const text = key === 'certainty' ? ({ confirmed: '已归因', candidate: '候选原因', unknown: '待定位' })[value] ?? value : value;
+    return esc(column.basis === 'derived' ? ui(text) : text);
+  };
+  if (!selected.length) return empty(ui('这个范围没有对应记录。'));
+  return '<div class="report-table-scroll"><table class="report-measures"><thead><tr>' + fields.map(key =>
+    '<th scope="col">' + esc(ui(data.columns[key].label)) + '</th>').join('') + '</tr></thead><tbody>' + selected.map(row =>
+    '<tr tabindex="0" data-row="' + esc(row.id) + '">' + fields.map((key, index) => '<' + (index ? 'td' : 'th scope="row"') +
+      (index ? ' class="measure-value"' : '') + '>' + cell(row, key) + '</' + (index ? 'td' : 'th') + '>').join('') + '</tr>').join('') +
+    '</tbody></table></div><p class="chart-caption">' + esc(ui('显示 ') + selected.length + ' / ' + rows.length + ui(' 项')) + '</p>';
+}
+
+function trend(data, spec) {
+  const xField = spec.fields.x;
+  const rows = data.rows.filter(row => known(row[xField])).sort((a, b) => a[xField] - b[xField]);
+  if (rows.length > (spec.limit ?? 200)) throw Error('Narrow the trend to at most ' + (spec.limit ?? 200) + ' positions');
+  if (!rows.length || !rows.some(row => spec.series.some(key => known(row[key])))) return empty(ui('这个范围没有对应记录。'));
+  const colors = ['#2378dc', '#137f79', '#c18017', '#cc354b', '#1c2633'];
+  const minX = rows[0][xField], maxX = Math.max(minX + 1, rows.at(-1)[xField]);
+  const [minY, maxY] = extent(rows.flatMap(row => spec.series.map(key => row[key])));
+  const x = value => 66 + (value - minX) / (maxX - minX) * 802;
+  const y = value => 218 - (value - minY) / (maxY - minY) * 168;
+  const display = value => measured(value, data.columns[spec.series[0]]).join(' ').trim();
+  let body = '';
+  for (let tick = 0; tick <= 3; tick++) {
+    const value = minY + (maxY - minY) * tick / 3;
+    body += rule(y(value)) + tx(50, y(value) + 4, display(value), 'plot-axis', 'end');
+  }
+  spec.series.forEach((key, series) => {
+    let path = '', connected = false;
+    for (const row of rows) {
+      if (!known(row[key])) { connected = false; continue; }
+      path += (connected ? 'L' : 'M') + x(row[xField]) + ' ' + y(row[key]);
+      connected = true;
+    }
+    body += '<path d="' + path + '" fill="none" stroke="' + colors[series] + '" stroke-width="2"/>';
+  });
+  rows.forEach((row, index) => {
+    body += mark(data, row, spec.series.filter(key => known(row[key])).map(key => '<circle cx="' + x(row[xField]) + '" cy="' + y(row[key]) +
+      '" r="3.5" fill="' + colors[spec.series.indexOf(key)] + '"/>').join(''));
+    if (index === 0 || index === rows.length - 1 || index % Math.max(1, Math.floor(rows.length / 5)) === 0) body += tx(x(row[xField]), 246, row[xField], 'plot-axis', 'middle');
+  });
+  return '<div class="legend">' + spec.series.map((key, index) => '<span><i style="background:' + colors[index] + '"></i>' + esc(ui(data.columns[key].label)) +
+    '</span>').join('') + '</div>' + svg(266, spec.title, body) + '<p class="chart-caption">' + esc(ui(data.columns[xField].label) + ' · ' + rows.length + ui(' 项')) + '</p>';
+}
+
+const renderers={metrics,bar,histogram,scatter,timeline,sequence,flow:renderFlow,context,comparison,donut,stacked,table,trend,assembly:renderAssembly};
 export function renderFigure(spec,datasets){
  const {data}=bindFigure(spec,datasets),body=renderers[spec.type](data,spec);
  const readout=spec.readout||ui('点选图中记录，查看对应读数与证据位置。');

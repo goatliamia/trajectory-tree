@@ -209,23 +209,25 @@ export function createRuntimeMetrics(session, { events, official, checks, projec
     return { seq, turn, startSeq: turnStarts.get(turn) ?? null, callId: calls.get(seq) ?? null };
   };
   return (turns, turnNumber) => {
-    const ownEvents = eventsIn(turnNumber);
-    const ownUsage = usageIn(turnNumber);
+    const select = index => index ? turnNumber == null && turns.length !== session.turns.length
+      ? turns.flatMap(turn => index(turn.number)) : index(turnNumber) : null;
+    const ownEvents = select(eventsIn);
+    const ownUsage = select(usageIn);
     const repeats = repeatGroups(turns, bySeq);
     let parameters = null;
     if (checks) {
       const { calls: checked, ...summary } = checks.summarize(
-        checksIn(turnNumber), count(ownEvents, dispatch));
+        select(checksIn), count(ownEvents, dispatch));
       parameters = { ...summary, evidence: checked.filter(call => call.json === 'invalid' || call.schema === 'nonconforming')
         .slice(-8).map(call => ({ ...pointer(call.seq), tool: call.name })) };
     }
     return {
-      timing: timingMetrics(turns, official, officialIn?.(turnNumber), modelIn?.(turnNumber)),
+      timing: timingMetrics(turns, official, select(officialIn), select(modelIn)),
       usage: { ...costTotals(ownUsage), coverage: costCoverage(ownUsage) },
-      files: fileMetrics(filesIn(turnNumber), pointer, callStart),
-      task: taskMetrics(ownEvents, turns, goalsIn(turnNumber), pointer),
-      context: contextMetrics(ownEvents, skillsIn(turnNumber), retainedSkills, {
-        requests: requestsIn?.(turnNumber) ?? null,
+      files: fileMetrics(select(filesIn), pointer, callStart),
+      task: taskMetrics(ownEvents, turns, select(goalsIn), pointer),
+      context: contextMetrics(ownEvents, select(skillsIn), retainedSkills, {
+        requests: select(requestsIn),
         source: requestContextSource,
         pressure: turnNumber == null ? projections?.values?.contextPressure ?? requestContext?.pressure : null,
       }, pointer),

@@ -10,10 +10,7 @@
 <body>
   <header class="masthead">
     <div class="container top">
-      <div class="crumb"><strong>Eval</strong><nav class="page-nav" id="overview-nav" aria-label="Eval 视图" hidden>
-        <button type="button" data-view="overview" aria-pressed="true">总览</button>
-        <button type="button" data-view="session" aria-pressed="false">单会话</button>
-      </nav></div>
+      <div class="crumb"><strong>Eval</strong><span class="overview-crumb">总览</span></div>
       <div class="snapshot" id="snapshot-controls" hidden><span id="snapshot"></span>
         <button class="text-button" type="button" id="overview-refresh">刷新</button></div>
     </div>
@@ -29,7 +26,7 @@
         <p>从真实任务看进展、模型行为和执行质量。</p>
       </div>
       <nav class="jump" aria-label="页内导航">
-        <a href="#work-section">推进</a><a href="#model-section">模型</a><a href="#window-section">窗口占用</a><a href="#wait-section">等待</a><a href="#error-section">工具报错</a>
+        <a href="#work-section">推进</a><a href="#model-section">模型</a><a href="#window-section">窗口占用</a><a href="#wait-section">等待</a><a href="#error-section">工具报错</a><a href="#overview-findings">诊断线索</a>
       </nav>
     </section>
     <form class="filters" aria-label="统计范围" onsubmit="return false">
@@ -154,7 +151,7 @@
 
     <section class="section" id="error-section" aria-labelledby="error-title">
       <div class="section-heading">
-        <div><div class="eyebrow">工具报错</div><h2 id="error-title">报错频次与恢复时间</h2>
+        <div><div class="eyebrow">工具报错</div><h2 id="error-title">报错频次与后续返回</h2>
         <p id="error-description"></p></div>
         <div class="legend" id="error-legend"></div>
       </div>
@@ -170,6 +167,8 @@
         </aside>
       </div>
     </section>
+
+    <section class="section" id="overview-findings"></section>
 
     <footer class="footer">
       <details>
@@ -192,73 +191,6 @@
     </footer>
   </main>
 
-  <main class="container" id="session-page" hidden>
-    <section class="intro" aria-labelledby="session-title">
-      <div><h1 id="session-title">窗口占用与报错</h1>
-        <p>沿会话查看窗口占用怎么变，以及不同报错出现在哪里。</p></div>
-      <div class="jump" id="session-native"></div>
-    </section>
-    <form class="filters session-filters" aria-label="单会话范围" onsubmit="return false">
-      <label for="session-project"><span>项目</span><select id="session-project"></select></label>
-      <label for="session-select"><span>会话</span><select id="session-select"></select></label>
-      <span class="filter-note" id="session-scope" aria-live="polite"></span>
-    </form>
-    <div class="overview session-overview" id="session-overview" aria-live="polite"></div>
-    <section class="section pressure-section" aria-labelledby="pressure-title">
-      <div class="section-heading">
-        <div><div class="eyebrow">会话进程</div><h2 id="pressure-title">窗口占用怎么变化</h2>
-        <p>在图上移动查看每一步结束时的占用，点一下固定读数。报错点取调用开始前的占用率。</p></div>
-        <div class="legend" id="pressure-legend"></div>
-      </div>
-      <div class="pressure-chart-top">
-        <div class="chart-axis-title">上下文窗口占用率</div>
-        <div class="pressure-inspector" id="pressure-inspector" aria-label="步骤结束时的窗口占用" role="group" hidden>
-          <span id="pressure-step-label"></span>
-          <div class="pressure-reading"><strong id="pressure-step-percent"></strong><span id="pressure-step-tokens"></span></div>
-          <div class="pressure-step-nav">
-            <button type="button" id="pressure-prev" aria-label="上一步" title="上一步">‹</button>
-            <button type="button" id="pressure-next" aria-label="下一步" title="下一步">›</button>
-          </div>
-          <span class="visually-hidden" id="pressure-step-status" role="status"></span>
-        </div>
-      </div>
-      <div class="plot pressure-plot" id="pressure-plot"></div>
-      <div class="x-caption">会话记录顺序</div>
-      <div class="pressure-breakdown">
-        <div class="section-heading pressure-summary">
-          <div><h3 id="band-title">不同占用区间的报错</h3><p id="band-note"></p></div>
-          <div class="model-controls">
-            <label class="cohort-control" for="session-tool"><span>工具</span><select id="session-tool"></select></label>
-            <label class="cohort-control" for="session-error"><span>报错</span><select id="session-error"></select></label>
-          </div>
-        </div>
-        <div class="split band-split">
-          <div id="pressure-bands" aria-labelledby="band-title"></div>
-          <aside class="rail" aria-labelledby="pressure-samples-title">
-            <div class="rail-title"><h3 id="pressure-samples-title">报错与压缩记录</h3><button class="text-button" type="button" id="pressure-more">看全部 <span aria-hidden="true">↗</span></button></div>
-            <div class="rows" id="pressure-samples"></div>
-          </aside>
-        </div>
-      </div>
-    </section>
-    <section class="section" id="session-handoff" aria-labelledby="session-handoff-title" hidden>
-      <div class="section-heading">
-        <div><div class="eyebrow">有委派记录的会话</div><h2 id="session-handoff-title">回传与主线动作</h2>
-        <p id="session-handoff-note"></p></div>
-        <button class="text-button" type="button" id="session-handoff-more">看全部 <span aria-hidden="true">↗</span></button>
-      </div>
-      <div class="rows handoff-rows" id="session-handoff-rows"></div>
-    </section>
-    <footer class="footer">
-      <details><summary>统计口径</summary>
-        <dl class="method">
-          <div><dt>窗口占用</dt><dd>回放本机 DSH Token Meter 的占用投影。逐步读数取步骤结束记录对应的预计输入和当时模型路由的窗口容量。</dd></div>
-          <div><dt>报错对照</dt><dd>同一步的同类报错合在一起。工具筛选同时约束分子和分母，报错分类只改变分子。有结果且能对齐调用开始前占用的动作进入分档，按模型步骤另列计数。</dd></div>
-        </dl>
-      </details><span>DSH 会话记录</span>
-    </footer>
-  </main>
-
   <dialog id="drawer" class="drawer" aria-labelledby="drawer-title">
     <div class="drawer-shell">
       <div class="drawer-top"><button type="button" id="drawer-back" class="text-button" hidden>‹ 返回样本</button><span id="drawer-top-label">原始记录</span><button type="button" id="drawer-close" class="close" aria-label="关闭详情">×</button></div>
@@ -267,7 +199,8 @@
   </dialog>
   <!-- OVERVIEW_DATA -->
   <script>/* OVERVIEW_I18N */</script>
-  <script>/* SESSION_SCRIPT */</script>
+  <script>/* OCCUPANCY_SCRIPT */</script>
+  <!-- OVERVIEW_EDITOR -->
   <script>/* OVERVIEW_SCRIPT */</script>
 </body>
 </html>

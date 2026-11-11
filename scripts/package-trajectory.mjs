@@ -31,8 +31,8 @@ for (const name of ['page.html', 'page.js', 'shared/visual-tokens.css', 'shared/
   copy('plugin/analysis-view/lib/trace/' + name);
 }
 for(const name of ['pi-host.js','codex-host.js','claude-host.js'])copy('view/assets/'+name);
-for(const name of ['index.html','style.css','views.css','themes.css','editor.css','editor.html','diagnosis.js','dashboard.js'])copy('plugin/analysis-view/lib/eval/'+name);
-for(const name of ['page.html','style.css','session-view.js','app.js'])copy('plugin/analysis-view/lib/eval/overview/'+name);
+for(const name of ['index.html','style.css','views.css','themes.css','editor.css','editor.html','diagnosis.js','dashboard.js','code-execution.css','code-execution.js','findings.css','findings.js'])copy('plugin/analysis-view/lib/eval/'+name);
+for(const name of ['page.html','style.css','occupancy.js','app.js'])copy('plugin/analysis-view/lib/eval/overview/'+name);
 if(host==='codex'||host==='claude')for(const name of [...DIAGNOSIS_SKILLS.map(s=>s.name),'trajectory-view','trajectory-eval']){
  const sourceRoot=join(root,'plugin',host,'skills',name);
  for(const sourceFile of files(sourceRoot)){

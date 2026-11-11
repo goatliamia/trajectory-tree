@@ -2,6 +2,8 @@
 
 视图生成是确定性代码，不调用模型；报告由模型使用取证方法撰写，再交给组件渲染。
 
+Pi 的 `/trajectory`、Codex 的 `$trajectory-view` / `$trajectory-eval` 和 Claude Code 对应的 view / eval 命令均支持选择会话 Eval、项目总览或代码执行。Pi 用 `--eval`、`--overview`、`--code`；另两宿主将同一选项传给随包生成器。DSH 使用常驻面板，不新增生成图的 skill。
+
 | 宿主 | 查看会话 | Eval | 过程诊断 | 静态剖面 |
 | --- | --- | --- | --- | --- |
 | Codex | `$trajectory-view` | `$trajectory-eval` | `$trace-analysis` | `$context-profile` |
@@ -10,6 +12,10 @@
 | DSH Web | `/trajectory` | 会话「评估」标签 | `trace-analysis` | `context-profile` |
 
 ## Eval 总览
+
+总览只保留跨会话统计，原先内置的「单会话」页已移除。单会话继续使用原 Eval 面板。两处共用程序信号归组规则，并随项目、时间、模型或轮次筛选更新；处置列表示可调查方向，不表示已经修复或需要保存长期知识。具体判断从选区草稿进入 `trace-analysis`，保留各来源的 session、cut 和便携宿主 logId。全局的跨会话草稿分别列出每段来源的查询；便携快照不假定绑定当前活动会话。
+
+DSH 首批会话到达后即显示图表，余下记录分批补齐；页眉保留已读进度，读取中断会保留已读部分。缓存命中不等待大日志队列；原始日志仍经过单个低优先级队列，关闭页面会取消未完成工作。分叉去重、切点校验和统计口径保持一致。
 
 | 宿主 | 入口 | 数据范围 |
 | --- | --- | --- |
@@ -26,7 +32,13 @@ Codex 使用官方推荐的 skills 入口，不新增已弃用的 custom prompt 
 
 ## 命令诊断
 
+Eval 顶部「代码执行」进入独立分析区，与运行指标共用统计范围和切点。可以按执行器、失败信号及调用筛选，检查原始脚本或宿主记录的命令、反馈和记录位置，以及 PTC 父子调用关系。选择「诊断这次」或「分析这组」生成已有取证入口的草稿，沿原文调查根因与后续处理。
+
+便携生成器加 `--code` 可直接进入这一分析区，例如 `node scripts/trajectory-view.mjs --host codex --code --serve`；Pi 和 Claude Code 使用各自原来的来源参数。它生成同一份 Eval，不另建一套统计。
+
 DSH、Codex、Pi 和 Claude Code 的工具明细及 Eval 概览会按记录到的运行证据归因。宿主结果用于统计调用和报错，归因单独展示。组合脚本里的候选原因留在样本中。查询工具的逐次 I/O 数据也带有归因和关联记录。
+
+PTC `run_code` 的原生运行时 kind 单独解析，区分程序异常、预算到期、中止、执行环境退出、输出契约与上限、协议和沙箱建立失败。父子调用属于同一次执行，不单凭这一关系判定传播原因。分组表示相同失败信号，具体根因与任务影响由诊断结合代码、环境和后续记录确认。
 
 ```sh
 node scripts/trajectory-view.mjs --host codex --eval --cr-root "<parser checkout>" --open

@@ -21,11 +21,12 @@ button:disabled { opacity:.48; cursor:default }
 [hidden] { display:none !important }
 .visually-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap }
 h1,h2,h3,p,dl,dd { margin:0 }
-.container { width:min(100% - 96px,1280px); margin-inline:auto }
+.container { width:calc(100% - clamp(32px,4vw,64px)); min-width:0; margin-inline:auto }
 .masthead { border-bottom:1px solid var(--line) }
 .top { min-height:60px; display:flex; align-items:center; justify-content:space-between; gap:16px }
 .crumb { display:flex; align-items:center; gap:13px; white-space:nowrap }
 .crumb strong { font-size:16px; letter-spacing:-.035em; font-weight:650 }
+.overview-crumb{font-size:12px;color:var(--sub);border-left:1px solid var(--line);padding-left:13px}
 .page-nav { display:flex; gap:3px; padding-left:10px; border-left:1px solid var(--line-strong) }
 .page-nav button { padding:4px 9px; border-radius:6px; font-size:13px; color:var(--sub) }
 .page-nav button[aria-pressed=true] { color:var(--blue-strong); background:var(--blue-soft); font-weight:580 }
@@ -34,7 +35,7 @@ h1,h2,h3,p,dl,dd { margin:0 }
 .intro { padding:32px 0 22px; display:flex; justify-content:space-between; align-items:end; gap:20px }
 .intro h1 { font-size:clamp(30px,4.4vw,46px); line-height:1.2; font-weight:650; letter-spacing:-.048em }
 .intro p { margin-top:9px; color:var(--sub); font-size:14px }
-.jump { display:flex; gap:20px; padding-bottom:2px; white-space:nowrap; font-size:13px; color:var(--sub) }
+.jump { display:flex; flex-wrap:wrap; gap:8px 20px; min-width:0; padding-bottom:2px; white-space:nowrap; font-size:13px; color:var(--sub) }
 .jump a:hover,.jump a:focus-visible { color:var(--blue) }
 .filters { display:flex; flex-wrap:wrap; align-items:center; gap:9px; padding-bottom:18px; border-bottom:1px solid var(--line) }
 .filters label { display:flex; align-items:center; min-width:0; gap:5px; padding:0 10px; border:1px solid var(--line-strong); border-radius:8px; background:#fff }

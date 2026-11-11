@@ -3,6 +3,7 @@ import { buildRecordedModelTiming, requestUsageEvidence } from '../../trace/shar
 import { projectWorkEvidence } from './work-evidence.mjs';
 import { projectSessionEval } from './eval-evidence.mjs';
 import { errorsForTurn, span, startSeq, valid } from './shared.mjs';
+import { projectFindingCalls } from '../findings.mjs';
 
 const replacement = row => row.surfaceOp && typeof row.surfaceOp === 'object';
 const isPtc = name => name === 'run_code';
@@ -139,5 +140,6 @@ export function projectOverviewSession(id, events, { cwd, inherited = 0 } = {}, 
     if (prior > 0) occupancy.points = occupancy.points.slice(prior);
   }
   const work = projectWorkEvidence(inherited ? events.filter(event => event.seq >= inherited) : events, turns);
-  return { id, cut: trace.lastSeq, turns, occupancy, work };
+  return { id, cut: trace.lastSeq, turns, occupancy, work,
+    findingCalls: projectFindingCalls(trace, { turns: turns.map(turn => turn.no) }) };
 }

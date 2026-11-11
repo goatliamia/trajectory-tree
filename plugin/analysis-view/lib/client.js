@@ -828,12 +828,12 @@ window.__ModuleLoader__.load({
       let applied = false;
       try {
         const binding = ctx?.sessions?.binding(sessionId);
-        if (binding && typeof openView === "function") {
+        if (binding) {
           applied = ctx.conversation.input.requestDraftInitialization(binding, { prompt: message.prompt, whenDraftExists: "append" }) === "applied";
         }
       } catch {}
       event.source.postMessage({ type: "analysis-diagnosis-ack", sessionId, applied }, event.origin);
-      if (applied) openView("chat", "");
+      if (applied && typeof openView === "function") openView("chat", "");
     }
     function useDiagnosisDraft(frame, sessionId, openView, enabled = true) {
       React.useEffect(() => {
@@ -1295,11 +1295,23 @@ window.__ModuleLoader__.load({
           title: cmUi("运行评估", "Session evaluation"), src: "/analysis-view/eval?format=page&session=" + encodeURIComponent(sessionId) }));
     }
 
-    function EvalOverviewPanel() {
+    function EvalOverviewPanel(props) {
       React.useEffect(ensureStyle, []);
       useLocaleRefresh();
+      const [frame, setFrame] = React.useState(null);
+      const openView = props?.openView;
+      React.useEffect(() => {
+        if (!frame) return;
+        const onMessage = event => {
+          const sessionId = event.data?.sessionId;
+          if (typeof sessionId !== "string" || !sessionId || sessionId.length > 256) return;
+          receiveDiagnosisDraft(event, frame, sessionId, clientCtx, openView);
+        };
+        window.addEventListener("message", onMessage);
+        return () => window.removeEventListener("message", onMessage);
+      }, [frame, openView]);
       return h("div", { className: "av-root av-trace" }, h("iframe", {
-        className: "av-trace-frame", title: cmUi("Eval 总览", "Eval overview"),
+        ref: setFrame, className: "av-trace-frame", title: cmUi("Eval 总览", "Eval overview"),
         src: "/analysis-view/overview",
       }));
     }

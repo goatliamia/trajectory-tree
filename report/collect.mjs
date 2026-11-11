@@ -48,12 +48,21 @@ export async function collectRecords(execute, source, seqs, { signal } = {}) {
   for (const seq of [...new Set(seqs)]) {
     signal?.throwIfAborted();
     const dsh = source.host === 'dsh';
-    const packet = await execute('trajectory_read', { session: source.session, snapshot: source.snapshot, seq, ...(dsh ? { format: 'linked' } : { linked: true }) }, signal);
+    const args = { session: source.session, snapshot: source.snapshot, seq,
+      ...(dsh ? { format: 'linked' } : { linked: true, logId: source.log }) };
+    let packet;
+    try { packet = await execute('trajectory_read', args, signal); }
+    catch (error) {
+      signal?.throwIfAborted();
+      if (dsh || !Number.isSafeInteger(source.cut)) throw error;
+      packet = await execute('trajectory_read', { ...args, cut: source.cut }, signal);
+    }
     if (packet?.ok === false) throw Error('Original-record read failed');
     if (packet.session !== source.session || packet.snapshot !== source.snapshot || (dsh ? packet.log?.id ?? packet.log : packet.logId) !== source.log || dsh && packet.cut !== source.cut) throw Error('Record read belongs to another source cut');
     const record = (dsh ? packet.records : packet.linked)?.find(row => row.seq === seq);
     if (!record) throw Error('Selected evidence was not returned');
-    const bodyRead = dsh ? record.body : { tool: 'trajectory_read', args: { session: source.session, snapshot: source.snapshot, logId: source.log, seq, field: 'body' } };
+    const bodyRead = dsh ? record.body : { tool: 'trajectory_read', args: { session: source.session, snapshot: source.snapshot, logId: source.log,
+      ...(Number.isSafeInteger(packet.cut) ? { cut: packet.cut } : {}), seq, field: 'body' } };
     rows.push({ id: 'record:' + seq, turn: packet.turn ?? null, time: record.time ?? null, kind: dsh ? record.type : record.kind,
       text: dsh ? record.text?.text ?? null : record.text ?? null,
       omittedCharacters: dsh ? record.text?.omitted ?? null : record.length == null ? null : Math.max(0, record.length - (record.text?.length || 0)),

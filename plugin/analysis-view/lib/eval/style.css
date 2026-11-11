@@ -16,8 +16,7 @@
   --red: #b94452;
   --amber: #a67323;
   --mono: GeistMono, Consolas, "Microsoft YaHei", monospace;
-  --width: 1416px;
-  --pad: clamp(16px, 3vw, 38px);
+  --pad: clamp(16px, 2vw, 32px);
 }
 
 body, [data-theme="blueprint"] :is(.usage-panel, .tool-inspector, .error-example) {
@@ -53,7 +52,7 @@ code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .app-header { position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--line); background: var(--header); }
-.header-inner, .workspace { max-width: var(--width); margin: 0 auto; padding-inline: var(--pad); }
+.header-inner, .workspace { width: 100%; min-width: 0; padding-inline: var(--pad); }
 .header-inner { height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .brand { display: flex; align-items: center; gap: 9px; margin-inline-end: auto; font-weight: 640; white-space: nowrap; }
 .brand-divider { width: 1px; height: 14px; margin-inline: 2px; background: var(--line); }
@@ -182,7 +181,7 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; ba
 .record-tag { display: inline-block; font: 10px/1.5 var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; background: var(--surface); color: var(--ink); }
 .task-records { display: flex; gap: 4px 10px; flex-wrap: wrap; margin-top: 8px; font-size: 11px; color: var(--muted); }
 .basis { margin-top: 12px; padding: 7px 1px; border-top: 1px solid var(--line); }
-.basis summary { cursor: pointer; width: fit-content; font-size: 12px; color: var(--muted); }
+.basis > h2 { font-size: 14px; font-weight: 500; margin: 8px 0 12px; }
 .supporting-metrics { margin-top: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .basis-notes { margin: 8px 0 1px; padding-left: 17px; color: var(--muted); font-size: 12px; }
 

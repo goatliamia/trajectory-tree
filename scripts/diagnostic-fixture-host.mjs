@@ -10,6 +10,12 @@ import { apply } from '../plugin/trajectory-tools/lib/index.js';
 import { projectToolSchema } from '@deepseek-ai/dsh-tools';
 import { decodeZstdSession } from '../experiments/corpus/decode-session.mjs';
 import { buildInjectionIndex } from '../analyzers/context-evidence.mjs';
+import { buildTracePayload } from '../plugin/analysis-view/lib/trace-build.js';
+import { readRuntimeEvidence, createRuntimeMetrics } from '../plugin/analysis-view/lib/eval-evidence.js';
+import { buildEvalData } from '../plugin/analysis-view/lib/eval/data.mjs';
+import { projectOverviewSession } from '../plugin/analysis-view/lib/eval/overview/data.mjs';
+import { createOverviewModels } from '../plugin/analysis-view/lib/eval/overview/shared.mjs';
+import { evaluationSession, evaluationReportTables, validateEvaluationRequest } from '../report/evaluation.mjs';
 
 const [fixturesArg = '.dsh/diagnostic-pilot', outputArg = '.dsh/diagnostic-experiment-v3', portArg = '3093', reasoningArg = 'max', promptArg = 'docs/archive/diagnostic-analysis-v3.md'] = process.argv.slice(2);
 const fixtures = resolve(fixturesArg), output = resolve(outputArg), port = Number(portArg);
@@ -57,7 +63,24 @@ const server = createServer(async (req, res) => {
     if (tool === 'schema') result = { case: key, session: state.spec.session, tools: [...state.tools.values()].map(t => projectToolSchema(t, true)),
       scope: 'Actual registered tool execute functions over frozen sources, with context estimates reconstructed from the same event cut.',
       notes: ['Only this frozen case is visible.', 'No original task or proposed optimization is executed.', 'Copy snapshot, expand, reads and nextRead from results.'] };
-    else if(tool==='report/structure'){
+    else if(tool==='report/evaluation'){
+      const {source,table,turns}=args;
+      validateEvaluationRequest({table,turns});
+      if(source?.session!==state.spec.session)throw Error('Eval source belongs to another case');
+      const pinned=await state.tools.get('trajectory_inspect').execute({session:state.spec.session,snapshot:source.snapshot,view:'overview',format:'data',limit:1},{signal:new AbortController().signal});
+      if(pinned.ok===false||['host','session','snapshot','log','cut'].some(key=>pinned.source?.[key]!==source[key]))throw Error('Eval source identity changed');
+      const key=JSON.stringify([source.snapshot,turns]);
+      if(state.evaluation?.key!==key){
+        const events=state.events.filter(event=>event.seq<=source.cut),payload=buildTracePayload(events,state.spec.session,{cwd:state.header.cwd});
+        const entry={payload,source:{cwd:state.header.cwd}},signal=new AbortController().signal;
+        const evidence=await readRuntimeEvidence({get:()=>undefined},entry,events,signal);
+        const session=payload.sessions[0],scoped=evaluationSession(session,turns);
+        const dashboard=buildEvalData(scoped,createRuntimeMetrics(session,evidence));
+        const catalog=createOverviewModels(),overview=projectOverviewSession(state.spec.session,events,{cwd:state.header.cwd},catalog,{stream:{},pressure:null});
+        state.evaluation={key,tables:evaluationReportTables(scoped,dashboard,overview,catalog.models,source,turns)};
+      }
+      result=state.evaluation.tables[table];
+    }else if(tool==='report/structure'){
       const {source,cuts}=args;
       if(source?.session!==state.spec.session||!Array.isArray(cuts)||!cuts.length||cuts.length>48||cuts.some((cut,i)=>!Number.isSafeInteger(cut)||cut<0||cut>source.cut||i&&cut<=cuts[i-1]))throw Error('Structure requires bounded increasing cuts for this source');
       const pinned=await state.tools.get('trajectory_inspect').execute({session:state.spec.session,snapshot:source.snapshot,view:'overview',format:'data',limit:1},{signal:new AbortController().signal});

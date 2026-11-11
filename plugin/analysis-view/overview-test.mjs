@@ -70,19 +70,67 @@ test('workspace overview uses the current cut and counts inherited turns once', 
     const first = await collect();
     assert.equal(first[0].total, 2);
     assert.deepEqual(first[0].projects.map(item => item.name), ['One', 'Two']);
-    const main = first[1].session;
+    const main = first.find(row => row.session?.id === 'main').session;
     assert.equal(main.project, 0);
     assert.deepEqual(main.turns[0].requests[0].window, [1000, 0]);
     assert.equal(main.turns[0].requests[0].input, 300);
     assert.deepEqual(main.occupancy.actions[0].slice(5), [1, 310, 1000, 5, 0, 1, 100]);
     assert.equal(main.turns[0].errors[0].returned, 7);
-    assert.equal(first[2].session, undefined);
+    assert.equal(main.findingCalls.length, 1);
+    assert.equal(main.findingCalls[0].seq, 4);
+    assert.equal(main.findingCalls[0].returned, 6);
+    assert.equal(first.filter(row => row.session).length, 1);
     assert.equal(first.at(-1).unread, 0);
-    assert.deepEqual(released, ['main', 'fork']);
+    assert.deepEqual([...released].sort(), ['fork', 'main']);
     await collect();
-    assert.deepEqual(calls, ['main', 'fork']);
+    assert.deepEqual([...calls].sort(), ['fork', 'main']);
     records.set('main', [...events, event(10, 'turn/start', { turn: 2 })]);
-    assert.equal((await collect())[1].session.cut, 10);
-    assert.deepEqual(calls, ['main', 'fork', 'main']);
+    assert.equal((await collect()).find(row => row.session?.id === 'main').session.cut, 10);
+    assert.equal(calls.filter(id => id === 'main').length, 2);
+    assert.equal(calls.filter(id => id === 'fork').length, 1);
   } finally { service.dispose(); }
+});
+
+test('warm summaries bypass queued raw logs and closing the stream cancels unfinished reads', async () => {
+  const queue = new TraceQueue(1), controller = new AbortController();
+  const sessions = { get: () => ({ seq: events.length }) };
+  let active = 0, peak = 0, stopped = false;
+  const service = new OverviewService({ get: key => key === 'sessions' ? sessions : null }, {
+    queue, timeout: (run, _ms, signal) => run(signal), sdk: async () => ({ stream: {}, pressure }),
+    observe: async (id, signal) => {
+      active++;peak = Math.max(peak, active);
+      try {
+        if (id === 'slow') await new Promise((_, reject) => signal.addEventListener('abort', () => { stopped = true;reject(signal.reason); }, { once: true }));
+        return { events, source: 'live', cursor: events.length-1 };
+      } finally { active--; }
+    }, dispose: () => {},
+  });
+  try {
+    await service.session({ id: 'warm', cwd: '/a' }, { stream: {}, pressure }, controller.signal);
+    const stream = service.stream({ projects: [], sessions: [{ id: 'slow', cwd: '/a' }, { id: 'warm', cwd: '/a' }] }, controller.signal);
+    assert.equal((await stream.next()).value.type, 'start');
+    const first = (await stream.next()).value;
+    assert.equal(first.session.id, 'warm');
+    assert.ok(first.models.length, 'A partial batch includes the model catalog needed for immediate rendering');
+    await stream.return();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(stopped, true);assert.equal(active, 0);assert.equal(peak, 1);
+  } finally { service.dispose();queue.dispose(); }
+});
+
+test('a workspace with more than 128 small summaries stays warm within the byte budget', async () => {
+  const queue = new TraceQueue(1), ids = Array.from({ length: 160 }, (_, i) => 'session-'+i);
+  const sessions = { get: () => ({ seq: events.length }) };
+  let reads = 0;
+  const service = new OverviewService({ get: key => key === 'sessions' ? sessions : null }, {
+    queue, timeout: (run, _ms, signal) => run(signal), sdk: async () => ({ stream: {}, pressure }),
+    observe: async () => { reads++;return { events, source: 'live', cursor: events.length-1 }; }, dispose: () => {},
+  });
+  const scope = { projects: [], sessions: ids.map(id => ({ id, cwd: '/a' })) };
+  try {
+    await Array.fromAsync(service.stream(scope, new AbortController().signal));
+    assert.equal(reads, ids.length);assert.ok(service.bytes < 20*1024*1024);
+    await Array.fromAsync(service.stream(scope, new AbortController().signal));
+    assert.equal(reads, ids.length, 'Unchanged small sessions are not decompressed again on refresh');
+  } finally { service.dispose();queue.dispose(); }
 });

@@ -12,8 +12,20 @@ import { adaptPiSession } from '../../analyzers/pi-adapter.mjs';
 import { renderTracePage } from '../../plugin/analysis-view/lib/index.js';
 import { generateTraceView } from '../../view/generate.mjs';
 import { datasetFromNative } from '../../plugin/portable-tools/sources.mjs';
-import { writeHostEvalPage } from '../../view/eval.mjs';
+import { writeHostEvalPage, portableRuntime } from '../../view/eval.mjs';
 import { generateCommandView } from '../../view/commands.mjs';
+import { buildEvalData } from '../../plugin/analysis-view/lib/eval/data.mjs';
+import { createOverviewModels } from '../../plugin/analysis-view/lib/eval/overview/shared.mjs';
+import { projectPortableOverview } from '../../view/overview.mjs';
+import { evaluationReportTables } from '../../report/evaluation.mjs';
+import { renderReport } from '../../report/render.mjs';
+import { buildTracePayload } from '../../plugin/analysis-view/lib/trace-build.js';
+import { createRuntimeMetrics } from '../../plugin/analysis-view/lib/eval-evidence.js';
+import { diagnosisSource } from '../../plugin/analysis-view/lib/eval/data.mjs';
+import { renderEvalPage } from '../../plugin/analysis-view/lib/eval/render.mjs';
+import { renderOverviewPage } from '../../plugin/analysis-view/lib/eval/overview/render.mjs';
+import { projectOverviewSession } from '../../plugin/analysis-view/lib/eval/overview/data.mjs';
+import { overviewCategories } from '../../plugin/analysis-view/lib/eval/overview/shared.mjs';
 
 const goalText = 'Check <limits> & results';
 const secondGoalText = 'Review changed files';
@@ -21,7 +33,8 @@ const nativeDiff = '@@ -23,2 +23,2 @@\n-const value = "<old>";\n+const value = "
 const addedFile = '/sample/flag.js';
 const addedLines = 510;
 const assets = new Map();
-let directory, server, origin, commandUrl;
+let directory, server, origin, commandUrl, streamFixture;
+const streaming = new Set();
 
 function hostDocument(src) {
   return '<!doctype html><html lang="zh-CN"><body style="margin:0">' +
@@ -85,6 +98,34 @@ before(async () => {
   const shellEval = await generateTraceView({ host: 'codex', snapshot: shellSnapshot, apiOnly: true, initialView: 'eval',
     locale: 'en', output: join(directory, 'eval-shell.html') });
   assets.set('/eval-shell', ['text/html; charset=utf-8', await readFile(shellEval.output)]);
+  const directCode=await generateTraceView({host:'codex',snapshot:shellSnapshot,apiOnly:true,initialView:'code',locale:'en',output:join(directory,'eval-code-direct.html')});
+  assets.set('/eval-code-direct',['text/html; charset=utf-8',await readFile(directCode.output)]);
+  const programEvents=[],addProgram=(type,data)=>programEvents.push({type,data,seq:programEvents.length,time:programEvents.length*10});
+  addProgram('turn/start',{turn:1});addProgram('step/start',{turn:1,step:1});
+  addProgram('tool/call',{turn:1,step:1,callId:'ptc',name:'run_code',arguments:{code:'await tools.pwsh({command: "sample"})'}});
+  addProgram('tool/ptc-dispatch-start',{turn:1,step:1,rootCallId:'ptc',subCallId:'ps',name:'pwsh',arguments:{command:'sample'}});
+  addProgram('tool/ptc-dispatch',{turn:1,step:1,rootCallId:'ptc',subCallId:'ps',name:'pwsh',arguments:{command:'sample'},isError:true,content:[{type:'text',text:'ParserError:\nLine |\n 1 | sample\n | Missing expression.'}]});
+  addProgram('tool/result',{turn:1,step:1,error:{code:'CODE_RUN_FAILED',message:'code run failed (timeout): elapsed budget expired'},message:{toolCallId:'ptc',isError:true,content:[{type:'text',text:'code run failed (timeout): elapsed budget expired'}]}});
+  addProgram('step/end',{turn:1,step:1});addProgram('turn/end',{turn:1,reason:{kind:'completed'}});
+  addProgram('turn/start',{turn:2});addProgram('step/start',{turn:2,step:1});
+  for (const kind of ['exception','abort','worker-exit','invalid-output','output-limit','protocol','sandbox-unavailable']) {
+    const callId='ptc-'+kind;
+    addProgram('tool/call',{turn:2,step:1,callId,name:'run_code',arguments:{code:'sample()'}});
+    addProgram('tool/result',{turn:2,step:1,error:{code:'CODE_RUN_FAILED',message:`code run failed (${kind}): recorded failure`},message:{toolCallId:callId,isError:true,content:[{type:'text',text:`code run failed (${kind}): recorded failure`}]}});
+  }
+  addProgram('step/end',{turn:2,step:1});addProgram('turn/end',{turn:2,reason:{kind:'completed'}});
+  const programSession=buildTracePayload(programEvents,'browser-program').sessions[0];
+  const programData=buildEvalData(programSession,createRuntimeMetrics(programSession,{events:programEvents}));
+  assets.set('/eval-program',['text/html; charset=utf-8',renderEvalPage(programData,{mode:'dsh',locale:'en',diagnosis:diagnosisSource(programSession,programData)})]);
+  const overviewModels=createOverviewModels();
+  const overviewOne=projectOverviewSession('overview-a',programEvents,{},overviewModels,{stream:{}});
+  const overviewTwo=projectOverviewSession('overview-b',programEvents.map(row=>({...row,time:row.time+86400000})),{},overviewModels,{stream:{}});
+  for(const [index,session] of [overviewOne,overviewTwo].entries())session.project=index;
+  const overviewNative={host:'dsh',projects:[{name:'Project A'},{name:'Project B'}],sessions:[overviewOne,overviewTwo],models:overviewModels.models,categories:overviewCategories,
+    latest:overviewTwo.turns.at(-1).at,unread:0,more:false};
+  assets.set('/overview-dsh',['text/html; charset=utf-8',renderOverviewPage({data:overviewNative,locale:'en'})]);
+  streamFixture = overviewNative;
+  assets.set('/overview-stream',['text/html; charset=utf-8',renderOverviewPage({locale:'en'})]);
   const transcript = join(directory, 'claude.jsonl');
   const event = { sessionId: 'browser-claude', timestamp, cwd: '/sample' };
   await writeFile(transcript, [
@@ -109,9 +150,38 @@ before(async () => {
   for (const [index, turn] of comparison.payload.sessions[0].turns.entries()) turn.durationMs = (index + 1) * 1000;
   const comparisonView = writeHostEvalPage(comparison, join(directory, 'eval-comparison.html'), { locale: 'en' });
   assets.set('/eval-comparison', ['text/html; charset=utf-8', await readFile(comparisonView.output)]);
+  const reportSession = comparison.payload.sessions[0], catalog = createOverviewModels();
+  const portableSession=projectPortableOverview(comparison,catalog);portableSession.project=0;
+  assets.set('/overview-pi',['text/html; charset=utf-8',renderOverviewPage({locale:'en',data:{host:'pi',projects:[{name:'Sample'}],sessions:[portableSession],models:catalog.models,categories:overviewCategories,latest:portableSession.turns.at(-1).at,unread:0,more:false}})]);
+  const reportData = evaluationReportTables(reportSession, buildEvalData(reportSession, portableRuntime(comparison.payload), { host: 'pi' }),
+    projectPortableOverview(comparison, catalog), catalog.models, { host: 'pi', session: comparison.session, snapshot: 'browser-report', log: comparison.logId, cut: reportSession.lastSeq });
+  const report = renderReport({ locale: 'en', template: 'diagnostic', datasets: reportData,
+    markdown: '# Recorded evaluation\n\n## Tool results\n\n[[figure:tools]]\n\n## Error distribution\n\n[[figure:trend]]\n\n## Call composition\n\n[[figure:share]]',
+    figures: { tools: { id: 'tools', type: 'table', data: 'tools', fields: { label: 'name', value: 'calls' }, series: ['calls', 'errorRate', 'durationP50Ms'], sort: 'descending' },
+      trend: { id: 'trend', type: 'trend', data: 'turns', fields: { x: 'turn' }, series: ['errors'] },
+      share: { id: 'share', type: 'donut', data: 'tools', fields: { label: 'name', value: 'calls' } } } });
+  assets.set('/report', ['text/html; charset=utf-8', report.html]);
   for (const host of ['dsh', 'codex']) assets.set('/host-' + host, ['text/html; charset=utf-8', hostDocument('/' + host)]);
   server = createServer((req, res) => {
-    const asset = assets.get(new URL(req.url, 'http://localhost').pathname);
+    const path = new URL(req.url, 'http://localhost').pathname;
+    const line = (response, value) => response.write(JSON.stringify(value)+'\n');
+    if (path === '/analysis-view/overview-data') {
+      res.writeHead(200, { 'content-type':'application/x-ndjson; charset=utf-8' });
+      line(res,{type:'start',projects:streamFixture.projects,total:2,latest:streamFixture.latest,models:streamFixture.models,categories:streamFixture.categories});
+      line(res,{type:'session',session:streamFixture.sessions[0],done:1,models:streamFixture.models});
+      streaming.add(res);res.once('close',()=>streaming.delete(res));return;
+    }
+    if (path === '/overview-release' || path === '/overview-interrupt') {
+      for (const response of streaming) {
+        if (path === '/overview-release') {
+          line(response,{type:'session',session:streamFixture.sessions[1],done:2,models:streamFixture.models});
+          line(response,{type:'complete',models:streamFixture.models,categories:streamFixture.categories,unread:0});
+        }
+        response.end();
+      }
+      res.writeHead(200).end();return;
+    }
+    const asset = assets.get(path);
     if (!asset) { res.writeHead(404).end(); return; }
     res.writeHead(200, { 'content-type': asset[0] }).end(asset[1]);
   });
@@ -339,8 +409,167 @@ async function checkCommands(page) {
   assert.equal(await page.locator('#detail-title').textContent(), '#' + await syntax.getAttribute('data-seq'));
 }
 
+async function checkReport(page) {
+  await page.goto(origin + '/report');
+  assert.equal(await page.locator('.diagnostic-kicker [data-report-ui]').textContent(),'Session diagnosis');
+  assert.match(await page.locator('.diagnostic-outline>summary').textContent(),/Contents.*sections/);
+  const table = page.locator('[data-figure="tools"]');
+  await table.locator('tbody tr').first().click();
+  const panel = table.locator('.report-record');
+  await panel.locator('summary').first().click();
+  assert.ok(await panel.locator('.report-evidence-links button').count() > 0);
+  const packet = JSON.parse(await panel.locator('.report-evidence-raw').textContent());
+  assert.equal(packet.evidence[0].args.linked, true);
+  assert.equal(packet.evidence[0].args.logId, packet.source.log);
+  assert.ok(!Object.hasOwn(packet.evidence[0].args, 'format'));
+  assert.equal(await page.locator('[data-figure="trend"] svg').count(), 1);
+  const share = page.locator('[data-figure="share"]');
+  const category = share.locator('.composition-item').last();
+  const rowId = await category.getAttribute('data-row');
+  await category.click();
+  assert.equal(JSON.parse(await share.locator('.report-evidence-raw').textContent()).values.id, rowId);
+  const sector = share.locator('svg [data-row]').first();
+  await sector.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(JSON.parse(await share.locator('.report-evidence-raw').textContent()).values.id, await sector.getAttribute('data-row'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Report tables scroll within the figure on narrow screens');
+  await page.setViewportSize({ width: 1280, height: 860 });
+}
+
+async function checkCodeExecution(page) {
+  await page.goto(origin+'/eval-shell');
+  await page.locator('[data-ce-tab="code"]').click();
+  await page.locator('#code-execution').waitFor({state:'visible'});
+  assert.match(await page.locator('#ce-group-title').textContent(),/Shell syntax error/);
+  assert.match(await page.locator('#ce-detail').innerText(),/L2/);
+  assert.match(await page.locator('.ce-code-grid>section').nth(1).innerText(),/ParserError:/,'Code feedback comes from the frozen result record');
+  await page.locator('#ce-ask-group').click();
+  const draft=await page.locator('#draft').inputValue();
+  assert.match(draft,/references\/code-execution\.md/);
+  assert.match(draft,/"seqs":\[/);
+  assert.match(draft,/"cut":/);
+  assert.match(draft,/"logId":/);
+  await page.locator('#close-editor').click();
+  await page.locator('#ce-executor').selectOption('Shell');
+  assert.equal(await page.locator('#ce-summary strong').first().textContent(),'1');
+  await page.locator('#scope').selectOption('1');
+  assert.match(await page.locator('#ce-group-title').textContent(),/No code execution errors/);
+  await page.locator('#ce-executor').selectOption('');
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Code analysis fits a narrow viewport');
+  await page.setViewportSize({width:1280,height:860});
+  await page.goto(origin+'/eval-program');
+  await page.locator('[data-ce-tab="code"]').click();
+  await page.locator('#ce-executor').selectOption('PTC');
+  await page.locator('#scope').selectOption('1');
+  assert.match(await page.locator('#ce-group-title').textContent(),/execution budget expired/);
+  assert.match(await page.locator('.ce-related').innerText(),/PowerShell/);
+  assert.equal(await page.locator('#ce-summary strong').first().textContent(),'1');
+  await page.locator('#ce-ask-call').click();
+  assert.match(await page.locator('#draft').inputValue(),/references\/code-execution\.md/);
+  assert.ok(!(await page.locator('#draft').inputValue()).includes('"logId"'),'DSH keeps its native source arguments');
+  await page.locator('#close-editor').click();
+  await page.locator('#scope').selectOption('');
+  assert.equal(await page.locator('#ce-groups .ce-group').count(),8);
+  await page.setViewportSize({width:1280,height:600});
+  const signalList=page.locator('#ce-groups');
+  await signalList.scrollIntoViewIfNeeded();
+  assert.equal(await signalList.evaluate(el=>el.scrollHeight>el.clientHeight),true,'Desktop failure signals have their own scroll viewport');
+  await signalList.evaluate(el=>el.scrollTop=0);
+  await signalList.hover();
+  const pageScroll=await page.evaluate(()=>scrollY);
+  await page.mouse.wheel(0,220);
+  await page.waitForFunction(()=>document.getElementById('ce-groups').scrollTop>0);
+  assert.equal(await page.evaluate(()=>scrollY),pageScroll,'Scrolling signals keeps the selected detail in place');
+  await signalList.locator('.ce-group').last().focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await signalList.locator('.ce-group').last().getAttribute('aria-pressed'),'true','Keyboard can select a group beyond the first screen');
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Many failure groups scroll inside the code analysis panel');
+  assert.equal(await page.locator('#ce-groups').evaluate(el=>el.scrollWidth>el.clientWidth),true);
+  await page.setViewportSize({width:1280,height:860});
+}
+
+async function checkFindings(page) {
+  await page.goto(origin+'/eval-code-direct');
+  await page.waitForFunction(()=>document.body.dataset.evalSection==='code');
+  assert.equal(await page.locator('#code-execution').isVisible(),true,'Direct generation opens code execution');
+  await page.goto(origin+'/eval-shell');
+  await page.setViewportSize({width:1920,height:1080});
+  assert.equal(await page.locator('.workspace').evaluate(el=>Math.round(el.getBoundingClientRect().width)),1920,'Session Eval uses the available width');
+  await page.locator('[data-ce-findings]').click();
+  assert.equal(await page.locator('section#eval-basis #time-basis').isVisible(),true,'Additional runtime metrics are directly visible');
+  const board=page.locator('#eval-findings');
+  await board.locator('.df-table tbody tr').first().click();
+  await board.locator('[data-df-ask="overall"]').click();
+  assert.match(await page.locator('#draft').inputValue(),/references\/disposition\.md/);
+  assert.match(await page.locator('#draft').inputValue(),/"logId":/);
+  await page.locator('#close-editor').click();
+  await page.locator('#scope').selectOption('1');
+  assert.equal(await board.locator('.df-table tbody tr').count(),1);
+  await page.locator('[data-ce-tab="code"]').click();
+  await page.locator('.ce-disposition [data-df-direction="repair"]').click();
+  assert.match(await page.locator('#draft').inputValue(),/Where should it be fixed/);
+  await page.locator('#close-editor').click();
+  await page.goto(origin+'/overview-dsh');
+  await page.locator('#overview-page').waitFor({state:'visible'});
+  assert.equal(await page.locator('#session-page,[data-view="session"]').count(),0,'Duplicate single-session overview page is removed');
+  const width=await page.locator('#overview-page').evaluate(el=>el.getBoundingClientRect().width);
+  assert.ok(width>=1850,'Global Eval uses the available width with normal gutters');
+  const global=page.locator('#overview-findings');
+  await global.locator('.df-table tbody tr').first().click();
+  await global.locator('[data-df-ask="overall"]').click();
+  let draft=await page.locator('#draft').inputValue();
+  assert.match(draft,/overview-a/);assert.match(draft,/overview-b/);
+  assert.ok(!draft.includes('"logId"'),'DSH keeps its native query contract');
+  await page.locator('#close-editor').click();
+  await page.locator('#project').selectOption('0');
+  await global.locator('[data-df-ask="overall"]').click();
+  draft=await page.locator('#draft').inputValue();
+  assert.match(draft,/overview-a/);assert.ok(!draft.includes('overview-b'),'Scope filters constrain diagnosis sources');
+  await page.locator('#close-editor').click();
+  await global.locator('[data-df-view="directions"]').click();
+  assert.equal(await global.locator('.df-cards>section').count(),4);
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Global findings fit a narrow viewport');
+  await page.goto(origin+'/overview-pi');
+  await page.locator('#overview-page').waitFor({state:'visible'});
+  await page.locator('#overview-findings [data-df-ask="overall"]').click();
+  draft=await page.locator('#draft').inputValue();assert.match(draft,/"logId":/);
+  assert.equal(await page.locator('#diagnosis-apply').isVisible(),false,'A global snapshot does not assume an active Pi binding');
+  await page.locator('#close-editor').click();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Portable overview fits a narrow viewport');
+  await page.setViewportSize({width:1280,height:860});
+}
+
+async function checkStreamingOverview(page) {
+  await page.goto(origin+'/overview-stream');
+  await page.locator('#overview-page').waitFor({state:'visible'});
+  assert.match(await page.locator('#snapshot').textContent(),/1 \/ 2/,'Charts appear before the remaining session is released');
+  await page.locator('#project').selectOption('0');
+  await page.locator('#overview-findings [data-df-ask="overall"]').click();
+  const originalDraft=await page.locator('#draft').inputValue();
+  assert.match(originalDraft,/overview-a/);assert.ok(!originalDraft.includes('overview-b'));
+  await page.request.get(origin+'/overview-release');
+  await page.waitForFunction(()=>document.getElementById('overview-page').getAttribute('aria-busy')==='false');
+  assert.match(await page.locator('#snapshot').textContent(),/Through/);
+  assert.equal(await page.locator('#project').inputValue(),'0','Loading another project preserves the chosen scope');
+  assert.equal(await page.locator('#draft').inputValue(),originalDraft,'An open diagnosis draft keeps its original source');
+  await page.locator('#close-editor').click();
+  await page.locator('#project').selectOption('all');
+  await page.locator('#overview-findings [data-df-ask="overall"]').click();
+  assert.match(await page.locator('#draft').inputValue(),/overview-b/,'Completed batches contribute their exact source records');
+  await page.locator('#close-editor').click();
+  await page.goto(origin+'/overview-stream');
+  await page.locator('#overview-page').waitFor({state:'visible'});
+  await page.request.get(origin+'/overview-interrupt');
+  await page.waitForFunction(()=>document.getElementById('snapshot').textContent.includes('Loading interrupted'));
+  assert.equal(await page.locator('#overview-page').isVisible(),true,'An interrupted stream retains the already loaded analysis');
+}
+
 for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
-  test(name + ' opens the shared trace and Eval with scoped host actions', { timeout: 60_000 }, async t => {
+  test(name + ' opens the shared trace and Eval with scoped host actions', { timeout: 90_000 }, async t => {
     const browser = await engine.launch();
     t.after(() => browser.close());
     const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
@@ -363,6 +592,10 @@ for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
     await checkPowerShellDraft(page);
     await checkTurnComparison(page);
     await checkCommands(page);
+    await checkReport(page);
+    await checkCodeExecution(page);
+    await checkFindings(page);
+    await checkStreamingOverview(page);
     assert.deepEqual(dshRequests, [], 'Frozen and portable pages do not request live DSH stages');
     assert.deepEqual(errors, [], 'No renderer errors');
   });

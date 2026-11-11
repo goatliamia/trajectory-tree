@@ -18,7 +18,7 @@
 .report-metric:hover>span{color:var(--blue)}
 
 .report-template-diagnostic .report-brand{max-width:1280px;margin:auto;padding:18px 32px;display:flex;align-items:center;gap:12px}
-.report-template-diagnostic .report-brand:before{content:'';width:14px;height:14px;display:inline-block;background:linear-gradient(90deg,transparent 6px,var(--ink) 6px,var(--ink) 8px,transparent 8px),linear-gradient(0deg,transparent 6px,var(--ink) 6px,var(--ink) 8px,transparent 8px);transform:rotate(45deg)}
+.report-template-diagnostic .report-provenance{max-width:1280px;padding:12px 32px 0}
 .report-template-diagnostic main{max-width:1280px;margin:auto;padding:0 32px 48px}
 .diagnostic-shell{display:block}
 .diagnostic-shell>article{min-width:0;container-type:inline-size}

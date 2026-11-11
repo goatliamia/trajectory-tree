@@ -1,4 +1,5 @@
 import { validateAssemblyData, assemblyFrames } from './assembly-model.mjs';
+import { flowGraph } from './flow.mjs';
 
 export const REPORT_SCHEMA = 'trajectory-report/1';
 export const DATA_SCHEMA = 'trajectory-data/1';
@@ -9,11 +10,14 @@ export const COMPONENTS = Object.freeze({
   scatter: { fields: ['x', 'y'], purpose: '比较相近条件的记录，选择异常或代表性样本' },
   timeline: { fields: ['label', 'start', 'end'], purpose: '按真实区间观察先后、重叠与等待' },
   sequence: { fields: [], purpose: '将有原文位置的行动、反馈和转折放在一起' },
+  flow: { fields: [], purpose: '用已核实的关系展示分支、依赖与汇合，逐节点和连线回查证据' },
   context: { fields: ['x'], purpose: '查看构成随轮次变化，或聚焦几种来源' },
   comparison: { fields: [], purpose: '将两个实际切点的同一组指标放在同一尺度比较' },
   donut: { fields: [], purpose: '查看同一统计范围内互斥、同单位类别的组成与占比' },
   stacked: { fields: [], purpose: '比较多个实际记录位置的组成数量或比例' },
   assembly: { fields: [], purpose: '逐个切点重放上下文的保留、追加与历史结构变化' },
+  table: { fields: ['label'], purpose: '在同一行核对数量、占比、分位数和证据' },
+  trend: { fields: ['x'], purpose: '沿轮次或实际位置对照同口径指标的变化' },
 });
 const numericUnit = unit => !['text', 'turn', 'step', 'identifier'].includes(unit);
 export function validateDataset(data) {
@@ -36,7 +40,7 @@ export function validateDataset(data) {
 export function bindFigure(spec, datasets) {
   const component = COMPONENTS[spec?.type];
   if (!component) throw Error('Unknown report component: ' + spec?.type);
-  const allowed = new Set(['id','type','data','fields','title','subtitle','note','readout','select','limit','sort','orientation','groupBy','highlight','bins','sample','series','layers','annotations','color','rows','nodes','rowLabels','mode','initialRow','autoplay','items']);
+  const allowed = new Set(['id','type','data','fields','title','subtitle','note','readout','select','limit','sort','orientation','groupBy','highlight','bins','sample','series','layers','annotations','color','rows','nodes','edges','rowLabels','mode','initialRow','autoplay','items']);
   for (const key of Object.keys(spec)) if (!allowed.has(key)) throw Error('Unknown component option: ' + key);
   if (spec.limit !== undefined && (!Number.isInteger(spec.limit) || spec.limit < 1 || spec.limit > 200)) throw Error('Component limit must be 1..200');
   if (spec.bins && spec.bins.length > 32) throw Error('Use at most 32 histogram bins');
@@ -50,7 +54,7 @@ export function bindFigure(spec, datasets) {
     data = { ...data, rows };
   }
   for (const role of component.fields) if (!spec.fields?.[role] || !data.columns[spec.fields[role]]) throw Error('Missing component field: ' + role);
-  for (const role of Object.keys(spec.fields || {})) if (![...component.fields, ...(spec.type === 'bar' ? ['detail'] : [])].includes(role) || !data.columns[spec.fields[role]]) throw Error('Unknown component field: ' + role);
+  for (const role of Object.keys(spec.fields || {})) if (![...component.fields, ...(spec.type === 'bar' ? ['detail'] : []), ...(spec.type === 'table' ? ['value'] : []), ...(spec.type === 'donut' ? ['label','value'] : [])].includes(role) || !data.columns[spec.fields[role]]) throw Error('Unknown component field: ' + role);
   if (spec.groupBy && (spec.type !== 'bar' || spec.groupBy !== spec.fields.label)) throw Error('Group additive bars by their label column');
   if (spec.orientation && !['horizontal','vertical'].includes(spec.orientation)) throw Error('Unknown bar orientation');
   if (spec.sort && !['source','descending'].includes(spec.sort)) throw Error('Unknown figure sort');
@@ -63,6 +67,20 @@ export function bindFigure(spec, datasets) {
     }
   } else if (spec.items) throw Error('items is only available for metrics');
   if (['bar', 'histogram'].includes(spec.type)) numberField(spec.fields.value);
+  if (spec.type === 'flow') flowGraph(data, spec);
+  else if (spec.edges) throw Error('edges is only available for flow');
+  if (spec.type === 'table') {
+    if (!Array.isArray(spec.series) || !spec.series.length || spec.series.length > 10 || new Set(spec.series).size !== spec.series.length
+        || spec.series.some(key => !data.columns[key])) throw Error('Table needs 1..10 distinct existing columns');
+    if (spec.fields.value) numberField(spec.fields.value);
+    if (spec.sort === 'descending' && !spec.fields.value) throw Error('Sorted table requires a numeric value field');
+  }
+  if (spec.type === 'trend') {
+    if (!Array.isArray(spec.series) || !spec.series.length || spec.series.length > 5 || new Set(spec.series).size !== spec.series.length) throw Error('Trend needs 1..5 distinct numeric series');
+    spec.series.forEach(numberField);
+    if (new Set(spec.series.map(key => data.columns[key].unit)).size !== 1 || new Set(spec.series.map(key => data.columns[key].basis)).size !== 1) throw Error('Trend series require the same unit and measurement basis');
+    if (data.rows.some(row => row[spec.fields.x] != null && !Number.isFinite(row[spec.fields.x]))) throw Error('Trend positions must be numeric');
+  }
   if (spec.type === 'scatter') { numberField(spec.fields.x); numberField(spec.fields.y); if (spec.color) { numberField(spec.color.field); if (!Number.isFinite(spec.color.threshold)) throw Error('Invalid color threshold'); } }
   if (spec.type === 'timeline') {
     if ([spec.fields.start, spec.fields.end].some(k => data.columns[k].unit !== 'timestamp-ms')) throw Error('Timeline requires two observed timestamp columns');
@@ -71,7 +89,16 @@ export function bindFigure(spec, datasets) {
     if (data.kind !== 'context') throw Error('Context requires a recorded composition dataset');
     for (const key of spec.series || []) if (data.columns[key]?.unit !== 'tokens' || data.columns[key]?.basis !== 'estimated') throw Error('Context series requires source estimates');
   }
-  if (['comparison','donut','stacked'].includes(spec.type)) {
+  const categoryDonut = spec.type === 'donut' && spec.fields != null;
+  if (categoryDonut) {
+    if (!spec.fields.label || !spec.fields.value) throw Error('Category donut requires label and value fields');
+    numberField(spec.fields.value);
+    if (data.columns[spec.fields.value].unit === 'ratio') throw Error('Category donut needs part quantities, not independent ratios');
+    if (spec.rows || spec.series || spec.rowLabels || spec.limit || spec.sort) throw Error('Category donut uses all selected rows; choose either fields or rows/series');
+    if (data.rows.length > 12) throw Error('Narrow category composition to at most 12 parts');
+    if (data.rows.some(row => row[spec.fields.value] < 0)) throw Error('Composition parts cannot be negative');
+  }
+  if (['comparison','donut','stacked'].includes(spec.type) && !categoryDonut) {
     if (!Array.isArray(spec.rows) || !spec.rows.length || spec.rows.some(id => !data.rows.some(row => row.id === id)) || new Set(spec.rows).size !== spec.rows.length) throw Error('Composition requires distinct recorded row IDs');
     if (spec.type === 'comparison' && spec.rows.length !== 2) throw Error('Comparison requires two recorded row IDs');
     if (spec.type === 'donut' && spec.rows.length !== 1) throw Error('Donut requires one recorded row ID');

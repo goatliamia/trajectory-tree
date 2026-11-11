@@ -1,6 +1,8 @@
 import { summarizeToolOutcomes } from '../trace/shared/io-outcome.mjs';
 import { callDurationMs, callTimingSummary } from '../trace/shared/tool-intervals.mjs';
 import { scopeByTurn } from '../trace/shared/scope-index.mjs';
+import { codeExecutionData } from './code-data.mjs';
+import { projectFindingCalls } from './findings.mjs';
 import { failureCategories, failureCategoryIndex, failureCondition, failureLabels, powerShellEdition, summarizeFailureAttributions } from '../trace/shared/tool-attribution.mjs';
 
 const longCallMs = 30_000;
@@ -11,14 +13,14 @@ const bins = [
 const hostNames = { dsh: 'DSH', codex: 'Codex', pi: 'Pi', claude: 'Claude Code' };
 export const EVAL_DETAIL_TURNS = 120;
 
-function interval(call, host) {
+export function evalCallInterval(call, host) {
   const startSeq = host === 'dsh' ? (call.inner ? call.startSeq : call.seq)
     : call.startSeq === null || ['ordinal-only', 'unrecorded-start'].includes(call.timingSource) ? null : call.startSeq ?? call.seq;
   return { startSeq, resultSeq: call.resultSeq, start: call.start, end: call.end };
 }
 
 function measure(calls, host) {
-  const intervals = calls.map(({ call }) => interval(call, host));
+  const intervals = calls.map(({ call }) => evalCallInterval(call, host));
   const counts = bins.map(() => 0);
   let longMs = 0;
   const rows = [];
@@ -95,7 +97,7 @@ function execution(turns, episodes, host, attributions) {
 }
 
 // Presentation adapter. All evidence is already projected from one source cut.
-export function buildEvalData(session, runtime, { host = 'dsh', title = session.title, turnLimit, synthetic = false, attributions } = {}) {
+export function buildEvalData(session, runtime, { host = 'dsh', title = session.title, turnLimit, synthetic = false, attributions, argumentsBySeq, resultsBySeq, commandScripts } = {}) {
   const episodesIn = scopeByTurn(session.overview?.episodes ?? []);
   const scope = (turns, number) => {
     const { timing, usage, files, task, context, repeats, parameters } = runtime(turns, number);
@@ -119,6 +121,8 @@ export function buildEvalData(session, runtime, { host = 'dsh', title = session.
   const turns = turnLimit ? session.turns.slice(-turnLimit) : session.turns;
   return { title, host, sourceLabel: hostNames[host] + (synthetic ? ' 模拟记录' : ' 实录'),
     cut: session.lastSeq, longCallMs, totalTurns: session.turns.length,
+    codeExecution: codeExecutionData(session, { host, attributions, argumentsBySeq, resultsBySeq, commandScripts }),
+    findingCalls: projectFindingCalls(session, { host, attributions }),
     failureLabels, failureCategories: failureCategories.map(([zh, en]) => [zh, en]),
     durationBins: bins.map(([, label, unit]) => ({ label, unit })),
     whole: scope(session.turns, null), turns: turns.map(turn => ({ number: turn.number, metrics: scope([turn], turn.number) })) };

@@ -14,12 +14,12 @@
   let usageSlot = 0;
   const defaultSort = globalThis.__trajectoryEvalToolSort;
   const state = { turn: null, sort: ['calls', 'errors'].includes(defaultSort) ? defaultSort : 'time', allTools: false, tool: null };
-  const standardOrder = ['tool-comparison', 'tool-errors', 'turn-usage'];
+  const standardOrder = ['tool-comparison', 'tool-errors', 'turn-usage', 'eval-findings'];
   const views = {
     classic: { title: t('运行评估', 'Session evaluation'), sections: standardOrder },
-    overview: { title: t('轮次总览', 'Turn overview'), sections: ['turn-usage', 'tool-comparison', 'tool-errors'] },
+    overview: { title: t('轮次总览', 'Turn overview'), sections: ['turn-usage', 'tool-comparison', 'tool-errors', 'eval-findings'] },
     monitor: { title: t('工具监控', 'Tool monitor'), sections: standardOrder },
-    evidence: { title: t('证据工作台', 'Evidence workspace'), sections: ['tool-errors', 'turn-usage', 'tool-comparison'] },
+    evidence: { title: t('证据工作台', 'Evidence workspace'), sections: ['tool-errors', 'turn-usage', 'tool-comparison', 'eval-findings'] },
   };
   const toolLimit = 5;
   const number = new Intl.NumberFormat(locale);
@@ -36,6 +36,17 @@
   const scopeLabel = () => state.turn == null ? t('整段会话', 'Full session') : turnLabel(state.turn);
   const scopeMetrics = () => turns.get(state.turn)?.metrics ?? data.whole;
   const selectedTool = metrics => metrics.tools.find(tool => tool.name === state.tool);
+  const findingSource = () => {
+    const source = window.__trajectoryDiagnosisOptions?.source?.() ?? {};
+    return {...source,host:data.host,session:source.session ?? data.codeExecution?.session,cut:data.cut};
+  };
+  const findingsBoard = globalThis.__mountEvalFindings?.($('eval-findings'), {
+    getEntries:()=> {
+      const source = findingSource();
+      return (data.findingCalls??[]).filter(row=>state.turn==null||row.turn===state.turn).map(row=>({...row,source}));
+    },
+    onDiagnose:(selection,button,view)=>window.__diagnosisDemoAsk?.(selection,button,view),
+  });
 
   function clockDuration(ms) {
     if (!Number.isFinite(ms) || ms < 60_000) return shortDuration(ms);
@@ -608,6 +619,7 @@
     renderErrors(metrics);
     selectUsageTurn(turn ?? usageTurn ?? defaultUsageTurn);
     renderSupporting(metrics);
+    findingsBoard?.refresh();
   }
 
   function selectView() {

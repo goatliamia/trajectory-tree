@@ -11,17 +11,17 @@ const options=key=>args.flatMap((arg,index)=>{
  return [value];
 });
 const option=key=>options(key)[0];
-if(args.includes('--help'))console.log('trajectory-view --host pi|codex|claude [--eval | --overview | --commands] [--file native-session|snapshot] [--thread ID] [--dir session-directory] [--project cwd] [--limit 20] [--leaf ID] [--capture file] [--api-only] [--lang en|zh-CN|auto] [--out view.html] [--serve] [--open]\nOverview accepts repeated --file or --thread arguments. Codex defaults to the current project; Pi and Claude require a directory or files.\nCommand diagnosis uses --host codex [--cr-root PATH] [--pwsh PATH] [--seq N ...] [--cut N].');
+if(args.includes('--help'))console.log('trajectory-view --host pi|codex|claude [--eval | --overview | --code | --commands] [--file native-session|snapshot] [--thread ID] [--dir session-directory] [--project cwd] [--limit 20] [--leaf ID] [--capture file] [--api-only] [--lang en|zh-CN|auto] [--out view.html] [--serve] [--open]\n--code opens the code execution section of the same session Eval.\nOverview accepts repeated --file or --thread arguments. Codex defaults to the current project; Pi and Claude require a directory or files.\nCommand diagnosis uses --host codex [--cr-root PATH] [--pwsh PATH] [--seq N ...] [--cut N].');
 else try{
  const common={host:option('--host'),rollout:option('--rollout'),apiOnly:args.includes('--api-only'),output:option('--out'),locale:option('--lang'),synthetic:args.includes('--synthetic')};
- const modes=['--eval','--overview','--commands'].filter(flag=>args.includes(flag));
- if(modes.length>1)throw Error('Choose one of --eval, --overview or --commands');
+ const modes=['--eval','--overview','--code','--commands'].filter(flag=>args.includes(flag));
+ if(modes.length>1)throw Error('Choose one of --eval, --overview, --code or --commands');
  const selected={...common,file:option('--file'),thread:option('--thread')};
  let view;
  if(modes[0]==='--overview')view=await generateOverviewView({...common,files:options('--file'),threads:options('--thread'),directory:option('--dir'),project:option('--project'),limit:Number(option('--limit')??20)});
  else if(modes[0]==='--commands')view=await generateCommandView({...selected,seqs:options('--seq').map(Number),cut:option('--cut')===undefined?undefined:Number(option('--cut')),cr:commandCrOptions(args)});
  else view=await generateTraceView({...selected,leafId:option('--leaf'),captureFile:option('--capture'),
-   ...(modes[0]==='--eval'?{initialView:'eval',cr:commandCrOptions(args)}:{initialView:'trace'})});
+   ...(['--eval','--code'].includes(modes[0])?{initialView:modes[0]==='--code'?'code':'eval',cr:commandCrOptions(args)}:{initialView:'trace'})});
  if(args.includes('--serve')||args.includes('--open'))Object.assign(view,await serveViewFile(view.output));
  if(args.includes('--open'))await openViewBrowser(view.url);
  console.log(JSON.stringify({ok:true,...view}));

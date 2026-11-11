@@ -843,7 +843,9 @@ export function apply(ctx, config) {
               const session = entry.payload.sessions[0];
               if (!page) return summarizeTrajectoryEval(session, evidence);
               const attributions = await evalPowerShellEvidence(session, events, stop);
-              const data = buildEvalData(session, createRuntimeMetrics(session, evidence), { turnLimit: EVAL_DETAIL_TURNS, attributions });
+              const argumentsBySeq = new Map(events.filter(event => event.type === 'tool/call' || event.type === 'tool/ptc-dispatch')
+                .map(event => [event.seq, event.data?.arguments]));
+              const data = buildEvalData(session, createRuntimeMetrics(session, evidence), { turnLimit: EVAL_DETAIL_TURNS, attributions, argumentsBySeq });
               return renderEvalPage(data, { integrated: true, mode: 'dsh', diagnosis: diagnosisSource(session, data), toolSort: settings.evalToolSort });
             }, signal), 8000, disconnected.signal);
             if (page) {

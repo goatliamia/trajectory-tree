@@ -4,35 +4,57 @@
   const reload = () => location.reload();
   $('overview-refresh').addEventListener('click', reload);
   $('overview-retry').addEventListener('click', reload);
+  let onStreamUpdate = () => {};
   async function loadOverview() {
-    const response = await fetch('/analysis-view/overview-data', { cache: 'no-store' });
-    if (!response.ok || !response.body) throw new Error('overview response');
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-    let buffer = '', data, complete = false;
-    try {
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += value;
-        let end;
-        while ((end = buffer.indexOf('\n')) >= 0) {
-          const row = JSON.parse(buffer.slice(0, end));
-          buffer = buffer.slice(end + 1);
-          if (row.type === 'start') data = { ...row, sessions: [] };
-          if (row.type === 'session') {
-            if (row.session) data.sessions.push(row.session);
-            $('overview-progress').textContent = ui`正在读取会话 · ${row.done} / ${data.total}`;
-          }
-          if (row.type === 'complete') {
-            Object.assign(data, { models: row.models, categories: row.categories, unread: row.unread });
-            complete = true;
+    let ready = false, resolve, reject;
+    const first = new Promise((yes, no) => { resolve = yes; reject = no; });
+    const controller = new AbortController();
+    window.addEventListener('pagehide', () => controller.abort(), { once: true });
+    // Resolve as soon as the first complete session arrives. Keep consuming the
+    // same stream; subsequent batches update the mounted charts and filters.
+    void (async () => {
+      let reader, data, buffer = '', complete = false;
+      try {
+        const response = await fetch('/analysis-view/overview-data', { cache: 'no-store', signal: controller.signal });
+        if (!response.ok || !response.body) throw new Error('overview response');
+        reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += value;
+          let end;
+          while ((end = buffer.indexOf('\n')) >= 0) {
+            const line = buffer.slice(0, end);buffer = buffer.slice(end + 1);
+            if (!line.trim()) continue;
+            const row = JSON.parse(line);
+            if (row.type === 'start') data = { ...row, sessions: [], loading: true, unread: 0 };
+            if (!data) throw new Error('missing overview scope');
+            if (row.type === 'session') {
+              if (row.session) data.sessions.push(row.session);
+              Object.assign(data, { done: row.done, unread: row.unread ?? 0, models: row.models ?? data.models });
+              $('overview-progress').textContent = ui`正在读取会话 · ${row.done} / ${data.total}`;
+            }
+            if (row.type === 'complete') {
+              Object.assign(data, { models: row.models, categories: row.categories, unread: row.unread, loading: false });
+              complete = true;
+            }
+            if (!ready && (data.sessions.length || complete) && data.models && data.categories) {
+              ready = true;resolve(data);
+            }
+            if (ready) onStreamUpdate();
           }
         }
+        if (!data || !complete) throw new Error('incomplete overview');
+      } catch (error) {
+        if (!ready) reject(error);
+        else if (!controller.signal.aborted) {
+          Object.assign(data, { loading: false, interrupted: true });onStreamUpdate();
+        }
+      } finally {
+        await reader?.cancel().catch(() => {});
       }
-    } finally { await reader.cancel().catch(() => {}); }
-    if (!data || !complete) throw new Error('incomplete overview');
-    data.sessions.sort((a, b) => b.turns.at(-1).at - a.turns.at(-1).at);
-    return data;
+    })();
+    return first;
   }
   let data;
   try { data = $('overview-data') ? JSON.parse($('overview-data').textContent) : await loadOverview(); }
@@ -42,31 +64,43 @@
     return;
   }
   const portable = Boolean(data.host && data.host !== 'dsh');
-  const hasUsage = data.sessions.some(session => session.turns.some(turn => turn.requests.length));
-  const hasRequestWindows = data.sessions.some(session => session.turns.some(turn => turn.requests.some(request => request.window && request.input != null)));
-  data.categories = data.categories.map(label => ui(label));
-  const rows = data.sessions.flatMap((session, sessionIndex) =>
-    session.turns.map(turn => ({ ...turn, session: sessionIndex, project: session.project })))
-    .sort((a, b) => a.at - b.at)
-    .map((turn, index) => ({ ...turn, id: index }));
-  const roundsBySession = data.sessions.map(() => new Map());
-  for (const turn of rows) roundsBySession[turn.session].set(turn.no, turn);
-  const actionsBySession = data.sessions.map((session, index) =>
-    readOccupancyActions(session.occupancy, turn => roundsBySession[index].get(turn)));
-  const hasToolModels = actionsBySession.some(actions => actions.some(action => action.model));
-  const actionsByTurn = rows.map(() => []);
-  for (const actions of actionsBySession) for (const action of actions) actionsByTurn[action.turn.id].push(action);
-  const workItems = data.sessions.flatMap((session, sessionIndex) => Object.entries(session.work)
-    .flatMap(([kind, items]) => items.map(item => ({ ...item, kind, session: sessionIndex,
-      project: session.project, round: roundsBySession[sessionIndex].get(item.turn) ?? null }))))
-    .map((item, id) => ({ ...item, id }));
-  const counts = new Map();
-  for (const turn of rows) for (const request of turn.requests) {
-    if (request.model) counts.set(request.model, (counts.get(request.model) ?? 0) + 1);
-  }
-  const routeOrder = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
   const colors = ['#1860e2', '#2e864d', '#b86b13', '#bd5040', '#087f83', '#963c20', '#196d98', '#998314'];
-  const colorByRoute = new Map(routeOrder.map((route, index) => [route, colors[index % colors.length]]));
+  const stableTurns = new Map(), colorByRoute = new Map();
+  let hasUsage, hasRequestWindows, hasToolModels, rows, orderedRows, roundsBySession, actionsBySession, actionsByTurn, findingsByTurn, workItems, routeOrder;
+  function indexSessions() {
+    hasUsage = data.sessions.some(session => session.turns.some(turn => turn.requests.length));
+    hasRequestWindows = data.sessions.some(session => session.turns.some(turn => turn.requests.some(request => request.window && request.input != null)));
+    data.categories = data.categories.map(label => ui(label));
+    for (const [sessionIndex, session] of data.sessions.entries()) for (const turn of session.turns) {
+      const key = session.id + ':' + turn.no;
+      if (!stableTurns.has(key)) stableTurns.set(key, { ...turn, session: sessionIndex, project: session.project, id: stableTurns.size });
+    }
+    // Stable IDs keep open sample drawers and selected records valid when an
+    // older session finishes loading after a newer one.
+    rows = [...stableTurns.values()];
+    orderedRows = [...rows].sort((a,b) => a.at-b.at || a.id-b.id);
+    roundsBySession = data.sessions.map(() => new Map());
+    for (const turn of rows) roundsBySession[turn.session].set(turn.no, turn);
+    actionsBySession = data.sessions.map((session, index) => readOccupancyActions(session.occupancy, turn => roundsBySession[index].get(turn)));
+    hasToolModels = actionsBySession.some(actions => actions.some(action => action.model));
+    actionsByTurn = rows.map(() => []);
+    for (const actions of actionsBySession) for (const action of actions) actionsByTurn[action.turn.id].push(action);
+    findingsByTurn = rows.map(() => []);
+    for (const [index,session] of data.sessions.entries()) for (const finding of session.findingCalls ?? []) {
+      const turn=roundsBySession[index].get(finding.turn);
+      if(turn)findingsByTurn[turn.id].push({...finding,source:{host:data.host??'dsh',session:session.id,cut:session.cut,
+        logId:session.logId,file:session.file,label:(data.projects[session.project]?.name??'')+' · '+session.id.slice(0,8)}});
+    }
+    workItems = data.sessions.flatMap((session, sessionIndex) => Object.entries(session.work)
+      .flatMap(([kind, items]) => items.map(item => ({ ...item, kind, session: sessionIndex,
+        project: session.project, round: roundsBySession[sessionIndex].get(item.turn) ?? null }))))
+      .map((item, id) => ({ ...item, id }));
+    const counts = new Map();
+    for (const turn of rows) for (const request of turn.requests) if (request.model) counts.set(request.model, (counts.get(request.model) ?? 0) + 1);
+    routeOrder = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
+    for (const route of routeOrder) if (!colorByRoute.has(route)) colorByRoute.set(route, colors[colorByRoute.size % colors.length]);
+  }
+  indexSessions();
   const unknownTone = '#446b91';
   const tone = route => colorByRoute.get(route) ?? unknownTone;
   const toneStyle = route => `--series:${tone(route)}`;
@@ -96,9 +130,8 @@
   const actionBuckets = [[ui('1 个'), '#b9d5fa'], [ui('2 个'), '#6fa7ed'], [ui('3–4 个'), '#347bda'], [ui('5 个以上'), '#1455ba']];
   const day = 86_400_000, shanghai = 8 * 3_600_000;
   const startDay = time => Math.floor((time + shanghai) / day) * day - shanghai;
-  const firstDay = startDay(workItems.reduce((min, row) => Math.min(min, row.round?.at ?? row.at), rows[0]?.at ?? data.latest));
-  const lastDay = startDay(data.latest);
-  const until = lastDay + day;
+  let firstDay;
+  const lastDay = startDay(data.latest), until = lastDay + day;
   const format = new Intl.NumberFormat('en-US');
   const dayFormat = new Intl.DateTimeFormat('en-US', { month: '2-digit', day: '2-digit', timeZone: 'Asia/Shanghai' });
   const dateFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Shanghai', hour12: false });
@@ -137,7 +170,10 @@
     `<span><i class="${variant}" style="--series:${color}" aria-hidden="true"></i>${esc(label)}</span>`;
   const option = (value, label) => `<option value="${esc(value)}">${esc(label)}</option>`;
 
-  $('snapshot').textContent = ui('截至 ') + dayFormat.format(data.latest)
+  function updateControls() {
+    $('overview-page').setAttribute('aria-busy', String(Boolean(data.loading)));
+    firstDay = startDay(workItems.reduce((min, row) => Math.min(min, row.round?.at ?? row.at), rows.reduce((min, row) => Math.min(min, row.at), data.latest)));
+    $('snapshot').textContent = (data.interrupted ? ui('读取中断 · 已保留已读取会话') : data.loading ? ui`正在读取会话 · ${data.done} / ${data.total}` : ui('截至 ') + dayFormat.format(data.latest))
     + (data.unread ? ' · ' + num(data.unread) + ui(' 段未读取') : '') + (data.more ? ui(' · 最近记录') : '')
     + (data.sessions.some(session => session.synthetic) ? ui(' · 含模拟记录') : '');
   $('project').innerHTML = option('all', ui('全部项目')) + data.projects.map((project, i) => option(i, project.name || ui('未记录项目'))).join('');
@@ -152,6 +188,9 @@
   $('window-tool').innerHTML = option('', ui('全部工具')) + [...new Set(actionsBySession.flatMap(actions => actions.map(action => action.tool)))]
     .sort((a, b) => a.localeCompare(b)).map(name => option(name, name)).join('');
   $('window-error').innerHTML = option('', ui('全部类型')) + data.categories.map((name, id) => option(id, name)).join('');
+    for (const [id,key] of [['project','project'],['model','model'],['tool-mode','toolMode'],['feedback-type','feedback'],['window-route','windowRoute'],['window-tool','windowTool'],['window-error','windowError']]) $(id).value=state[key];
+  }
+  updateControls();
   $('wait-legend').innerHTML = dot(ui('单轮'), ink.wait) + dot(ui('日 P50'), ink.median, 'line') + dot(ui('日 P90'), ink.tail, 'dashed');
   $('error-legend').innerHTML = dot(ui('有同参返回样本'), ink.paired) + dot(ui('无同参返回样本'), ink.unpaired, 'hollow');
 
@@ -212,7 +251,7 @@
 
   function derive() {
     const since = state.period === 'all' ? firstDay : until - Number(state.period) * day;
-    const turns = rows.filter(turn => turn.at >= since
+    const turns = orderedRows.filter(turn => turn.at >= since
       && (state.project === 'all' || turn.project === Number(state.project))
       && (state.model === 'all' || turn.model === Number(state.model)));
     const waits = turns.filter(turn => Number.isFinite(turn.wait)).sort((a, b) => b.wait - a.wait || b.at - a.at);
@@ -855,7 +894,6 @@
     if (portable) return `<p class="drawer-sub">${ui`会话快照截至 ${seq(session.cut)}`}</p>`;
     const target = encodeURIComponent(session.id);
     return ui`<div class="native-links">
-      <button type="button" class="session-jump" data-session-jump="${data.sessions.indexOf(session)}">本页查看窗口占用 ↗</button>
       <a href="/analysis-view/eval?format=page&amp;session=${target}" target="_blank" rel="noopener">打开会话 Eval ↗</a>
       <a href="/analysis-view/trace?staged=1&amp;session=${target}" target="_blank" rel="noopener">打开执行路径 ↗</a>
     </div><p class="drawer-sub">会话快照截至 ${seq(session.cut)}</p>`;
@@ -1099,6 +1137,15 @@
     }
   }
 
+  const findingsBoard=globalThis.__mountEvalFindings($('overview-findings'),{
+    getEntries:()=>view?.turns.flatMap(turn=>findingsByTurn[turn.id])??[],
+    onDiagnose:(selection,button,intent)=>{
+      const source=selection.sources[0];if(!source)return;
+      window.__trajectoryOverviewDiagnosisSource={...source,rounds:[],episodes:[],maxCallSelection:500};
+      window.__diagnosisDemoAsk(selection,button,intent);
+    },
+  });
+
   function refresh() {
     view = derive();
     renderOverview();
@@ -1108,6 +1155,7 @@
     else { renderBehavior(); renderCohort(); }
     renderWindow();
     renderPlots();
+    findingsBoard.refresh();
   }
   const inputs = [['project', 'project'], ['period', 'period'], ['model', 'model'], ['input-size', 'input'],
     ['tool-mode', 'toolMode'], ['feedback-type', 'feedback']];
@@ -1183,35 +1231,6 @@
       openWorkList(action, view.work[action]);
     }
   });
-  const sessionView = mountSessionEval({ data, $, num, esc, time, dayFormat, option, metric, empty, fraction, dot,
-    chart: { frame, xGrid, yGrid, line, circle, showPlot, plotEmpty },
-    getActions: session => actionsBySession[session],
-    openActions: openActionSamples,
-    openWork: (kind, session, anchor) => {
-      const items = workItems.filter(item => item.session === session && item.kind === kind);
-      if (anchor == null) return openWorkList(kind, items);
-      const item = items.find(item => item.seq === anchor);
-      if (item) {
-        list = null;
-        workDetail(item);
-      }
-    },
-  });
-  let activePage = 'overview';
-  function switchPage(page, session) {
-    activePage = page;
-    $('overview-page').hidden = page !== 'overview';
-    $('session-page').hidden = page !== 'session';
-    for (const button of document.querySelectorAll('.page-nav button')) {
-      button.setAttribute('aria-pressed', String(button.dataset.view === page));
-    }
-    if (page === 'session') sessionView.select(session);
-    else renderPlots();
-    window.scrollTo({ top: 0, behavior: 'instant' });
-  }
-  for (const button of document.querySelectorAll('.page-nav button')) {
-    button.addEventListener('click', () => switchPage(button.dataset.view));
-  }
   dialog.addEventListener('click', async event => {
     if (event.target === dialog) {
       const bounds = dialog.getBoundingClientRect();
@@ -1221,10 +1240,6 @@
     const button = event.target.closest('button');
     if (!button || button.disabled) return;
     if (button.id === 'drawer-close') dialog.close();
-    if (button.dataset.sessionJump != null) {
-      dialog.close();
-      switchPage('session', Number(button.dataset.sessionJump));
-    }
     if (button.id === 'drawer-back') showList();
     if (button.dataset.page != null && list) {
       list.page += Number(button.dataset.page);
@@ -1251,15 +1266,11 @@
   let resize;
   window.addEventListener('resize', () => {
     cancelAnimationFrame(resize);
-    resize = requestAnimationFrame(activePage === 'session' ? sessionView.draw : renderPlots);
+    resize = requestAnimationFrame(renderPlots);
   });
   $('overview-loading').hidden = true;
-  $('overview-nav').hidden = false;
   $('snapshot-controls').hidden = false;
   $('overview-page').hidden = false;
-  const sessionButton = document.querySelector('[data-view="session"]');
-  sessionButton.disabled = !data.sessions.length || portable;
-  sessionButton.hidden = portable;
   if (portable) {
     document.body.classList.add('portable-overview');
     $('native-overview-method').hidden = true;
@@ -1279,5 +1290,11 @@
     document.querySelector('[data-window-mode="tool"]').setAttribute('aria-pressed', String(!hasUsage));
   }
   refresh();
-  if (location.hash === '#session' && !sessionButton.disabled) switchPage('session');
+  let updateTimer;
+  onStreamUpdate = () => {
+    if (updateTimer) return;
+    updateTimer = setTimeout(() => {
+      updateTimer = null;indexSessions();updateControls();refresh();
+    }, 200);
+  };
 })();

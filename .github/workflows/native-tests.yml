@@ -50,6 +50,8 @@ jobs:
           lib/i18n-test.mjs
           plugin/analysis-view/self-test.mjs
           plugin/analysis-view/eval-test.mjs
+          plugin/analysis-view/code-execution-test.mjs
+          plugin/analysis-view/findings-test.mjs
           plugin/analysis-view/overview-test.mjs
           plugin/analysis-view/search-test.mjs
           plugin/trajectory-tools/request-context-test.mjs
@@ -58,6 +60,9 @@ jobs:
           docs/demo/layout-review/geist-interaction-test.mjs
           view/test.mjs
           report/smoke-test.mjs
+          report/test.mjs
+          report/eval-test.mjs
+          report/flow-test.mjs
       - name: Exercise the portable evidence tools and transports
         run: npm test --prefix plugin/portable-tools
       - name: Build the three host packages and load their entrypoints

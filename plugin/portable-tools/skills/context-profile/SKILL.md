@@ -13,6 +13,8 @@ Respond and write reports in the language of the user's current request unless t
 
 **找配置与工作之间的不匹配。** 例如多份说明已经互相冲突、任务切换后仍带着大量过期材料、常驻目录很长但能力仍难发现、压缩保留了结论却丢掉继续操作所需的入口。用有关联的实际使用确认。
 
+决定修配置、恢复、补能力或留下指导时，沿用[处置与知识保留](../trace-analysis/references/disposition.md)。先核对当时实际可见的事实与能力，再选择合适的调整位置。
+
 对材料更新、外置和 skill 使用，按[上下文持续使用](../trace-analysis/references/context.md)深入。对工具供给、加载或替换，按[用量与能力投入](../trace-analysis/references/cost.md)核对来源与作用域，再比较适用的策略。验证沿用[综合诊断的验证方法](../trace-analysis/SKILL.md#验证改法)。
 
 交付按[报告写作](../../../../report/WRITING.md)组织。

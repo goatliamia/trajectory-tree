@@ -20,7 +20,7 @@ pi -e ./plugin/portable-tools
 
 扩展读取当前会话选中的分支、当前 SDK 工具清单与系统提示，并从加载之后记录工具开始/结束时间。不会补造加载前的时间，也不会替换工具、调用模型或写回历史。包内同时提供短 skill。
 
-使用 `/trajectory` 打开当前分支的轨迹，或用 `/trajectory --eval` 直接打开 Eval。两个命令都可加 `--no-open` 只返回链接。
+使用 `/trajectory` 打开当前分支的轨迹，`/trajectory --eval` 打开 Eval，`/trajectory --overview` 打开项目总览，`/trajectory --code` 直接进入 Eval 的代码执行。都可加 `--no-open` 只返回链接，或用 `--lang en|zh-CN|auto` 选择界面语言。
 
 可从 Eval 页面复制草稿命令，回到同一 Pi 会话的终端输入框运行。扩展会在输入框为空时载入草稿，之后可以编辑并手动发送。其他客户端可从 Eval 页面复制提示词。
 

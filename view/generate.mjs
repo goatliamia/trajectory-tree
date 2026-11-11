@@ -18,7 +18,7 @@ import {normalizeLocale} from '../lib/i18n.mjs';
 // Deterministic view generation only. No model call or diagnostic prose.
 export async function generateTraceView(spec,{signal}={}){
  signal?.throwIfAborted();const locale=spec.locale==='auto'?'auto':normalizeLocale(spec.locale);let payload, dataset;
- const evaluation=spec.initialView==='eval';
+ const evaluation=['eval','code'].includes(spec.initialView);
  const cr=evaluation?(spec.cr??commandCrOptions([])):null;
  if(spec.host==='pi'){
   const input=spec.input||await readPiSession(spec.file,{leafId:spec.leafId,captureFile:spec.captureFile,synthetic:spec.synthetic,signal});
@@ -34,12 +34,12 @@ export async function generateTraceView(spec,{signal}={}){
   const snapshot=spec.snapshot||(spec.file?await readCodexSnapshot(spec.file,{signal}):await readCodexThread(thread,{signal}));
   const rollout=spec.apiOnly?null:await readCodexRollout(spec.rollout||snapshot.thread?.path,{required:!!spec.rollout,signal});
   validateCodexRollout(rollout,snapshot.thread.id);
-  if(evaluation)dataset=datasetFromNative('codex',snapshot,{rollout,commandDiagnostics:!!cr.root});
+  if(evaluation)dataset=datasetFromNative('codex',snapshot,{rollout,commandDiagnostics:true});
   payload=dataset?.payload||adaptCodexThread(spec.snapshot?omitCodexImageValues(snapshot):snapshot,{rollout});
  }else throw Error('View host must be pi, codex or claude');
  signal?.throwIfAborted();const session=payload.sessions[0].id;
  const key=createHash('sha256').update(spec.host+':'+session).digest('hex').slice(0,20);
  const output=resolve(spec.output||join(tmpdir(),'trajectory-tree',key,evaluation?'eval.html':'view.html'));
- if(dataset){const attributions=await commandAttributionDetails(dataset,cr,signal);return writeHostEvalPage(dataset,output,{locale,attributions});}
+ if(dataset){const attributions=await commandAttributionDetails(dataset,cr,signal);return writeHostEvalPage(dataset,output,{locale,attributions,section:spec.initialView==='code'?'code':undefined});}
  return {...writeHostTracePage(payload,output,{locale}),session,totals:payload.sessions[0].totals};
 }

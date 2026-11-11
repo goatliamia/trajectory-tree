@@ -8,13 +8,21 @@ import { scopeByTurn } from '../lib/scope-index.mjs';
 
 const valid = value => Number.isFinite(value) && value >= 0;
 const sum = values => values.length ? values.reduce((total, value) => total + value, 0) : null;
+function resultText(value) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(resultText).filter(Boolean).join('\n');
+  if (!value || typeof value !== 'object' || value.mediaOmitted || /^(?:input_|output_)?(?:image|audio|video)(?:_url)?$/.test(value.type || '')) return '';
+  if (typeof value.text === 'string') return value.text;
+  if (value.content != null) return resultText(value.content);
+  return JSON.stringify(value);
+}
 function spans(rows) {
   const measured = rows.flatMap(row => valid(row.durationMs) ? [row.durationMs]
     : row.endObserved === true && valid(row.start) && valid(row.end) && row.end >= row.start ? [row.end - row.start] : []);
   return { total: rows.length, measured: measured.length, ms: sum(measured) };
 }
 
-function portableRuntime(payload) {
+export function portableRuntime(payload) {
   const { host, context = {} } = payload;
   const session = payload.sessions[0];
   const turnNumbers = new Map(session.turns.map(turn => [turn.id, turn.number]));
@@ -24,10 +32,12 @@ function portableRuntime(payload) {
   })));
   const filesIn = scopeByTurn((context.fileOperations ?? []).filter(row => row.path && row.source !== 'estimate'));
   return (turns, number) => {
-    const rows = usageIn(number);
+    const select = index => number == null && turns.length !== session.turns.length
+      ? turns.flatMap(turn => index(turn.number)) : index(number);
+    const rows = select(usageIn);
     const outputs = rows.map(row => row.output).filter(valid);
     const steps = turns.flatMap(turn => turn.steps);
-    const files = filesIn(number);
+    const files = select(filesIn);
     return {
       timing: { turns: spans(turns), steps: spans(steps),
         toolSteps: { coveredMs: null, measured: null, total: steps.length }, official: null },
@@ -41,11 +51,19 @@ function portableRuntime(payload) {
   };
 }
 
-export function writeHostEvalPage(dataset, output, { locale, attributions } = {}) {
-  const { payload, logId, host } = datasetAtCut(dataset, dataset.payload.sessions[0].lastSeq);
+export function writeHostEvalPage(dataset, output, { locale, attributions, section } = {}) {
+  const { payload, logId, host, records, commandScripts } = datasetAtCut(dataset, dataset.payload.sessions[0].lastSeq);
   const session = payload.sessions[0];
-  const data = buildEvalData(session, portableRuntime(payload), { host, synthetic: payload.synthetic, turnLimit: EVAL_DETAIL_TURNS, attributions });
-  const html = renderEvalPage(data, { integrated: true, mode: host, locale,
+  const argumentsBySeq = new Map(records.map(record => [record.seq, record.arguments ?? record.body?.arguments]));
+  // Query snapshots drop duplicated renderer excerpts. Read bounded previews
+  // from the same frozen native records rather than treating them as no output.
+  const failedResults = new Set(session.turns.flatMap(turn => turn.steps.flatMap(step => step.calls.filter(call => call.status === 'error').map(call => call.resultSeq))));
+  const resultsBySeq = new Map(records.filter(record => failedResults.has(record.seq)).map(record => {
+    const value = host === 'codex' ? record.body?.result?.output ?? record.body?.result : record.body?.content;
+    return [record.seq, value == null ? undefined : resultText(value)];
+  }));
+  const data = buildEvalData(session, portableRuntime(payload), { host, synthetic: payload.synthetic, turnLimit: EVAL_DETAIL_TURNS, attributions, argumentsBySeq, resultsBySeq, commandScripts });
+  const html = renderEvalPage(data, { integrated: true, mode: host, locale, section,
     diagnosis: diagnosisSource(session, data, { host, logId, file: session.source?.file }) });
   const path = resolve(output);
   mkdirSync(dirname(path), { recursive: true });

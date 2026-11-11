@@ -65,13 +65,19 @@ try{
   assert.equal(evaluation.view,'eval');assert.equal(evaluation.host,host);
   const evalHtml=readFileSync(evaluation.output,'utf8');
   assert.ok(evalHtml.includes('installUi("en", false)')&&evalHtml.includes('id="diagnosis-editor"'));
+  assert.ok(evalHtml.includes('Code execution analysis')&&evalHtml.includes('references/code-execution.md'),'Packaged Eval includes code execution and its diagnosis method');
+  assert.ok(evalHtml.includes('id="eval-findings"')&&evalHtml.includes('references/disposition.md'),'Packaged Eval includes shared program signals and investigation methods');
   assert.match(evalHtml, /SIL OPEN FONT LICENSE Version 1\.1/);
+  const code=run('trajectory-view.mjs',[...source,'--code','--lang','en','--out',join(directory,'code.html')]);
+  assert.equal(code.view,'eval');assert.equal(code.session,evaluation.session);assert.equal(code.cut,evaluation.cut);
+  assert.ok(readFileSync(code.output,'utf8').includes('window.__trajectoryEvalInitialSection = "code";'),'Each host can open code execution directly');
   const overviewSource=host==='codex'?[...source.filter(arg=>arg!=='--api-only'),'--rollout',codexRollout]:source;
   for(const locale of ['en','zh-CN']){
    const overview=run('trajectory-view.mjs',[...overviewSource,'--overview','--lang',locale,'--out',join(directory,'overview-'+locale+'.html')]);
    assert.equal(overview.view,'overview');assert.equal(overview.host,host);assert.equal(overview.sessions,1);assert.equal(overview.projects,1);
    const html=readFileSync(overview.output,'utf8');
    assert.ok(html.includes('installUi('+JSON.stringify(locale)+', false)'));
+   assert.ok(html.includes('id="overview-findings"')&&!html.includes('id="session-page"'),'Overview ships signals without a duplicate session view');
    assert.match(html, /SIL OPEN FONT LICENSE Version 1\.1/);
    const data=JSON.parse(html.match(/id="overview-data">([^<]*)<\/script>/)[1]);
    assert.ok(data.projects[0].name && data.sessions[0].occupancy.actions.length);
@@ -94,6 +100,16 @@ try{
    assert.equal(report.rows[0].resultSeq,4);assert.equal(report.rows[0].cause.kind,'returned');
   }
   const query=run('trajectory-query.mjs',[...source,'--args','{"view":"overview","format":"data"}']);assert.ok(query.source.snapshot);
+  const evalPlan=join(directory,'eval-plan.json'),evalBundle=join(directory,'eval-bundle.json');
+  writeFileSync(evalPlan,JSON.stringify({schema:'trajectory-report-plan/1',sources:{
+   summary:{evaluation:{source:query.source,table:'summary'}},tools:{evaluation:{from:'summary',table:'tools'}},turns:{evaluation:{from:'summary',table:'turns'}},
+  }}));
+  const prepared=run('trajectory-report.mjs',['prepare',...source,'--plan',evalPlan,'--bundle',evalBundle]);
+  assert.equal(prepared.ok,true);assert.ok(prepared.datasets.summary.examples[0].calls>0);
+  const evalMarkdown=join(directory,'eval-report.md');
+  writeFileSync(evalMarkdown,'# Eval report\n\n\x60\x60\x60report-figure\n'+JSON.stringify({type:'table',data:'tools',fields:{label:'name'},series:['calls','errors','durationP50Ms']})+'\n\x60\x60\x60\n');
+  const evalReport=run('trajectory-report.mjs',['render','--markdown',evalMarkdown,'--bundle',evalBundle,'--output',join(directory,'eval-report.html'),'--lang','en']);
+  assert.equal(evalReport.ok,true);assert.equal(evalReport.figures[0].type,'table');
   if(host==='claude'){
    assert.equal(view.host,'claude');assert.ok(readFileSync(view.output,'utf8').includes('Claude Code · 会话分析'));
    const overview=run('trajectory-query.mjs',[...source,'--args','{"view":"overview"}']);

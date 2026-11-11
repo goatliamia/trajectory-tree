@@ -54,6 +54,8 @@
       </section>
     </aside>
 
+    <section id="eval-findings"></section>
+
     <section id="tool-comparison" class="panel comparison" aria-labelledby="tools-title">
       <header class="section-head comparison-head">
         <div><h2 id="tools-title" tabindex="-1">工具对照</h2><p id="tool-caption"></p></div>
@@ -119,8 +121,8 @@
       </div>
     </section>
 
-    <details id="eval-basis" class="basis">
-      <summary>其他运行指标与统计口径</summary>
+    <section id="eval-basis" class="basis" aria-labelledby="eval-basis-title">
+      <h2 id="eval-basis-title">其他运行指标与统计口径</h2>
       <section class="supporting-metrics" aria-labelledby="file-title">
         <h3 id="file-title">文件与交付</h3>
         <div id="files"></div>
@@ -139,7 +141,7 @@
         <li>报错优先按实录中的错误码分类，其余沿用轨迹归类。同参返回指同一轮内同工具、同完整参数的后续非报错返回。</li>
         <li>文件前读和读回按有配对写入记录的文件计算，搜索命中单独计数。</li>
       </ul>
-    </details>
+    </section>
   </main>
 
   <!-- eval:data -->

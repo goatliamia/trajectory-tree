@@ -5,13 +5,14 @@ export const failureCategories = [
   ['服务与访问', 'Services and access', ['SESSION_QUERY_PERSISTENCE_FAILED', 'SEARCH_FAILED', 'WEB_UNSUPPORTED_CONTENT_TYPE',
     'WEB_PROVIDER_ERROR', 'WEB_REDIRECT_BLOCKED', 'COMMAND_APP_SERVER_EXITED', 'COMMAND_RESPONSE_BODY_UNAVAILABLE',
     'COMMAND_OFFLINE_DEPENDENCY', 'COMMAND_CIM_UNAVAILABLE']],
-  ['调用超时', 'Timeouts', ['TOOL_TIMEOUT', 'COMMAND_TIMEOUT']],
-  ['中止与取消', 'Aborts and cancellations', ['ABORTED', 'ABORTED_BEFORE_DISPATCH']],
+  ['调用超时', 'Timeouts', ['TOOL_TIMEOUT', 'COMMAND_TIMEOUT', 'CODE_TIMEOUT']],
+  ['中止与取消', 'Aborts and cancellations', ['ABORTED', 'ABORTED_BEFORE_DISPATCH', 'CODE_ABORTED']],
   ['结果待确认', 'Unconfirmed outcomes', ['TOOL_OUTCOME_UNKNOWN']],
-  ['代码执行失败', 'Code execution failed', ['CODE_RUN_FAILED', 'COMMAND_RUNTIME_ERROR', 'COMMAND_ENCODING_ERROR']],
+  ['代码执行失败', 'Code execution failed', ['CODE_RUN_FAILED', 'COMMAND_RUNTIME_ERROR', 'COMMAND_ENCODING_ERROR',
+    'CODE_EXCEPTION', 'CODE_WORKER_EXIT', 'CODE_INVALID_OUTPUT', 'CODE_OUTPUT_LIMIT', 'CODE_PROTOCOL']],
   ['原因待确认', 'Cause unclassified', []],
-  ['命令语法与参数', 'Command syntax and arguments', ['COMMAND_SYNTAX', 'COMMAND_PATTERN', 'COMMAND_ARGUMENT', 'COMMAND_NOT_FOUND']],
-  ['权限受阻', 'Access denied', ['COMMAND_PERMISSION', 'TOOL_PERMISSION']],
+  ['命令语法与参数', 'Command syntax and arguments', ['COMMAND_SYNTAX', 'COMMAND_PATTERN', 'COMMAND_ARGUMENT', 'COMMAND_NOT_FOUND', 'CODE_SYNTAX']],
+  ['权限受阻', 'Access denied', ['COMMAND_PERMISSION', 'TOOL_PERMISSION', 'CODE_SANDBOX_UNAVAILABLE']],
   ['连接失败', 'Connection failures', ['COMMAND_CONNECTION_DENIED', 'COMMAND_CONNECTION_FAILED']],
   ['验证未通过', 'Verification failures', ['COMMAND_TEST_FAILED']],
 ];
@@ -55,6 +56,15 @@ export const failureLabels = {
   LOOKUP_COMMAND: ['疑似未找到命令', 'Command lookup may have found nothing'],
   UNCLASSIFIED_OUTPUT: ['有返回，原因待确认', 'Output present, cause unclassified'],
   NO_OUTPUT: ['无文字返回', 'No text output'],
+  CODE_SYNTAX: ['程序语法或转换失败', 'Program syntax or transform failed'],
+  CODE_EXCEPTION: ['程序抛出异常', 'Program exception'],
+  CODE_TIMEOUT: ['程序运行预算到期', 'Program execution budget expired'],
+  CODE_ABORTED: ['程序运行被中止', 'Program run aborted'],
+  CODE_WORKER_EXIT: ['程序运行环境退出', 'Program worker exited'],
+  CODE_INVALID_OUTPUT: ['程序返回值不符合 JSON 契约', 'Program result is not lossless JSON'],
+  CODE_OUTPUT_LIMIT: ['程序输出超过运行时上限', 'Program output limit exceeded'],
+  CODE_PROTOCOL: ['程序运行时协议错误', 'Program runtime protocol error'],
+  CODE_SANDBOX_UNAVAILABLE: ['程序所需沙箱不可用', 'Required program sandbox unavailable'],
 };
 export const failureMessages = {
   ...Object.fromEntries(failureCategories.map(([zh, en]) => [zh, en])),
@@ -105,6 +115,7 @@ export const failureViewRuntime = () => [
 ].map(([name, fn]) => 'globalThis.' + name + ' = ' + fn.toString() + ';\n').join('');
 
 export const isShellTool = name => /^(?:commandExecution|bash|pwsh|powershell|shell|terminal|exec_command)$/i.test(name ?? '');
+export const isProgramTool = name => /^run_?code$/i.test(name ?? '');
 export function powerShellEdition(executable) {
   const name = String(executable ?? '').trim().replace(/^["']|["']$/g, '').split(/[\\/]/).at(-1);
   if (/^pwsh(?:\.exe)?$/i.test(name)) return 'Core';
@@ -190,6 +201,30 @@ export function legacyParserDiagnostic(lines) {
   if (index < 0) return null;
   const id = /^\+\s*FullyQualifiedErrorId\s*:\s*([A-Za-z][A-Za-z0-9_]{0,80})\b/i.exec(lines[index + 1] ?? '')?.[1];
   return id ? { index, id } : null;
+}
+
+// Keep the runtime's own failure kind separate from an inferred root cause.
+function programFailure(runtime, detected) {
+  const match = /^(?:Error:\s*)?code run failed \((exception|timeout|abort|worker-exit|invalid-output|output-limit|protocol|sandbox-unavailable)\):\s*([^\n]*)/i.exec(runtime);
+  if (!match) return null;
+  const kind = match[1].toLowerCase(), message = match[2].trim();
+  const exception = /^(?:Error:\s*)?([A-Za-z][A-Za-z0-9]*(?:Error|Exception))\b/.exec(message)?.[1];
+  const codes = { exception: /^(?:SyntaxError|IndentationError|TabError|TransformError)$/.test(exception ?? '') ? 'CODE_SYNTAX' : 'CODE_EXCEPTION',
+    timeout: 'CODE_TIMEOUT', abort: 'CODE_ABORTED', 'worker-exit': 'CODE_WORKER_EXIT', 'invalid-output': 'CODE_INVALID_OUTPUT',
+    'output-limit': 'CODE_OUTPUT_LIMIT', protocol: 'CODE_PROTOCOL', 'sandbox-unavailable': 'CODE_SANDBOX_UNAVAILABLE' };
+  return { ...detected(codes[kind], message.slice(0, 220) || kind, 'PTC', 'runtime-kind'), runtimeKind: kind,
+    ...(exception ? { exception } : {}) };
+}
+
+function failureLocation(runtime, program) {
+  if (program === 'PowerShell') {
+    const line = /^\s*(\d+)\s*\|/m.exec(runtime)?.[1];
+    return line ? { line: Number(line), source: 'recorded-output' } : undefined;
+  }
+  const stack = /^\s*at\s+(?:[^()\n]*\()?((?:file:\/\/\/|[A-Z]:[\\/]|\/)[^()\n]+?\.(?:[cm]?[jt]sx?|py)):(\d+)(?::(\d+))?\)?\s*$/im.exec(runtime);
+  if (stack) return { file: stack[1].slice(0, 240), line: Number(stack[2]), ...(stack[3] ? { column: Number(stack[3]) } : {}), source: 'runtime-stack' };
+  const python = /^\s*File "([^"\n]+)", line (\d+)/m.exec(runtime);
+  return python ? { file: python[1].slice(0, 240), line: Number(python[2]), source: 'runtime-stack' } : undefined;
 }
 
 function recordedFailure(runtime, source, shell, detected) {
@@ -299,12 +334,18 @@ export function attributeToolFailure({ status, tool, output, stderr, error, exit
   const detected = (code, evidence, program, basis = 'runtime-output') => ({
     code, label: failureLabels[code][0], certainty: 'confirmed', basis, exitCode: exit,
     ...(program ? { program } : {}), evidence,
+    ...(failureLocation(diagnostic || runtime, program) ? { site: failureLocation(diagnostic || runtime, program) } : {}),
   });
   const nativeCode = nativeCodeAliases.get(error?.code) ?? error?.code;
   if (categories.has(nativeCode) && !genericCodes.has(nativeCode)) {
     return detected(nativeCode, error.code, null, 'native-code');
   }
   if (interrupted === true) return detected('ABORTED', 'interrupted', null, 'native-status');
+
+  if (isProgramTool(tool) && nativeCode === 'CODE_RUN_FAILED') {
+    const observedProgram = programFailure(runtime, detected);
+    if (observedProgram) return observedProgram;
+  }
 
   const source = bounded(sourceText(command)) ?? '';
   const observed = (diagnostic && recordedFailure(diagnostic, source, shell, (code, evidence, program) =>

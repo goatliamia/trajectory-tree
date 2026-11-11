@@ -3,7 +3,8 @@ import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, posix, resolve, win32 } from 'node:path';
 import { readCodexOverview } from '../analyzers/codex-reader.mjs';
-import { loadPortableSource } from '../plugin/portable-tools/sources.mjs';
+import { loadPortableSource, datasetAtCut } from '../plugin/portable-tools/sources.mjs';
+import { projectFindingCalls } from '../plugin/analysis-view/lib/eval/findings.mjs';
 import { usageRow, usageSettlements } from '../plugin/portable-tools/usage.mjs';
 import { renderOverviewPage } from '../plugin/analysis-view/lib/eval/overview/render.mjs';
 import { createOverviewModels, errorsForTurn, overviewCategories, span, valid } from '../plugin/analysis-view/lib/eval/overview/shared.mjs';
@@ -73,7 +74,10 @@ export function projectPortableOverview(dataset, catalog, { cwd, provider } = {}
       wait: null, calls: calls.length, errors, requests, loops: null, chars: null });
   }
   if (!turns.length) return null;
-  return { id: source.id, cut: source.lastSeq, projectPath: projectPath(cwd), turns, synthetic: dataset.synthetic === true,
+  const frozen = datasetAtCut(dataset, source.lastSeq);
+  return { id: source.id, cut: source.lastSeq, logId: frozen.logId, file: source.source?.file,
+    findingCalls: projectFindingCalls(source, { host, turns: turns.map(turn => turn.no) }),
+    projectPath: projectPath(cwd), turns, synthetic: dataset.synthetic === true,
     occupancy: { points: [], names, actions, stepEnds: [] }, work: { goals: [], deliveries: [], children: [], compactions: [] } };
 }
 

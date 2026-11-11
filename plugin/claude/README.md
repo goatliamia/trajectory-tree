@@ -8,6 +8,8 @@ The reader opens only the explicit local file. It includes visible user and assi
 
 Use `/trajectory-tree:trajectory-eval` to open Eval for the bound transcript. To open a specific transcript from a terminal, run `node scripts/trajectory-view.mjs --host claude --file "<transcript_path>" --eval --serve` and open the returned local URL. The view uses the transcript revision captured at generation. Tool outcomes, same-input returns, file calls and recorded usage are observations. Execution duration, full request composition and task completion require other evidence.
 
+Pass `--code` to the view or Eval command to open code execution directly. Use `--overview` for the bound transcript's project directory, or choose explicit files. The generated views include the shared diagnosis signals and use the same source cut for the copied evidence draft.
+
 For diagnosis, select a scope in Eval and review the copied `/trajectory-tree:trace-analysis` draft in Claude Code. Use its transcript path and log identity when querying a record sequence. If the transcript changed, verify a reference against its native line or tool ID, or regenerate Eval for the new revision.
 
 The installed plugin must include the hook script and generated skills; see the repository packaging workflow. Claude Code needs Node.js on PATH to run the hook and CLI. No Claude model call is needed for reading a transcript.

@@ -31,7 +31,7 @@ function loadRuntime() {
 }
 
 const CACHE_BYTES = 20 * 1024 * 1024;
-const CACHE_SESSIONS = 128;
+const CACHE_SESSIONS = 1024;
 
 export class OverviewService {
   constructor(ctx, { observe, dispose, timeout, queue, sdk = loadRuntime }) {
@@ -47,10 +47,10 @@ export class OverviewService {
     if (typeof registry?.list !== 'function') return null;
     const archived = new Set(registry.archivedSessionIds);
     const projects = [], sessions = [], seen = new Set();
-    for (const workspace of registry.list()) {
+    for (const workspace of [...registry.list()].sort((a,b) => new Date(b.updatedAt ?? 0)-new Date(a.updatedAt ?? 0))) {
       const project = projects.length;
       projects.push({ id: workspace.id, name: workspace.title || basename(workspace.path) });
-      for (const id of workspace.sessionIds) {
+      for (const id of [...workspace.sessionIds].reverse()) {
         if (archived.has(id) || seen.has(id)) continue;
         seen.add(id);
         sessions.push({ id, cwd: workspace.path, project });
@@ -60,17 +60,19 @@ export class OverviewService {
   }
 
   async session({ id, cwd }, sdk, signal) {
+    // Revision checks and compact cache hits must not wait behind a large trace
+    // projection. The shared low-priority queue still admits only one raw log.
+    const source = await this.timeout(stop => traceSource(this.ctx, id, stop), 1500, signal).catch(error => {
+      if (signal.aborted) throw error;
+      return null;
+    });
+    const cached = this.cache.get(id);
+    if (cached && sameSource(cached.source, source) && cached.cwd === cwd) {
+      this.cache.delete(id);
+      this.cache.set(id, cached);
+      return cached.data;
+    }
     return this.queue.run(async () => {
-      const source = await this.timeout(stop => traceSource(this.ctx, id, stop), 1500, signal).catch(error => {
-        if (signal.aborted) throw error;
-        return null;
-      });
-      const cached = this.cache.get(id);
-      if (cached && sameSource(cached.source, source) && cached.cwd === cwd) {
-        this.cache.delete(id);
-        this.cache.set(id, cached);
-        return cached.data;
-      }
       this.forget(id);
       const observation = await this.timeout(stop => this.observe(id, stop), 8000, signal);
       let data, captured;
@@ -99,22 +101,38 @@ export class OverviewService {
   }
 
   async *stream(scope, requestSignal) {
-    const signal = AbortSignal.any([this.controller.signal, requestSignal]);
-    yield { type: 'start', projects: scope.projects, total: scope.sessions.length, latest: Date.now() };
-    const sdk = await this.sdk();
-    let done = 0, unread = 0;
-    for (const entry of scope.sessions) {
-      signal.throwIfAborted();
-      let data;
-      try { data = await this.session(entry, sdk, signal); }
-      catch (error) {
-        if (signal.aborted) throw error;
-        unread++;
+    const request = new AbortController();
+    const signal = AbortSignal.any([this.controller.signal, requestSignal, request.signal]);
+    yield { type: 'start', projects: scope.projects, total: scope.sessions.length, latest: Date.now(),
+      models: this.catalog.models, categories: overviewCategories };
+    const pending = new Map();
+    let next = 0, done = 0, unread = 0;
+    try {
+      const sdk = await this.sdk();
+      // Warm summaries first also prevents an LRU sweep from evicting every
+      // not-yet-read cache entry when the workspace exceeds the byte budget.
+      const entries = [...scope.sessions].sort((a,b) => Number(this.cache.has(b.id))-Number(this.cache.has(a.id)));
+      const fill = () => {
+        while (next < entries.length && pending.size < 4) {
+          const entry = entries[next++];
+          pending.set(entry, this.session(entry, sdk, signal).then(data => ({ entry, data }), error => ({ entry, error })));
+        }
+      };
+      fill();
+      while (pending.size) {
+        signal.throwIfAborted();
+        const { entry, data, error } = await Promise.race(pending.values());
+        pending.delete(entry);
+        if (error) { signal.throwIfAborted(); unread++; }
+        yield { type: 'session', done: ++done, unread, models: this.catalog.models,
+          ...(data ? { session: { ...data, project: entry.project } } : {}) };
+        await setImmediate(undefined, { signal });
+        fill();
       }
-      yield { type: 'session', done: ++done, ...(data ? { session: { ...data, project: entry.project } } : {}) };
-      await setImmediate(undefined, { signal });
+      yield { type: 'complete', models: this.catalog.models, categories: overviewCategories, unread };
+    } finally {
+      request.abort();
     }
-    yield { type: 'complete', models: this.catalog.models, categories: overviewCategories, unread };
   }
 
   dispose() {

@@ -1,6 +1,6 @@
 {
   "name": "dsh-analysis-view",
-  "version": "0.10.146",
+  "version": "0.10.147",
   "private": true,
   "type": "module",
   "description": "Trajectory Tree, Eval and conversation search for DSH",

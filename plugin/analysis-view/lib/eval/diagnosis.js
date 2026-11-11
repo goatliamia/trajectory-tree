@@ -70,7 +70,24 @@
   function selectionModel(selection) {
     if (!selection) return null;
     const { kind, turn } = selection;
+    if (kind === 'finding') {
+      const sources=(selection.sources??[]).filter(source=>source?.session&&Number.isSafeInteger(source.cut)&&Array.isArray(source.seqs))
+        .map(source=>({...source,seqs:[...new Set(source.seqs.filter(Number.isSafeInteger))]})).filter(source=>source.seqs.length);
+      if(!sources.length)return null;
+      return {kind,label:selection.label,scope:t(`${sources.length} 段会话的程序线索`,`${sources.length} sessions of program signals`),
+        sources,first:sources[0].seqs[0],sequences:sources[0].seqs,facts:selection.facts??[],
+        codeExecution:selection.codeExecution,method:selection.method,direction:selection.direction,
+        powerShellSeqs:sources.flatMap(source=>source.powerShellSeqs??[]).slice(0,12)};
+    }
     if (kind === 'rounds') return roundSelection(selection.turns);
+    if (kind === 'execution') {
+      const sequences = [...new Set(selection.seqs.filter(Number.isSafeInteger))];
+      if (!sequences.length) return null;
+      return { kind, turn, label:selection.label, scope:scopeLabel(turn), sequences, first:sequences.at(-1),
+        powerShellSeqs:selection.powerShellSeqs?.slice(0,12),
+        facts:[t(`${sequences.length} 条代码执行报错，执行器 ${selection.executor}`,`${sequences.length} code execution errors, executor ${selection.executor}`),
+          `${t('失败信号','Failure signals')} ${selection.signals.join(', ')}`] };
+    }
     if (kind === 'context') {
       const { current, previous, byStep, focus, categories, net } = selection;
       const ref = row => t(`第 ${row.turn} 轮${byStep ? `第 ${row.step} 步` : '末次有记录的'}请求（响应 #${row.seq}）`,
@@ -169,11 +186,39 @@
     '综合诊断': 'overall diagnosis', '工具与文件使用': 'tool and file use',
     '反复尝试': 'repeated attempts', '上下文持续使用': 'context continuity',
     '耗时与等待': 'latency and waiting', '用量与能力投入': 'usage and capability',
-    '相应专项': 'method suited to the question',
+    '相应专项': 'method suited to the question', '代码执行诊断': 'code execution diagnosis',
   };
   const intent = (zh, en, method, askZh, askEn, options) =>
     ({ label: t(zh, en), method, ask: t(askZh, askEn), ...options });
   const questions = {
+    finding: [
+      intent('核对原因与处置','Investigate cause and disposition','综合诊断',
+        '从程序提供的信号出发，查清具体触发条件、任务影响、已有处理及实际结果，再选择适合的处置。',
+        'Start from the program signal. Investigate the actual trigger, task impact, existing handling and results before choosing an action.',{view:'overall'}),
+      intent('修在哪里','Where should it be fixed?','综合诊断',
+        '核对问题发生在调用、配置、自有实现还是环境，给出具体调整位置及原执行链的验收。',
+        'Check whether the issue lies in invocation, configuration, implementation or environment. Identify the concrete change and verification in the original execution chain.',{view:'repair'}),
+      intent('怎样恢复','How should it recover?','综合诊断',
+        '先查后续是否已处理及原操作产生的效果，区分局部恢复与持续故障。',
+        'First check existing follow-up and the operation’s effects. Distinguish local recovery from a persistent fault.',{view:'recover'}),
+      intent('是否缺少能力','Is capability actually missing?','用量与能力投入',
+        '核对能力是否存在、已加载、可调用及权限允许，再决定调整配置还是补齐能力。',
+        'Check existence, loading, callability and permissions before choosing configuration changes or additional capability.',{view:'capability'}),
+      intent('是否值得保留方法','Is a reusable method worth keeping?','综合诊断',
+        '核对是否同一触发模式，以及执行 Agent 当时实际收到的说明；有依据时再提出适用范围和保留位置。',
+        'Check whether the trigger pattern is shared and what guidance the acting agent actually received. Establish scope and storage only where justified.',{view:'knowledge'}),
+      intent('后来处理了吗','What happened later?','综合诊断',
+        '沿改参、改代码、跨轮处理和产物验收核对实际结果；同参返回只是一个线索。',
+        'Trace changed arguments, code changes, later turns and verification. A same-argument return is one signal only.',{view:'result'}),
+    ],
+    execution: [
+      intent('归因并给出处置','Find the cause and appropriate action','代码执行诊断',
+        '核对原代码、执行器、具体失败层和已有处理结果，定位有证据的原因及合适的处置。',
+        'Check the original code, executor, failure layer and recorded follow-up. Establish the evidenced cause and appropriate action.'),
+      intent('后来解决了吗','Was it resolved later?','代码执行诊断',
+        '沿后续记录核对修改、换参或跨轮处理及原任务验收，说明实际解决到哪一步。',
+        'Trace code changes, changed arguments and later turns. Check the original task verification and report the actual resolution.'),
+    ],
     episode: [
       intent('为什么受阻', 'What blocked progress?', '工具与文件使用', '核对当时缺少的前置条件和正式报错。', 'Check the missing prerequisites and recorded errors.'),
       intent('后来验收了吗', 'Was the work verified later?', '综合诊断', '按原任务的验收要求，分别核对调用返回、实际产物和验证证据。', 'Check the tool result, actual deliverable and verification evidence against the original requirements.', { after: true }),
@@ -235,6 +280,21 @@
   }
 
   function evidenceEntry(item, question) {
+    if(item.kind==='finding'){
+      return item.sources.flatMap(source=>{
+        const identity={session:source.session,cut:source.cut,...(source.host!=='dsh'&&source.logId?{logId:source.logId}:{})};
+        const queries=[];
+        for(let index=0;index<source.seqs.length;index+=500){
+          const args={...identity,view:'io',seqs:source.seqs.slice(index,index+500),groupBy:'tool',limit:10,samples:false,
+            ...(source.host!=='dsh'?{includeSelf:true}:{})};
+          queries.push(`trajectory_inspect(${JSON.stringify(args)})`);
+        }
+        return [t(`会话 ${source.session} 截至 #${source.cut}：`,`Session ${source.session} through #${source.cut}:`),
+          ...(source.file?[t(`原生来源 ${source.file}；来源文件绑定不同时，按宿主 Skill 的 CLI 从该文件读取。`,
+            `Native source ${source.file}; if the current tool is bound to a different file, use the host skill's CLI with this source.`)]:[]),...queries];
+      }).join('\n');
+    }
+    if (item.kind === 'execution') return inspectSelectedCalls(item.sequences);
     if (item.kind === 'tool' && question.view === 'cost') {
       const turns = item.turn == null ? {} : { turns: { from: item.turn, to: item.turn } };
       const query = inspect({ view: 'cost', focus: { tool: item.tool }, ...turns, limit: 1, samples: false });
@@ -302,17 +362,25 @@
         `${label}duration ${duration(row.ms)}, ${row.calls} calls, ${row.errors} errors${output}`);
     }) : showToolSupply ? [] : item.facts;
     const entry = data.host === 'codex' ? '$trace-analysis' : data.host === 'claude' ? '/trajectory-tree:trace-analysis' : '';
-    const powerShell = item.powerShellSeqs?.length && ['工具与文件使用', '反复尝试'].includes(question.method);
+    const powerShell = item.powerShellSeqs?.length && (item.kind==='finding'||['工具与文件使用', '反复尝试', '代码执行诊断'].includes(question.method));
     const text = [
       ...(entry ? [entry] : []),
       question.prompt ?? t(`请分析「${question.label}」。${question.ask}`, `Analyze: ${question.label} ${question.ask}`),
-      t(`范围为会话 ${data.session} 截至 #${data.cut}。`, `Scope: session ${data.session} through #${data.cut}.`),
+      item.kind==='finding'&&item.sources.length>1?t(`范围包含 ${item.sources.length} 段会话，各自切点和查询见下方。`,
+        `Scope includes ${item.sources.length} sessions, with individual cuts and queries below.`):
+        t(`范围为会话 ${data.session} 截至 #${data.cut}。`, `Scope: session ${data.session} through #${data.cut}.`),
       ...(data.host === 'claude' && data.file ? [`Transcript ${data.file}`] : []),
       t(`选中${item.label}（${item.scope}）${facts.length ? ' · ' + facts.join('。') : ''}。`,
         `Selected: ${item.label} (${item.scope})${facts.length ? ' · ' + facts.join('. ') : ''}.`),
       t(entry ? `采用「${question.method}」方法。` : `使用 trace-analysis 的「${question.method}」方法。`,
         entry ? `Apply the ${methods[question.method]} method.` : `Apply the ${methods[question.method]} method from trace-analysis.`),
-      ...(powerShell ? [t(`对 ${refs(item.powerShellSeqs)} 读取 trace-analysis 的 references/powershell.md。`,
+      ...(item.kind === 'execution'||item.codeExecution ? [t('读取 trace-analysis 的 references/code-execution.md，沿具体执行链调查。',
+        'Read references/code-execution.md from trace-analysis and investigate the actual execution chain.')] : []),
+      ...(item.kind==='finding'?[t('这是程序归纳的调查线索。读取 references/disposition.md，按证据选择修复、恢复、补齐能力与保留知识；先核对已有后续，不重做已完成的历史工作。',
+        'These are program-generated investigation signals. Read references/disposition.md and use the evidence to choose repair, recovery, capability or reusable knowledge. Check existing follow-up before repeating completed historical work.')]:[]),
+      ...(powerShell ? [item.kind==='finding'&&item.sources.length>1?t('所选来源包含 PowerShell 调用，按对应会话读取 references/powershell.md。',
+        'The selected sources include PowerShell calls; use references/powershell.md in their respective sessions.'):
+        t(`对 ${refs(item.powerShellSeqs)} 读取 trace-analysis 的 references/powershell.md。`,
         `For ${refs(item.powerShellSeqs)}, read references/powershell.md from trace-analysis.`)] : []),
       evidenceEntry(item, question),
       t('引用关键记录序号，说明能确认到哪一步。', 'Cite the key record numbers and state what the evidence can confirm.'),
@@ -364,11 +432,17 @@
     $('selection-title').textContent = item.label;
     $('question').value = '';
     $('diagnosis-status').textContent = '';
-    const intents = item.kind === 'tool' && data.host === 'dsh' && item.tool
+    const intents = item.kind==='finding'&&item.method==='latency'
+      ? [intent('核对等待与处置','Investigate waiting and disposition','耗时与等待',
+        '查清长调用的任务作用、阻塞位置、已有结果和可调整的执行安排，再选择适合的处置。',
+        'Check the purpose, blocking point, existing results and possible execution changes before choosing a disposition.',{view:'overall'}),...questions.finding]
+      : item.kind === 'tool' && data.host === 'dsh' && item.tool
       ? [...questions.tool, toolSupplyQuestion] : questions[item.kind];
     const choices = intents.map(question => action(question.label, event => chooseQuestion(question, event.currentTarget)));
     $('questions').replaceChildren(...choices);
     editor.hidden = false;
+    if(options)$('diagnosis-apply').hidden=options.allowApply===false||
+      (item.kind==='finding'&&item.sources.length>1)||!(options.mode==='pi'||options.mode==='dsh'&&parent!==window);
     const preferred = view ? Math.max(0, intents.findIndex(question => question.view === view)) : 0;
     chooseQuestion(intents[preferred], choices[preferred]);
     $('draft').focus({ preventScroll: true });
@@ -435,7 +509,7 @@
   const apply = $('diagnosis-apply'), status = $('diagnosis-status'), draft = $('draft');
   const embeddedDsh = options.mode === 'dsh' && parent !== window;
   editor.querySelector('.editor-actions').hidden = false;
-  apply.hidden = !embeddedDsh && options.mode !== 'pi';
+  apply.hidden = options.allowApply===false || !embeddedDsh && options.mode !== 'pi';
   apply.textContent = embeddedDsh ? t('填入对话', 'Fill conversation') : t('复制 Pi 装填指令', 'Copy Pi draft command');
   const unavailable = t('对话暂不可用，可复制草稿', 'Conversation unavailable. You can copy the draft.');
   const copy = async (text, label) => {

@@ -6,7 +6,7 @@ import {generateTraceView} from '../../view/generate.mjs';
 import {generateOverviewView} from '../../view/overview.mjs';
 import {serveViewFile,openViewBrowser} from '../../view/serve.mjs';
 
-const trajectoryUsage = '用法：/trajectory [--eval | --overview] [--lang en|zh-CN|auto] [--no-open] 或 /trajectory --draft <内容>';
+const trajectoryUsage = '用法：/trajectory [--eval | --overview | --code] [--lang en|zh-CN|auto] [--no-open] 或 /trajectory --draft <内容>';
 
 function readEvalDraft(encoded) {
   if (!encoded || encoded.length > 16 * 1024 || !/^[A-Za-z0-9_-]+$/.test(encoded)) throw Error('无效的 Eval 草稿命令。');
@@ -67,18 +67,18 @@ export default function trajectoryExtension(pi) {
       const locale = langAt < 0 ? undefined : flags.splice(langAt, 2)[1];
       const english = (locale === 'auto' || !locale ? Intl.DateTimeFormat().resolvedOptions().locale : locale).startsWith('en');
       if ((langAt >= 0 && !['en', 'zh-CN', 'auto'].includes(locale)) || new Set(flags).size !== flags.length
-          || flags.some(flag => !['--eval', '--overview', '--no-open'].includes(flag)) || (flags.includes('--eval') && flags.includes('--overview'))) {
+          || flags.some(flag => !['--eval', '--overview', '--code', '--no-open'].includes(flag)) || flags.filter(flag=>['--eval','--overview','--code'].includes(flag)).length>1) {
         ctx.ui.notify(trajectoryUsage, 'warning'); return;
       }
       try{
-        const evalView = flags.includes('--eval');
+        const codeView = flags.includes('--code'), evalView = flags.includes('--eval') || codeView;
         const input = viewInput(ctx), overview = flags.includes('--overview');
         const view = overview ? await generateOverviewView({ host: 'pi', input, locale,
           directory: input.source.file ? dirname(input.source.file) : undefined })
-          : await generateTraceView({ host: 'pi', input, locale, initialView: evalView ? 'eval' : undefined });
+          : await generateTraceView({ host: 'pi', input, locale, initialView: codeView ? 'code' : evalView ? 'eval' : undefined });
         const { url } = await serveViewFile(view.output);
         if (!flags.includes('--no-open')) await openViewBrowser(url);
-        const title = overview ? (english ? 'Eval overview' : 'Eval 总览') : evalView ? 'Eval' : (english ? 'Trajectory Tree' : '轨迹树');
+        const title = overview ? (english ? 'Eval overview' : 'Eval 总览') : codeView ? (english ? 'Code execution' : '代码执行') : evalView ? 'Eval' : (english ? 'Trajectory Tree' : '轨迹树');
         ctx.ui.notify(title + ' · ' + url, 'info');
       }catch(error){ctx.ui.notify('轨迹树：'+error.message,'error');}
     },

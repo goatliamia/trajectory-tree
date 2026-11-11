@@ -3,6 +3,16 @@
 A DSH Web GUI plugin for browsing the current conversation's trajectory and evaluation metrics.
 DSH Web GUI 插件提供当前会话的轨迹树与评估指标。
 
+### Eval overview and diagnosis signals / 总览与诊断线索
+
+Eval overview is a persistent panel in the left sidebar. It shows the first loaded sessions immediately, then fills in the remaining data without resetting filters or open diagnosis drafts. Warm summaries bypass the raw-log queue; raw logs remain serialized at low priority, and closing the page cancels unfinished work. The compact cache stays within a 20 MiB budget. No generation skill is needed in DSH.
+
+总览从左侧常驻面板进入。首批会话到达即显示，随后补齐；缓存命中不等待大日志，关闭页面会取消未完成读取。缓存维持 20 MiB 上限。项目、时间、模型筛选，以及已打开的诊断草稿会保留。
+
+Overview and session Eval share program-generated signal groups and four investigation directions. The agent follows the existing evidence workflow to establish the diagnosis. Code execution shows native PowerShell and PTC feedback with linked records. Additional runtime metrics and measurement notes are directly visible.
+
+总览与会话 Eval 共用程序信号和四种调查方向，具体归因继续由 Agent 沿既有流程核对。「代码执行」展示 PowerShell、PTC 与子调用反馈；其他运行指标及统计口径直接展示。
+
 0.10.31 起，Web 端可用 `/trajectory` 直接打开当前会话的路径与上下文页；这是客户端动作，不发送分析提示词或调用模型。
 
 0.10.32 合入来源多选与总趋势图层。总趋势默认关闭；共享资源与独立宿主视图同步，保留已做的缓存、可见区域裁剪和折线压缩。
@@ -48,7 +58,7 @@ Install into your DSH Web profile and restart DSH Web.
 
 ```sh
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-analysis-view-0.10.146.tgz
+dsh plugin --profile web add ./dsh-analysis-view-0.10.147.tgz
 ```
 
 ### Plugin settings
@@ -124,7 +134,7 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
 
 ```sh
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-analysis-view-0.10.146.tgz
+dsh plugin --profile web add ./dsh-analysis-view-0.10.147.tgz
 ```
 
 ### 插件设置

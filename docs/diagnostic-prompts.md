@@ -12,10 +12,12 @@
 ## 方法正文
 
 - [综合诊断](../skill/trace-analysis/SKILL.md#综合诊断)
+- [通用处置与知识保留](../skill/trace-analysis/references/disposition.md)
 - [耗时与等待](../skill/trace-analysis/references/latency.md)
 - [用量与能力投入](../skill/trace-analysis/references/cost.md)
 - [反复尝试](../skill/trace-analysis/references/repeats.md)
 - [工具与文件使用](../skill/trace-analysis/references/io.md)
+- [代码执行诊断](../skill/trace-analysis/references/code-execution.md)
 - [PowerShell 命令诊断](../skill/trace-analysis/references/powershell.md)
 - [上下文持续使用](../skill/trace-analysis/references/context.md)
 - [静态剖面](../skill/context-profile/SKILL.md)
