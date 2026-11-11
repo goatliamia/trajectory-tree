@@ -29,6 +29,8 @@ jobs:
           package-manager-cache: false
       - name: Install the locked portable tool dependencies
         run: npm ci --prefix plugin/portable-tools --ignore-scripts --no-audit --no-fund
+      - name: Install the DSH definition reader used by native report tests
+        run: npm install --prefix . --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @deepseek-ai/dsh-token-meter@0.2.2-rc.1
       - name: Check shared assets and host skills are synchronized
         run: |
           node scripts/sync-view-assets.mjs --check
