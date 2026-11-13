@@ -16,9 +16,12 @@ concurrency:
 
 jobs:
   browser:
-    name: Exercise trace interactions in Chromium, Firefox and WebKit
+    name: Exercise shared trace and Eval interactions
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      # One engine for PR feedback; main and manual runs keep full compatibility.
+      BROWSERS: ${{ github.event_name == 'pull_request' && 'chromium' || 'chromium firefox webkit' }}
     defaults:
       run:
         working-directory: test/browser
@@ -34,5 +37,6 @@ jobs:
       - name: Install locked portable tool dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: plugin/portable-tools
-      - run: npx --no-install playwright install --with-deps chromium firefox webkit
-      - run: npm test
+      - run: npx --no-install playwright install --with-deps $BROWSERS
+      - name: Run the selected browser checks
+        run: node --test --test-name-pattern="${BROWSERS// /|}" smoke-test.mjs

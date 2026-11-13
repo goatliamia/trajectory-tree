@@ -282,7 +282,9 @@ async function checkCodex(page) {
   const trace = page.frameLocator('iframe');
   // The branch group also spans empty SVG space. Use its actual pointer target.
   await trace.locator('#graph [data-tool-result] .br-hit').first().click();
-  await trace.locator('[data-result-diff]').click();
+  const record = trace.locator('.geist-tool-record').filter({ has: trace.locator('[data-result-diff]') });
+  await record.locator('summary').click();
+  await record.getByRole('button', { name: 'Compare changes' }).click();
   const patch = trace.locator('#review-patch-view');
   const picker = trace.getByRole('combobox', { name: 'Select changed file' });
   assert.equal(await patch.locator('.review-diff-row.remove .review-diff-line-number').first().textContent(), '23');

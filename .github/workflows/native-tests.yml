@@ -30,14 +30,23 @@ jobs:
       - name: Install the locked portable tool dependencies
         run: npm ci --prefix plugin/portable-tools --ignore-scripts --no-audit --no-fund
       - name: Install the DSH definition reader used by native report tests
-        run: npm install --prefix . --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @deepseek-ai/dsh-token-meter@0.2.2-rc.1
+        run: npm install --prefix . --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @deepseek-ai/dsh-token-meter@0.2.2-rc.3
       - name: Check shared assets and host skills are synchronized
         run: |
           node scripts/sync-view-assets.mjs --check
           node scripts/sync-inspect-models.mjs --check
           node scripts/sync-host-skills.mjs --check
       - name: Run synthetic observations and actual package loading
-        run: node --test plugin/analysis-view/goal-events-test.mjs plugin/analysis-view/stages-test.mjs plugin/analysis-view/resources-test.mjs
+        run: >-
+          node --test
+          plugin/analysis-view/goal-events-test.mjs
+          plugin/analysis-view/stages-test.mjs
+          plugin/analysis-view/resources-test.mjs
+          plugin/analysis-view/overview-cache-test.mjs
+          lib/context-diagnosis-test.mjs
+          analyzers/context-overlap-test.mjs
+          plugin/trajectory-tools/inspect-test.mjs
+          plugin/trajectory-tools/diagnosis-test.mjs
       - name: Smoke test host adapters, language and presentation
         run: >-
           node --test

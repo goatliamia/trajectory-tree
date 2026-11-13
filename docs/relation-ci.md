@@ -2,7 +2,7 @@
 
 `relations-ci.json` 声明需要保留的源码关系。CI 比较同一个实际合并提交的第一父节点与合并结果，显示保证保持、保证丢失、候选消除或观察待补。
 
-当前目标包括资源先登记再裁剪、释放 viewer 后释放资源、规范化查询后准备数据、打开目标事件读取器后关闭、载入后构造检查，以及目标事件的两个标识符调用保有源码词法绑定。匿名回调沿所选操作的调用归属取得，不保存跨版本失效的 AST 偏移。普通改行或重排文件不会自动改变逻辑询问。
+当前目标包括资源先登记再裁剪、释放 viewer 后释放资源、规范化查询后准备数据、打开目标事件读取器后关闭、载入后构造检查，以及目标事件的两个标识符调用保有源码词法绑定。Eval 转正后补入缓存先写临时文件再发布，以及查询模型的工具反馈绑定。匿名回调沿所选操作的调用归属取得，不保存跨版本失效的 AST 偏移。普通改行或重排文件不会自动改变逻辑询问。
 
 配置来自基线，候选不能在同一次检查中删除自己的要求。只有首次接入才显式采用候选配置。已答关系与源码覆盖分别报告；两侧同样未知仍不能通过。源码绕过路径是诊断候选，不能直接表述成已执行的错误；绑定存在也不等于外部实现或动态分派已被证明。
 
@@ -10,11 +10,15 @@
 
 `Relation diagnostics` 复用关系引擎的已有诊断、观察运输与目标比较。每侧共享一次源码提取，不执行项目函数。完整 JSON 保留两侧响应、操作位置、检查点、绕过路径和缺失观察；Actions summary 给出简洁结论。`relations/diagnostics` 状态附在候选提交上。
 
-`Native regression` 独立运行合成事件下的实际轨迹阶段、目标阶段更新、来源隔离、读取失败、旧异步结果竞争、资源释放，以及 npm 实际打包文件的加载。它负责验证当前静态目标尚未表达的缓存版本一致性，不访问真实会话或模型服务。
+`Native regression` 独立运行合成事件下的实际轨迹阶段、目标阶段更新、来源隔离、读取失败、旧异步结果竞争、资源释放，以及 npm 实际打包文件的加载。缓存检查验证跨服务重启复用、版本失效、损坏回退和模型索引恢复；查询检查实际加载生成的模型和工具反馈依赖。上下文检查验证重复文本的定位及诊断快照的选区隔离、冻结、失效和取消。它们负责当前静态目标尚未表达的运行行为，不访问真实会话或模型服务。
 
-普通 CI 还校验共享资源和各宿主 skill 的同步，运行合成适配、语言、页面和报告冒烟，检查便携工具和传输入口，并构建三种宿主包。依赖由 `plugin/portable-tools/package-lock.json` 固定安装。
+普通 CI 还校验共享资源、查询模型和各宿主 skill 的同步，运行合成适配、语言、页面和报告冒烟，检查便携工具和传输入口，并构建三种宿主包。便携依赖由 `plugin/portable-tools/package-lock.json` 固定安装；官方定义读取器明确使用 DSH `0.2.2-rc.3`。不把整个宿主、模型调用或真实历史回放放进日常 CI。
 
-`Browser compatibility` 在同一个 Ubuntu 作业中启动 Chromium、Firefox 和 WebKit。它用合成会话检查 DSH 路径页的目标、文件、滚轮缩放、拖动和对话跳转，以及 Pi、Codex、Claude 的快照页面和能力边界。
+`Browser compatibility` 在 PR 中只安装并运行 Chromium，主干和手动触发检查 Chromium、Firefox 与 WebKit。它用同一批合成会话检查路径页的目标、文件、滚轮缩放、拖动和对话跳转，以及便携快照、Eval 和能力边界。操作遵循可见界面：先展开工具记录，再打开改动对比。
+
+三类检查分别提供来源保证、运行行为和浏览器交互证据。CR 已覆盖的调用顺序和绑定不再另写语法匹配测试；未被 CR 表达的行为保留小型运行验证。不按目录名或“没有静态依赖边”跳过检查，也不把未知响应当作兼容通过。
+
+当前 CR 对诊断快照函数的完整控制流仍返回 `completion-control-unobserved`，因此该发布顺序尚未列入必需静态目标；文件快照行为由上述运行验证负责。缓存目标只保证声明的调用顺序，不声称证明文件系统的持久化语义。
 
 ```sh
 npm ci --prefix test/browser --ignore-scripts --no-audit --no-fund
@@ -22,7 +26,7 @@ npm exec --prefix test/browser -- playwright install chromium firefox webkit
 npm test --prefix test/browser
 ```
 
-Pi 源码版本核对与已生成页面核对属于可选本地检查，分别通过 `TRAJECTORY_PI_TEST_REPO`、`TRAJECTORY_PI_TEST_VIEW` 显式启用；日常测试不会因开发机上恰好存在另一个仓库或旧页面而改变行为。包含 DSH 官方统计依赖的完整报告集仍可在宿主开发环境运行，普通 CI 使用无宿主依赖的 `report/smoke-test.mjs`。
+Pi 源码版本核对与已生成页面核对属于可选本地检查，分别通过 `TRAJECTORY_PI_TEST_REPO`、`TRAJECTORY_PI_TEST_VIEW` 显式启用；日常测试不会因开发机上恰好存在另一个仓库或旧页面而改变行为。报告检查使用上述固定版本的定义读取器，不需要安装或启动 DSH。
 
 ```sh
 node --test plugin/analysis-view/goal-events-test.mjs plugin/analysis-view/stages-test.mjs plugin/analysis-view/resources-test.mjs
@@ -30,7 +34,7 @@ node --test plugin/analysis-view/goal-events-test.mjs plugin/analysis-view/stage
 
 ## 私有引擎的接入
 
-分析引擎固定到工作流中的提交 SHA，编译器按该提交的锁文件安装。公开仓库不包含引擎源码。`RELATIONS_ENGINE_READ_KEY` 是仅对引擎仓库有效的只读 deploy key，作为本仓库 Actions secret 保存。
+分析引擎固定到工作流中的提交 SHA（本轮为 `491362c`，九项来源目标已在该版本核对），编译器按该提交的锁文件安装。新目标在并入基线前单独核对候选源码；常规前后比较仍以基线策略为准。公开仓库不包含引擎源码。`RELATIONS_ENGINE_READ_KEY` 是仅对引擎仓库有效的只读 deploy key，作为本仓库 Actions secret 保存。
 
 凭据作业使用 GitHub 的 [pull_request_target](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request_target) 执行可信基线工作流。它只检出可信基线和固定引擎；候选通过 Git blob 导出为封闭源码快照，不执行 PR 脚本、不安装 PR 依赖、不上传引擎文件。合并引用的第二父节点必须对应当前事件的 head，过期事件保留待补。普通 PR 的原生测试另用无私有凭据的作业。
 

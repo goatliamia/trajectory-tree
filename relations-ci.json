@@ -61,6 +61,23 @@
       "file": "plugin/analysis-view/lib/trace-stages.js",
       "function": {"operation_caller": true},
       "operation": {"label": "applyGoalEvents"}
+    },
+    {
+      "id": "overview-cache-write-before-publish",
+      "kind": "diagnostic",
+      "file": "plugin/analysis-view/lib/eval/overview/persisted-cache.mjs",
+      "function": {"operation_caller": true},
+      "operation": {"label": "rename"},
+      "required_before": {"call": {"label": "writeFile"}},
+      "assert": "covered"
+    },
+    {
+      "id": "inspection-feedback-binding",
+      "kind": "diagnostic",
+      "diagnostic": "lexical-binding",
+      "file": "plugin/trajectory-tools/lib/inspect-models/session.js",
+      "function": {"operation_caller": true},
+      "operation": {"label": "recordedDiagnostics"}
     }
   ]
 }

@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: goatliamia/code-relations
-          ref: 23fa1ec0ef9b730ad32c1a55f24a62f713d8750f
+          ref: 491362c1015a6fee9f07bbb0dc26084a3eb67aad
           path: engine
           ssh-key: ${{ secrets.RELATIONS_ENGINE_READ_KEY }}
           persist-credentials: false
