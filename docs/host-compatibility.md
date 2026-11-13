@@ -21,7 +21,9 @@ Portable pages retain the shared light/dark theme rules and responsive viewport 
 
 The portable overview compares reported input bands and recorded tool results. Codex offers occupancy bands when usage and window capacity belong to the same turn's recorded request. Pi and Claude history retain the input and tool comparisons without borrowing a current model capacity for historical requests.
 
-Eval and overview count attribution among recorded tool errors in the selected scope. Both use the same rule set and separate confirmed causes, tentative causes, unclassified output and empty text. Coverage depends on the tasks and the evidence each host records. Optional PowerShell parsing can add a location or a tentative explanation to the evidence details.
+Eval and overview count attribution among recorded tool errors in the selected scope. Both use the same rule set and separate recognized feedback, tentative explanations, unclassified output and empty text. Coverage depends on the tasks and the evidence each host records. Optional PowerShell parsing can add a location or a tentative explanation to the evidence details.
+
+DSH's PowerShell renderer reports non-zero process exits in the returned text without necessarily setting a tool error. The findings projector separately preserves those command markers, original tool status and command evidence. Command feedback does not change the tool-error denominator or the native same-argument error/return pairs. The preset Demo can enrich at most 12 observations per session with the configured CR PowerShell parser, retaining its version, source hash and coverage state; historical scripts are never executed by this enrichment. Its diagnostic drafts include exact source/cut queries and PowerShell, disposition and context-supply methods. All four investigation directions are selectable independently of the program's suggested directions.
 
 Codex analysis replaces inline Base64 images in App Server responses, saved snapshots and local rollouts with a compact reference. It keeps the surrounding record, image type, encoded size and a digest. Native request usage still comes from the host's telemetry.
 
@@ -72,6 +74,37 @@ npm test --prefix plugin/trajectory-tools
 Rebuild shared assets and all three portable packages after changing presentation code. `dist/` is generated and ignored by Git. Updating the installed DSH plugin remains a separate installation step.
 
 ## DSH version
+
+### 0.2.2-rc.3 (2026-11-14)
+
+The local npm CLI is now `0.2.2-rc.3`. Its version, a native PTY child, the 34 source-derived consumer goals and the existing Skill/tool lifetime fixtures pass. The published upgrade index adds no rc.2-specific migration section. The linked view bundle is `0.11.0`, and the evidence/Skill bundle is `0.6.8`; an already-running host must reload these modules or restart before it uses them.
+
+The preset Eval workspace is served at the existing native `/analysis-view/overview` entry. It reads the launcher-owned profile and registered workspaces, progressively projects native session observations, and ships its UI and collector dependencies inside the package. It does not read the optional Stats page or depend on the standalone Demo server. Current configuration remains a static, explicitly timed snapshot; dynamic request assembly is not inferred from registered source text.
+
+Restart reuse is versioned by the projector graph, host installation and persistence revision. Model identities are restored from each saved catalog. Live sequence numbers alone never authorize cross-process reuse. Configuration may first show a last-known snapshot marked as being checked; management previews always await a fresh read. [Review and validation](release-review.md)
+
+Pi `1.5.2` and Claude Code stable `2.1.311` were installed through their official paths, and Trajectory Tree `0.2.4` was registered locally. Portable adapters now actually produce tool measures and recorded error locations before display truncation. Pi's native `powershell` tool and CC's capitalized tool names retain their identity. The new preset Eval homepage is DSH-only; existing portable views remain shared.
+
+### 0.2.2-rc.2 (2026-11-13)
+
+The local npm CLI is upgraded from `0.2.2-rc.1` to `0.2.2-rc.2`. The installed CLI version, shared `HarnessError` identity and a native PTY child were checked. Both installed Trajectory Tree bundles resolve to this workspace; existing DSH processes need a restart to load the updated host and plugin modules.
+
+The CR upgrade replay was run against the current consumer, using the exact published rc.1/rc.2 artifacts and their integrity receipts. All 31 cases and 12 assertions pass after adaptation. The four native approval/context identities no longer collapse into one unknown label; existing confirmed labels, normal/PTC failure status, future unknowns and mixed-SDK missing identity remain bounded by their evidence.
+
+| Surface | Adaptation or verification |
+| --- | --- |
+| Tool failures | Preserve rejection, cancellation, unavailable approval channels, missing runtime context, unknown tools, availability-check failures, invalid outputs and unsupported schemas. Explicit approval decisions do not imply a repair or recovery recommendation. Recorded host error counts remain intact. |
+| Attachments | Recognize the 17 published attachment/image error codes without treating arbitrary future codes as known. This follows the attachment-error migration guide. |
+| Named subagents | Keep the catalog name separately from the task label, direct-parent ownership and same-cut child catalog facts. Use each observation's `inheritedEventCount` to exclude inherited entries; a recorded end-seed boundary is only a fallback when the floor is unavailable. This preserves nested relationship evidence; it does not recursively load every descendant. |
+| Child settlement | Preserve `stopReason` and use the latest settlement. Aborted, refused, failed and token-limited runs are not completed; missing or future reasons remain unknown. |
+| Session batches | Native single/array `append` and the consumer's event projection pass. The plugin observes `session/event` and does not replace `Session.append`; the published runtime still notifies per event. |
+| Runtime context | Read `source.kind/form/sections`; reminder framing and an explicit empty snapshot retain their identity. Existing stored logs are not rewritten. |
+| Current configuration | The read-only demo builder works with rc.2 and discovers `dsh-doc`, which replaces the four former Creator skills. Agent Experience content is now `dsh-doc/references/tool-design.md`. |
+| Other surfaces | No removed `getAnchorRect` or `Session.append` replacement is used. Account, Forge, CUA provider and terminal-backend migrations do not apply to these two bundles' imports and configuration. |
+
+`node scripts/check-dsh-rc2-surfaces.mjs --assert` checks 34 additional source-derived goals using the installed native constructors and the actual consumers. CR's goal comparison also passes for these responses. Query, native view, staged delivery, bounded actor reads/cache and context-evidence regressions passed. Private receipts and before/after CR reports are under `.dsh/dsh-rc2-review/`; this is not a claim of complete live-host UI or unrelated third-party plugin compatibility.
+
+### Earlier rc.1 review
 
 Checked against the installed runtime `0.2.2-alpha.2` and the published `0.2.2-rc.1` (2026-11-04, the first candidate of the 0.2.2 line). This is a static comparison of the release artifacts, not a run against a booted `0.2.2-rc.1`.
 

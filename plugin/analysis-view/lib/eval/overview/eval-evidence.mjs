@@ -117,7 +117,7 @@ export function projectSessionEval(events, trace, turns, cwd, pressureProjection
   const { points, beforeCall } = readOccupancy(events, pressureProjection, modelIndex);
   const bySeq = new Map(events.map(event => [event.seq, event]));
   const projected = new Map(turns.map(turn => [turn.no, turn]));
-  const names = [], nameIndices = new Map(), actions = [], stepEnds = [];
+  const names = [], nameIndices = new Map(), actions = [], stepEnds = [],measures={};
   for (const turn of trace.turns) {
     const target = projected.get(turn.number);
     if (!target) continue;
@@ -141,6 +141,7 @@ export function projectSessionEval(events, trace, turns, cwd, pressureProjection
         names.push(call.name);
       }
       const pressure = beforeCall.get(call.launch), error = errors.get(call.resultSeq);
+      if(call.measure&&Number.isSafeInteger(call.launch??call.resultSeq))measures[call.launch??call.resultSeq]=call.measure;
       const elapsed = recorded(call.launch) && recorded(call.resultSeq) && Number.isFinite(call.start)
         && Number.isFinite(call.end) && call.end >= call.start ? call.end - call.start : null;
       // launch, reply, turn, step, tool, status, used, capacity, result, error category, model, elapsed
@@ -160,5 +161,5 @@ export function projectSessionEval(events, trace, turns, cwd, pressureProjection
     }
   }
   stepEnds.sort((a, b) => a[0] - b[0]);
-  return { points, names, actions, stepEnds };
+  return { points, names, actions, stepEnds,measures };
 }

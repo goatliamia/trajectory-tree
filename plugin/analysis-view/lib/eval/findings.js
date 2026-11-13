@@ -3,6 +3,7 @@
   const t = (zh,en) => globalThis.__trajectoryLocale === 'en' ? en : zh;
   const ui = text => globalThis.__trajectoryUi?.(text) ?? text;
   const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+  const toolHtml = name => globalThis.__trajectoryToolName?.(name) ?? esc(name);
   const fmt = value => new Intl.NumberFormat(globalThis.__trajectoryLocale ?? 'zh-CN').format(value);
   const directions = () => [
     ['repair',t('修复环境与实现','Environment and implementation'),t('修复实现','Fix')],
@@ -33,7 +34,7 @@
   }
   function hints(group) {
     const focus=group.focus;
-    return group.directions.map(id=>{
+    return directions().map(([id])=>{
       const name=directions().find(row=>row[0]===id)[1];
       const explanation=id==='knowledge'?t('重复出现时，先核对触发条件及当时已有的指导。','For repeated signals, check triggers and guidance already supplied.')
         :id==='capability'?t('核对能力是否存在、已加载且当前可用。','Check whether the capability exists, is loaded and callable.')
@@ -45,15 +46,12 @@
         :focus==='latency'?t('核对这次等待在任务中的作用和可调整的执行安排。','Check the wait’s purpose and possible changes to execution.')
         :focus==='validation'?t('区分产物问题、检查脚本和测试环境。','Distinguish deliverable, check-script and test-environment issues.')
         :t('核对自有实现、执行条件和后续结果。','Inspect the implementation, execution conditions and follow-up.');
-      return {id,name,explanation};
+      const signal=group.signals?.find(signal=>signal.direction===id);
+      return {id,name,explanation:signal?.summary??explanation};
     });
   }
   globalThis.__trajectoryFindingHints = (root,group,onAsk) => {
     if(!group){root.replaceChildren();return;}
-    if(group.focus==='lookup'){
-      root.innerHTML=`<p class="df-observation">${t('先核对搜索或探测目的；未命中可能已经回答了原问题。','Check the search or probe’s purpose first; no match may already answer the question.')}</p>`;
-      root.onclick=null;return;
-    }
     root.innerHTML=`<p class="df-kicker">${t('可调查的处理方向','Disposition directions to investigate')}</p><div class="df-hint-list">${hints(group).map(row=>`<button type="button" data-df-direction="${row.id}"><strong>${esc(row.name)}</strong><span>${esc(row.explanation)}</span><i>↗</i></button>`).join('')}</div>`;
     root.onclick=event=>{const button=event.target.closest('[data-df-direction]');if(button)onAsk(selection(group,button.dataset.dfDirection),button,button.dataset.dfDirection);};
   };
@@ -71,7 +69,7 @@
       selected=group.key;current=group;
       root.querySelectorAll('[data-df-pick]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.dfPick===selected)));
       const evidence=group.entries.find(row=>row.evidence)?.evidence;
-      $('.df-detail').innerHTML=`<div class="df-detail-head"><span>${group.kind==='wait'?t('耗时线索','Timing signal'):group.certainty==='candidate'?t('候选信号','Tentative signal'):t('已识别反馈信号','Identified feedback signal')}</span><h3>${esc(title(group))}</h3><p>${esc(counts(group))}</p></div><div class="df-detail-body">${group.kind==='error'?`<dl class="df-facts"><div><dt>${t('程序依据','Recorded evidence')}</dt><dd>${esc(evidence||group.code)}</dd></div><div><dt>${t('后续线索','Follow-up signal')}</dt><dd>${t(`${fmt(group.paired)} 条有同轮同参非报错返回`,`${fmt(group.paired)} have same-turn, same-argument non-error returns`)}</dd></div></dl>`:`<p class="df-observation">${t('长调用可能包含必要工作，先核对它是否阻断推进。','A long call may be necessary work. Check whether it blocked progress.')}</p>`}<div class="df-directions"></div><p class="df-kicker df-records-heading">${t('相关记录','Related records')}</p><div class="df-records">${group.entries.slice(0,5).map((row,index)=>`<button type="button" data-df-record="${index}"><span>${row.source?.label?esc(row.source.label)+' · ':''}${t('第 '+row.turn+' 轮','Turn '+row.turn)}</span><code>#${row.seq} → #${row.result??'—'}</code><small>${esc(row.exception||row.program||row.evidence||row.code)}</small></button>`).join('')}</div><div class="df-actions"><button type="button" class="df-primary" data-df-ask="overall">${t('交给 Agent 诊断','Diagnose with agent')}</button><button type="button" data-df-ask="result">${t('核对后续','Check follow-up')}</button></div></div>`;
+      $('.df-detail').innerHTML=`<div class="df-detail-head"><span>${group.kind==='wait'?t('耗时线索','Timing signal'):group.certainty==='candidate'?t('候选信号','Tentative signal'):t('已识别反馈信号','Identified feedback signal')}</span><h3>${esc(title(group))}</h3><p>${esc(counts(group))}</p></div><div class="df-detail-body">${group.kind!=='wait'?`<dl class="df-facts"><div><dt>${t('程序依据','Recorded evidence')}</dt><dd>${esc(evidence||group.code)}</dd></div><div><dt>${t('后续线索','Follow-up signal')}</dt><dd>${t(`${fmt(group.paired)} 条有同轮同参非报错返回`,`${fmt(group.paired)} have same-turn, same-argument non-error returns`)}</dd></div></dl>`:`<p class="df-observation">${t('长调用可能包含必要工作，先核对它是否阻断推进。','A long call may be necessary work. Check whether it blocked progress.')}</p>`}<div class="df-directions"></div><p class="df-kicker df-records-heading">${t('相关记录','Related records')}</p><div class="df-records">${group.entries.slice(0,5).map((row,index)=>`<button type="button" data-df-record="${index}"><span>${row.source?.label?esc(row.source.label)+' · ':''}${t('第 '+row.turn+' 轮','Turn '+row.turn)}</span><code>#${row.seq} → #${row.result??'—'}</code><small>${esc(row.exception||row.program||row.evidence||row.code)}</small></button>`).join('')}</div><div class="df-actions"><button type="button" class="df-primary" data-df-ask="overall">${t('交给 Agent 诊断','Diagnose with agent')}</button><button type="button" data-df-ask="result">${t('核对后续','Check follow-up')}</button></div></div>`;
       globalThis.__trajectoryFindingHints($('.df-directions'),group,(_selection,button,id)=>ask(group,button,id));
       $('.df-detail').onclick=event=>{
         const button=event.target.closest('[data-df-ask]');if(button)ask(group,button,button.dataset.dfAsk);
@@ -82,11 +80,11 @@
       model=globalThis.__trajectorySummarizeFindings(getEntries?.()??[]);
       const own=model.groups.filter(group=>filter==='all'||filter==='repeated'&&group.repeated||filter==='paired'&&group.paired);
       const shown=expanded?own:own.slice(0,8);
-      $('.df-stats').innerHTML=[[t('可查看的信号组','Signal groups'),model.groups.length],[t('报错记录','Error records'),model.observedErrors],[t('未细分反馈','Unclassified feedback'),model.unclassified.length],[t('结果未知','Unconfirmed outcomes'),model.pending.length]].map(([label,value])=>`<span>${label}<strong>${fmt(value)}</strong></span>`).join('');
+      $('.df-stats').innerHTML=[[t('可查看的信号组','Signal groups'),model.groups.length],[t('报错记录','Error records'),model.observedErrors],[t('命令反馈','Command feedback'),model.commandFeedback??0],[t('未细分反馈','Unclassified feedback'),model.unclassified.length],[t('结果未知','Unconfirmed outcomes'),model.pending.length]].map(([label,value])=>`<span>${label}<strong>${fmt(value)}</strong></span>`).join('');
       $('.df-filters').innerHTML=[['all',t('全部线索','All signals')],['repeated',t('重复出现','Repeated')],['paired',t('同参有返回','Same-argument returns')]].map(([id,label])=>`<button type="button" data-df-filter="${id}" aria-pressed="${filter===id}">${label}</button>`).join('');
       root.querySelectorAll('[data-df-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.dfView===layout)));
       const blank=t('此范围没有可归组的相关信号。','No matching signal groups in this scope.');
-      $('.df-list').innerHTML=!shown.length?`<p class="df-empty">${blank}</p>`:layout==='matrix'?`<div class="df-table-scroll"><table class="df-table"><thead><tr><th scope="col">${t('可查看的信号','Recorded signal')}</th>${directions().map(row=>`<th scope="col" title="${esc(row[1])}">${row[2]}</th>`).join('')}</tr></thead><tbody>${shown.map(group=>`<tr role="button" tabindex="0" data-df-pick="${esc(group.key)}" aria-pressed="${selected===group.key}"><td><strong>${esc(title(group))}</strong><span>${esc(counts(group))}</span><small>${esc(group.tool)}${group.exception?' · '+esc(group.exception):''}</small></td>${directions().map(([id])=>`<td>${group.directions.includes(id)?`<span class="df-pill">${t('可查','Explore')}</span>`:'<span class="df-dash">—</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:`<div class="df-cards">${directions().map(([id,label])=>{const groups=shown.filter(group=>group.directions.includes(id));return `<section><h3>${label}<span>${groups.length}</span></h3>${groups.length?groups.map(group=>`<button type="button" data-df-pick="${esc(group.key)}" aria-pressed="${selected===group.key}"><strong>${esc(title(group))}</strong><small>${esc(counts(group))}</small></button>`).join(''):`<p class="df-empty">${t('暂无相关线索','No related signals')}</p>`}</section>`;}).join('')}</div>`;
+      $('.df-list').innerHTML=!shown.length?`<p class="df-empty">${blank}</p>`:layout==='matrix'?`<div class="df-table-scroll"><table class="df-table"><thead><tr><th scope="col">${t('可查看的信号','Recorded signal')}</th>${directions().map(row=>`<th scope="col" title="${esc(row[1])}">${row[2]}</th>`).join('')}</tr></thead><tbody>${shown.map(group=>`<tr role="button" tabindex="0" data-df-pick="${esc(group.key)}" aria-pressed="${selected===group.key}"><td><strong>${esc(title(group))}</strong><span>${esc(counts(group))}</span><small>${toolHtml(group.tool)}${group.exception?' · '+esc(group.exception):''}</small></td>${directions().map(([id])=>`<td>${group.directions.includes(id)?`<span class="df-pill">${t('可查','Explore')}</span>`:'<span class="df-dash">—</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:`<div class="df-cards">${directions().map(([id,label])=>{const groups=shown.filter(group=>group.directions.includes(id));return `<section><h3>${label}<span>${groups.length}</span></h3>${groups.length?groups.map(group=>`<button type="button" data-df-pick="${esc(group.key)}" aria-pressed="${selected===group.key}"><strong>${esc(title(group))}</strong><small>${esc(counts(group))}</small></button>`).join(''):`<p class="df-empty">${t('暂无相关线索','No related signals')}</p>`}</section>`;}).join('')}</div>`;
       const more=$('.df-more');more.hidden=own.length<=8;more.textContent=expanded?t('收起','Show less'):t(`查看全部 ${fmt(own.length)} 组`,`View all ${fmt(own.length)} groups`);
       const unclassified=[...model.unclassified,...model.pending];
       $('.df-unknown').hidden=!unclassified.length;$('.df-unknown').innerHTML=`<span>${t(`${fmt(unclassified.length)} 条记录还需沿原文核对`,`${fmt(unclassified.length)} records need original-evidence review`)}</span><span>${t('交给 Agent 查证','Investigate with agent')} ↗</span>`;

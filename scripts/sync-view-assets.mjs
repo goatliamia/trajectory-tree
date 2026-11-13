@@ -17,6 +17,8 @@ const assets={
  'request-context.mjs':readFileSync(new URL('plugin/trajectory-tools/lib/request-context.js',root),'utf8'),
  'usage.mjs':readFileSync(new URL('plugin/trajectory-tools/lib/usage.js',root),'utf8').replace('./inspect-models/cache-efficiency.js','../../cache-efficiency.js'),
  'scope-index.mjs':readFileSync(new URL('lib/scope-index.mjs',root),'utf8'),
+ 'tool-colors.mjs':readFileSync(new URL('lib/tool-colors.mjs',root),'utf8'),
+ 'tool-feedback.mjs':readFileSync(new URL('lib/tool-feedback.mjs',root),'utf8'),
 };
 let changed=false;
 for(const [name,content] of Object.entries(assets)){
@@ -29,3 +31,4 @@ for(const [name,content] of Object.entries(assets)){
  }
 }
 if(check&&changed)process.exitCode=1;
+await import('./sync-eval-workspace.mjs');

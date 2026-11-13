@@ -832,7 +832,7 @@ window.__ModuleLoader__.load({
           applied = ctx.conversation.input.requestDraftInitialization(binding, { prompt: message.prompt, whenDraftExists: "append" }) === "applied";
         }
       } catch {}
-      event.source.postMessage({ type: "analysis-diagnosis-ack", sessionId, applied }, event.origin);
+      event.source.postMessage({ type: "analysis-diagnosis-ack", sessionId, applied, requestId: message.requestId }, event.origin);
       if (applied && typeof openView === "function") openView("chat", "");
     }
     function useDiagnosisDraft(frame, sessionId, openView, enabled = true) {

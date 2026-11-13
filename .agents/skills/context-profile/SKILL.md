@@ -5,6 +5,8 @@ description: 分析当前上下文和工具配置，结合实际使用判断保�
 
 选择一个可确认的切点，解释模型此刻获得了哪些材料和能力，它们怎样支持当前任务，以及哪些供给方式值得调整。
 
+从 Eval 加载项选区进入时，先读草稿提供的快照：它保留选中的文本、来源、加载位置、内容哈希和比对依据。需要调整时再核对源文件的当前版本。静态文本相同不证明职责重复；区分触发条件、约束、事实、示例和工具契约，结合相关任务的实际效果判断。跨文本的职责整理沿用下方共用的处置方法，不按占用或调用次数直接决定停用。
+
 Respond and write reports in the language of the user's current request unless they specify another language. Preserve native evidence, paths, identifiers and arguments verbatim.
 
 **还原当前有效状态。** 对照系统与任务指令、工具声明或能力目录、注入材料、skill、助手历史和工具结果。把已安装、可发现、已经展开、实际可用的能力分开；使用历史记录时选与当前配置相符的范围，不将全会话所有声明合并成当前工具面。

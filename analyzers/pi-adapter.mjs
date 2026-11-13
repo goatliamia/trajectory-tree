@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { posix, win32 } from 'node:path';
 import { commandReadEvidence } from './codex-adapter.mjs';
-import { attributeToolFailure } from '../plugin/trajectory-tools/lib/tool-attribution.js';
+import { attributeToolFailure, powerShellScript, isProgramTool, isShellTool } from '../plugin/trajectory-tools/lib/tool-attribution.js';
+import { inputToolMeasure, settleToolMeasure, recordedDiagnostics } from '../lib/tool-feedback.mjs';
 
 const categories = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
 const empty = () => Object.fromEntries(categories.map(k => [k, 0]));
@@ -123,21 +124,30 @@ export function adaptPiSession(input) {
       const observedEnd = finish?.observedAt ?? result?.timestamp ?? null;
       const start = completeTiming ? begin.observedAt : observedEnd ?? begin?.observedAt ?? responseEnd, end = observedEnd;
       const call = { id: native.id, seq: callSeq, name: native.name === 'bash' ? 'bash' : native.name, nativeName: native.name, signature: signature(native.name, native.arguments), target: native.arguments.path || null, args: excerpt(JSON.stringify(native.arguments)), start, end, startSeq: completeTiming ? callSeq : null, observedStart: begin?.observedAt ?? null, observedEnd, resultSeq: result ? ++seq : null, status: state, error: result?.isError ? { code: 'PI_TOOL_ERROR', message: text(result.content).slice(0, 180) } : null, result: result ? excerpt(text(result.content)) : null, durationMs: finish?.event.durationMs ?? result?.durationMs ?? null, timingSource: completeTiming ? source + '-capture' : 'unrecorded-start', source, synthetic };
+      // Project feedback before excerpts truncate the native arguments/results.
+      const feedbackName = native.name.toLowerCase(), measure = inputToolMeasure(feedbackName, native.arguments);
+      call.measure = result ? settleToolMeasure(feedbackName, measure, text(result.content), state) : measure;
+      if (state === 'error') {
+        const program = isProgramTool(native.name);
+        const script = program ? native.arguments.code : powerShellScript(native.arguments.command ?? native.arguments.cmd, native.name, native.arguments.shell)?.text;
+        const feedbackOutput = [text(result.content), result.details?.stderr].filter(value => typeof value === 'string' && value).join('\n');
+        call.codeFrames = recordedDiagnostics({ name: native.name, output: feedbackOutput, source: script, program });
+      }
       step.calls.push(call); step.end = Math.max(step.end, end ?? responseEnd); step.errors += state === 'error' ? 1 : 0;
       if (state === 'error') call.attribution = attributeToolFailure({ status: state, tool: native.name,
         output: text(result.content), error: result.details?.error, exitCode: result.details?.exitCode,
         stderr: result.details?.stderr, interrupted: result.details?.interrupted,
         command: native.arguments.command ?? native.arguments.cmd });
-      const shellReads = native.name === 'bash' ? commandReadEvidence(native.arguments.command || '') : [];
-      const shellSearch = native.name === 'bash' && /\b(?:rg|grep|Select-String)\b/.test(native.arguments.command || '');
-      call.semanticKind = native.name === 'read' || shellReads.length ? 'read' : ['edit', 'write'].includes(native.name) ? 'write' : shellSearch ? 'query' : native.name === 'bash' ? 'run' : 'other';
-      const title = native.name === 'read' ? (/SKILL\.md$/i.test(call.target) ? '读取技能材料 ' : '读取 ') + basename(call.target) : ['edit', 'write'].includes(native.name) ? (native.name === 'edit' ? '修改 ' : '写入 ') + basename(call.target) : native.name === 'bash' ? (shellSearch ? '查询文件内容' : shellReads.length ? '读取 ' + basename(shellReads[0].path) : /\b(?:test|--test|vitest|pytest)\b/.test(native.arguments.command || '') ? '运行验证' : '运行命令') : '调用 ' + native.name;
+      const shell = isShellTool(native.name), shellReads = shell ? commandReadEvidence(native.arguments.command || '') : [];
+      const shellSearch = shell && /\b(?:rg|grep|Select-String)\b/.test(native.arguments.command || '');
+      call.semanticKind = native.name === 'read' || shellReads.length ? 'read' : ['edit', 'write'].includes(native.name) ? 'write' : shellSearch ? 'query' : shell ? 'run' : 'other';
+      const title = native.name === 'read' ? (/SKILL\.md$/i.test(call.target) ? '读取技能材料 ' : '读取 ') + basename(call.target) : ['edit', 'write'].includes(native.name) ? (native.name === 'edit' ? '修改 ' : '写入 ') + basename(call.target) : shell ? (shellSearch ? '查询文件内容' : shellReads.length ? '读取 ' + basename(shellReads[0].path) : /\b(?:test|--test|vitest|pytest)\b/.test(native.arguments.command || '') ? '运行验证' : '运行命令') : '调用 ' + native.name;
       let outcome = state === 'error' ? '工具返回错误：' + text(result.content).slice(0, 170) : state === 'unknown' ? '没有配对的返回记录。' : text(result.content).slice(0, 170) || '已返回结果。';
-      if (native.name === 'bash' && state === 'returned' && /^PASS/m.test(text(result.content))) outcome = '命令输出报告：PASS · ' + text(result.content).replace(/\n/g, ' · ');
+      if (shell && state === 'returned' && /^PASS/m.test(text(result.content))) outcome = '命令输出报告：PASS · ' + text(result.content).replace(/\n/g, ' · ');
       const edit = native.arguments.edits?.[0], preview = native.name === 'edit' && edit ? { before: edit.oldText, after: edit.newText, partial: native.arguments.edits.length !== 1 } : native.name === 'write' ? { before: '', after: native.arguments.content, partial: false } : null;
       callFacts[callSeq] = { seq: callSeq, title, outcome, target: call.target, detail: 'Pi ' + native.name + ' · ' + (synthetic ? '模拟会话，未实际执行' : '会话记录') + (result?.details?.patch ? ' · 返回 details.patch' : ''), tone: state === 'error' ? 'bad' : state === 'unknown' ? 'unknown' : 'normal', resultSeq: call.resultSeq, preview, patch: result?.details?.patch ?? null, source, synthetic };
       if (['read', 'edit', 'write'].includes(native.name) && call.target) fileOperations.push({ seq: callSeq, turn: currentTurn.number, step: number, path: (/^[A-Za-z]:[\\/]|^\\\\/.test(call.target) || input.header.cwd?.includes('\\') ? win32 : posix).resolve(input.header.cwd, call.target), kind: native.name === 'read' ? 'read' : 'change', status: state, time: start, end, source, synthetic, nativeKind: native.name, diff: result?.details?.patch ? excerpt(result.details.patch) : null });
-      for (const read of shellReads) fileOperations.push({ seq: callSeq, turn: currentTurn.number, step: number, path: (/^[A-Za-z]:[\\/]/.test(read.path) || input.header.cwd?.includes('\\') ? win32 : posix).resolve(input.header.cwd, read.path), kind: 'read', status: state, time: start, end, source: 'estimate', synthetic, nativeKind: 'bash', evidence: { ...read, confidence: read.conditional ? 'intended-read-in-process' : 'read-command-returned' } });
+      for (const read of shellReads) fileOperations.push({ seq: callSeq, turn: currentTurn.number, step: number, path: (/^[A-Za-z]:[\\/]/.test(read.path) || input.header.cwd?.includes('\\') ? win32 : posix).resolve(input.header.cwd, read.path), kind: 'read', status: state, time: start, end, source: 'estimate', synthetic, nativeKind: native.name, evidence: { ...read, confidence: read.conditional ? 'intended-read-in-process' : 'read-command-returned' } });
       if (native.name === 'read' && /SKILL\.md$/i.test(call.target)) skillEvents.push({ id: native.id, kind: 'skill-file-read', name: basename(posix.dirname(call.target.replace(/\\/g, '/'))), path: call.target, turn: currentTurn.number, step: number, seq: callSeq, time: start, status: state, source, synthetic });
       if (state === 'error') episodes.push({ id: 'pi-' + native.id, turn: currentTurn.number, condition: 'PI_TOOL_ERROR', reason: title + '未成功', summary: '后续结果待确认', steps: [number], failureSeqs: [callSeq], pairs: [], readSeqs: [], targets: call.target ? [call.target] : [], start, end: end ?? start, firstError: end ?? start, resolvedAt: null, complete: false, failedCount: 1, confirmedCount: 0, unconfirmedCount: 1, failedCallMs: call.durationMs, stepMs: step.end - step.start, continuationMs: null, sequence: [{ kind: 'failure', time: end ?? start, label: outcome, seqs: [callSeq] }], synthetic, source });
     }

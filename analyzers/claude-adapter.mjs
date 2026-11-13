@@ -147,6 +147,17 @@ export function finalizeClaudeDataset(data, native, projected = projectClaudeTra
         if (!input) call.args = null;
         if (call.error) call.error.code = 'CLAUDE_TOOL_ERROR';
         call.semanticKind = ({ Read: 'read', Write: 'write', Edit: 'write', Bash: 'run' })[call.nativeName] || 'other';
+        const fact = data.payload.context.callFacts?.[call.seq];
+        if (fact && typeof path === 'string' && path && ['Read', 'Write', 'Edit'].includes(call.nativeName)) {
+          const filename = path.replace(/\\/g, '/').split('/').at(-1);
+          fact.target = path;
+          fact.title = ({ Read: '读取 ', Write: '写入 ', Edit: '修改 ' })[call.nativeName] + filename;
+          // This is the submitted replacement, not a reconstructed disk diff.
+          fact.preview = call.nativeName === 'Edit' && typeof input.old_string === 'string' && typeof input.new_string === 'string'
+            ? { before: input.old_string, after: input.new_string, partial: input.replace_all === true }
+            : call.nativeName === 'Write' && typeof input.content === 'string'
+              ? { before: '', after: input.content, partial: false } : null;
+        }
         if (typeof path === 'string' && path && ['Read', 'Write', 'Edit'].includes(call.nativeName)) {
           call.target = path;
           const cwd = entry.claudeRow.cwd || projected.header.cwd;

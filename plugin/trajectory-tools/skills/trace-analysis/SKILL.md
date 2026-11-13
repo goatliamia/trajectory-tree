@@ -26,7 +26,7 @@ Respond and write reports in the language of the user's current request unless t
 
 **确定处置去向，再决定是否长期保留。** 按[处置与知识保留](references/disposition.md)决定修环境或实现、临时恢复、补齐能力和提炼经验。这是各类分析共用的方法，方向可以组合，错误类型不能直接决定处置。
 
-拟补充宿主事实或工作约定时，先核对出错当时、执行该动作的 Agent 实际获得了哪些说明。已有明确信息时，检查冲突、供给方式和动作是否遵循它，避免重复追加同一提醒。按需用[上下文持续使用](references/context.md)查证，报错本身不能证明信息没有提供。
+涉及供给缺口、重复说明或过期知识时，按[上下文持续使用](references/context.md)核对当时实际可见的材料。当前配置由 `context-profile` 分析。
 
 ### 验证改法
 

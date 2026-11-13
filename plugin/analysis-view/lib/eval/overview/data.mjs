@@ -141,5 +141,5 @@ export function projectOverviewSession(id, events, { cwd, inherited = 0 } = {}, 
   }
   const work = projectWorkEvidence(inherited ? events.filter(event => event.seq >= inherited) : events, turns);
   return { id, cut: trace.lastSeq, turns, occupancy, work,
-    findingCalls: projectFindingCalls(trace, { turns: turns.map(turn => turn.no) }) };
+    findingCalls: projectFindingCalls(trace, { turns: turns.map(turn => turn.no), events }) };
 }

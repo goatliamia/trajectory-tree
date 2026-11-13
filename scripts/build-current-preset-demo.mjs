@@ -1,0 +1,15 @@
+import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { collectCurrentPreset } from '../lib/dsh-current-preset.mjs';
+import { visualTokenCss } from '../design/tokens.mjs';
+const option=(name,fallback)=>{const i=process.argv.indexOf(name);return i<0?fallback:process.argv[i+1];};
+const out=resolve(option('--out','.dsh/preset-context-demo'));
+const historyFile=join(out,'data.json');
+const history=existsSync(historyFile)?JSON.parse(readFileSync(historyFile,'utf8')):null;
+const data=await collectCurrentPreset({home:option('--home',undefined),cwd:option('--cwd',process.cwd()),history});
+mkdirSync(out,{recursive:true});
+writeFileSync(join(out,'current-data.next.json'),JSON.stringify(data));
+renameSync(join(out,'current-data.next.json'),join(out,'current-data.json'));
+writeFileSync(join(out,'tokens.css'),visualTokenCss());
+writeFileSync(join(out,'index.html'),readFileSync(new URL('../docs/demo/preset-context/index.html',import.meta.url),'utf8'));
+console.log(JSON.stringify({output:out,presets:data.presets.map(p=>({id:p.id,skills:p.skills.length,tools:p.tools.length})),issues:data.coverage.issues.length}));

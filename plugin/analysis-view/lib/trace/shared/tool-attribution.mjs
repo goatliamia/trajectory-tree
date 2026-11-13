@@ -1,26 +1,71 @@
 // Cause evidence is independent of the recorded host outcome.
 export const failureCategories = [
   ['文件修改保护', 'File edit protection', ['FS_NOT_OBSERVED', 'FS_STALE_VERSION']],
-  ['文件与编辑目标', 'Files and edit targets', ['FS_NOT_FOUND', 'FS_NOT_TEXT', 'FS_EDIT_NOT_FOUND', 'COMMAND_FILE_BUSY']],
+  ['文件与编辑目标', 'Files and edit targets', ['FS_NOT_FOUND', 'FS_NOT_TEXT', 'FS_EDIT_NOT_FOUND', 'COMMAND_FILE_BUSY', 'FS_NOT_REGULAR_FILE', 'FS_AMBIGUOUS_EDIT', 'FS_REPLACE_FAILED']],
   ['服务与访问', 'Services and access', ['SESSION_QUERY_PERSISTENCE_FAILED', 'SEARCH_FAILED', 'WEB_UNSUPPORTED_CONTENT_TYPE',
     'WEB_PROVIDER_ERROR', 'WEB_REDIRECT_BLOCKED', 'COMMAND_APP_SERVER_EXITED', 'COMMAND_RESPONSE_BODY_UNAVAILABLE',
-    'COMMAND_OFFLINE_DEPENDENCY', 'COMMAND_CIM_UNAVAILABLE']],
+    'COMMAND_OFFLINE_DEPENDENCY', 'COMMAND_CIM_UNAVAILABLE', 'APPROVAL_UNAVAILABLE', 'TOOL_CONTEXT_UNAVAILABLE',
+    'UNKNOWN_TOOL', 'TOOL_ACTIVATION_FAILED', 'browser-unavailable', 'HOST_SANDBOX_SETUP_FAILED', 'SEARCH_RAW_OUTPUT_OVERFLOW']],
   ['调用超时', 'Timeouts', ['TOOL_TIMEOUT', 'COMMAND_TIMEOUT', 'CODE_TIMEOUT']],
-  ['中止与取消', 'Aborts and cancellations', ['ABORTED', 'ABORTED_BEFORE_DISPATCH', 'CODE_ABORTED']],
-  ['结果待确认', 'Unconfirmed outcomes', ['TOOL_OUTCOME_UNKNOWN']],
+  ['中止与取消', 'Aborts and cancellations', ['ABORTED', 'ABORTED_BEFORE_DISPATCH', 'CODE_ABORTED', 'APPROVAL_CANCELLED', 'WEB_ABORTED', 'ASK_CANCELLED', 'JOB_WAIT_ABORTED']],
+  ['结果待确认', 'Unconfirmed outcomes', ['TOOL_OUTCOME_UNKNOWN', 'JOB_NOT_FOUND', 'COMMAND_EXTERNAL_FEEDBACK']],
   ['代码执行失败', 'Code execution failed', ['CODE_RUN_FAILED', 'COMMAND_RUNTIME_ERROR', 'COMMAND_ENCODING_ERROR',
     'CODE_EXCEPTION', 'CODE_WORKER_EXIT', 'CODE_INVALID_OUTPUT', 'CODE_OUTPUT_LIMIT', 'CODE_PROTOCOL']],
   ['原因待确认', 'Cause unclassified', []],
-  ['命令语法与参数', 'Command syntax and arguments', ['COMMAND_SYNTAX', 'COMMAND_PATTERN', 'COMMAND_ARGUMENT', 'COMMAND_NOT_FOUND', 'CODE_SYNTAX']],
-  ['权限受阻', 'Access denied', ['COMMAND_PERMISSION', 'TOOL_PERMISSION', 'CODE_SANDBOX_UNAVAILABLE']],
+  ['命令语法与参数', 'Command syntax and arguments', ['COMMAND_SYNTAX', 'COMMAND_PATTERN', 'COMMAND_ARGUMENT', 'COMMAND_NOT_FOUND', 'CODE_SYNTAX', 'INVALID_ARGS', 'SEARCH_INVALID_PATTERN']],
+  ['权限受阻', 'Access denied', ['COMMAND_PERMISSION', 'TOOL_PERMISSION', 'CODE_SANDBOX_UNAVAILABLE', 'APPROVAL_REJECTED']],
   ['连接失败', 'Connection failures', ['COMMAND_CONNECTION_DENIED', 'COMMAND_CONNECTION_FAILED']],
   ['验证未通过', 'Verification failures', ['COMMAND_TEST_FAILED']],
+  ['工具接口契约', 'Tool interface contracts', ['INVALID_TOOL_OUTPUT', 'UNSUPPORTED_SCHEMA']],
+  ['附件与图像', 'Attachments and images', ['TOO_MANY_IMAGES', 'IMAGES_TOO_LARGE', 'UNSUPPORTED_IMAGE_TYPE',
+    'INVALID_IMAGE_BASE64', 'INVALID_IMAGE', 'IMAGE_TYPE_MISMATCH', 'IMAGE_TOO_LARGE', 'IMAGE_TOO_MANY_PIXELS',
+    'IMAGE_DIMENSION_TOO_LARGE', 'INVALID_FILE_BASE64', 'INVALID_ATTACHMENT_REF', 'ATTACHMENT_CORRUPT',
+    'ATTACHMENT_WRITE_FAILED', 'ATTACHMENT_NOT_FOUND', 'ATTACHMENT_READ_FAILED',
+    'ATTACHMENT_PROJECTION_UNSUPPORTED', 'ATTACHMENT_FILES_UNSUPPORTED']],
 ];
 const categories = new Map(failureCategories.flatMap(([, , codes], index) => codes.map(code => [code, index])));
 export const failureCategoryIndex = code => categories.get(code) ?? 7;
 
 export const failureLabels = {
-  FS_NOT_OBSERVED: ['修改前未读取文件', 'File not read before editing'],
+  INVALID_ARGS: ['调用参数不符合声明', 'Arguments do not match the tool schema'],
+  SEARCH_INVALID_PATTERN: ['搜索表达式无效', 'Invalid search pattern'],
+  SEARCH_RAW_OUTPUT_OVERFLOW: ['搜索返回超过上限', 'Search output exceeds its limit'],
+  FS_NOT_REGULAR_FILE: ['目标不是普通文件', 'Target is not a regular file'],
+  FS_AMBIGUOUS_EDIT: ['替换目标不唯一', 'Ambiguous edit target'],
+  FS_REPLACE_FAILED: ['文件替换失败', 'File replacement failed'],
+  HOST_SANDBOX_SETUP_FAILED: ['沙箱或权限环境准备失败', 'Sandbox or permission setup failed'],
+  'browser-unavailable': ['浏览器能力不可用', 'Browser capability unavailable'],
+  WEB_ABORTED: ['网页请求被中止', 'Web request aborted'],
+  ASK_CANCELLED: ['交互询问已取消', 'User question cancelled'],
+  JOB_WAIT_ABORTED: ['后台任务等待被中止', 'Background job wait aborted'],
+  JOB_NOT_FOUND: ['后台任务身份未找到', 'Background job identity not found'],
+  COMMAND_EXTERNAL_FEEDBACK: ['外部程序反馈待核对', 'External program feedback needs review'],
+  APPROVAL_REJECTED: ['审批被用户拒绝', 'Approval rejected by user'],
+  APPROVAL_CANCELLED: ['审批已取消', 'Approval cancelled'],
+  APPROVAL_UNAVAILABLE: ['审批服务或通道不可用', 'Approval service or channel unavailable'],
+  TOOL_CONTEXT_UNAVAILABLE: ['工具所需运行上下文缺失', 'Required tool context unavailable'],
+  UNKNOWN_TOOL: ['工具未注册或不可直接调用', 'Tool unregistered or not directly callable'],
+  TOOL_ACTIVATION_FAILED: ['工具可用性判断失败', 'Tool availability check failed'],
+  INVALID_TOOL_OUTPUT: ['工具返回值违反契约', 'Tool output violates its contract'],
+  UNSUPPORTED_SCHEMA: ['工具声明的 Schema 不受支持', 'Tool schema is unsupported'],
+  TOO_MANY_IMAGES: ['图像数量超过限制', 'Too many images'],
+  IMAGES_TOO_LARGE: ['图像总量超过限制', 'Images exceed the total size limit'],
+  UNSUPPORTED_IMAGE_TYPE: ['图像类型不受支持', 'Unsupported image type'],
+  INVALID_IMAGE_BASE64: ['图像 Base64 无效', 'Invalid image Base64'],
+  INVALID_IMAGE: ['图像内容无效', 'Invalid image'],
+  IMAGE_TYPE_MISMATCH: ['图像类型与内容不符', 'Image type does not match its content'],
+  IMAGE_TOO_LARGE: ['图像大小超过限制', 'Image exceeds the size limit'],
+  IMAGE_TOO_MANY_PIXELS: ['图像像素数超过限制', 'Image exceeds the pixel limit'],
+  IMAGE_DIMENSION_TOO_LARGE: ['图像尺寸超过限制', 'Image dimensions exceed the limit'],
+  INVALID_FILE_BASE64: ['文件 Base64 无效', 'Invalid file Base64'],
+  INVALID_ATTACHMENT_REF: ['附件引用无效', 'Invalid attachment reference'],
+  ATTACHMENT_CORRUPT: ['附件数据损坏', 'Attachment data is corrupt'],
+  ATTACHMENT_WRITE_FAILED: ['附件写入失败', 'Attachment write failed'],
+  ATTACHMENT_NOT_FOUND: ['附件未找到', 'Attachment not found'],
+  ATTACHMENT_READ_FAILED: ['附件读取失败', 'Attachment read failed'],
+  ATTACHMENT_PROJECTION_UNSUPPORTED: ['附件投递格式不受支持', 'Attachment projection is unsupported'],
+  ATTACHMENT_FILES_UNSUPPORTED: ['文件附件不受支持', 'File attachments are unsupported'],
+  FS_NOT_OBSERVED: ['文件保护要求先读取', 'File guard requires an observed read'],
   FS_STALE_VERSION: ['文件版本已变化', 'File version changed'],
   FS_EDIT_NOT_FOUND: ['找不到待替换文本', 'Replacement target not found'],
   FS_NOT_FOUND: ['文件未找到', 'File not found'],
@@ -203,6 +248,12 @@ export function legacyParserDiagnostic(lines) {
   return id ? { index, id } : null;
 }
 
+// Windows PowerShell 5.1 and Core, including localized/wrapped messages.
+// Only stable identifiers are extracted; the message is not a root-cause proof.
+export function powerShellDiagnosticIds(text) {
+  return [...new Set([...String(text??'').matchAll(/^\s*\+\s*FullyQualifiedErrorId\s*:\s*([A-Za-z][A-Za-z0-9_.-]{0,79})(?=\s*(?:,|$))/gm)].map(match=>match[1]))];
+}
+
 // Keep the runtime's own failure kind separate from an inferred root cause.
 function programFailure(runtime, detected) {
   const match = /^(?:Error:\s*)?code run failed \((exception|timeout|abort|worker-exit|invalid-output|output-limit|protocol|sandbox-unavailable)\):\s*([^\n]*)/i.exec(runtime);
@@ -235,9 +286,32 @@ function recordedFailure(runtime, source, shell, detected) {
     if (legacyGrammar || lines.some(line => /^ParserError:/i.test(line))) {
       return detected('COMMAND_SYNTAX', legacyGrammar?.id ?? 'ParserError', 'PowerShell');
     }
+    const ids = powerShellDiagnosticIds(runtime);
+    const argument = ids.find(id=>/^(?:NamedParameterNotFound|PositionalParameterNotFound|ParameterArgumentValidationError|ParameterBindingException|AmbiguousParameter|MissingMandatoryParameter)$/.test(id));
+    if (argument) return { ...detected('COMMAND_ARGUMENT', argument, 'PowerShell'), pattern: argument };
+    if (ids.includes('CommandNotFoundException')) {
+      const name = /(?:The term\s+['"]([^'"]+)['"]|无法将[“"']([^”"']+)[”"'])/.exec(runtime);
+      return { ...detected('COMMAND_NOT_FOUND', 'CommandNotFoundException', 'PowerShell'),
+        ...(name ? { pattern: 'CommandNotFoundException:'+(name[1]??name[2]).slice(0,100) } : {}) };
+    }
+    if (ids.some(id=>id==='PathNotFound'||id==='FileOpenFailure')) return detected('FS_NOT_FOUND', ids.includes('PathNotFound')?'PathNotFound':'FileOpenFailure', 'PowerShell');
+    const runtimeId = ids.find(id=>/^(?:ArgumentOutOfRangeException|NullArray|MethodInvocationException|InvalidOperation)$/.test(id));
+    if (runtimeId) return {...detected('COMMAND_RUNTIME_ERROR',runtimeId,'PowerShell'),pattern:runtimeId};
+    if (/\b(?:error TS\d+):/m.test(runtime)) {
+      const code=/\berror (TS\d+):/.exec(runtime)[1];
+      return {...detected('COMMAND_TEST_FAILED',code,'TypeScript'),pattern:code};
+    }
+    if (/(?:^|\n)(?:python(?:\.exe)?\s*:\s*)?Traceback \(most recent call last\):/m.test(runtime)) {
+      const error = [...runtime.matchAll(/^(\w+(?:Error|Exception)):\s*(.+)$/gm)].at(-1);
+      if (error) return {...detected(/^Unicode(?:Encode|Decode)Error$/.test(error[1])?'COMMAND_ENCODING_ERROR':error[1]==='PermissionError'?'COMMAND_PERMISSION':'COMMAND_RUNTIME_ERROR',error[1],'Python'),exception:error[1],pattern:error[1]};
+    }
+    if (/\bERR_SQLITE_ERROR\b/.test(runtime) && /(?:^|\n)(?:Error:|\s+code:)/m.test(runtime)) return detected('COMMAND_RUNTIME_ERROR','ERR_SQLITE_ERROR','SQLite');
+    if (/^(?:ssh\s*:\s*)?bash:.*(?:syntax error|unexpected EOF)/m.test(runtime)) return {...detected('COMMAND_SYNTAX','Remote Bash syntax','bash'),layer:'remote-shell',pattern:'remote-bash-quoting'};
+    if (/^(?:ssh\s*:\s*)?sed:.*Unmatched/m.test(runtime)) return {...detected('COMMAND_PATTERN','Unmatched grouping expression','sed'),pattern:'sed:unmatched-group'};
+    if (/^(?:ssh\s*:\s*)?awk:.*(?:syntax|backslash)/m.test(runtime)) return {...detected('COMMAND_PATTERN','awk expression syntax','awk'),pattern:/backslash/.test(runtime)?'awk:backslash':'awk:syntax'};
     if (/^rg:\s*regex parse error:/im.test(runtime)) return detected('COMMAND_PATTERN', 'rg: regex parse error', 'rg');
     if (/^rg:.*\(os error (?:2|3|123)\)/im.test(runtime)) return detected('FS_NOT_FOUND', 'rg: file or path error', 'rg');
-    if (/^Get-Content:.*(?:cannot find|找不到|不存在)/im.test(runtime)) return detected('FS_NOT_FOUND', 'Get-Content: path not found', 'PowerShell');
+    if (/^Get-Content\s*:.*(?:cannot find|找不到|不存在)/im.test(runtime)) return detected('FS_NOT_FOUND', 'Get-Content: path not found', 'PowerShell');
     if (/^rg:.*\(os error (?:5|13)\)/im.test(runtime)) return detected('COMMAND_PERMISSION', 'rg: permission denied', 'rg');
     if (/(?:^|\n)\s*(?:\|\s*)?(?:The term .{1,400} is not recognized as a name of a cmdlet|CommandNotFoundException\b)/i.test(runtime)) {
       return detected('COMMAND_NOT_FOUND', 'CommandNotFoundException', 'PowerShell');
@@ -334,13 +408,20 @@ export function attributeToolFailure({ status, tool, output, stderr, error, exit
   const detected = (code, evidence, program, basis = 'runtime-output') => ({
     code, label: failureLabels[code][0], certainty: 'confirmed', basis, exitCode: exit,
     ...(program ? { program } : {}), evidence,
+    ...(powerShellDiagnosticIds(diagnostic || runtime).length ? { diagnosticIds: powerShellDiagnosticIds(diagnostic || runtime) } : {}),
     ...(failureLocation(diagnostic || runtime, program) ? { site: failureLocation(diagnostic || runtime, program) } : {}),
   });
   const nativeCode = nativeCodeAliases.get(error?.code) ?? error?.code;
   if (categories.has(nativeCode) && !genericCodes.has(nativeCode)) {
-    return detected(nativeCode, error.code, null, 'native-code');
+    const missing = nativeCode==='INVALID_ARGS' && /missing required property ["']([^"']+)["']/.exec(runtime);
+    return {...detected(nativeCode, error.code, null, 'native-code'),...(missing?{pattern:'missing-required:'+missing[1],evidence:'缺少必填参数 '+missing[1]}:{})};
   }
   if (interrupted === true) return detected('ABORTED', 'interrupted', null, 'native-status');
+  if (shell && /^(?:Error:\s*)?sandbox-local windows-acl temp grant materialization failed/m.test(runtime)) return {...detected('HOST_SANDBOX_SETUP_FAILED','临时授权准备及清理失败','DSH'),pattern:'sandbox:temporary-grant'};
+  if (shell && /^(?:Error:\s*)?SetNamedSecurityInfoW failed \(Win32 \d+\): grantWrite/m.test(runtime)) return {...detected('HOST_SANDBOX_SETUP_FAILED','SetNamedSecurityInfoW / grantWrite','DSH'),pattern:'acl:grantWrite'};
+  if (/^(?:Error:\s*)?ReplaceFileW EIO \(Win32 \d+\):/m.test(runtime)) return detected('FS_REPLACE_FAILED','ReplaceFileW EIO');
+  if (/^job_(?:output|kill)$/i.test(tool??'') && /^(?:Error:\s*)?unknown job\b/m.test(runtime)) return detected('JOB_NOT_FOUND','Unknown job');
+  if (/^job_output$/i.test(tool??'') && /^(?:Error:\s*)?wait aborted\s*$/m.test(runtime)) return detected('JOB_WAIT_ABORTED','Wait aborted');
 
   if (isProgramTool(tool) && nativeCode === 'CODE_RUN_FAILED') {
     const observedProgram = programFailure(runtime, detected);
@@ -351,6 +432,7 @@ export function attributeToolFailure({ status, tool, output, stderr, error, exit
   const observed = (diagnostic && recordedFailure(diagnostic, source, shell, (code, evidence, program) =>
     detected(code, evidence, program, 'native-stderr'))) || recordedFailure(runtime, source, shell, detected);
   if (observed) return observed;
+  if (shell && powerShellDiagnosticIds(diagnostic || runtime).includes('NativeCommandError')) return {...detected('COMMAND_EXTERNAL_FEEDBACK','NativeCommandError','PowerShell'),certainty:'candidate'};
   if (shell && exit === 1 && !outputRecorded && /^rg(?:\.exe)?[ \t]+(?:[^;|&<>(){}\r\n\x60$"']|"[^"\r\n\x60$]*"|'[^'\r\n]*')+$/i.test(source.trim())
       && !/(?:^|\s)(?:--no-messages|-s)(?=\s|$)/.test(source)) {
     return candidateAttribution('LOOKUP_NO_MATCH', 'rg', exit, 'rg · exit 1');

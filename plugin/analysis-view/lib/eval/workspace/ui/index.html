@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Eval · 轨迹树</title>
+  <link rel="stylesheet" href="/design/tokens.css"><link rel="stylesheet" href="/design/primitives.css">
+  <link rel="stylesheet" href="/tool-colors.css">
+  <link rel="stylesheet" href="/tool-feedback.css">
+  <link rel="stylesheet" href="/capability-management.css">
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/variants.css"><link rel="stylesheet" href="/skill-manager.css"><link rel="stylesheet" href="/eval-shell.css"><link rel="stylesheet" href="/eval-redesign.css"><link rel="stylesheet" href="/eval-visuals.css">
+  <link rel="stylesheet" href="/context-overlap.css">
+  <link rel="stylesheet" href="/home-overview.css">
+</head>
+<body data-layout="desk">
+<div class="app-shell">
+  <aside class="sidebar">
+    <a href="/" class="brand">轨迹树<span>DSH</span></a>
+    <div class="side-section">工作区</div><a class="side-active eval-nav" href="/?preset=cordis&tab=home"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16V9m7 7V4m7 12v-6"/></svg>Eval<span>总览</span></a>
+    <div class="side-section">预设</div><nav id="modes" aria-label="选择当前预设"></nav>
+    <div class="side-bottom"><span class="status-dot"></span>本机配置预览</div>
+  </aside>
+  <main>
+    <header class="page-header"><div class="breadcrumb">web <span>/</span> Eval <span>/</span> <strong id="tab-crumb">首页</strong></div><div class="header-actions"><span id="captured-at"></span><button class="tt-button" id="refresh" type="button">刷新配置</button></div></header>
+    <section class="design-switcher" aria-label="界面方案" hidden>
+      <div class="design-caption"><span>布局探索</span><small>同一份真实数据</small></div>
+      <div id="design-options" class="design-options" role="group" aria-label="切换界面方案"></div>
+    </section>
+    <section class="page-title"><div><div class="title-line"><h1 id="preset-title">Eval 总览</h1><span class="quiet-badge" id="default-label" hidden>默认预设</span></div><p id="preset-subtitle">当前配置与真实使用表现</p></div><div class="workspace"><span>工作目录</span><strong id="workspace-name">sql event</strong></div></section>
+    <nav id="workspace-tabs" class="workspace-tabs" role="tablist" aria-label="Eval"><button type="button" id="home-tab" role="tab" data-workspace-tab="home" aria-selected="true" aria-controls="overview-panel">首页</button><button type="button" id="skills-tab" role="tab" data-workspace-tab="skills" aria-selected="false" aria-controls="skill-management-panel">Skill 管理 <span id="skill-tab-count"></span></button><button type="button" id="diagnosis-tab" role="tab" data-workspace-tab="diagnosis" aria-selected="false" aria-controls="retained-panel">诊断</button><button type="button" id="window-tab" role="tab" data-workspace-tab="window" aria-selected="false" aria-controls="retained-panel">上下文窗口</button></nav>
+    <div id="load-error" role="alert" hidden></div>
+    <section id="overview-panel" role="tabpanel" aria-labelledby="home-tab"></section>
+    <section id="skill-management-panel" aria-labelledby="skills-tab" role="tabpanel" hidden></section>
+    <section id="retained-panel" role="tabpanel" hidden></section>
+    <footer class="page-footer"><span id="footer-status">当前磁盘配置 · 运行时组装未连接</span><button type="button" id="about" class="text-action">数据来源与口径</button></footer>
+  </main>
+</div>
+<dialog id="detail-dialog" aria-labelledby="section-title">
+  <div class="drawer-top"><span id="detail-breadcrumb">当前内容</span><button type="button" id="close-detail" aria-label="关闭详情">×</button></div>
+  <nav id="categories" class="categories" aria-label="详情分类"></nav>
+  <section id="detail-panel" class="content-section">
+    <div class="section-heading"><div><h2 id="section-title"></h2><p id="section-description"></p></div><span class="section-metric" id="section-metric"></span></div>
+    <div id="detail-context" class="detail-context"></div>
+    <div class="list-toolbar" id="list-toolbar"><label class="search-field"><span aria-hidden="true">⌕</span><input type="search" id="search" aria-label="查找当前内容" placeholder="按名称、用途或来源查找"></label><label id="unused-control" class="unused-control"><input type="checkbox" id="unused-only">未见使用</label><span id="list-count"></span></div>
+    <div id="current-list" aria-live="polite"></div>
+    <div id="current-note" class="content-note" hidden></div>
+  </section>
+</dialog>
+<dialog id="source-dialog"><header><h2>数据来源</h2><button type="button" id="close-dialog" aria-label="关闭">×</button></header><div id="source-detail"></div></dialog>
+<dialog id="skill-dialog" aria-label="Skill 管理详情"><div class="drawer-top"><span id="skill-dialog-label">Skill 管理</span><button type="button" id="close-skill-dialog" aria-label="关闭 Skill 详情">×</button></div><div id="skill-detail"></div></dialog>
+<dialog id="eval-dialog" aria-labelledby="eval-dialog-title"><div class="drawer-top"><span id="eval-dialog-title">分析记录</span><button type="button" id="close-eval-dialog" aria-label="关闭分析记录">×</button></div><div id="eval-dialog-body"></div></dialog>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

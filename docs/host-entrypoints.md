@@ -17,6 +17,8 @@ Pi 的 `/trajectory`、Codex 的 `$trajectory-view` / `$trajectory-eval` 和 Cla
 
 DSH 首批会话到达后即显示图表，余下记录分批补齐；页眉保留已读进度，读取中断会保留已读部分。缓存命中不等待大日志队列；原始日志仍经过单个低优先级队列，关闭页面会取消未完成工作。分叉去重、切点校验和统计口径保持一致。
 
+新版 DSH Eval 将当前预设首页、Skill 管理、执行记录/加载项诊断和上下文窗口放在同一入口。当前工作区可以切换；后台统计保留读取进度。会话摘要有跨重启缓存，页面不再访问后暂停尚未完成的读取。加载项与执行记录的诊断共用可编辑草稿和目标对话选择，原生接口回执成功后才显示已填入。
+
 | 宿主 | 入口 | 数据范围 |
 | --- | --- | --- |
 | DSH Web | 左侧栏「Eval 总览」 | 已登记工作区中的会话，略过归档会话和分叉继承的历史 |
@@ -29,6 +31,8 @@ DSH 首批会话到达后即显示图表，余下记录分批补齐；页眉保�
 Codex 项目查询遇到历史读取超时时，会保留已读会话并在总览标出未读取数量。已有的会话快照可用 `--file SNAPSHOT` 加入对照。
 
 Codex 使用官方推荐的 skills 入口，不新增已弃用的 custom prompt slash 文件。插件包使用根 `plugin.json`，从根 `skills/` 发现 skill；本地 marketplace 指向生成后的 Codex 包，不指向含私有日志的整个工作目录。它是本地可安装包，尚未提交公共插件目录。
+
+Codex `0.2.4` 插件还携带根 `mcp.json` 和本地 stdio MCP：四个取证工具，以及 `trajectory_view(session, view, language)`。后者直接生成轨迹树、会话 Eval 或代码执行页并返回本机链接，由浏览器或 Codex 预览面板展示。服务不绑定启动它的旧对话；列出会话时明确传工作目录。已验证工具调用与出图，未把 ChatGPT 的 MCP 内嵌 UI 支持推定为 Codex 同样支持。官方依据：[本地 MCP 插件](https://developers.openai.com/plugins/deploy/desktop-only)、[可选 UI 的宿主边界](https://developers.openai.com/plugins/build/chatgpt-ui)。
 
 ## 命令诊断
 

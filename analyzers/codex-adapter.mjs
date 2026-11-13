@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { win32, posix } from 'node:path';
 import { omitCodexImages, omitImageLabels } from './codex-images.mjs';
-import { attributeToolFailure, commandPowerShellEdition } from '../plugin/trajectory-tools/lib/tool-attribution.js';
+import { attributeToolFailure, commandPowerShellEdition, powerShellScript } from '../plugin/trajectory-tools/lib/tool-attribution.js';
+import {inputToolMeasure,settleToolMeasure,recordedDiagnostics} from '../lib/tool-feedback.mjs';
 
 const keys = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
 const empty = () => Object.fromEntries(keys.map(k => [k, 0]));
@@ -241,6 +242,20 @@ export function adaptCodexThread(snapshot, options = {}) {
         ?? (item.type === 'webSearch' ? 'web_search' : nativeName);
       const target = item.changes?.[0]?.path || cls.reads?.[0]?.path || item.path || null;
       const call = { id: item.id, seq: itemSeq, name, nativeName, classification: cls, signature: hash(JSON.stringify([item.type, args])), target, args: excerpt(JSON.stringify(args), 22000), start: a, end: state === 'unknown' ? null : b, resultSeq, status: state, error: state === 'error' ? { code: item.exitCode != null ? 'EXIT_' + item.exitCode : 'TOOL_ERROR', message: short(item.error || result, 180) } : null, result: excerpt(result, 18000), durationMs: Number.isFinite(item.durationMs) && item.durationMs >= 0 ? item.durationMs : precise ? b - a : null, timingSource: step.timingSource, source: cls.source };
+      let measure=inputToolMeasure(name,args);
+      if(item.type==='fileChange'&&item.changes?.some(change=>typeof change.diff==='string')){
+        let added=0,removed=0;
+        for(const change of item.changes)for(const line of String(change.diff??'').split('\n')){
+          if(line.startsWith('+')&&!line.startsWith('+++'))added++;
+          if(line.startsWith('-')&&!line.startsWith('---'))removed++;
+        }
+        measure={kind:'change',added,removed,basis:'recorded-diff',state:'pending'};
+      }
+      call.measure=state==='unknown'?measure:settleToolMeasure(name,measure,result,state);
+      if(state==='error'){
+        const script=item.type==='commandExecution'?powerShellScript(item.command,'exec_command')?.text:null;
+        call.codeFrames=recordedDiagnostics({name:nativeName,output:result,source:script});
+      }
       if (item.evidenceSource === 'local-rollout' && item.type === 'collabAgentToolCall') call.nativeName = 'collaboration.' + item.tool;
       if (state === 'error') {
         call.attribution = attributeToolFailure({ status: state, tool: nativeName, output: result,

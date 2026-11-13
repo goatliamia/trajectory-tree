@@ -56,6 +56,7 @@ export function codeExecutionData(session, { host = 'dsh', attributions, argumen
     return { seq: call.seq, startSeq: host === 'dsh' && call.inner ? call.startSeq : call.startSeq ?? call.seq,
       resultSeq: call.resultSeq, turn, step, name, executor, edition: edition ?? null,
       phase, code, nativeCode: call.error?.code ?? null, attribution, fingerprint,
+      measure:call.measure??null,codeFrames:attribution?.codeFrames??call.codeFrames??[],
       source: typeof script === 'string' ? { ...clip(script, 2800), exact } : null,
       output: typeof recordedOutput === 'string' ? clip(recordedOutput, 2200)
         : call.result ? { text: call.result.text.slice(0, 2200), omitted: (call.result.omitted ?? 0) + Math.max(0, call.result.text.length - 2200) } : null,

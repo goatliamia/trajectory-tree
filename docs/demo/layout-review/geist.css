@@ -530,9 +530,10 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .geist-review .geist-time-part.tool i { background: #39a29b; }
 .geist-review .geist-time-part.rest i { background: #dfe3e6; }
 
-/* 耗时构成:条形、底部栏圆点、抽屉三处共用同一套颜色。取视觉令牌里的分类色,
+/* 耗时构成:条形、底部栏圆点、抽屉三处共用同一套颜色。沿用官方统计页的耗时角色,
    深色值由令牌的深色块提供,不在这里另设一套。 */
-.geist-review { --time-wait: var(--tt-muted, #666666); --time-model: var(--tt-context-assistant, #5b9fe8); --time-tool: var(--tt-context-tool, #3ab4a4); --time-rest: var(--tt-line, #e6e6e6); }
+.geist-review { --time-wait: var(--tt-duration-ttft); --time-model: var(--tt-duration-decode); --time-tool: var(--tt-duration-tool); --time-rest: var(--tt-duration-rest); }
+.review-time-wait { fill: var(--time-wait); }
 .review-time-tool { fill: var(--time-tool); }
 .review-time-model { fill: var(--time-model); }
 .review-time-rest { fill: var(--time-rest); }
@@ -616,3 +617,36 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 #graph g:has(> .review-goal-icon) > .review-action-halo { display: none; }
 .geist-result-label{display:block;margin:8px 0 2px;font:11px/18px var(--sans);color:var(--muted)}
 .geist-result-note{display:block;margin-top:2px;font:11px/18px var(--sans);color:var(--muted)}
+
+.geist-tool-record{min-width:0;border-bottom:1px solid var(--line)}
+.geist-tool-record:last-child{border-bottom:0}
+.geist-tool-record-toggle{display:block;padding:12px 0;list-style:none;cursor:pointer;border-radius:4px}
+.geist-tool-record-toggle::-webkit-details-marker{display:none}
+.geist-tool-record-toggle:hover{background:var(--soft)}
+.geist-tool-record-toggle:focus-visible{outline:2px solid var(--review-action);outline-offset:2px}
+.geist-tool-record-head{display:flex;align-items:center;gap:10px;min-width:0}
+.geist-tool-record-head>.geist-chevron{width:16px;height:16px;flex:none}
+.geist-tool-record[open]>.geist-tool-record-toggle .geist-chevron{transform:rotate(0)}
+.geist-tool-record-name{flex:none;max-width:22%;font:500 12px/22px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.geist-tool-record-title{flex:0 1 auto;font:500 13px/22px var(--sans);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.geist-tool-record-amount{flex:none;font-variant-numeric:tabular-nums}
+.geist-tool-record-elapsed{flex:none;margin-left:auto;font:11px/22px var(--mono);color:var(--muted)}
+.geist-tool-record-preview{display:block;padding-left:26px;margin-top:2px;min-width:0}
+.geist-tool-record-outcome{display:block;font:12px/20px var(--sans);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.geist-tool-record[data-tone=bad] .geist-tool-record-outcome{color:var(--branch-bad)}
+.geist-tool-record-content{container-type:inline-size;min-width:0;padding:0 0 16px}
+.geist-tool-record-meta{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-bottom:10px;font:11px/20px var(--mono);color:var(--muted)}
+.geist-tool-record-meta>.geist-text-action{font-size:12px}
+.geist-tool-record-meta>.geist-text-action:first-of-type{margin-left:auto}
+.geist-tool-record-detail{margin:0 0 10px;font:12px/20px var(--sans);color:var(--muted);overflow-wrap:anywhere}
+.geist-tool-record-error{margin:0 0 10px;font:12px/20px var(--mono);color:var(--branch-bad);overflow-wrap:anywhere}
+.geist-tool-source-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.geist-tool-source{min-width:0}
+.geist-tool-source h4{margin:0 0 6px;font:500 12px/20px var(--sans);color:var(--muted)}
+.geist-tool-source pre{box-sizing:border-box;margin:0;padding:12px;min-width:0;max-height:260px;overflow:auto;overscroll-behavior:contain;border-radius:5px;background:var(--soft);color:var(--ink);font:12px/1.65 var(--mono);white-space:pre;overflow-wrap:normal;tab-size:2}
+.geist-tool-record .tt-feedback-peek{margin:0;font-size:12px;line-height:20px}
+.geist-tool-record[data-tone=bad] .tt-feedback-peek,.geist-tool-record[data-tone=bad] .tt-feedback-peek b{color:var(--branch-bad)}
+.geist-tool-record .tt-code-feedback{margin:0 0 14px}
+.geist-operations{gap:0}
+@container (min-width:760px){.geist-tool-source-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)}.geist-tool-source:only-child{grid-column:1/-1}}
+@media(max-width:540px){.geist-tool-record-head{gap:8px}.geist-tool-record-preview{padding-left:24px}.geist-tool-record-name{max-width:24%}}

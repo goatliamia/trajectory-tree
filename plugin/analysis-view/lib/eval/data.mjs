@@ -97,7 +97,7 @@ function execution(turns, episodes, host, attributions) {
 }
 
 // Presentation adapter. All evidence is already projected from one source cut.
-export function buildEvalData(session, runtime, { host = 'dsh', title = session.title, turnLimit, synthetic = false, attributions, argumentsBySeq, resultsBySeq, commandScripts } = {}) {
+export function buildEvalData(session, runtime, { host = 'dsh', title = session.title, turnLimit, synthetic = false, attributions, argumentsBySeq, resultsBySeq, commandScripts, events } = {}) {
   const episodesIn = scopeByTurn(session.overview?.episodes ?? []);
   const scope = (turns, number) => {
     const { timing, usage, files, task, context, repeats, parameters } = runtime(turns, number);
@@ -122,7 +122,7 @@ export function buildEvalData(session, runtime, { host = 'dsh', title = session.
   return { title, host, sourceLabel: hostNames[host] + (synthetic ? ' 模拟记录' : ' 实录'),
     cut: session.lastSeq, longCallMs, totalTurns: session.turns.length,
     codeExecution: codeExecutionData(session, { host, attributions, argumentsBySeq, resultsBySeq, commandScripts }),
-    findingCalls: projectFindingCalls(session, { host, attributions }),
+    findingCalls: projectFindingCalls(session, { host, attributions, events }),
     failureLabels, failureCategories: failureCategories.map(([zh, en]) => [zh, en]),
     durationBins: bins.map(([, label, unit]) => ({ label, unit })),
     whole: scope(session.turns, null), turns: turns.map(turn => ({ number: turn.number, metrics: scope([turn], turn.number) })) };

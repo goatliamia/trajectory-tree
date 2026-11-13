@@ -1,6 +1,7 @@
 // 会话事件 → 「执行路径」页面需要的数据。判定与聚合都是确定性的,不调模型。
 import { createHash } from 'node:crypto';
-import { attributeToolFailure, isShellTool } from './trace/shared/tool-attribution.mjs';
+import { attributeToolFailure, isShellTool, isProgramTool, powerShellScript } from './trace/shared/tool-attribution.mjs';
+import { feedbackArgs, inputToolMeasure, settleToolMeasure, recordedDiagnostics } from './trace/shared/tool-feedback.mjs';
 
 // The demo uses execution history, not the current compacted message surface.
 // A replacement result belongs to an old call: counting it again fabricates duration.
@@ -46,6 +47,14 @@ function attachFailure(call, data, output, command) {
     interrupted: data.meta?.interrupted ?? data.message?.details?.interrupted, command });
 }
 
+function attachToolFeedback(call,raw,output){
+  call.measure=settleToolMeasure(call.name,call.measure??inputToolMeasure(call.name,raw),output,call.status);
+  const exit=/(?:^|\n)\[exit code: (-?\d+)\]\s*$/.exec(output);
+  if(call.status!=='error'&&!(exit&&Number(exit[1])!==0))return;
+  const args=feedbackArgs(raw),program=isProgramTool(call.name),source=program?args.code:powerShellScript(args.command??args.cmd,call.name,args.shell)?.text;
+  call.codeFrames=recordedDiagnostics({name:call.name,output:call.error?.message?call.error.message+'\n'+output:output,source,program});
+}
+
 export function projectSession(rows, source = {}) {
   const header = rows.find(e => e.type === 'session');
   if (!header) throw new Error('Missing session header');
@@ -53,7 +62,7 @@ export function projectSession(rows, source = {}) {
   const events = rows.filter(e => Number.isFinite(e.seq)).sort((a, b) => a.seq - b.seq);
   const turns = [], turnIndex = new Map(), steps = new Map(), calls = new Map();
   const roots = new Map(), dispatches = new Map(), hasChildren = new Set();
-  const shellCommands = new WeakMap();
+  const shellCommands = new WeakMap(),callArguments=new WeakMap();
   const diagnostics = { replacementEventsExcluded: 0, unmatchedResults: 0, duplicateResults: 0, unresolvedCalls: 0 };
   let currentTurn;
   const getStep = (turn, step) => steps.get(key(turn, step, 'step'));
@@ -75,7 +84,7 @@ export function projectSession(rows, source = {}) {
         call = { id: d.subCallId, seq: e.seq, name: d.name, signature: argumentSignature(d.name, d.arguments),
           target: argumentTarget(d.arguments), args: excerpt(argumentText(d.arguments), 6000), start: e.time,
           end: null, resultSeq: null, status: 'unknown', error: null, result: null, inner: true,
-          rootSeq: root.call.seq, startSeq: e.type === 'tool/ptc-dispatch-start' ? e.seq : null };
+          rootSeq: root.call.seq, startSeq: e.type === 'tool/ptc-dispatch-start' ? e.seq : null,measure:inputToolMeasure(d.name,d.arguments) };
         root.step.calls.push(call); dispatches.set(dispatchId, call);
       }
       hasChildren.add(d.rootCallId); hasChildren.add(d.parentCallId);
@@ -86,6 +95,7 @@ export function projectSession(rows, source = {}) {
           resultSeq: e.seq, status: d.isError || d.error ? 'error' : 'returned', error: d.error || null,
           result: excerpt(output, 8000) });
         attachFailure(call, d, output, isShellTool(call.name) ? shellCommand(d.arguments) : undefined);
+        attachToolFeedback(call,d.arguments,output);
       }
       continue;
     }
@@ -119,6 +129,7 @@ export function projectSession(rows, source = {}) {
       if (calls.has(id)) throw new Error(`Duplicate call at seq ${e.seq}`);
       const call = { id: d.callId, seq: e.seq, name: d.name, signature: argumentSignature(d.name, d.arguments), target: argumentTarget(d.arguments), args: excerpt(argumentText(d.arguments), 2200), start: e.time, end: null, resultSeq: null, status: 'unknown', error: null, result: null };
       if (isShellTool(d.name)) shellCommands.set(call, shellCommand(d.arguments));
+      call.measure=inputToolMeasure(d.name,d.arguments);callArguments.set(call,d.arguments);
       step.calls.push(call); calls.set(id, call); roots.set(d.callId, { call, step });
     } else if (e.type === 'tool/result') {
       const id = d.message?.toolCallId ?? d.message?.source?.callId ?? d.callId;
@@ -131,11 +142,13 @@ export function projectSession(rows, source = {}) {
       const output = textOf(d.message?.content);
       call.error = d.error || null; call.result = excerpt(output, 2400);
       attachFailure(call, d, output, shellCommands.get(call));
+      attachToolFeedback(call,callArguments.get(call),output);
     } else if (e.type === 'llm/retry') {
       const step = getStep(d.turn, d.step);
       if (step) step.retries.push({ seq: e.seq, time: e.time, delayMs: d.delayMs, failure: d.failure });
     } else if (['compaction/start', 'compaction/end', 'subagent/catalog'].includes(e.type)) {
-      const marker = { type: e.type, seq: e.seq, time: e.time, childId: d.childId, label: d.label };
+      const marker = { type: e.type, seq: e.seq, time: e.time, childId: d.childId, label: d.label,
+        ...(e.type === 'subagent/catalog' ? { name: d.name, mode: d.mode, catalogVersion: d.version, parentId: header.id } : {}) };
       turn.markers.push(marker);
       const step = turn.steps.at(-1); if (step) step.markers.push(marker);
     } else if (e.type === 'turn/end') {
@@ -160,6 +173,7 @@ export function projectSession(rows, source = {}) {
   const title = events.filter(e => e.type === 'session/title').at(-1)?.data?.title || header.id;
   const communications = events.filter(e => !isReplacement(e) && e.type === 'user/message' && ['agent-message', 'team-message', 'subagent-settled'].includes(e.data?.source?.kind)).map(e => ({
     seq: e.seq, time: e.time, kind: e.data.source.kind, childId: e.data.source.senderSessionId || e.data.source.senderId || null,
+    ...(typeof e.data.source.stopReason === 'string' ? { stopReason: e.data.source.stopReason } : {}),
     content: excerpt(textOf(e.data.content), 1800),
   }));
   return { id: header.id, title, parentSession: header.parentSession || null, source, firstSeq: events[0]?.seq, lastSeq: events.at(-1)?.seq, eventCount: events.length, diagnostics, turns, communications,

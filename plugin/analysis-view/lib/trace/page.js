@@ -252,7 +252,24 @@ window.__geistBoot = () => {
     if (kinds.length === 1 && kinds[0] === 'other' && titles.length === 1) return titles[0] + (step.calls.length > 1 ? ' ×' + step.calls.length : '');
     return kinds.length > 1 ? kinds.slice(0, 2).map(kindLabel).join('、') + (kinds.length > 2 ? ui('等') : '') : stepLabel(step);
   }
+  function reviewToolStepLabel(step, x, y) {
+    if (!step.calls.length) return brText(x, y, shorten(reviewActionStepLabel(step), 16), 'br-label');
+    const counts = new Map();
+    for (const call of step.calls) counts.set(call.name, (counts.get(call.name) || 0) + 1);
+    const names = [...counts].slice(0, 2), max = names.length > 1 ? 7 : 16;
+    return '<text x="' + x + '" y="' + y + '" text-anchor="middle" class="br-label review-tool-label">' + names.map(([name,n],i) =>
+      (i ? '<tspan class="review-tool-separator"> / </tspan>' : '') + '<tspan style="fill:' + globalThis.__trajectoryToolColor(name) + '">' + esc(shorten(name??'?',max)) + (n>1?' ×'+n:'') + '</tspan>').join('') + (counts.size>2?'<tspan>…</tspan>':'') + '</text>';
+  }
+  function reviewCallMeasure(call,step,turnNumber){
+    if(call.measure)return call.measure;
+    const stats=typeof geistStatsByStep==='undefined'?null:geistStatsByStep.get(turnNumber+':'+step.number);
+    const record=stats?.calls?.find(r=>r.name===call.name&&(r.seq===call.seq||r.callId===call.id));
+    if(!record)return null;
+    return /^(edit|write|apply_patch)$/.test(call.name)?{kind:'change',added:record.added,removed:record.removed,basis:call.name==='write'?'write-input':'replacement-input',state:record.error?'attempted':record.endedAt==null?'pending':'returned'}:
+      call.name==='read'?{kind:'read',lines:record.lines}:{kind:'output',chars:record.chars};
+  }
   function renderActionPath() {
+    // Counts are projected once from original events; no diff work during paint.
     const t = turn(), steps = t.steps, count = steps.length, viewport = $('graph-scroll');
     const canvas = $('canvas'); canvas.classList.add('review-action-mode');
     if (!count) { $('graph').innerHTML = ''; return; }
@@ -312,7 +329,8 @@ window.__geistBoot = () => {
         const rest = Math.max(0, total - tool - model);
         const width = Math.max(1, right - left);
         let bx = left;
-        for (const [cls, value] of [['review-time-tool', tool], ['review-time-model', model], ['review-time-rest', rest]]) {
+        const ttft = stats && Number.isFinite(stats.ttft) ? Math.max(0, Math.min(model, stats.ttft)) : 0;
+        for (const [cls, value] of [['review-time-wait', ttft], ['review-time-model', model-ttft], ['review-time-tool', tool], ['review-time-rest', rest]]) {
           if (value <= 0) continue;
           const w = Math.max(0.6, value / total * width);
           part += '<rect x="' + bx + '" y="56" width="' + w + '" height="4" rx="1" class="' + cls + '"/>';
@@ -377,8 +395,10 @@ window.__geistBoot = () => {
           '<circle r="7.5"/><text text-anchor="middle" y="3.2">' + glyph + '</text></g>';
       });
       const icon = step.calls.length && step.calls.every(c => /^查询/.test(reviewContextData.callFacts?.[c.seq]?.title || '')) ? STEP_ICON.query : stepIcon(step);
-      part += '<g transform="translate(' + pos + ' ' + base + ')" class="review-action-icon">' + icon + '</g>';
-      part += brText(pos, base + 34, shorten(reviewActionStepLabel(step), 16), 'br-label');
+      const toolNames = [...new Set(step.calls.map(call => call.name))];
+      part += '<g transform="translate(' + pos + ' ' + base + ')" class="review-action-icon"' + (toolNames.length === 1 ? ' style="stroke:' + globalThis.__trajectoryToolColor(toolNames[0]) + '"' : '') + '>' + icon + '</g>';
+      part += reviewToolStepLabel(step, pos, base + 34);
+
       html += brGroup('class="action-step review-action-step' + (active ? ' is-selected' : '') + '" data-step="' + index + '" aria-pressed="' + active + '"', part,
         ui('第 ') + step.number + ui(' 步 · ') + reviewActionStepLabel(step) + ' · ' + preciseTime(recordDuration(step)) + (info ? ui('；上下文净变化 ') + reviewSigned(info.amount) : ''));
     });
@@ -3028,6 +3048,56 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   }
 }
 
+  // The step inspector, result branches and error evidence use the same record.
+  const geistRecordChevron = '<span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path d="m5 6 3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span>';
+  function geistRecordDisclosure(label, body, extra = '') {
+    return '<details class="geist-result ' + extra + '"><summary>' + geistRecordChevron + label + '</summary>' + body + '</details>';
+  }
+  function geistRecordText(value, formatJson) {
+    if (formatJson && !value.omitted) {
+      try { return JSON.stringify(JSON.parse(value.text), null, 2); } catch {}
+    }
+    return value.text;
+  }
+  function geistToolRecord(call, options = {}) {
+    let { step, turn: selectedTurn } = options;
+    if (!step) for (const row of session.turns) {
+      const found = row.steps.find(s => s.calls.some(c => c.seq === call.seq));
+      if (found) { step = found; selectedTurn = row; break; }
+    }
+    const fact = options.fact || presentCallFact(call, reviewContextData.callFacts?.[call.seq] || call.fact);
+    const measure = call.measure || (step ? reviewCallMeasure(call, step, selectedTurn.number) : null);
+    const program = /^run_?code$/i.test(call.name || '');
+    const args = insightJSON(call.args) || {};
+    const title = program ? (args.description || ui('PTC 程序')) : fact.title || call.target || '';
+    const frames = call.codeFrames?.length ? call.codeFrames : call.attribution?.codeFrames || [];
+    const tone = call.status === 'error' || fact.tone === 'bad' ? 'bad' : fact.tone === 'unknown' ? 'unknown' : 'normal';
+    const meta = [];
+    const elapsed = call.start != null && call.end != null ? dur(Math.max(0, call.end - call.start)) : '';
+    if (call.seq != null) meta.push('#' + call.seq + (call.resultSeq != null ? ' → #' + call.resultSeq : ''));
+    if (call.inner || call.rootSeq != null) meta.push(ui('PTC 内部工具') + (call.rootSeq != null ? ' · #' + call.rootSeq : ''));
+    const detail = fact.detail ? '<p class="geist-tool-record-detail">' + esc(fact.detail) + '</p>' : '';
+    const rawBlock = (label, value, formatJson = false) => value?.text ? '<section class="geist-tool-source"><h4>' + label + '</h4><pre>' + esc(geistRecordText(value, formatJson)) + '</pre>' +
+      (value.omitted ? '<span class="geist-result-note">' + ui('节选 · 另有 ') + value.omitted + ui(' 个字符未载入') + '</span>' : '') + '</section>' : '';
+    const error = call.error?.code || call.error?.name;
+    const attribution = globalThis.__trajectoryFailureText?.(call.attribution);
+    const raw = '<div class="geist-tool-source-grid">' + rawBlock(ui('调用参数'), call.args, true) + rawBlock(ui('返回原文'), call.result) + '</div>';
+    const outcome = frames.length ? globalThis.__trajectoryDiagnosticSummary?.(frames) : '<span class="geist-tool-record-outcome">' + esc(fact.outcome) + '</span>';
+    return '<details class="geist-tool-record" data-tone="' + tone + '" data-call-seq="' + call.seq + '">' +
+      '<summary class="geist-tool-record-toggle"><span class="geist-tool-record-head">' + geistRecordChevron +
+      '<span class="geist-tool-record-name">' + globalThis.__trajectoryToolName(call.name) + '</span>' +
+      '<span class="geist-tool-record-title" title="' + esc(call.target || title) + '">' + esc(title) + '</span>' +
+      '<span class="geist-tool-record-amount">' + (globalThis.__trajectoryToolMeasure?.(measure) || '') + '</span>' +
+      '<span class="geist-tool-record-elapsed">' + esc(elapsed) + '</span></span>' +
+      (outcome ? '<span class="geist-tool-record-preview">' + outcome + '</span>' : '') + '</summary>' +
+      '<div class="geist-tool-record-content"><div class="geist-tool-record-meta"><span>' + esc(meta.join(' · ')) + '</span>' + (options.actions || '') + '</div>' + detail +
+      (frames.length ? globalThis.__trajectoryDiagnosticFrames(frames) : '') +
+      (error ? '<p class="geist-tool-record-error">' + esc(error) + '</p>' : '') +
+      (attribution ? '<p class="review-quiet">' + esc(attribution) + '</p>' : '') + raw + '</div></details>';
+  }
+  // All legacy branch/evidence entry points call this function as well.
+  callEntry = function(call) { return geistToolRecord(call); };
+
   // 一步的读数与证据:标题一行、操作一段、依据收进一个折叠区,原文只在最深处。
   reviewRenderStepSummary = function(t, step) {
     const panel = $('step-panel');
@@ -3052,43 +3122,13 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       if (!target.within) return direction > 0 ? ui('下一轮第 1 步') : ui('上一轮末步');
       return direction > 0 ? (insight.following ? ui('下一步 · ') + insight.following.text : ui('下一步')) : ui('上一步');
     };
-    const callOf = fact => step.calls.find(call => call.seq === fact.seq) || null;
-    // 展开沿用 Geist 的 Show code 行:16px chevron 收起时指右、打开后指下,文字只留标签。
-    const chevron = '<span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span>';
-    // 跳转箭头用图标,不用 ↗ 字符:字符随字体变形,这是 Geist 图标的同一套几何。
     const arrow = '<svg class="geist-arrow" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M5.5 10.5 10.5 5.5M6.5 5.5h4v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    const disclosure = (label, body) => '<details class="geist-result"><summary>' + label + chevron + '</summary>' + body + '</details>';
-    const excerpt = value => value && typeof value.text === 'string' && value.text.trim()
-      ? { text: value.text.replace(/\r\n/g, '\n'), omitted: Number(value.omitted) || 0 } : null;
-    // 原始记录的内容并进面板:调用参数、返回原文、错误类型和 seq 都在这一步里看全。
-    const rawEntry = fact => {
-      const call = callOf(fact);
-      if (!call) return '';
-      const args = excerpt(call.args), result = fact.preview ? null : excerpt(call.result);
-      const error = call.error ? String(call.error.code || call.error.name || '') : '';
-      if (!args && !result && !error) return '';
-      const block = (label, value) => '<span class="geist-result-label">' + label + '</span><pre class="geist-result-text">' + esc(value.text) + '</pre>' +
-        (value.omitted ? '<span class="geist-result-note">' + ui('节选 · 另有 ') + value.omitted + ui(' 个字符未载入') + '</span>' : '');
-      return disclosure(ui('调用参数与原文'),
-        (error ? '<span class="geist-result-label">' + ui('错误类型') + '</span><pre class="geist-result-text">' + esc(error) + '</pre>' : '') +
-        (args ? block(ui('调用参数'), args) : '') + (result ? block(ui('返回原文'), result) : ''));
-    };
-    const callMeta = fact => {
-      const call = callOf(fact), bits = [];
-      if (call && call.seq != null) bits.push('seq ' + call.seq + (call.resultSeq != null ? ' → ' + call.resultSeq : ''));
-      if (call && call.start != null && call.end != null) bits.push(dur(call.end - call.start));
-      return bits.join(' · ');
-    };
+    const disclosure = geistRecordDisclosure;
     const operation = fact => {
-      const meta = [fact.detail, callMeta(fact)].filter(Boolean).join(' · ');
-      const raw = rawEntry(fact);
+      const call = step.calls.find(c => c.seq === fact.seq);
+      if (!call) return '';
       const diff = reviewHasChange(fact) ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + arrow + '</button>' : '';
-      return '<article class="geist-operation" data-tone="' + fact.tone + '">' +
-        '<h3>' + esc(fact.title) + '</h3>' +
-        '<p>' + esc(fact.outcome) + (diff ? ' ' + diff : '') + '</p>' +
-        (meta ? '<span class="geist-operation-size">' + esc(meta) + '</span>' : '') +
-        (raw ? '<div class="geist-operation-actions">' + raw + '</div>' : '') +
-        '</article>';
+      return geistToolRecord(call, { fact, turn: t, step, actions: diff });
     };
     // 展开原文时不改变面板外框高度:锁住当前高度,内容在面板内滚动,图区不会被挤压。
     panel.style.height = '';
@@ -3109,12 +3149,12 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       (insight.following ? '<p class="geist-step-next"><span>' + ui('接下来') + '</span><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + arrow + '</button></p>' : '');
     panel.querySelectorAll('[data-insight-change]').forEach(el => el.onclick = () => reviewOpenChange(t, step, insight.calls.find(f => f.seq === Number(el.dataset.insightChange))));
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
-    // 展开前把面板高度钉住:内容在里面滚,画布和图区保持原样。
-    const panelDetails = () => [...panel.querySelectorAll('details.geist-result')];
+    // 展开时给原文稳定的阅读高度,内容在面板内滚动,不跟随长输出无限增高。
+    const panelDetails = () => [...panel.querySelectorAll('details.geist-tool-record, details.geist-result')];
     panelDetails().forEach(details => {
       details.querySelector('summary').addEventListener('click', () => {
         if (details.open) return;
-        panel.style.height = panel.getBoundingClientRect().height + 'px';
+        panel.style.height = Math.max(panel.getBoundingClientRect().height, Math.min(window.innerHeight * .44, 360)) + 'px';
       });
       details.addEventListener('toggle', () => {
         if (!details.open && !panelDetails().some(row => row.open)) panel.style.height = '';
@@ -3315,6 +3355,15 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     geistLayoutObserver = new ResizeObserver(() => {
       cancelAnimationFrame(geistLayoutFrame);
       geistLayoutFrame = requestAnimationFrame(() => {
+        if(view==='path'){
+          const viewport=$('graph-scroll'),geometry=geistActionGeometry(turn()),height=Number($('graph').getAttribute('height'));
+          // Opening step details changes the flex viewport after the first paint.
+          // Refit once to its settled box so the second label row stays visible.
+          if(Math.abs(height-geometry.height)>1||Math.abs((reviewActionFileFrame?.viewportWidth??0)-Math.max(300,viewport.clientWidth))>1){
+            const left=viewport.scrollLeft;renderPath();viewport.scrollLeft=left;viewport.scrollTop=0;
+          }
+          return;
+        }
         if (view !== 'overview') return;
         const signature = [$('canvas').clientWidth, $('canvas').clientHeight, $('geist-context-overview').getBoundingClientRect().height, $('graph-caption').getBoundingClientRect().height, $('graph-scroll') ? $('graph-scroll').clientHeight : 0, $('graph-scroll') ? $('graph-scroll').clientWidth : 0].map(n => Math.round(n)).join(':');
         if (signature === geistLayoutMeasure) return;
@@ -3606,18 +3655,12 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const paths = [...new Set(result.calls.flatMap(c => c.files?.length ? c.files.map(file => file.path) : [c.file]).filter(Boolean))];
     const blocked = result.calls.filter(call => call.fact?.tone === 'bad').length;
     const recovered = result.calls.filter(call => call.fact?.tone === 'bad' && geistRecovery(call.seq)).length;
+    const selectedTurn = brRound(result.turn), selectedStep = selectedTurn.steps.find(s => s.number === result.step);
     let html = result.calls.map(call => {
-      const tone = call.fact?.tone === 'bad' ? 'bad' : call.fact?.tone === 'unknown' ? 'warn' : 'quiet';
-      const state = tone === 'bad' ? ui('受阻 · ') : tone === 'warn' ? ui('未确认 · ') : '';
-      const recovery = tone === 'bad' ? geistRecovery(call.seq) : null, subject = geistCallSubject(call);
-      return '<div class="geist-outcome-record" data-tone="' + tone + '"><div class="geist-outcome-head">' +
-        (state ? '<span class="geist-outcome-state">' + esc(state) + '</span>' : '') +
-        '<strong>' + esc(call.fact?.title || call.name) + '</strong></div>' +
-        '<p>' + esc(call.fact?.outcome || ui('工具结果已记录')) + '</p>' +
-        (subject ? '<p class="geist-outcome-meta">' + esc(subject) + '</p>' : '') +
-        (recovery ? '<button class="geist-text-action recovery" data-result-recovery="' + call.seq + '">' + ui('第 ') + recovery.step + ui(' 步恢复 ↗') + '</button>' : '') +
-        (reviewHasChange(call.fact) ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : call.fact.preview ? ui('查看改动片段') : ui('查看文件差异')) + ' ↗</button>' : '') +
-        (result.recorded ? '<p class="review-quiet">' + (call.inner ? ui('内部工具 · ') : '') + 'seq ' + call.seq + (call.rootSeq != null ? ui(' · 外层调用 #') + call.rootSeq : '') + '</p>' + callEntry(call) : '') + '</div>';
+      const recovery = call.fact?.tone === 'bad' ? geistRecovery(call.seq) : null;
+      const actions = (recovery ? '<button class="geist-text-action recovery" data-result-recovery="' + call.seq + '">' + ui('第 ') + recovery.step + ui(' 步恢复 ↗') + '</button>' : '') +
+        (reviewHasChange(call.fact) ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + ' ↗</button>' : '');
+      return geistToolRecord(call, { fact: call.fact, turn: selectedTurn, step: selectedStep, actions });
     }).join('');
     if (paths.length) html += '<div class="geist-outcome-files">' + paths.map((path, i) => '<button class="geist-text-action" data-result-file="' + i + '">' + esc(path.split(/[\\/]/).at(-1)) + ui(' · 全程记录 ↗</button>')).join('') + '</div>';
     html += ui('<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button></div>');

@@ -376,7 +376,72 @@ body{margin:0;background:var(--bg)}
     .canvas, .graph-scroll, .graph-wrap, .graph-caption, .canvas-bar, .turn-heading { background: var(--surface); }
   }
 </style>
-<link rel="preload" href="/analysis-view/trace/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/analysis-view/trace/fonts/GeistMono-Variable.woff2" as="font" type="font/woff2" crossorigin><style>@font-face{font-family:Geist;src:url('/analysis-view/trace/fonts/Geist-Variable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+<style>:root{--tt-tool-fallback-0:#4176e6;--tt-tool-fallback-1:#22c55e;--tt-tool-fallback-2:#f59e0b;--tt-tool-fallback-3:#f25a5a;--tt-tool-fallback-4:#4176e6;--tt-tool-fallback-5:#4ed17e;--tt-tool-fallback-6:#dd8629;--tt-tool-fallback-7:#adb2b8;}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--tt-tool-fallback-0:#7aaaff;--tt-tool-fallback-1:#22c55e;--tt-tool-fallback-2:#f59e0b;--tt-tool-fallback-3:#f25a5a;--tt-tool-fallback-4:#5686fe;--tt-tool-fallback-5:#4ed17e;--tt-tool-fallback-6:#dd8629;--tt-tool-fallback-7:#81858c;}}
+:root[data-theme="dark"],body[data-ds-dark-theme]{--tt-tool-fallback-0:#7aaaff;--tt-tool-fallback-1:#22c55e;--tt-tool-fallback-2:#f59e0b;--tt-tool-fallback-3:#f25a5a;--tt-tool-fallback-4:#5686fe;--tt-tool-fallback-5:#4ed17e;--tt-tool-fallback-6:#dd8629;--tt-tool-fallback-7:#81858c;}
+:root,body{--tt-tool-tone-0:var(--dsw-alias-state-business-primary,var(--tt-tool-fallback-0));--tt-tool-tone-1:var(--dsw-alias-state-success-primary,var(--tt-tool-fallback-1));--tt-tool-tone-2:var(--dsw-alias-state-warn-primary,var(--tt-tool-fallback-2));--tt-tool-tone-3:var(--dsw-alias-state-error-secondary,var(--tt-tool-fallback-3));--tt-tool-tone-4:var(--dsw-alias-brand-primary-new-colorprimary-new-color,var(--tt-tool-fallback-4));--tt-tool-tone-5:var(--dsw-alias-state-success-secondary,var(--tt-tool-fallback-5));--tt-tool-tone-6:var(--dsw-alias-state-warn-label,var(--tt-tool-fallback-6));--tt-tool-tone-7:var(--dsw-alias-label-caption,var(--tt-tool-fallback-7));--tt-duration-ttft:color-mix(in srgb,var(--tt-tool-tone-0) 50%,transparent);--tt-duration-decode:var(--tt-tool-tone-0);--tt-duration-tool:var(--tt-tool-tone-2);--tt-duration-rest:var(--tt-tool-tone-7);}
+[data-tool-tone="0"]{--tt-tool-color:var(--tt-tool-tone-0);}
+[data-tool-tone="1"]{--tt-tool-color:var(--tt-tool-tone-1);}
+[data-tool-tone="2"]{--tt-tool-color:var(--tt-tool-tone-2);}
+[data-tool-tone="3"]{--tt-tool-color:var(--tt-tool-tone-3);}
+[data-tool-tone="4"]{--tt-tool-color:var(--tt-tool-tone-4);}
+[data-tool-tone="5"]{--tt-tool-color:var(--tt-tool-tone-5);}
+[data-tool-tone="6"]{--tt-tool-color:var(--tt-tool-tone-6);}
+[data-tool-tone="7"]{--tt-tool-color:var(--tt-tool-tone-7);}
+.tt-tool-name{color:var(--tt-tool-color);font-weight:500}
+.tt-tool-measure{display:inline-flex;gap:4px;font:11px var(--font-mono,monospace);white-space:nowrap}.tt-measure-added{color:var(--dsw-alias-state-success-primary,#22c55e)}.tt-measure-removed{color:var(--dsw-alias-state-error-primary,#ec1313)}.tt-measure-muted{color:var(--muted,#777)}.tt-feedback-peek{display:block;font-size:12px;line-height:1.5;color:var(--muted,#777);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:6px}.tt-feedback-peek b{color:#b84b50;font:11px var(--font-mono,monospace);font-weight:500}.tt-code-feedback{margin:15px 0;font-size:12px;min-width:0}.tt-code-feedback header{display:flex;gap:12px;flex-wrap:wrap;align-items:baseline;margin-bottom:9px}.tt-code-feedback header>span{color:#a2464b}.tt-code-feedback header>strong{font-weight:500;overflow-wrap:anywhere}.tt-code-lines{overflow:auto;background:var(--surface,#fafafa);padding:9px 0;border-radius:5px}.tt-code-line,.tt-code-caret{display:grid;grid-template-columns:38px minmax(max-content,1fr);line-height:1.7;font:12px/1.7 var(--font-mono,monospace);min-width:100%;width:max-content}.tt-code-line code,.tt-code-caret code{white-space:pre;padding:0 12px 0 8px;background:transparent;color:inherit;font:inherit}.tt-line-number{text-align:right;padding-right:8px;color:#999;user-select:none}.tt-code-line.is-error{background:#e5484d10;box-shadow:inset 2px 0 #e5484d}.tt-code-line.is-error .tt-line-number,.tt-code-caret{color:#c72b31}.tt-code-hit{background:transparent;color:inherit;text-decoration:underline wavy #c72b31;text-underline-offset:3px;display:inline-block;min-width:.65ch}.tt-code-reason{font-size:12px!important;line-height:1.65!important;color:#a2333a!important;margin:8px 0!important;overflow-wrap:anywhere}.tt-code-reason small{display:block;font:11px var(--font-mono,monospace);color:#888;margin-top:3px}</style><script>(()=>{const fixedToolTones={"read":0,"glob":1,"grep":1,"edit":2,"write":2,"apply_patch":2,"pwsh":4,"powershell":4,"shell":4,"bash":4,"web_fetch":5,"web_search":5,"ask_user_question":3,"todo_write":7,"subagent":5,"subagent_fork":5};function toolToneIndex(name) {
+  if (name == null) return 7;
+  if (Object.hasOwn(fixedToolTones, name)) return fixedToolTones[name];
+  let hash = 0;
+  for (let index = 0; index < name.length; index++) hash = (hash * 31 + name.charCodeAt(index)) % 9973;
+  return hash % 8;
+}
+function toolColor(name) { return `var(--tt-tool-tone-${toolToneIndex(name)})`; }
+function toolNameHtml(name, label = name ?? '?') {
+  const text = String(label).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return `<span class="tt-tool-name" data-tool-tone="${toolToneIndex(name)}">${text}</span>`;
+}
+Object.assign(globalThis,{__trajectoryToolTone:toolToneIndex,__trajectoryToolColor:toolColor,__trajectoryToolName:toolNameHtml});})();function feedbackEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function feedbackNumber(n){return n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n);}
+function toolMeasureParts(measure){
+  if(!measure)return [];
+  if(measure.kind==='change'){
+    const planned=measure.state==='attempted'||measure.state==='pending',parts=[];
+    if(planned)parts.push({text:measure.state==='attempted'?'计划':'待返回',tone:'muted'});
+    if(measure.added>0)parts.push({text:(measure.approximate?'≈ ':'')+'+'+feedbackNumber(measure.added),tone:planned?'muted':'added'});
+    if(measure.removed>0)parts.push({text:'−'+feedbackNumber(measure.removed),tone:planned?'muted':'removed'});
+    if(parts.some(p=>p.tone!=='muted')||measure.added>0||measure.removed>0)parts.push({text:'行',tone:'muted'});
+    return measure.added||measure.removed?parts:[];
+  }
+  const value=measure.kind==='read'?measure.lines:measure.chars;return value>0?[{text:feedbackNumber(value)+(measure.kind==='read'?' 行':' 字符'),tone:'muted'}]:[];
+}
+function renderToolMeasure(measure){
+  const parts=toolMeasureParts(measure);if(!parts.length)return '';
+  const title=measure.kind==='change'?(measure.basis==='write-input'?'写入内容行数':'替换片段增删行数')+(measure.approximate?' · 大片段净变化近似':''):'工具返回的文本量';
+  return '<span class="tt-tool-measure" title="'+feedbackEscape(title)+'">'+parts.map(p=>'<span class="tt-measure-'+p.tone+'">'+feedbackEscape(p.text)+'</span>').join(' ')+'</span>';
+}
+function renderDiagnosticFrames(frames){
+  return (frames??[]).slice(0,3).map(frame=>{
+    const scope=({'ptc-syntax':'PTC 代码语法','ptc-runtime':'PTC 运行反馈','ptc-tool':'PTC 内部工具反馈','remote-syntax':'远端脚本语法',syntax:frame.origin==='powershell-parser'?'静态语法检查':'语法反馈',runtime:'运行反馈',compiler:'编译反馈'})[frame.kind]??'错误位置';
+    const site=[frame.file,frame.line?'第 '+frame.line+' 行'+(frame.column?' · 第 '+frame.column+' 列':''):''].filter(Boolean).join(' · ');
+    return '<section class="tt-code-feedback"><header><span>'+scope+'</span>'+(site?'<strong>'+feedbackEscape(site)+'</strong>':'')+'</header>'+
+      (frame.lines?.length?'<div class="tt-code-lines" role="region" aria-label="报错附近代码">'+frame.lines.map(row=>{
+        const text=(row.left?'…':'')+row.text+(row.right?'…':'');
+        const at=row.error&&row.column?Math.min(text.length,row.column-1+(row.left?1:0)):null;
+        const width=at!=null&&text.codePointAt(at)>65535?2:1;
+        const code=at==null?feedbackEscape(text):feedbackEscape(text.slice(0,at))+'<mark class="tt-code-hit">'+feedbackEscape(text.slice(at,at+width)||' ')+'</mark>'+feedbackEscape(text.slice(at+width));
+        return '<div class="tt-code-line'+(row.error?' is-error':'')+'"><span class="tt-line-number">'+row.number+'</span><code>'+code+'</code></div>';
+      }).join('')+'</div>':'')+'<p class="tt-code-reason">'+feedbackEscape(frame.message||frame.id)+(frame.id&&frame.id!==frame.message?'<small>'+feedbackEscape(frame.id)+'</small>':'')+'</p></section>';
+  }).join('');
+}
+function renderDiagnosticSummary(frames){
+  const frame=(frames??[]).find(f=>f.line)??frames?.[0];if(!frame)return '';
+  const scope=frame.kind==='remote-syntax'?'远端 ':frame.kind?.startsWith('ptc-')?'PTC ':frame.origin==='powershell-parser'?'解析 ':'';
+  const file=frame.file?String(frame.file).split(/[\\/]/).at(-1):'';
+  const at=frame.line?scope+(file?file+':':'L')+frame.line+(frame.column?':'+frame.column:''):scope;
+  return '<span class="tt-feedback-peek"><b'+(frame.file?' title="'+feedbackEscape(frame.file)+'"':'')+'>'+feedbackEscape(at)+'</b> '+feedbackEscape(String(frame.message||frame.id).slice(0,120))+'</span>';
+}
+globalThis.__trajectoryToolMeasure=renderToolMeasure;globalThis.__trajectoryMeasureParts=toolMeasureParts;globalThis.__trajectoryDiagnosticFrames=renderDiagnosticFrames;globalThis.__trajectoryDiagnosticSummary=renderDiagnosticSummary;</script><link rel="preload" href="/analysis-view/trace/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/analysis-view/trace/fonts/GeistMono-Variable.woff2" as="font" type="font/woff2" crossorigin><style>@font-face{font-family:Geist;src:url('/analysis-view/trace/fonts/Geist-Variable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 @font-face{font-family:'Geist Mono';src:url('/analysis-view/trace/fonts/GeistMono-Variable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 :root{
   color-scheme:light dark;
@@ -908,9 +973,10 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .geist-review .geist-time-part.tool i { background: #39a29b; }
 .geist-review .geist-time-part.rest i { background: #dfe3e6; }
 
-/* 耗时构成:条形、底部栏圆点、抽屉三处共用同一套颜色。取视觉令牌里的分类色,
+/* 耗时构成:条形、底部栏圆点、抽屉三处共用同一套颜色。沿用官方统计页的耗时角色,
    深色值由令牌的深色块提供,不在这里另设一套。 */
-.geist-review { --time-wait: var(--tt-muted, #666666); --time-model: var(--tt-context-assistant, #5b9fe8); --time-tool: var(--tt-context-tool, #3ab4a4); --time-rest: var(--tt-line, #e6e6e6); }
+.geist-review { --time-wait: var(--tt-duration-ttft); --time-model: var(--tt-duration-decode); --time-tool: var(--tt-duration-tool); --time-rest: var(--tt-duration-rest); }
+.review-time-wait { fill: var(--time-wait); }
 .review-time-tool { fill: var(--time-tool); }
 .review-time-model { fill: var(--time-model); }
 .review-time-rest { fill: var(--time-rest); }
@@ -994,6 +1060,39 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 #graph g:has(> .review-goal-icon) > .review-action-halo { display: none; }
 .geist-result-label{display:block;margin:8px 0 2px;font:11px/18px var(--sans);color:var(--muted)}
 .geist-result-note{display:block;margin-top:2px;font:11px/18px var(--sans);color:var(--muted)}
+
+.geist-tool-record{min-width:0;border-bottom:1px solid var(--line)}
+.geist-tool-record:last-child{border-bottom:0}
+.geist-tool-record-toggle{display:block;padding:12px 0;list-style:none;cursor:pointer;border-radius:4px}
+.geist-tool-record-toggle::-webkit-details-marker{display:none}
+.geist-tool-record-toggle:hover{background:var(--soft)}
+.geist-tool-record-toggle:focus-visible{outline:2px solid var(--review-action);outline-offset:2px}
+.geist-tool-record-head{display:flex;align-items:center;gap:10px;min-width:0}
+.geist-tool-record-head>.geist-chevron{width:16px;height:16px;flex:none}
+.geist-tool-record[open]>.geist-tool-record-toggle .geist-chevron{transform:rotate(0)}
+.geist-tool-record-name{flex:none;max-width:22%;font:500 12px/22px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.geist-tool-record-title{flex:0 1 auto;font:500 13px/22px var(--sans);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.geist-tool-record-amount{flex:none;font-variant-numeric:tabular-nums}
+.geist-tool-record-elapsed{flex:none;margin-left:auto;font:11px/22px var(--mono);color:var(--muted)}
+.geist-tool-record-preview{display:block;padding-left:26px;margin-top:2px;min-width:0}
+.geist-tool-record-outcome{display:block;font:12px/20px var(--sans);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.geist-tool-record[data-tone=bad] .geist-tool-record-outcome{color:var(--branch-bad)}
+.geist-tool-record-content{container-type:inline-size;min-width:0;padding:0 0 16px}
+.geist-tool-record-meta{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-bottom:10px;font:11px/20px var(--mono);color:var(--muted)}
+.geist-tool-record-meta>.geist-text-action{font-size:12px}
+.geist-tool-record-meta>.geist-text-action:first-of-type{margin-left:auto}
+.geist-tool-record-detail{margin:0 0 10px;font:12px/20px var(--sans);color:var(--muted);overflow-wrap:anywhere}
+.geist-tool-record-error{margin:0 0 10px;font:12px/20px var(--mono);color:var(--branch-bad);overflow-wrap:anywhere}
+.geist-tool-source-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.geist-tool-source{min-width:0}
+.geist-tool-source h4{margin:0 0 6px;font:500 12px/20px var(--sans);color:var(--muted)}
+.geist-tool-source pre{box-sizing:border-box;margin:0;padding:12px;min-width:0;max-height:260px;overflow:auto;overscroll-behavior:contain;border-radius:5px;background:var(--soft);color:var(--ink);font:12px/1.65 var(--mono);white-space:pre;overflow-wrap:normal;tab-size:2}
+.geist-tool-record .tt-feedback-peek{margin:0;font-size:12px;line-height:20px}
+.geist-tool-record[data-tone=bad] .tt-feedback-peek,.geist-tool-record[data-tone=bad] .tt-feedback-peek b{color:var(--branch-bad)}
+.geist-tool-record .tt-code-feedback{margin:0 0 14px}
+.geist-operations{gap:0}
+@container (min-width:760px){.geist-tool-source-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)}.geist-tool-source:only-child{grid-column:1/-1}}
+@media(max-width:540px){.geist-tool-record-head{gap:8px}.geist-tool-record-preview{padding-left:24px}.geist-tool-record-name{max-width:24%}}
 .geist-review .review-action-mode .graph-scroll{flex:0 0 auto;min-height:0;height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
 .geist-review .review-action-mode .graph-wrap{display:block;align-items:initial;min-height:0;height:auto;padding:0}
 .geist-review .review-action-mode .step-panel.geist-step{max-height:none;overflow:visible;flex:none;padding-bottom:24px}

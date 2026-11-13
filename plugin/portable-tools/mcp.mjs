@@ -1,5 +1,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+export { StdioServerTransport };
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -8,15 +9,17 @@ import { fileService, sourceOptions } from './runtime.mjs';
 import { COMMAND_TOOL, executeCommandTool } from './command-diagnosis.mjs';
 import { commandCrOptions } from '../../analyzers/cr-pwsh.mjs';
 
-export function createMcpServer(service, { commandCr } = {}) {
+export function createMcpServer(service, { commandCr, additionalTools=[], toolDefinitions=TOOLS } = {}) {
   const dedicated = commandCr !== undefined;
-  const tools = dedicated ? [COMMAND_TOOL] : TOOLS;
+  const tools = [...(dedicated ? [COMMAND_TOOL] : toolDefinitions),...additionalTools.map(tool=>tool.definition)];
   const server = new Server({ name: dedicated ? 'trajectory-commands' : 'trajectory-evidence', version: '0.2.2' }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } })) }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     try {
       const { name, arguments: args = {} } = request.params;
       if (!tools.some(tool => tool.name === name)) throw Error('Unknown tool');
+      const extension=additionalTools.find(tool=>tool.definition.name===name);
+      if(extension)return await extension.call(args,extra.signal);
       const result = dedicated ? await executeCommandTool(service, args, commandCr, extra.signal) : await executeTool(service, name, args, extra.signal);
       return { content: [{ type: 'text', text: JSON.stringify(result) }] };
     }

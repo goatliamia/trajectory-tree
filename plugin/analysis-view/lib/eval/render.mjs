@@ -3,6 +3,8 @@ import { i18nRuntime } from '../trace/shared/i18n.mjs';
 import { geistFontFiles, geistFontPath, geistFontUrl, geistLicenseNotice } from '../trace/fonts.mjs';
 import { failureMessages, failureViewRuntime } from '../trace/shared/tool-attribution.mjs';
 import { findingsRuntime } from './findings.mjs';
+import { toolColorRuntime, toolColorCss } from '../trace/shared/tool-colors.mjs';
+import { toolFeedbackRuntime, toolFeedbackCss } from '../trace/shared/tool-feedback.mjs';
 export { inlineTraceFonts } from '../trace/fonts.mjs';
 
 export const evalAsset = name => readFileSync(new URL(name, import.meta.url), 'utf8');
@@ -28,7 +30,7 @@ export function renderEvalPage(data, { integrated = false, script = '', diagnosi
       const url = native ? geistFontPath + file : geistFontUrl(file);
       return '@font-face{font-family:' + family + ';src:url(' + url + ") format('woff2');font-weight:100 900;font-display:swap}";
     }),
-    ...['style.css', 'views.css', 'themes.css', 'code-execution.css', 'findings.css'].map(evalAsset),
+    ...['style.css', 'views.css', 'themes.css', 'code-execution.css', 'findings.css'].map(evalAsset),toolColorCss(),toolFeedbackCss(),
     integrated ? '.brand,.appearance-control{display:none}.header-inner{justify-content:flex-end}.eval-native-details{margin-inline-end:auto}' : '',
     '.eval-diagnosis-action + .eval-diagnosis-action{margin-inline-start:12px}',
   ].join('\n');
@@ -45,7 +47,7 @@ export function renderEvalPage(data, { integrated = false, script = '', diagnosi
     .replace('<!-- eval:details -->', () => details)
     .replace('<!-- eval:data -->', () => json('eval-data', data))
     .replace('<!-- eval:script -->', () => editor + inline([
-      i18nRuntime(locale, failureMessages), failureViewRuntime(), findingsRuntime(), evalAsset('findings.js'), editorScript, detailsScript, script,
+      i18nRuntime(locale, failureMessages), toolColorRuntime(), toolFeedbackRuntime(), failureViewRuntime(), findingsRuntime(), evalAsset('findings.js'), editorScript, detailsScript, script,
       native && toolSort ? 'window.__trajectoryEvalToolSort = ' + embedJson(toolSort) + ';' : '',
       section === 'code' ? 'window.__trajectoryEvalInitialSection = "code";' : '',
       evalAsset('dashboard.js'), evalAsset('code-execution.js'),

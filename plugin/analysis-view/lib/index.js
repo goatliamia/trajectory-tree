@@ -16,8 +16,8 @@ import { createRuntimeMetrics, readRuntimeEvidence } from "./eval-evidence.js";
 import { buildEvalData, diagnosisSource, EVAL_DETAIL_TURNS } from "./eval/data.mjs";
 import { evalPowerShellEvidence } from "./eval/pwsh-evidence.mjs";
 import { editorMarkup, renderEvalPage } from "./eval/render.mjs";
-import { renderOverviewPage } from "./eval/overview/render.mjs";
 import { OverviewService } from "./eval/overview/service.mjs";
+import { EvalWorkspaceService, WORKSPACE_PATH } from "./eval/workspace-service.mjs";
 import { parseSearchParams, searchTurns } from "./conversation-search.js";
 import { viewSettings } from "./settings.js";
 import { hostCapabilities } from './trace/shared/host-capabilities.mjs';
@@ -768,7 +768,8 @@ export function apply(ctx, config) {
     observe: (id, signal) => observeEvents(ctx, id, signal), dispose: disposeObservation, timeout: withAbortTimeout,
     queue: traceResources.main,
   });
-  ctx.effect(() => () => { overview.dispose(); traceStages.dispose(); traceResources.dispose(); }, "analysis-view: trace resources");
+  const workspace = new EvalWorkspaceService(ctx, overview);
+  ctx.effect(() => () => { workspace.dispose(); overview.dispose(); traceStages.dispose(); traceResources.dispose(); }, "analysis-view: trace resources");
   // 面板每次切回「分析」都会拉一次;同一会话 2 秒内的重复请求复用上一次结果。
   const digestCache = new Map();
   const DIGEST_TTL_MS = 2000;
@@ -786,15 +787,19 @@ export function apply(ctx, config) {
       };
       try {
         const url = new URL(req.url || "/", "http://localhost");
-        if (req.method !== "GET") return send(404, { error: "not found" });
-        if (url.pathname === ROUTE_PATH + "/overview" || url.pathname === ROUTE_PATH + "/overview-data") {
+        if (url.pathname.startsWith(WORKSPACE_PATH+'/') || url.pathname === ROUTE_PATH + "/overview" || url.pathname === ROUTE_PATH + "/overview-data") {
           const connection = ctx.get("connection");
           if (typeof connection?.admit !== "function") return send(503, { error: "Web authorization unavailable" });
           const admission = connection.admit(req);
           if (admission.peer?.principal.kind !== "owner") return send(admission.rejection ?? 403, { error: "Web access required" });
+          if(url.pathname.startsWith(WORKSPACE_PATH+'/')){
+            const signal=AbortSignal.any([disconnected.signal,admission.peer.signal]);
+            await workspace.handle(req,res,url,{signal,origin:(req.socket?.encrypted?'https':'http')+'://'+req.headers.host});return;
+          }
+          if(req.method!=='GET')return send(405,{error:'method not allowed'});
           if (url.pathname.endsWith("/overview")) {
             await sendHtml(res, req, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
-              "content-security-policy": "frame-ancestors 'self'" }, { html: renderOverviewPage() });
+              "content-security-policy": "frame-ancestors 'self'" }, { html: workspace.page() });
             return;
           }
           const scope = overview.scope();
@@ -809,6 +814,7 @@ export function apply(ctx, config) {
           res.end();
           return;
         }
+        if (req.method !== "GET") return send(404, { error: "not found" });
         if (url.pathname.startsWith(ROUTE_PATH + "/trace/fonts/")) {
           const name = url.pathname.slice((ROUTE_PATH + "/trace/fonts/").length);
           if (!Object.hasOwn(TRACE_FONTS, name)) return send(404, { error: "not found" });
@@ -845,7 +851,7 @@ export function apply(ctx, config) {
               const attributions = await evalPowerShellEvidence(session, events, stop);
               const argumentsBySeq = new Map(events.filter(event => event.type === 'tool/call' || event.type === 'tool/ptc-dispatch')
                 .map(event => [event.seq, event.data?.arguments]));
-              const data = buildEvalData(session, createRuntimeMetrics(session, evidence), { turnLimit: EVAL_DETAIL_TURNS, attributions, argumentsBySeq });
+              const data = buildEvalData(session, createRuntimeMetrics(session, evidence), { turnLimit: EVAL_DETAIL_TURNS, attributions, argumentsBySeq, events });
               return renderEvalPage(data, { integrated: true, mode: 'dsh', diagnosis: diagnosisSource(session, data), toolSort: settings.evalToolSort });
             }, signal), 8000, disconnected.signal);
             if (page) {

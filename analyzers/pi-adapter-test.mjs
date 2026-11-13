@@ -57,6 +57,36 @@ const splitCall = adaptPiSession(splitResult).sessions[0].turns.flatMap(turn => 
   .find(call => call.id === failedShell.toolCallId);
 assert.deepEqual([splitCall.status, splitCall.attribution.code, splitCall.attribution.basis, splitCall.attribution.exitCode],
   ['error', 'COMMAND_PATTERN', 'native-stderr', 2]);
+const feedbackInput = structuredClone(input);
+const feedbackShell = feedbackInput.entries.find(entry => entry.message?.role === 'toolResult' && entry.message.toolName === 'bash' && entry.message.isError).message;
+feedbackShell.content = [{ type: 'text', text: 'log\n'.repeat(5000) + 'bash: -c: line 2: syntax error: unexpected end of file' }];
+const feedbackGraph = adaptPiSession(feedbackInput), feedbackCalls = feedbackGraph.sessions[0].turns.flatMap(turn => turn.steps.flatMap(step => step.calls));
+const feedbackCall = feedbackCalls.find(call => call.id === feedbackShell.toolCallId);
+assert.equal(feedbackCall.measure.chars, textLength(feedbackShell));
+assert.ok(feedbackCall.result.omitted > 0, 'feedback measures use the full result before excerpt truncation');
+assert.equal(feedbackCall.codeFrames[0].line, 2, 'shell error location survives excerpt truncation');
+assert.equal(feedbackCall.codeFrames[0].lines.length, 0, 'bash wrapper coordinates do not highlight an unverified submitted script');
+const powershellInput = structuredClone(input);
+for (const entry of powershellInput.entries) {
+  if (entry.message?.role === 'assistant') for (const call of entry.message.content || []) if (call.name === 'bash') {
+    call.name = 'powershell'; call.arguments.command = 'Write-Output ok\nif (';
+  }
+  if (entry.message?.toolName === 'bash') {
+    entry.message.toolName = 'powershell';
+    if (entry.message.isError) entry.message.content = [{ type: 'text', text: 'ParserError:\nLine |\n   2 | if (\n     |     ~\n     | Missing closing ) in expression.\nCommand exited with code 1' }];
+  }
+}
+const powershellCall = adaptPiSession(powershellInput).sessions[0].turns.flatMap(turn => turn.steps.flatMap(step => step.calls))
+  .find(call => call.name === 'powershell' && call.status === 'error');
+assert.equal(powershellCall.semanticKind, 'run', 'Pi 1.5.2 native PowerShell is a shell execution');
+assert.equal(powershellCall.codeFrames[0].line, 2);
+assert.ok(powershellCall.codeFrames[0].lines.some(line => line.error && line.text === 'if ('), 'verified native PowerShell source is highlighted');
+assert.ok(feedbackCalls.some(call => call.name === 'read' && call.measure?.kind === 'read'));
+const pendingFeedback = structuredClone(input);
+for (const entry of pendingFeedback.entries) if (entry.message?.role === 'toolResult') entry.message.role = 'custom';
+assert.ok(adaptPiSession(pendingFeedback).sessions[0].turns.flatMap(turn => turn.steps.flatMap(step => step.calls))
+  .filter(call => call.name === 'write').every(call => call.measure.state === 'pending'), 'unpaired writes remain planned');
+function textLength(message) { return message.content.map(block => block.text).join('\n').length; }
 assert.throws(() => piSessionPath([{ id: 'a', parentId: 'a' }]), /cycle/);
 assert.throws(() => piSessionPath([{ id: 'a', parentId: 'missing' }]), /Missing/);
 const prompt = [{ type: 'message', id: 'a', parentId: null, message: { role: 'system', content: 'base', sections: { rules: 'first' }, toolsAdded: [{ name: 'read', parameters: {} }] } }, { type: 'message', id: 'b', parentId: 'a', message: { role: 'system', content: '', sections: { rules: null }, toolsRemoved: [{ name: 'read' }] } }, { type: 'custom', id: 'c', parentId: 'b', customType: 'state', data: 'PRIVATE-STATE'.repeat(100) }];

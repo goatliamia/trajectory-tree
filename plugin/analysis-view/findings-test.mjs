@@ -51,11 +51,12 @@ test('program findings preserve native outcomes and exact return pairs without c
   session.overview.episodes[0].pairs=[];assert.equal(JSON.stringify(session),before);
 });
 
-test('directions are investigation hints; filtering updates repeated signals and knowledge candidates',()=>{
+test('directions stay investigative; repetition alone does not imply a knowledge change',()=>{
   const row={seq:2,result:3,turn:1,step:1,tool:'pwsh',status:'error',code:'COMMAND_NOT_FOUND',certainty:'confirmed',label:'命令未找到'};
   const entries=[{...row,source:{session:'one',cut:5}},{...row,turn:2,source:{session:'two',cut:7}}];
   const group=summarizeFindings(entries).groups[0];
-  assert.equal(group.sessions,2);assert.equal(group.turns,2);assert.deepEqual(group.directions,['repair','capability','knowledge']);
+  assert.equal(group.sessions,2);assert.equal(group.turns,2);assert.deepEqual(group.directions,['repair','capability']);
+  assert.equal(group.causeConfirmed,false);assert.equal(group.needsAction,null);
   assert.equal(group.count,2,'Equal local sequence numbers from two sessions remain distinct');
   assert.deepEqual(summarizeFindings(entries.slice(0,1)).groups[0].directions,['repair','capability']);
   assert.ok(!('install' in group)&&!('repairApplied' in group)&&!('knowledgeSaved' in group));
@@ -72,6 +73,44 @@ test('browser and server group exactly the same source populations',()=>{
     {seq:3,turn:1,tool:'run_code',status:'error',certainty:'confirmed',code:'CODE_TIMEOUT',runtimeKind:'timeout',source:{session:'y'}}];
   const context=vm.createContext({});vm.runInContext(findingsRuntime(),context);
   assert.equal(JSON.stringify(context.__trajectorySummarizeFindings(rows)),JSON.stringify(summarizeFindings(rows)));
+});
+
+test('rc2 approval decisions remain distinct from unavailable services and capabilities',()=>{
+  const row={seq:2,result:3,turn:1,tool:'write',status:'error',certainty:'confirmed'};
+  const codes=['APPROVAL_REJECTED','APPROVAL_CANCELLED','APPROVAL_UNAVAILABLE','TOOL_CONTEXT_UNAVAILABLE','UNKNOWN_TOOL','TOOL_ACTIVATION_FAILED'];
+  const result=summarizeFindings(codes.map((code,index)=>({...row,seq:index*2+2,code})));
+  assert.equal(result.observedErrors,6,'The recorded host outcome is retained');
+  for(const code of codes.slice(0,2)){
+    const group=result.groups.find(g=>g.code===code);
+    assert.equal(group.focus,'control');assert.deepEqual(group.directions,[],'A user decision does not imply repair or recovery');
+  }
+  for(const code of codes.slice(2)){
+    const group=result.groups.find(g=>g.code===code);
+    assert.equal(group.focus,'availability');assert.deepEqual(group.directions,['repair','capability']);
+    assert.equal(group.needsAction,null);assert.equal(group.causeConfirmed,false);
+  }
+});
+
+test('rc2 attachment and output contracts supply distinct investigation factors',()=>{
+  const codes=['INVALID_TOOL_OUTPUT','UNSUPPORTED_SCHEMA','ATTACHMENT_FILES_UNSUPPORTED','ATTACHMENT_PROJECTION_UNSUPPORTED','IMAGE_TOO_LARGE','INVALID_IMAGE_BASE64','ATTACHMENT_NOT_FOUND'];
+  const groups=summarizeFindings(codes.map((code,i)=>({seq:i+1,turn:1,tool:'sample',status:'error',code,certainty:'confirmed'}))).groups;
+  assert.deepEqual(codes.map(code=>groups.find(g=>g.code===code).focus),['contract','contract','availability','availability','input','arguments','access']);
+  assert.ok(groups.every(g=>g.needsAction===null&&!g.directions.includes('knowledge')));
+});
+
+test('a guard refusal preserves an earlier successful read without claiming model negligence',()=>{
+  const read={seq:2,resultSeq:3,name:'read',status:'returned',target:'d:/work/a.js',start:0,end:10};
+  const guard={seq:8,resultSeq:9,name:'edit',status:'error',target:'d:/work/a.js',start:20,end:25,error:{code:'FS_NOT_OBSERVED'},result:{text:'Read the file first'},attribution:{code:'FS_NOT_OBSERVED',label:'文件保护要求先读取',certainty:'confirmed',basis:'native-code'}};
+  const session={turns:[{number:1,steps:[{number:1,calls:[read]}]},{number:2,steps:[{number:1,calls:[guard]}]}],overview:{episodes:[]}};
+  const rows=projectFindingCalls(session,{turns:[2]});
+  assert.deepEqual(rows[0].priorRead,{seq:2,result:3,turn:1});assert.equal(rows[0].attributionBasis,'native-code');
+  const group=summarizeFindings([...rows,{...rows[0],turn:3,seq:12}]).groups[0];
+  assert.deepEqual(group.directions,['recover','knowledge']);assert.equal(group.causeConfirmed,false);assert.equal(group.needsAction,null);
+  assert.equal(group.signals.find(signal=>signal.direction==='knowledge').rule,'D-K3');
+  assert.ok(!group.directions.includes('repair'));
+  assert.deepEqual(summarizeFindings([...rows,{...rows[0],turn:3,seq:12}].map(row=>({...row,priorRead:null}))).groups[0].directions,['recover'],
+    'Repeated guard codes alone do not imply a method-retention lead');
+  read.status='error';assert.equal(projectFindingCalls(session).find(row=>row.code==='FS_NOT_OBSERVED').priorRead,null);
 });
 
 test('overview program entries resolve through the existing exact-cut portable query',async()=>{

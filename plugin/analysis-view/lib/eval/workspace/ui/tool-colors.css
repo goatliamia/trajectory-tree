@@ -1,0 +1,13 @@
+:root{--tt-tool-fallback-0:#4176e6;--tt-tool-fallback-1:#22c55e;--tt-tool-fallback-2:#f59e0b;--tt-tool-fallback-3:#f25a5a;--tt-tool-fallback-4:#4176e6;--tt-tool-fallback-5:#4ed17e;--tt-tool-fallback-6:#dd8629;--tt-tool-fallback-7:#adb2b8;}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--tt-tool-fallback-0:#7aaaff;--tt-tool-fallback-1:#22c55e;--tt-tool-fallback-2:#f59e0b;--tt-tool-fallback-3:#f25a5a;--tt-tool-fallback-4:#5686fe;--tt-tool-fallback-5:#4ed17e;--tt-tool-fallback-6:#dd8629;--tt-tool-fallback-7:#81858c;}}
+:root[data-theme="dark"],body[data-ds-dark-theme]{--tt-tool-fallback-0:#7aaaff;--tt-tool-fallback-1:#22c55e;--tt-tool-fallback-2:#f59e0b;--tt-tool-fallback-3:#f25a5a;--tt-tool-fallback-4:#5686fe;--tt-tool-fallback-5:#4ed17e;--tt-tool-fallback-6:#dd8629;--tt-tool-fallback-7:#81858c;}
+:root,body{--tt-tool-tone-0:var(--dsw-alias-state-business-primary,var(--tt-tool-fallback-0));--tt-tool-tone-1:var(--dsw-alias-state-success-primary,var(--tt-tool-fallback-1));--tt-tool-tone-2:var(--dsw-alias-state-warn-primary,var(--tt-tool-fallback-2));--tt-tool-tone-3:var(--dsw-alias-state-error-secondary,var(--tt-tool-fallback-3));--tt-tool-tone-4:var(--dsw-alias-brand-primary-new-colorprimary-new-color,var(--tt-tool-fallback-4));--tt-tool-tone-5:var(--dsw-alias-state-success-secondary,var(--tt-tool-fallback-5));--tt-tool-tone-6:var(--dsw-alias-state-warn-label,var(--tt-tool-fallback-6));--tt-tool-tone-7:var(--dsw-alias-label-caption,var(--tt-tool-fallback-7));--tt-duration-ttft:color-mix(in srgb,var(--tt-tool-tone-0) 50%,transparent);--tt-duration-decode:var(--tt-tool-tone-0);--tt-duration-tool:var(--tt-tool-tone-2);--tt-duration-rest:var(--tt-tool-tone-7);}
+[data-tool-tone="0"]{--tt-tool-color:var(--tt-tool-tone-0);}
+[data-tool-tone="1"]{--tt-tool-color:var(--tt-tool-tone-1);}
+[data-tool-tone="2"]{--tt-tool-color:var(--tt-tool-tone-2);}
+[data-tool-tone="3"]{--tt-tool-color:var(--tt-tool-tone-3);}
+[data-tool-tone="4"]{--tt-tool-color:var(--tt-tool-tone-4);}
+[data-tool-tone="5"]{--tt-tool-color:var(--tt-tool-tone-5);}
+[data-tool-tone="6"]{--tt-tool-color:var(--tt-tool-tone-6);}
+[data-tool-tone="7"]{--tt-tool-color:var(--tt-tool-tone-7);}
+.tt-tool-name{color:var(--tt-tool-color);font-weight:500}

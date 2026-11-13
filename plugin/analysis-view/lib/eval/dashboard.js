@@ -33,6 +33,7 @@
   const record = seq => `<code class="record-tag">#${seq}</code>`;
   const unknownTool = t('未记工具名', 'Unnamed tool');
   const toolName = name => html(name || unknownTool);
+  const toolHtml = name => globalThis.__trajectoryToolName?.(name, name || unknownTool) ?? toolName(name);
   const scopeLabel = () => state.turn == null ? t('整段会话', 'Full session') : turnLabel(state.turn);
   const scopeMetrics = () => turns.get(state.turn)?.metrics ?? data.whole;
   const selectedTool = metrics => metrics.tools.find(tool => tool.name === state.tool);
@@ -183,7 +184,7 @@
     ${samples.length ? `<section class="slowest">
       <div class="evidence-head"><h4>${t('最慢的调用', 'Slowest calls')}</h4><small>${t('发起 → 结果', 'Start → result')}</small></div>
       <ol>${samples.map(sample => `<li>
-        <span>${turnLabel(fmt(sample.turn))} ${includeTool ? `· <code>${toolName(sample.tool)}</code> ` : ''}
+        <span>${turnLabel(fmt(sample.turn))} ${includeTool ? `· <code>${toolHtml(sample.tool)}</code> ` : ''}
           ${record(sample.call)} <span aria-hidden="true">→</span> ${record(sample.result)}</span>
         <strong class="mono" title="${fmt(sample.ms)} ms">${clockDuration(sample.ms)}</strong>
       </li>`).join('')}</ol>
@@ -207,7 +208,7 @@
     const lead = tools.find(tool => tool.timing.cumulativeMs === maxMs);
     if (lead && timing.calls.cumulativeMs > 0) {
       const share = `<strong>${pct(maxMs / timing.calls.cumulativeMs)}</strong>`;
-      $('tool-caption').innerHTML = `<code>${toolName(lead.name)}</code> ${t(`占已测工具累计耗时的 ${share}`, `accounts for ${share} of measured tool duration`)}`;
+      $('tool-caption').innerHTML = `<code>${toolHtml(lead.name)}</code> ${t(`占已测工具累计耗时的 ${share}`, `accounts for ${share} of measured tool duration`)}`;
     } else $('tool-caption').textContent = `${scopeLabel()} · ${t(`${fmt(tools.length)} 种工具`, `${fmt(tools.length)} tools`)}`;
     const list = $('tool-rows');
     list.classList.toggle('is-expanded', state.allTools);
@@ -216,11 +217,11 @@
       const timeLabel = clockDuration(ms);
       const label = t(`${toolName(tool.name)}，${fmt(tool.calls)} 次调用，累计耗时 ${timeLabel}，${fmt(tool.errors)} 次报错`,
         `${toolName(tool.name)}, ${fmt(tool.calls)} calls, ${timeLabel} cumulative duration, ${fmt(tool.errors)} errors`);
-      return `<button type="button" class="compare-row" data-tool="${index}" aria-controls="tool-inspector"
+      return `<button type="button" class="compare-row" data-tool="${index}" data-tool-tone="${globalThis.__trajectoryToolTone?.(tool.name)??7}" aria-controls="tool-inspector"
         aria-pressed="${tool.name === state.tool}" aria-label="${label}">
-        <span class="compare-name"><code>${toolName(tool.name)}</code><small>${t(`${fmt(tool.calls)} 次调用`, `${fmt(tool.calls)} calls`)}</small></span>
+        <span class="compare-name"><code>${toolHtml(tool.name)}</code><small>${t(`${fmt(tool.calls)} 次调用`, `${fmt(tool.calls)} calls`)}</small></span>
         <span class="compare-value compare-time">
-          <span class="bar-track" aria-hidden="true"><i style="width:${(ms ?? 0) / maxMs * 100}%"></i></span>
+          <span class="bar-track" aria-hidden="true"><i style="width:${(ms ?? 0) / maxMs * 100}%;background:var(--tt-tool-color,var(--blue))"></i></span>
           <span class="mono"${ms == null ? '' : ` title="${fmt(ms)} ms"`}>${timeLabel}</span>
         </span>
         <span class="compare-value compare-errors">
@@ -283,6 +284,7 @@
     const stats = tool?.timing ?? metrics.timing.calls;
     $('selected-tool-title').textContent = tool ? tool.name || unknownTool : t('全部工具', 'All tools');
     $('selected-tool-title').classList.toggle('mono', Boolean(tool));
+    $('selected-tool-title').style.color = tool ? globalThis.__trajectoryToolColor?.(tool.name) ?? '' : '';
     $('show-all-latency').hidden = !tool;
     $('tool-error-link').hidden = !tool?.errorConditions.length;
     const samples = tool?.slowest ?? slowestCalls(metrics.tools, 3);
@@ -301,7 +303,7 @@
     }
     const { tool, group } = cell;
     $('error-example').innerHTML = `<p class="evidence-label">${t('报错样本', 'Error samples')}</p>
-      <h3><code>${toolName(tool)}</code><span aria-hidden="true"> × </span>${group.label}</h3>
+      <h3><code>${toolHtml(tool)}</code><span aria-hidden="true"> × </span>${group.label}</h3>
       <p><strong class="mono">${ratio(group.matched, group.calls)}</strong> ${t('次报错后有同轮同参非报错返回', 'errors were followed by a non-error return with the same arguments in the same turn')}</p>
       <div class="error-conditions" role="group" aria-label="${t('按错误码查看样本', 'View samples by error code')}">
         ${group.conditions.map((condition, index) => `<button type="button" class="error-condition"
@@ -361,7 +363,7 @@
         <thead><tr><th scope="col">${t('工具 / 类型', 'Tool / type')}</th>${columns.map(column => `<th scope="col">
           ${column.label}<small class="mono">${t(`${fmt(column.calls)} 次`, `${fmt(column.calls)} errors`)}</small>
         </th>`).join('')}</tr></thead>
-        <tbody>${rows.map(row => `<tr><th scope="row"><code>${toolName(row.tool).replaceAll('_', '_<wbr>')}</code></th>${row.keys.map(key => {
+        <tbody>${rows.map(row => `<tr><th scope="row"><code>${toolHtml(row.tool).replaceAll('_', '_<wbr>')}</code></th>${row.keys.map(key => {
           if (key === null) return `<td class="matrix-zero" aria-label="${t('0 次', '0 errors')}">–</td>`;
           const { tool, group } = errorCells.get(key);
           return `<td><button type="button" class="heat-cell mono" data-cell="${key}" aria-controls="error-example"
@@ -560,7 +562,7 @@
         'The scatter plot uses turns with recorded timing and complete output counts.')}</p>`}
       ${slowest ? `<div class="usage-slow-call">
         <h4>${t('该轮已测最慢调用', 'Slowest measured call in this turn')}</h4>
-        <p><code>${toolName(slowest.tool)}</code><strong class="mono" title="${fmt(slowest.ms)} ms">${clockDuration(slowest.ms)}</strong></p>
+        <p><code>${toolHtml(slowest.tool)}</code><strong class="mono" title="${fmt(slowest.ms)} ms">${clockDuration(slowest.ms)}</strong></p>
         <p class="usage-call-records"><span>${t('发起', 'Start')} ${record(slowest.call)}</span> <span class="usage-call-arrow" aria-hidden="true">→</span> <span>${t('结果', 'Result')} ${record(slowest.result)}</span></p>
       </div>` : ''}`;
     $('usage-open-turn').hidden = !outcomes.calls;

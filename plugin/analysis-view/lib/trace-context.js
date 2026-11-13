@@ -163,7 +163,7 @@ export function skillEvents(events, session) {
  * Skill 正文在模型可见历史里的存续区间,以及子代理支线。
  * Child sessions are read through the same Session query service as the main one.
  */
-export async function traceActors(events, payload, skillRecords, readEvents) {
+export async function traceActors(events, payload, skillRecords, readEvents, { inheritedEventCount } = {}) {
   const session = payload.sessions[0];
   const until = events.at(-1)?.time ?? Date.now();
   const requestSeqs = events.filter(e => e.type === "request/header").map(e => e.seq);
@@ -177,8 +177,12 @@ export async function traceActors(events, payload, skillRecords, readEvents) {
     skillAnalysis = null;
   }
 
-  const catalogs = events.filter(e => e.type === "subagent/catalog"
-    && typeof e.data?.childId === "string" && /^[a-zA-Z0-9-]+$/.test(e.data.childId));
+  const ownCatalogs = (rows, floor) => {
+    const firstOwn = Number.isSafeInteger(floor) && floor >= 0 ? floor : (rows.findLast(e => e.type === "session/end-seed")?.seq ?? -1) + 1;
+    return rows.filter(e => e.type === "subagent/catalog" && e.seq >= firstOwn
+      && typeof e.data?.childId === "string" && /^[a-zA-Z0-9-]+$/.test(e.data.childId));
+  };
+  const catalogs = ownCatalogs(events, inheritedEventCount);
   const launches = session.turns.flatMap(t => t.steps.flatMap(s =>
     s.calls.filter(c => c.name === "subagent").map(c => ({ t, s, c }))));
   const reads = new Map();
@@ -186,13 +190,17 @@ export async function traceActors(events, payload, skillRecords, readEvents) {
     const id = catalog.data?.childId;
     const reports = session.communications
       .filter(c => c.childId === id)
-      .map(c => ({ time: c.time, kind: c.kind === "subagent-settled" ? "completed" : "report", text: (c.content.text || "").slice(0, 5000) }));
-    let child = null, childEvents;
+      .map(c => ({ time: c.time, kind: c.kind === "subagent-settled" ? "completed" : "report",
+        ...(c.kind === "subagent-settled" ? { stopReason: c.stopReason ?? null } : {}), text: (c.content.text || "").slice(0, 5000) }));
+    let child = null, childEvents, childInherited;
     try {
       if (!reads.has(id)) reads.set(id, Promise.resolve().then(() => readEvents(id)));
-      childEvents = await reads.get(id);
+      const observation = await reads.get(id);
+      childEvents = Array.isArray(observation) ? observation : observation?.events;
+      childInherited = Array.isArray(observation) ? undefined : observation?.inheritedEventCount;
       if (Array.isArray(childEvents) && childEvents.length) {
-        child = buildTracePayload(childEvents.filter(e => e.time <= until), id).sessions[0];
+        childEvents = childEvents.filter(e => e.time <= until);
+        child = buildTracePayload(childEvents, id).sessions[0];
       }
     } catch {
       child = null;
@@ -216,12 +224,21 @@ export async function traceActors(events, payload, skillRecords, readEvents) {
       detail: s.calls.map(c => ({ seq: c.seq, name: c.name, target: c.target, status: c.status,
         outcome: childFacts[c.seq].outcome, result: c.result?.text?.slice(0, 1500) })),
     }))) : [];
+    const settlement = reports.findLast(r => r.kind === "completed");
+    const stopReason = settlement?.stopReason ?? null;
+    // A settlement is an ending, not necessarily a successful completion.
+    const status = ["completed", "aborted", "max-tokens", "refusal", "error"].includes(stopReason) ? stopReason : "unknown";
+    const children = ownCatalogs(Array.isArray(childEvents) ? childEvents : [], childInherited).map(e => ({
+      id: e.data.childId, parentId: id, name: e.data.name ?? null, label: e.data.label ?? null,
+      mode: e.data.mode ?? null, createdAt: e.data.childCreatedAt ?? e.time, seq: e.seq,
+    }));
     return {
-      id, name: catalog.data.label || "子代理", title: catalog.data.label || "子任务",
+      id, name: catalog.data.name || catalog.data.label || "子代理", title: catalog.data.label || catalog.data.name || "子任务",
+      parentId: session.id, mode: catalog.data.mode ?? null, catalogVersion: catalog.data.version ?? null, children,
       start: catalog.data.childCreatedAt || catalog.time, end: child?.turns.at(-1)?.end ?? null,
       returnTime: reports.at(-1)?.time ?? null,
       turn: fallback.turn, step: fallback.step, seq: launch?.c.seq ?? catalog.seq,
-      status: reports.some(r => r.kind === "completed") ? "completed" : "unknown",
+      status, stopReason,
       steps, results, reports, source: "dsh-record",
     };
   };

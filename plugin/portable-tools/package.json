@@ -1,6 +1,6 @@
 {
   "name": "trajectory-portable-tools",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "type": "module",
   "description": "Read-only session evidence, Eval and diagnosis for Pi, Codex and Claude Code",

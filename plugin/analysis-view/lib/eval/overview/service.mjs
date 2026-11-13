@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { observationSource, sameSource, traceSource } from '../../trace-cache.js';
 import { projectOverviewSession } from './data.mjs';
 import { createOverviewModels, overviewCategories } from './shared.mjs';
+import { restoreOverviewModels } from './persisted-cache.mjs';
 
 function resolveSdk(name) {
   const local = createRequire(import.meta.url);
@@ -34,8 +35,8 @@ const CACHE_BYTES = 20 * 1024 * 1024;
 const CACHE_SESSIONS = 1024;
 
 export class OverviewService {
-  constructor(ctx, { observe, dispose, timeout, queue, sdk = loadRuntime }) {
-    Object.assign(this, { ctx, observe, release: dispose, timeout, queue, sdk });
+  constructor(ctx, { observe, dispose, timeout, queue, sdk = loadRuntime, disk, augment }) {
+    Object.assign(this, { ctx, observe, release: dispose, timeout, queue, sdk, disk, augment });
     this.catalog = createOverviewModels();
     this.cache = new Map();
     this.bytes = 0;
@@ -72,27 +73,41 @@ export class OverviewService {
       this.cache.set(id, cached);
       return cached.data;
     }
+    const saved=await this.disk?.get(id,cwd,source?.revision,signal);
+    if(saved){
+      const data=restoreOverviewModels(saved.data,saved.models,this.catalog);
+      this.remember(id,{source,cwd,data});return data;
+    }
     return this.queue.run(async () => {
+      // Another viewer may have filled this entry while it waited in the queue.
+      const ready=this.cache.get(id);
+      if(ready&&ready.cwd===cwd&&sameSource(ready.source,source))return ready.data;
       this.forget(id);
       const observation = await this.timeout(stop => this.observe(id, stop), 8000, signal);
-      let data, captured;
+      let data, captured;const localCatalog=createOverviewModels();
       try {
         signal.throwIfAborted();
         data = projectOverviewSession(id, observation.events ?? [], {
           cwd, inherited: observation.inheritedEventCount ?? 0,
-        }, this.catalog, sdk);
+        }, localCatalog, sdk);
+        if(data&&this.augment)Object.assign(data,await this.augment(id,cwd,observation,signal,data));
         captured = observationSource(this.ctx, observation, source);
       } finally { this.release(observation); }
+      signal.throwIfAborted();
+      await this.disk?.put(id,cwd,captured?.revision,data,localCatalog.models,signal);
+      data=restoreOverviewModels(data,localCatalog.models,this.catalog);
       if (captured) {
-        const bytes = data ? Buffer.byteLength(JSON.stringify(data)) : 0;
-        if (bytes <= CACHE_BYTES) {
-          this.cache.set(id, { source: captured, cwd, data, bytes });
-          this.bytes += bytes;
-          while (this.cache.size > CACHE_SESSIONS || this.bytes > CACHE_BYTES) this.forget(this.cache.keys().next().value);
-        }
+        this.remember(id,{source:captured,cwd,data});
       }
       return data;
     }, signal, 2);
+  }
+
+  remember(id,entry){
+    const bytes=entry.data?Buffer.byteLength(JSON.stringify(entry.data)):0;
+    if(bytes>CACHE_BYTES)return;
+    this.forget(id);this.cache.set(id,{...entry,bytes});this.bytes+=bytes;
+    while(this.cache.size>CACHE_SESSIONS||this.bytes>CACHE_BYTES)this.forget(this.cache.keys().next().value);
   }
 
   forget(id) {

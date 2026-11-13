@@ -5,14 +5,15 @@ import { failureMessages, failureViewRuntime } from '../../trace/shared/tool-att
 import { overviewMessages } from './messages.mjs';
 import { findingsRuntime } from '../findings.mjs';
 import { evalAsset, editorMarkup } from '../render.mjs';
+import { toolColorRuntime, toolColorCss } from '../../trace/shared/tool-colors.mjs';
 
 const asset = name => readFileSync(new URL(name, import.meta.url), 'utf8');
 const script = name => asset(name).replace(/<\/script/gi, '<\\/script');
 
 export function renderOverviewPage({ data, locale } = {}) {
   const html = asset('page.html')
-    .replace('/* OVERVIEW_STYLES */', () => asset('style.css') + '\n' + evalAsset('findings.css'))
-    .replace('/* OVERVIEW_I18N */', () => i18nRuntime(locale, { ...overviewMessages, ...failureMessages }) + failureViewRuntime())
+    .replace('/* OVERVIEW_STYLES */', () => asset('style.css') + '\n' + evalAsset('findings.css') + toolColorCss())
+    .replace('/* OVERVIEW_I18N */', () => i18nRuntime(locale, { ...overviewMessages, ...failureMessages }) + toolColorRuntime() + failureViewRuntime())
     .replace('<!-- OVERVIEW_DATA -->', () => data
       ? '<script type="application/json" id="overview-data">' + JSON.stringify(data).replaceAll('<', '\\u003c') + '</script>' : '')
     .replace('<!-- OVERVIEW_EDITOR -->', () => editorMarkup())

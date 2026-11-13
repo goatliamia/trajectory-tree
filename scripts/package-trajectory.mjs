@@ -23,7 +23,7 @@ function copy(path){
   else if(!specifier.startsWith('node:'))external.add(specifier.split('/').slice(0,specifier.startsWith('@')?2:1).join('/'));
  }
 }
-for(const entry of ['scripts/trajectory-view.mjs','scripts/trajectory-query.mjs','scripts/trajectory-report.mjs',...(host==='pi'?['plugin/portable-tools/pi.mjs']:[])])copy(entry);
+for(const entry of ['scripts/trajectory-view.mjs','scripts/trajectory-query.mjs','scripts/trajectory-report.mjs',...(host==='pi'?['plugin/portable-tools/pi.mjs']:[]),...(host==='codex'?['plugin/codex/server.mjs']:[])])copy(entry);
 for(const file of ['view/commands.html','view/commands.js'])copy(file);
 for(const file of ['report/base.css','report/style.css','report/layout.css','report/assembly.css','report/runtime.js','report/AUTHORING.md','report/WRITING.md','design/primitives.css','design/DESIGN.md','design/icons.svg','LICENSE'])copy(file);
 for (const name of ['page.html', 'page.js', 'shared/visual-tokens.css', 'shared/context-observation.css', 'shared/context-observation.js',
@@ -41,7 +41,16 @@ if(host==='codex'||host==='claude')for(const name of [...DIAGNOSIS_SKILLS.map(s=
   skillFiles.push({source:relative(root,sourceFile),output:relative(out,target),sha256:createHash('sha256').update(text).digest('hex')});
  }
 }else for(const skill of DIAGNOSIS_SKILLS)for(const file of files(join(root,'plugin/portable-tools/skills',skill.name)))copy(relative(root,file));
+if(host==='codex'){
+ const dependencyRoot=join(root,'plugin/portable-tools/node_modules');
+ if(!existsSync(dependencyRoot))throw Error('Install the portable tool lockfile dependencies before packaging');
+ cpSync(dependencyRoot,join(out,'node_modules'),{recursive:true,filter:file=>{
+  const dependencyPath=relative(dependencyRoot,file).replaceAll('\\','/');
+  return !/^(?:json-schema-traverse\/spec|fast-uri\/test)(?:\/|$)/.test(dependencyPath);
+ }});
+}
 for(const name of external){
+ if(host==='codex'&&['typebox','@modelcontextprotocol/sdk'].includes(name))continue;
  if(name!=='typebox')throw Error('Review unexpected bundled dependency: '+name);
  const require=createRequire(new URL('../plugin/portable-tools/package.json',import.meta.url));
  let source=dirname(realpathSync(require.resolve(name)));
@@ -49,7 +58,10 @@ for(const name of external){
  cpSync(source,join(out,'node_modules',name),{recursive:true});
 }
 const manifest=JSON.parse(readFileSync(join(root,'plugin/codex/plugin.json'),'utf8'));
-if(host==='codex')writeFileSync(join(out,'plugin.json'),JSON.stringify(manifest,null,2)+'\n');
+if(host==='codex'){
+ writeFileSync(join(out,'plugin.json'),JSON.stringify(manifest,null,2)+'\n');
+ copyFileSync(join(root,'plugin/codex/mcp.json'),join(out,'mcp.json'));
+}
 if(host==='claude')for(const file of ['.claude-plugin/plugin.json','hooks/hooks.json','scripts/bind-session.mjs']){
  const source=join(root,'plugin/claude',file),target=join(out,file),text=readFileSync(source,'utf8');
  mkdirSync(dirname(target),{recursive:true});writeFileSync(target,text);

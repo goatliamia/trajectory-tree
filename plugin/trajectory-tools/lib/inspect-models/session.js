@@ -136,7 +136,8 @@ export function projectSession(rows, source = {}) {
       const step = getStep(d.turn, d.step);
       if (step) step.retries.push({ seq: e.seq, time: e.time, delayMs: d.delayMs, failure: d.failure });
     } else if (['compaction/start', 'compaction/end', 'subagent/catalog'].includes(e.type)) {
-      const marker = { type: e.type, seq: e.seq, time: e.time, childId: d.childId, label: d.label };
+      const marker = { type: e.type, seq: e.seq, time: e.time, childId: d.childId, label: d.label,
+        ...(e.type === 'subagent/catalog' ? { name: d.name, mode: d.mode, catalogVersion: d.version, parentId: header.id } : {}) };
       turn.markers.push(marker);
       const step = turn.steps.at(-1); if (step) step.markers.push(marker);
     } else if (e.type === 'turn/end') {
@@ -161,6 +162,7 @@ export function projectSession(rows, source = {}) {
   const title = events.filter(e => e.type === 'session/title').at(-1)?.data?.title || header.id;
   const communications = events.filter(e => !isReplacement(e) && e.type === 'user/message' && ['agent-message', 'team-message', 'subagent-settled'].includes(e.data?.source?.kind)).map(e => ({
     seq: e.seq, time: e.time, kind: e.data.source.kind, childId: e.data.source.senderSessionId || e.data.source.senderId || null,
+    ...(typeof e.data.source.stopReason === 'string' ? { stopReason: e.data.source.stopReason } : {}),
     content: excerpt(textOf(e.data.content), 1800),
   }));
   return { id: header.id, title, parentSession: header.parentSession || null, source, firstSeq: events[0]?.seq, lastSeq: events.at(-1)?.seq, eventCount: events.length, diagnostics, turns, communications,

@@ -833,6 +833,7 @@
     pause: ui('暂停'), resume: ui('恢复'), block: ui('标记受阻') };
   const nextLabels = { same: ui('同工具同参'), changed: ui('同工具改参'), other: ui('换用其他工具') };
   const detailMetric = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  const toolHtml = name => globalThis.__trajectoryToolName?.(name) ?? esc(name);
   const record = (label, line, extra = '') => `<div class="record"><strong>${label}</strong><p>${line}</p>${extra ? `<p>${extra}</p>` : ''}</div>`;
   function showDrawer(content, hasBack, heading) {
     $('drawer-back').hidden = !hasBack;
@@ -882,11 +883,11 @@
     return point?.[2] > 0 ? 100 * point[1] / point[2] : null;
   }
   function errorRecord(error) {
-    const next = error.next ? ui`随后调用 ${esc(error.next.name)} ${seq(error.next.seq)} · ${nextLabels[error.next.kind]}` : '';
+    const next = error.next ? ui`随后调用 ${toolHtml(error.next.name)} ${seq(error.next.seq)} · ${nextLabels[error.next.kind]}` : '';
     const returned = error.returned == null ? ui('本轮未见同参非报错返回')
       : ui('同参返回 ') + seq(error.returned) + (error.recovery != null ? ui(' · 间隔 ') + time(error.recovery) : '');
     const attribution = globalThis.__trajectoryFailureText?.(error.attribution);
-    return record(esc(data.categories[error.category]) + ' · ' + esc(error.tool),
+    return record(esc(data.categories[error.category]) + ' · ' + toolHtml(error.tool),
       ui('报错 ') + seq(error.failed) + (error.code ? ' · ' + esc(error.code) : '') + ' · ' + returned,
       [attribution && esc(attribution), next].filter(Boolean).join(' · '));
   }
@@ -952,8 +953,8 @@
       ${turn.ptc && turn.ptc.seq !== turn.toolSeq ? record(ui('首个 PTC 程序'),
         'run_code ' + seq(turn.ptc.seq) + ' · ' + time(turn.ptc.wait),
         ui`${num(turn.ptc.programs)} 个程序 · ${num(turn.ptc.calls)} 次子调用 · 外层累计 ${time(turn.ptc.elapsed)}（${turn.ptc.measured} / ${turn.ptc.programs} 有计时）`) : ''}
-      ${turn.toolSeq == null ? '' : record(ui('首个工具动作'), esc(turn.tool) + ' ' + seq(turn.toolSeq) + ' · ' + time(turn.firstTool))}
-      ${action ? (portable ? `<h3>${ui('工具调用记录')}</h3>` : ui('<h3>调用前的窗口占用</h3>')) + record(esc(action.tool) + ' · ' +
+      ${turn.toolSeq == null ? '' : record(ui('首个工具动作'), toolHtml(turn.tool) + ' ' + seq(turn.toolSeq) + ' · ' + time(turn.firstTool))}
+      ${action ? (portable ? `<h3>${ui('工具调用记录')}</h3>` : ui('<h3>调用前的窗口占用</h3>')) + record(toolHtml(action.tool) + ' · ' +
         (portable ? action.status === 1 ? ui('报错') : ui('正常返回') : occupancyText(action.ratio)),
         portable ? time(action.elapsed) : action.window > 0 ? num(action.used) + ' / ' + num(action.window) + ' token' : ui('占用记录缺失'),
         ui('发起 ') + seq(action.launch) + ui(' · 返回 ') + seq(action.result) + (action.elapsed == null ? '' : ui(' · 耗时 ') + time(action.elapsed))

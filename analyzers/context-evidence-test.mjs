@@ -88,4 +88,12 @@ const broken={get:name=>name==='sessionProjections'?{restore(){throw Error('proj
 const degraded=await observeContextEvidence(broken,'fixture',{SurfaceManager});
 assert.equal(degraded.composition.available,false); assert.ok(degraded.composition.coverage.error);
 assert.ok(degraded.injections.slots.length); assert.equal(released,3);
+const reminderEvents=[
+  {seq:0,time:1000,type:'user/message',surfaceOp:'append',data:user('runtime-context','<system-reminder>Current workspace: alpha</system-reminder>',{form:'snapshot',sections:[{name:'workspace',text:'alpha'}]})},
+  {seq:1,time:1001,type:'user/message',surfaceOp:'append',data:user('runtime-context','<system-reminder>Prior runtime context is cleared.</system-reminder>',{form:'snapshot',sections:[]})},
+];
+const reminders=build(reminderEvents);
+assert.equal(reminders.records.filter(r=>r.producer==='runtime-context').length,2,'rc2 reminder framing does not hide structured source identity');
+assert.equal(reminders.records.find(r=>r.admitted?.seq===0).sections[0].name,'workspace');
+assert.deepEqual(reminders.records.find(r=>r.admitted?.seq===1).sections,[],'An explicit empty snapshot does not inherit old context sections');
 console.log('PASS context evidence: native positions, queue/admission/cancellation, payload identity, snapshots vs retention, cut coherence, official estimates, detached reads and lease disposal');

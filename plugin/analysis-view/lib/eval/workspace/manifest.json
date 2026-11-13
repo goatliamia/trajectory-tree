@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "sources": [
+    {
+      "path": "analyzers/context-overlap.mjs",
+      "sha256": "d502fa8dd5f415b400a7c245de8bbb996d1a3723783169ced29d269c100326bf"
+    },
+    {
+      "path": "analyzers/eval-insights.mjs",
+      "sha256": "b47fc20e61ecde838ae3a5ecb9fdc09401cc21501cba6320dd7cc05ef495b58c"
+    },
+    {
+      "path": "analyzers/preset-context.mjs",
+      "sha256": "9c9b45a88037e2fb7ff363c10d29a0b35c9c3be472159e9e1912fa1eb4302429"
+    },
+    {
+      "path": "analyzers/preset-current.mjs",
+      "sha256": "a3dcb0e3a804073923002ec22b5b0f5b34e65b094055476a81a157b7c00aae9e"
+    },
+    {
+      "path": "analyzers/preset-skill-management.mjs",
+      "sha256": "991a5bc3ce58c71404bbc29ee46bc25a539debb6dabc677bb00316b1384d3d83"
+    },
+    {
+      "path": "analyzers/preset-statistics.mjs",
+      "sha256": "c8dd60825a3c84fa116cc1d8e449adf29f7b24ce98cbe41fbfaf4cf81d770833"
+    },
+    {
+      "path": "analyzers/skill-description-candidates.mjs",
+      "sha256": "9e58dd4c3f9b88982f4baf4cd47261a2a7d572189f678d54e8efb71a3ee9cf26"
+    },
+    {
+      "path": "analyzers/skill-overlap-demo.mjs",
+      "sha256": "e62f8937eac49e5e1fa261e1837e861e583b7df536a9b5d180071d118c3f9ce3"
+    },
+    {
+      "path": "analyzers/static-declaration.mjs",
+      "sha256": "85025633f7e742e5a89444bef34fd7a5b55ba12ee0e515ebf55a171568c82593"
+    },
+    {
+      "path": "lib/context-diagnosis.mjs",
+      "sha256": "daeaf83d655e323a0d8043acecb3b18deca9a0641257244fbec4fe941ccb482e"
+    },
+    {
+      "path": "lib/dsh-current-preset.mjs",
+      "sha256": "704e3d3c7843e285922a93376960aeb47c38c0b671309b35492fe7106dd3304a"
+    },
+    {
+      "path": "lib/lifecycle-observation.mjs",
+      "sha256": "fa3f064bbcd722649e0d029d3ea9f07701dc4821534101bef9b4448eeb9767bd"
+    },
+    {
+      "path": "plugin/analysis-view/lib/eval/diagnostic-rules.mjs",
+      "sha256": "e814b06bf52c85fef5d12eafee2e0e80d61e7b6cf0600769eeb62d29b45f69c4"
+    },
+    {
+      "path": "plugin/analysis-view/lib/eval/findings.mjs",
+      "sha256": "12c3c79e618c630c3426a090b959487b743eea79f3a29e3d6f033ab01a42ea36"
+    },
+    {
+      "path": "plugin/analysis-view/lib/skill-policy.js",
+      "sha256": "7eae6c7b6965020833cd3011590478dd28202ae5b71c1421820ea1f4750e02c8"
+    },
+    {
+      "path": "plugin/analysis-view/lib/trace/shared/tool-attribution.mjs",
+      "sha256": "4eed4924dfba92bd21a6e1a51b93a9d4a75ffa105bc7795bd8f4566e0da00ecd"
+    },
+    {
+      "path": "scripts/dsh-management-config.mjs",
+      "sha256": "91091fba098169e47f3616696a6a30b94979720f7b1000352b2dea2fd584739a"
+    },
+    {
+      "path": "scripts/dsh-management-http.mjs",
+      "sha256": "e20ae100fc8b89819634e960455bdf489c3b6102cb57f0fd484e1cc04fc3a984"
+    },
+    {
+      "path": "scripts/dsh-management.mjs",
+      "sha256": "739ae4d0b3bba779f19aecc106d89515cf963dfae45aac3a7af44193ec2a6559"
+    },
+    {
+      "path": "scripts/preset-source-inventory.mjs",
+      "sha256": "a9c18ed5d955ce6623447ca025f8254c8a88eb5447b10e9ebc84a1105001c28b"
+    },
+    {
+      "path": "scripts/read-dsh-bundles.mjs",
+      "sha256": "faac4cfe4b782613a47e77fedd6e5a2e119fae6eaff9ee572f765390d2f75417"
+    }
+  ]
+}

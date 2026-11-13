@@ -21,6 +21,15 @@
     geistLayoutObserver = new ResizeObserver(() => {
       cancelAnimationFrame(geistLayoutFrame);
       geistLayoutFrame = requestAnimationFrame(() => {
+        if(view==='path'){
+          const viewport=$('graph-scroll'),geometry=geistActionGeometry(turn()),height=Number($('graph').getAttribute('height'));
+          // Opening step details changes the flex viewport after the first paint.
+          // Refit once to its settled box so the second label row stays visible.
+          if(Math.abs(height-geometry.height)>1||Math.abs((reviewActionFileFrame?.viewportWidth??0)-Math.max(300,viewport.clientWidth))>1){
+            const left=viewport.scrollLeft;renderPath();viewport.scrollLeft=left;viewport.scrollTop=0;
+          }
+          return;
+        }
         if (view !== 'overview') return;
         const signature = [$('canvas').clientWidth, $('canvas').clientHeight, $('geist-context-overview').getBoundingClientRect().height, $('graph-caption').getBoundingClientRect().height, $('graph-scroll') ? $('graph-scroll').clientHeight : 0, $('graph-scroll') ? $('graph-scroll').clientWidth : 0].map(n => Math.round(n)).join(':');
         if (signature === geistLayoutMeasure) return;

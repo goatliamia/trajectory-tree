@@ -91,6 +91,7 @@ export class TraceStages {
         children: new Map(), retryAt: Infinity, bodies: new Map(), encodedBytes: 0, viewers: new Map(), controller,
         version: hash([cut?.revision, assets, []]), payload, actorData: null,
         header: observation.header || observation.session, inherited: observation.inheritedEventCount ?? 0,
+        catalogInherited: observation.inheritedEventCount,
         timing: { load: loaded - started, core: Date.now() - loaded } };
       entry.core = { ...traceCore(payload), traceVersion: entry.version, traceAssets: assets, traceCapabilities: { requestContext: true } };
       const ensureEvents = async () => {
@@ -153,10 +154,10 @@ export class TraceStages {
               entry.children.set(id, version);
               if (version?.revision === 'missing') return [];
               const child = await this.timeout(stop => this.observe(id, stop), remaining(), controller.signal);
-              try { entry.children.set(id, observationSource(this.ctx, child, version)); return child.events || []; }
+              try { entry.children.set(id, observationSource(this.ctx, child, version)); return { events: child.events || [], inheritedEventCount: child.inheritedEventCount }; }
               finally { this.dispose(child); }
             } catch (error) { incomplete = true; throw error; }
-          }, controller.signal));
+          }, controller.signal), { inheritedEventCount: entry.catalogInherited });
           controller.signal.throwIfAborted();
           entry.version = hash([cut?.revision, assets, [...entry.children].map(([id, child]) => [id, child?.revision]).sort()]);
           if (incomplete) entry.retryAt = Date.now() + 1500;

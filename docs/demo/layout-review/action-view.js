@@ -4,7 +4,24 @@
     if (kinds.length === 1 && kinds[0] === 'other' && titles.length === 1) return titles[0] + (step.calls.length > 1 ? ' ×' + step.calls.length : '');
     return kinds.length > 1 ? kinds.slice(0, 2).map(kindLabel).join('、') + (kinds.length > 2 ? ui('等') : '') : stepLabel(step);
   }
+  function reviewToolStepLabel(step, x, y) {
+    if (!step.calls.length) return brText(x, y, shorten(reviewActionStepLabel(step), 16), 'br-label');
+    const counts = new Map();
+    for (const call of step.calls) counts.set(call.name, (counts.get(call.name) || 0) + 1);
+    const names = [...counts].slice(0, 2), max = names.length > 1 ? 7 : 16;
+    return '<text x="' + x + '" y="' + y + '" text-anchor="middle" class="br-label review-tool-label">' + names.map(([name,n],i) =>
+      (i ? '<tspan class="review-tool-separator"> / </tspan>' : '') + '<tspan style="fill:' + globalThis.__trajectoryToolColor(name) + '">' + esc(shorten(name??'?',max)) + (n>1?' ×'+n:'') + '</tspan>').join('') + (counts.size>2?'<tspan>…</tspan>':'') + '</text>';
+  }
+  function reviewCallMeasure(call,step,turnNumber){
+    if(call.measure)return call.measure;
+    const stats=typeof geistStatsByStep==='undefined'?null:geistStatsByStep.get(turnNumber+':'+step.number);
+    const record=stats?.calls?.find(r=>r.name===call.name&&(r.seq===call.seq||r.callId===call.id));
+    if(!record)return null;
+    return /^(edit|write|apply_patch)$/.test(call.name)?{kind:'change',added:record.added,removed:record.removed,basis:call.name==='write'?'write-input':'replacement-input',state:record.error?'attempted':record.endedAt==null?'pending':'returned'}:
+      call.name==='read'?{kind:'read',lines:record.lines}:{kind:'output',chars:record.chars};
+  }
   function renderActionPath() {
+    // Counts are projected once from original events; no diff work during paint.
     const t = turn(), steps = t.steps, count = steps.length, viewport = $('graph-scroll');
     const canvas = $('canvas'); canvas.classList.add('review-action-mode');
     if (!count) { $('graph').innerHTML = ''; return; }
@@ -64,7 +81,8 @@
         const rest = Math.max(0, total - tool - model);
         const width = Math.max(1, right - left);
         let bx = left;
-        for (const [cls, value] of [['review-time-tool', tool], ['review-time-model', model], ['review-time-rest', rest]]) {
+        const ttft = stats && Number.isFinite(stats.ttft) ? Math.max(0, Math.min(model, stats.ttft)) : 0;
+        for (const [cls, value] of [['review-time-wait', ttft], ['review-time-model', model-ttft], ['review-time-tool', tool], ['review-time-rest', rest]]) {
           if (value <= 0) continue;
           const w = Math.max(0.6, value / total * width);
           part += '<rect x="' + bx + '" y="56" width="' + w + '" height="4" rx="1" class="' + cls + '"/>';
@@ -129,8 +147,10 @@
           '<circle r="7.5"/><text text-anchor="middle" y="3.2">' + glyph + '</text></g>';
       });
       const icon = step.calls.length && step.calls.every(c => /^查询/.test(reviewContextData.callFacts?.[c.seq]?.title || '')) ? STEP_ICON.query : stepIcon(step);
-      part += '<g transform="translate(' + pos + ' ' + base + ')" class="review-action-icon">' + icon + '</g>';
-      part += brText(pos, base + 34, shorten(reviewActionStepLabel(step), 16), 'br-label');
+      const toolNames = [...new Set(step.calls.map(call => call.name))];
+      part += '<g transform="translate(' + pos + ' ' + base + ')" class="review-action-icon"' + (toolNames.length === 1 ? ' style="stroke:' + globalThis.__trajectoryToolColor(toolNames[0]) + '"' : '') + '>' + icon + '</g>';
+      part += reviewToolStepLabel(step, pos, base + 34);
+
       html += brGroup('class="action-step review-action-step' + (active ? ' is-selected' : '') + '" data-step="' + index + '" aria-pressed="' + active + '"', part,
         ui('第 ') + step.number + ui(' 步 · ') + reviewActionStepLabel(step) + ' · ' + preciseTime(recordDuration(step)) + (info ? ui('；上下文净变化 ') + reviewSigned(info.amount) : ''));
     });

@@ -174,18 +174,12 @@
     const paths = [...new Set(result.calls.flatMap(c => c.files?.length ? c.files.map(file => file.path) : [c.file]).filter(Boolean))];
     const blocked = result.calls.filter(call => call.fact?.tone === 'bad').length;
     const recovered = result.calls.filter(call => call.fact?.tone === 'bad' && geistRecovery(call.seq)).length;
+    const selectedTurn = brRound(result.turn), selectedStep = selectedTurn.steps.find(s => s.number === result.step);
     let html = result.calls.map(call => {
-      const tone = call.fact?.tone === 'bad' ? 'bad' : call.fact?.tone === 'unknown' ? 'warn' : 'quiet';
-      const state = tone === 'bad' ? ui('受阻 · ') : tone === 'warn' ? ui('未确认 · ') : '';
-      const recovery = tone === 'bad' ? geistRecovery(call.seq) : null, subject = geistCallSubject(call);
-      return '<div class="geist-outcome-record" data-tone="' + tone + '"><div class="geist-outcome-head">' +
-        (state ? '<span class="geist-outcome-state">' + esc(state) + '</span>' : '') +
-        '<strong>' + esc(call.fact?.title || call.name) + '</strong></div>' +
-        '<p>' + esc(call.fact?.outcome || ui('工具结果已记录')) + '</p>' +
-        (subject ? '<p class="geist-outcome-meta">' + esc(subject) + '</p>' : '') +
-        (recovery ? '<button class="geist-text-action recovery" data-result-recovery="' + call.seq + '">' + ui('第 ') + recovery.step + ui(' 步恢复 ↗') + '</button>' : '') +
-        (reviewHasChange(call.fact) ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : call.fact.preview ? ui('查看改动片段') : ui('查看文件差异')) + ' ↗</button>' : '') +
-        (result.recorded ? '<p class="review-quiet">' + (call.inner ? ui('内部工具 · ') : '') + 'seq ' + call.seq + (call.rootSeq != null ? ui(' · 外层调用 #') + call.rootSeq : '') + '</p>' + callEntry(call) : '') + '</div>';
+      const recovery = call.fact?.tone === 'bad' ? geistRecovery(call.seq) : null;
+      const actions = (recovery ? '<button class="geist-text-action recovery" data-result-recovery="' + call.seq + '">' + ui('第 ') + recovery.step + ui(' 步恢复 ↗') + '</button>' : '') +
+        (reviewHasChange(call.fact) ? '<button class="geist-text-action" data-result-diff="' + call.seq + '">' + (call.fact.tone === 'bad' || call.fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + ' ↗</button>' : '');
+      return geistToolRecord(call, { fact: call.fact, turn: selectedTurn, step: selectedStep, actions });
     }).join('');
     if (paths.length) html += '<div class="geist-outcome-files">' + paths.map((path, i) => '<button class="geist-text-action" data-result-file="' + i + '">' + esc(path.split(/[\\/]/).at(-1)) + ui(' · 全程记录 ↗</button>')).join('') + '</div>';
     html += ui('<div class="drawer-actions"><button class="action-button primary" id="geist-result-step">在行动路径中查看 ↗</button><button class="action-button" id="geist-result-context">本轮上下文变化</button></div>');

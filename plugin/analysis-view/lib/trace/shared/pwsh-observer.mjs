@@ -5,6 +5,7 @@ import { access, readFile } from 'node:fs/promises';
 import { delimiter, dirname, isAbsolute, resolve } from 'node:path';
 
 import { candidateAttribution } from './tool-attribution.mjs';
+import { diagnosticFrame } from './tool-feedback.mjs';
 
 const protocol = 'pwsh-syntax/1';
 export const commandBatchLimit = 12;
@@ -146,7 +147,9 @@ function applySyntax(entry, observed, file) {
   syntax.diagnostics = parsed.diagnostics.slice(0, 6).map(error => ({
     id: commandEvidenceExcerpt(error.error_id), message: commandEvidenceExcerpt(error.message), line: error.span?.line, column: error.span?.column,
     incomplete: !!error.incomplete_input, hint: syntaxHint(error, source.text),
+    frame:matchingEdition?diagnosticFrame(source.text,{line:error.span?.line,column:error.span?.column,id:error.error_id,message:error.message,origin:'powershell-parser',kind:'syntax'}):null,
   }));
+  if(syntax.diagnostics.some(d=>d.frame))row.attribution={...row.attribution,codeFrames:syntax.diagnostics.map(d=>d.frame).filter(Boolean)};
   if (syntax.state !== 'parsed') {
     const { id, line, column, hint } = syntax.diagnostics[0];
     if (matchingEdition && row.attribution?.code === 'COMMAND_SYNTAX') row.attribution = { ...row.attribution, site: { line, column }, evidence: id,

@@ -3,7 +3,9 @@ name: trajectory-eval
 description: 打开当前或指定 Codex 会话的 Eval 图表，按轮次检查有记录的用量、耗时和工具结果。
 ---
 
-用 Node 运行本目录相对路径 `../../../../scripts/trajectory-view.mjs --host codex --eval --serve`，把返回的 `url` 打开到浏览器或预览面板。默认当前会话，指定其他会话时加 `--thread ID`。使用已经捕获的会话时加 `--file SNAPSHOT`。
+优先调用插件的 `trajectory_view`，指定 `session` 和 `view: "eval"`（代码执行用 `"code"`），把返回的 `url` 打开到浏览器或预览面板。当前对话 ID 从 `CODEX_THREAD_ID` 读取。
+
+工具尚未连接时，用 Node 运行本目录相对路径 `../../../../scripts/trajectory-view.mjs --host codex --eval --serve`。指定其他会话时加 `--thread ID`，已捕获会话加 `--file SNAPSHOT`。
 
 用户要项目总览时，改用 `--host codex --overview --serve`。默认按当前目录读取最近的项目会话，可用 `--project PATH` 或重复 `--thread ID`、`--file SNAPSHOT` 选定范围。用 `--lang en` 或 `--lang zh-CN` 固定界面语言。
 

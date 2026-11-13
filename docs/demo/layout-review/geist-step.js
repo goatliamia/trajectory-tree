@@ -22,43 +22,13 @@
       if (!target.within) return direction > 0 ? ui('下一轮第 1 步') : ui('上一轮末步');
       return direction > 0 ? (insight.following ? ui('下一步 · ') + insight.following.text : ui('下一步')) : ui('上一步');
     };
-    const callOf = fact => step.calls.find(call => call.seq === fact.seq) || null;
-    // 展开沿用 Geist 的 Show code 行:16px chevron 收起时指右、打开后指下,文字只留标签。
-    const chevron = '<span class="geist-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="m12.06 6.75-.53.53-2.82 2.82a1 1 0 0 1-1.42 0L4.47 7.28l-.53-.53L5 5.69l.53.53L8 8.69l2.47-2.47.53-.53z"/></svg></span>';
-    // 跳转箭头用图标,不用 ↗ 字符:字符随字体变形,这是 Geist 图标的同一套几何。
     const arrow = '<svg class="geist-arrow" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M5.5 10.5 10.5 5.5M6.5 5.5h4v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    const disclosure = (label, body) => '<details class="geist-result"><summary>' + label + chevron + '</summary>' + body + '</details>';
-    const excerpt = value => value && typeof value.text === 'string' && value.text.trim()
-      ? { text: value.text.replace(/\r\n/g, '\n'), omitted: Number(value.omitted) || 0 } : null;
-    // 原始记录的内容并进面板:调用参数、返回原文、错误类型和 seq 都在这一步里看全。
-    const rawEntry = fact => {
-      const call = callOf(fact);
-      if (!call) return '';
-      const args = excerpt(call.args), result = fact.preview ? null : excerpt(call.result);
-      const error = call.error ? String(call.error.code || call.error.name || '') : '';
-      if (!args && !result && !error) return '';
-      const block = (label, value) => '<span class="geist-result-label">' + label + '</span><pre class="geist-result-text">' + esc(value.text) + '</pre>' +
-        (value.omitted ? '<span class="geist-result-note">' + ui('节选 · 另有 ') + value.omitted + ui(' 个字符未载入') + '</span>' : '');
-      return disclosure(ui('调用参数与原文'),
-        (error ? '<span class="geist-result-label">' + ui('错误类型') + '</span><pre class="geist-result-text">' + esc(error) + '</pre>' : '') +
-        (args ? block(ui('调用参数'), args) : '') + (result ? block(ui('返回原文'), result) : ''));
-    };
-    const callMeta = fact => {
-      const call = callOf(fact), bits = [];
-      if (call && call.seq != null) bits.push('seq ' + call.seq + (call.resultSeq != null ? ' → ' + call.resultSeq : ''));
-      if (call && call.start != null && call.end != null) bits.push(dur(call.end - call.start));
-      return bits.join(' · ');
-    };
+    const disclosure = geistRecordDisclosure;
     const operation = fact => {
-      const meta = [fact.detail, callMeta(fact)].filter(Boolean).join(' · ');
-      const raw = rawEntry(fact);
+      const call = step.calls.find(c => c.seq === fact.seq);
+      if (!call) return '';
       const diff = reviewHasChange(fact) ? '<button class="geist-text-action" data-insight-change="' + fact.seq + '">' + (fact.tone === 'bad' || fact.tone === 'unknown' ? ui('查看原计划') : ui('打开改动对比')) + arrow + '</button>' : '';
-      return '<article class="geist-operation" data-tone="' + fact.tone + '">' +
-        '<h3>' + esc(fact.title) + '</h3>' +
-        '<p>' + esc(fact.outcome) + (diff ? ' ' + diff : '') + '</p>' +
-        (meta ? '<span class="geist-operation-size">' + esc(meta) + '</span>' : '') +
-        (raw ? '<div class="geist-operation-actions">' + raw + '</div>' : '') +
-        '</article>';
+      return geistToolRecord(call, { fact, turn: t, step, actions: diff });
     };
     // 展开原文时不改变面板外框高度:锁住当前高度,内容在面板内滚动,图区不会被挤压。
     panel.style.height = '';
@@ -79,12 +49,12 @@
       (insight.following ? '<p class="geist-step-next"><span>' + ui('接下来') + '</span><button class="geist-text-action" data-insight-step="' + insight.following.step + '">' + ui('第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + arrow + '</button></p>' : '');
     panel.querySelectorAll('[data-insight-change]').forEach(el => el.onclick = () => reviewOpenChange(t, step, insight.calls.find(f => f.seq === Number(el.dataset.insightChange))));
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
-    // 展开前把面板高度钉住:内容在里面滚,画布和图区保持原样。
-    const panelDetails = () => [...panel.querySelectorAll('details.geist-result')];
+    // 展开时给原文稳定的阅读高度,内容在面板内滚动,不跟随长输出无限增高。
+    const panelDetails = () => [...panel.querySelectorAll('details.geist-tool-record, details.geist-result')];
     panelDetails().forEach(details => {
       details.querySelector('summary').addEventListener('click', () => {
         if (details.open) return;
-        panel.style.height = panel.getBoundingClientRect().height + 'px';
+        panel.style.height = Math.max(panel.getBoundingClientRect().height, Math.min(window.innerHeight * .44, 360)) + 'px';
       });
       details.addEventListener('toggle', () => {
         if (!details.open && !panelDetails().some(row => row.open)) panel.style.height = '';

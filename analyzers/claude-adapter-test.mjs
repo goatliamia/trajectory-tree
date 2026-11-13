@@ -7,6 +7,7 @@ import { projectClaudeTranscript, finalizeClaudeDataset } from './claude-adapter
 import { datasetFromNative } from '../plugin/portable-tools/sources.mjs';
 import { PortableService } from '../plugin/portable-tools/service.mjs';
 import { commandReport } from '../plugin/portable-tools/command-diagnosis.mjs';
+import { adaptPiSession } from './pi-adapter.mjs';
 
 const dir = await mkdtemp(join(tmpdir(), 'trajectory-claude-'));
 try {
@@ -23,6 +24,7 @@ try {
   assert.equal(data.host, 'claude'); assert.equal(data.session, 'test');
   assert.equal(data.payload.sessions[0].totals.calls, 1);
   assert.equal(data.payload.sessions[0].turns[0].steps[0].calls[0].status, 'returned');
+  assert.equal(data.payload.sessions[0].turns[0].steps[0].calls[0].measure.lines, 1);
   const call = data.records.find(r => r.kind === 'call'), result = data.records.find(r => r.kind === 'result');
   assert.equal(call.name, 'Read'); assert.deepEqual(call.arguments, { file_path: 'a.txt', signature: 'literal' });
   assert.equal(call.native.uuid, 'a1'); assert.equal(call.native.line, 2); assert.equal(result.body.content.length, 40000);
@@ -125,5 +127,42 @@ try {
     { input: 0, output: 5, cacheRead: null, cacheWrite: null },
     { input: null, output: null, cacheRead: 3, cacheWrite: null },
   ]);
+  const editFile = join(dir, 'edit.jsonl');
+  const edits = [
+    { type: 'tool_use', id: 'edit', name: 'Edit', input: { file_path: 'a.txt', old_string: 'old', new_string: 'new\nextra', replace_all: true } },
+    { type: 'tool_use', id: 'write', name: 'Write', input: { file_path: 'b.txt', content: 'a\nb\n' } },
+    { type: 'tool_use', id: 'output', name: 'Bash', input: { command: 'echo output' } },
+  ];
+  await writeFile(editFile, [rows[0], assistant('edits', edits),
+    { ...base, type: 'user', message: { content: [
+      { type: 'tool_result', tool_use_id: 'edit', is_error: true, content: 'denied' },
+      { type: 'tool_result', tool_use_id: 'output', content: 'x'.repeat(20000) },
+    ] } },
+  ].map(JSON.stringify).join('\n'));
+  const editData = datasetFromNative('claude', await readClaudeTranscript(editFile));
+  const [editCall, writeCall, outputCall] = editData.payload.sessions[0].turns[0].steps[0].calls;
+  assert.deepEqual(editCall.measure, { kind: 'change', added: 2, removed: 1, basis: 'replacement-input', state: 'attempted' });
+  assert.equal(writeCall.measure.state, 'pending');
+  assert.equal(writeCall.measure.added, 2);
+  assert.equal(outputCall.measure.chars, 20000, 'Measure full recorded output before preview truncation');
+  assert.equal(outputCall.result.omitted, 20000);
+  const editNative = await readClaudeTranscript(editFile), editProjected = projectClaudeTranscript(editNative);
+  const editPage = finalizeClaudeDataset({ session: editNative.sessionId, records: [], payload: adaptPiSession(editProjected) }, editNative, editProjected).payload;
+  assert.deepEqual(editPage.context.callFacts[editCall.seq].preview,
+    { before: 'old', after: 'new\nextra', partial: true });
+  assert.equal(editPage.context.callFacts[writeCall.seq].title, '写入 b.txt');
+  assert.equal(writeCall.durationMs, null);
+  const diagnosticFile = join(dir, 'diagnostic.jsonl');
+  await writeFile(diagnosticFile, [rows[0], assistant('compiler', [bash('compiler')]),
+    { ...base, type: 'user', message: { content: [
+      { type: 'tool_result', tool_use_id: 'compiler', is_error: true, content: 'src/a.ts(9,3): error TS1005: Expected a closing brace.' },
+    ] } },
+  ].map(JSON.stringify).join('\n'));
+  const diagnosticData = datasetFromNative('claude', await readClaudeTranscript(diagnosticFile));
+  const [diagnosticCall] = diagnosticData.payload.sessions[0].turns[0].steps[0].calls;
+  assert.equal(diagnosticCall.codeFrames[0].file, 'src/a.ts');
+  assert.equal(diagnosticCall.codeFrames[0].line, 9);
+  assert.equal(diagnosticCall.codeFrames[0].column, 3);
+  assert.deepEqual(diagnosticCall.codeFrames[0].lines, [], 'External file locations never highlight an unrelated command');
   console.log('Claude transcript adapter checks passed');
 } finally { await rm(dir, { recursive: true, force: true }); }

@@ -1,11 +1,20 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { toolColorRuntime, toolColorCss } from '../lib/tool-colors.mjs';
+import { toolFeedbackRuntime, toolFeedbackCss, feedbackArgs, recordedDiagnostics } from '../lib/tool-feedback.mjs';
+import { powerShellScript, isProgramTool } from '../plugin/trajectory-tools/lib/tool-attribution.js';
 const source = resolve('docs/demo/layout-review/base'), demo = resolve('docs/demo/layout-review'), out = resolve('.dsh/layout-review');
 const read = (dir, name) => readFileSync(resolve(dir, name), 'utf8').replace(/\r\n/g, '\n');
 const saved = read(out, 'installed-trace.html');
 const match = saved.match(/<script id="trace-data" type="application\/json">([\s\S]*?)<\/script>/);
 if (!match) throw new Error('No installed trace data');
 const tracePayload = JSON.parse(match[1]);
+for(const session of tracePayload.sessions)for(const turn of session.turns)for(const step of turn.steps)for(const call of step.calls){
+  if(call.status!=='error'||call.codeFrames?.length)continue;
+  const args=call.args?.omitted?{}:feedbackArgs(call.args?.text),program=isProgramTool(call.name);
+  const source=program?args.code:powerShellScript(args.command??args.cmd,call.name,args.shell)?.text;
+  call.codeFrames=recordedDiagnostics({name:call.name,source,program,output:(call.error?.message??'')+'\n'+(call.result?.text??'')});
+}
 tracePayload.context = JSON.parse(read(out, 'context-data.json'));
 if (tracePayload.context.session !== tracePayload.mainSession) throw new Error('Context fixture belongs to another session');
 const encodedData = JSON.stringify(tracePayload).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -48,6 +57,7 @@ graph = graph.slice(0, actionStart) + read(demo, 'action-view.js') + '\n' + grap
 const scripts = [graph, read(source, 'panorama.js'), read(source, 'scene.js'), pure, read(demo, 'preserved.js'), read(demo, 'context-layer.js'), read(demo, 'goal-layer.js'), read(demo, 'review-navigation.js'), read(demo, 'step-detail.js'), read(demo, 'file-layer.js'), branch].join('\n');
 let page = read(source, 'template.html');
 page = page.replace('/*__TRACE_RENDERER__*/', () => scripts).replace('/*__TRACE_DATA__*/', () => encodedData);
+page = page.replace('</head>', () => '<style>'+toolColorCss()+toolFeedbackCss()+'</style><script>'+toolColorRuntime()+toolFeedbackRuntime()+'</script></head>');
 page = page.replace('</style>', () => read(source, 'branches.css') + '\n' + read(demo, 'preserved.css') + '\n' + read(demo, 'context-layer.css') + '\n' + read(demo, 'visual-unity.css') + '\n' + read(demo, 'step-detail.css') + '\n' + read(demo, 'file-layer.css') + '\n</style>');
 page = page.replace('role="img" aria-label="从左到右推进的执行路径"', 'role="group" aria-label="从左到右推进的执行路径"');
 const observer = "  let resizeTimer;new ResizeObserver(()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(view==='path')renderPath();else renderOverview()},80)}).observe($('graph-wrap'));";

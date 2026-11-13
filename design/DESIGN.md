@@ -42,6 +42,28 @@
 
 历史替换可能是正常整理。拼装时保留来源条的基色，用短暂红色描边及离场碎片定位旧片段；它是过渡提示，不把这轮标成执行失败。变化完成后恢复普通状态。
 
+## 工具名称与官方统计页
+
+操作计量与报错定位共用 [tool-feedback.mjs](../lib/tool-feedback.mjs)，详见[口径与性能](../docs/tool-feedback.md)。增加／删除沿用官方 `state-success-primary` / `state-error-primary`；失败写入的请求量用中性色标为计划。工具名称色与执行状态色保持独立。
+
+行动路径主线保留工具名称与状态，计量不单独堆在节点下方。下方步骤详情与枝条抽屉共用整行折叠项：行头排列箭头、工具名、操作对象、计量与耗时；下一行给出反馈摘要，整个摘要区均可展开。工具名不占固定宽列，展开内容不继承工具名缩进。参数与返回在宽面板并排、窄抽屉上下排列，代码与终端输出保留原始行列。PTC 与其他工具保持相同版式。
+
+行动路径和 Eval 共用 [tool-colors.mjs](../lib/tool-colors.mjs)，对齐 DSH `0.2.2-rc.2` 的 `StatsTable.tsx`（`TOOL_TONES`、`toneIndex`）与 `stats.module.css`。工具颜色按完整名称固定，未知名称沿用官方 `hash * 31`、模 9973 后取八色色板的算法，不按列表次序分配。
+
+| 工具 | 官方颜色角色 |
+| --- | --- |
+| read | business-primary 蓝色 |
+| grep、glob | success-primary 绿色 |
+| edit、write、apply_patch | warn-primary 橙色 |
+| pwsh、shell、bash | brand-primary 品牌蓝 |
+| web_fetch、web_search、subagent、subagent_fork | success-secondary 浅绿 |
+| ask_user_question | error-secondary 红色 |
+| todo_write、缺少名称 | caption 灰色 |
+
+颜色用于工具名称、单工具行动图标和按工具区分的图形。混合步骤逐个标出工具色；失败环、错误数量与诊断方向继续表达各自状态。工具色不是插件归属或执行结果，七类上下文来源色保持原定义。
+
+耗时构成沿官方统计页：首字等待为 business-primary 的 50% 色，解码为 business-primary，工具耗时为 warn-primary，其余为 caption。条形、图例与详情共用这些角色。存在宿主 `--dsw-alias-*` 时直接使用；独立页面回退到该版本官方浅／深色主题值。
+
 ## 基础样式
 
 - 页面白色 `#fff`，次级底 `#fafafa`，正文 `#171717`，次级文字 `#666`，分隔 `#e6e6e6`，网格 `#ededed`。

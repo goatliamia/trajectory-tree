@@ -84,6 +84,15 @@ assert.equal(agentExtent(apiBranch).hasEnd,false);
 const invalidTiming = structuredClone(fixture);
 invalidTiming.thread.turns[0].items[1].localTiming={start:20,end:10};
 assert.equal(adaptCodexThread(invalidTiming).sessions[0].turns[0].steps[0].endObserved,false,'Reversed timestamps are not a measured interval');
+const feedbackFixture=structuredClone(fixture);
+feedbackFixture.thread.turns[0].items=[
+  {...command('long', ['pwsh.exe','-Command','Write-Output ok\nif ('],1),aggregatedOutput:'x'.repeat(20000)+'\nParserError:\nLine |\n 2 | if (\n   |    ~\n   | Missing closing parenthesis.'},
+  {type:'fileChange',id:'pending',status:'inProgress',changes:[{path:'/a',diff:'--- a\n+++ b\n-old\n+new\n+extra'}]},
+];
+const feedbackCalls=adaptCodexThread(feedbackFixture).sessions[0].turns[0].steps.flatMap(s=>s.calls);
+assert.ok(feedbackCalls[0].measure.chars>20000,'Output is measured before the display excerpt');
+assert.equal(feedbackCalls[0].codeFrames[0].line,2);assert.ok(feedbackCalls[0].codeFrames[0].lines.some(r=>r.error));
+assert.equal(feedbackCalls[1].measure.added,2);assert.equal(feedbackCalls[1].measure.removed,1);assert.equal(feedbackCalls[1].measure.state,'pending');
 if (process.env.TRAJECTORY_CODEX_TEST_SNAPSHOT) {
   const snapshot = JSON.parse(readFileSync(process.env.TRAJECTORY_CODEX_TEST_SNAPSHOT, 'utf8'));
   const real = adaptCodexThread(snapshot, { rollout: readFileSync(snapshot.thread.path, 'utf8') });

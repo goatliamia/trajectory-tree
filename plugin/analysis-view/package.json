@@ -1,6 +1,6 @@
 {
   "name": "dsh-analysis-view",
-  "version": "0.10.147",
+  "version": "0.11.0",
   "private": true,
   "type": "module",
   "description": "Trajectory Tree, Eval and conversation search for DSH",
@@ -9,6 +9,7 @@
   "exports": {
     ".": "./lib/dsh-entry.js",
     "./client": "./lib/client.js",
+    "./skill-policy": "./lib/skill-policy.js",
     "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
@@ -17,6 +18,7 @@
     "lib/index.js",
     "lib/dsh-entry.js",
     "lib/settings.js",
+    "lib/skill-policy.js",
     "lib/conversation-search.js",
     "lib/cache-efficiency.js",
     "lib/eval-metrics.js",
