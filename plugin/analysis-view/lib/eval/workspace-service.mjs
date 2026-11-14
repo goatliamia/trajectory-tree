@@ -6,7 +6,9 @@ import {createRequire} from 'node:module';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {OverviewDiskCache} from './overview/persisted-cache.mjs';
 import {enrichFindingPowerShell} from './pwsh-evidence.mjs';
-import {collectCurrentPreset} from './workspace/runtime/lib/dsh-current-preset.mjs';
+import {editNativeConfig} from './native-config-edit.mjs';
+import {collectCurrentPreset,collectCurrentWorkspaces} from './workspace/runtime/lib/dsh-current-preset.mjs';
+import {mergeWorkspaceConfigurations,scopedUsageHistory} from './workspace/runtime/analyzers/workspace-presets.mjs';
 import {projectPresetContext} from './workspace/runtime/analyzers/preset-context.mjs';
 import {currentUsageStatistics} from './workspace/runtime/analyzers/preset-statistics.mjs';
 import {currentSkillUsage} from './workspace/runtime/analyzers/preset-skill-management.mjs';
@@ -38,8 +40,9 @@ export function overviewProjectionVersion(profile){
 }
 
 export class EvalWorkspaceService {
-  constructor(ctx,overview,{profile=ctx.get('profileContext'),cr,cacheRoot,collect=collectCurrentPreset}={}){
+  constructor(ctx,overview,{profile=ctx.get('profileContext'),cr,cacheRoot,collect=collectCurrentPreset,collectAll}={}){
     this.ctx=ctx;this.overview=overview;this.profile=profile;this.cr=cr;this.collect=collect;
+    this.collectAll=collectAll??(collect===collectCurrentPreset?collectCurrentWorkspaces:async options=>mergeWorkspaceConfigurations(await Promise.all(options.workspaces.map(async workspace=>({...await collect({...options,cwd:workspace.path}),workspace})))));
     this.controller=new AbortController();this.configs=new Map();this.managers=new Map();this.pending=new Map();this.lastViewed=Date.now();
     this.data={host:'dsh',latest:Date.now(),projects:[],sessions:[],models:[],categories:[],failures:[]};
     this.progress={loading:false,done:0,total:0,unread:0,revision:0};
@@ -47,14 +50,16 @@ export class EvalWorkspaceService {
       this.version=overviewProjectionVersion(profile);
       this.cacheRoot=cacheRoot??join(profile.home,'cache','trajectory-tree',hash(profile.dir).slice(0,16));
       overview.disk=new OverviewDiskCache(join(this.cacheRoot,'sessions'),this.version);
-      this.previews=new OverviewDiskCache(join(this.cacheRoot,'configuration'),hash(this.version+readFileSync(new URL('./workspace/manifest.json',import.meta.url),'utf8')),{maxEntries:4,maxBytes:16*1024*1024,maxEntryBytes:4*1024*1024});
+      this.previews=new OverviewDiskCache(join(this.cacheRoot,'configuration'),hash(this.version+readFileSync(new URL('./workspace/manifest.json',import.meta.url),'utf8')),{maxEntries:4,maxBytes:64*1024*1024,maxEntryBytes:16*1024*1024});
       overview.augment=(id,cwd,observation,signal,data)=>this.augment(id,cwd,observation,signal,data);
     }
   }
   workspaces(){return [...(this.ctx.get('workspaceRegistry')?.list?.()??[])].map(w=>({id:w.id,name:w.title||basename(w.path),path:w.path}));}
   workspace(id){
     const rows=this.workspaces();
-    const selected=id?rows.find(w=>w.id===id):rows.find(w=>w.path===this.profile?.cwd)??rows[0];
+    if(!rows.length)throw Error('请先在 DSH 中登记工作区');
+    if(!id||id==='all')return {id:'all',name:'全部工作区',path:'',scope:'all'};
+    const selected=rows.find(w=>w.id===id);
     if(!selected)throw Error('请先在 DSH 中登记工作区');return selected;
   }
   async runtime(){
@@ -70,7 +75,7 @@ export class EvalWorkspaceService {
     return {preset:projected?.session.preset??header.agentPreset??'unrecorded',title:projected?.session.title??id,
       presetUsage:projected?.session??null,findingCalls:await enrichFindingPowerShell(data.findingCalls,events,this.cr,signal)};
   }
-  history(){return {generatedAt:this.progress.capturedAt??null,sessions:this.data.sessions.map(s=>s.presetUsage).filter(Boolean)};}
+  history(workspace='all',period=7){return scopedUsageHistory(this.data,{workspace,period});}
   startHistory({refresh=false}={}){
     if(this.job)return this.job;
     if(this.progress.complete&&!refresh)return Promise.resolve();
@@ -106,7 +111,7 @@ export class EvalWorkspaceService {
       .finally(()=>{clearInterval(check);this.progress.loading=false;this.progress.revision++;this.job=null;});
     return this.job;
   }
-  async current(id,{refresh=false}={}){
+  async current(id,{refresh=false,period=7}={}){
     const workspace=this.workspace(id);if(!this.profile)throw Error('当前宿主没有提供配置位置');
     let cached=this.configs.get(workspace.id);
     if(!cached&&!refresh){
@@ -116,7 +121,8 @@ export class EvalWorkspaceService {
     if(!cached||refresh||Date.now()-cached.at>30000){
       let task=this.pending.get(workspace.id);
       if(!task){
-        task=this.collect({home:this.profile.home,profileRoot:this.profile.dir,cwd:workspace.path,anchor:this.profile.installAnchor,
+        const collector=workspace.id==='all'?this.collectAll:this.collect;
+        task=collector({home:this.profile.home,profileRoot:this.profile.dir,cwd:workspace.path,workspaces:this.workspaces(),anchor:this.profile.installAnchor,
           profile:this.profile.name,overlays:this.profile.overlays??[]}).then(async value=>{
             this.controller.signal.throwIfAborted();
             this.configs.delete(workspace.id);this.configs.set(workspace.id,{at:Date.now(),value});
@@ -128,24 +134,26 @@ export class EvalWorkspaceService {
         this.pending.set(workspace.id,task);
       }
       // Last-known configuration can paint immediately, visibly marked as being
-      // checked. Mutation previews always pass refresh:true and await the scan.
+      // checked. Mutation previews use their own fresh, targeted inventory.
       if(!cached||refresh)cached={at:Date.now(),value:await task};else task.catch(()=>{});
     }
-    const result=structuredClone(cached.value),history=this.history();
+    const result=structuredClone(cached.value),history=this.history(workspace.id,period);
     for(const preset of result.presets){
       Object.assign(preset.statistics,currentUsageStatistics(preset,history));
       // Configuration snapshots carry static analyses, while usage arrives in
       // later history batches. Refresh their event list and freshness together.
       Object.assign(preset.skillManagement,currentSkillUsage(preset));
     }
-    result.coverage.historyAsOf=history.generatedAt;result.workspaces=this.workspaces();result.workspace.id=workspace.id;
+    result.coverage.historyAsOf=history.generatedAt;result.workspaces=this.workspaces();result.workspace.id=workspace.id;result.range=history.range;
     result.progress={...this.progress,configurationChecking:this.pending.has(workspace.id)};return result;
   }
   async manager(id,origin){
-    const workspace=this.workspace(id);let manager=this.managers.get(workspace.id);
+    let manager=this.managers.get('profile');
     if(!manager){
-      const service=new DshManagement({home:this.profile.home,profileRoot:this.profile.dir,workspace:workspace.path,
-        storage:join(this.cacheRoot,'management'),readSnapshot:()=>this.current(workspace.id,{refresh:true}),api:await loadManagementSdk(this.profile.installAnchor),
+      const service=new DshManagement({home:this.profile.home,profileRoot:this.profile.dir,workspace:this.profile.cwd,
+        workspaces:()=>this.workspaces().map(row=>row.path),
+        storage:join(this.cacheRoot,'management'),api:await loadManagementSdk(this.profile.installAnchor),
+        editConfig:(change,source)=>editNativeConfig(this.ctx,change,source),
         reconcile:async receipt=>{
           const pluginManager=this.ctx.get('pluginManager');
           if(receipt.kind==='bundle'&&typeof pluginManager?.setBundleEnabled==='function')return pluginManager.setBundleEnabled(receipt.source,receipt.enabled);
@@ -155,8 +163,7 @@ export class EvalWorkspaceService {
           return {...result,application:result.restartReason||result.pending?.length?'restart-required':'applied'};
         }});
       const http=managementHttp(service,{origin:()=>manager.origin,onSaved:async()=>{this.configs.clear();}});
-      manager={service,http,origin};this.managers.set(workspace.id,manager);
-      while(this.managers.size>8)this.managers.delete(this.managers.keys().next().value);
+      manager={service,http,origin};this.managers.set('profile',manager);
     }
     manager.origin=origin;return manager;
   }
@@ -171,7 +178,7 @@ export class EvalWorkspaceService {
   async handle(req,res,url,{signal,origin}){
     const path=url.pathname.slice(WORKSPACE_PATH.length)||'/';
     const send=(status,data)=>{res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(data));};
-    const id=url.searchParams.get('workspace');
+    const id=url.searchParams.get('workspace'),period=url.searchParams.get('period')??7;
     if(['/data.json','/api/status','/api/eval-view'].includes(path))this.lastViewed=Date.now();
     if(path.startsWith('/api/management/')){
       if(this.profile?.overlays?.length)return send(409,{error:'启动参数包含临时配置覆盖，请在原配置中管理加载项。'});
@@ -191,7 +198,7 @@ export class EvalWorkspaceService {
     }
     if(req.method!=='GET')return send(405,{error:'method not allowed'});
     if(path==='/data.json'){
-      const data=await this.current(id);send(200,data);this.startHistory().catch(()=>{});return;
+      const data=await this.current(id,{period});send(200,data);this.startHistory().catch(()=>{});return;
     }
     if(path==='/api/status'){if(this.progress.paused)this.startHistory().catch(()=>{});const selected=this.workspace(id);return send(200,{...this.progress,configurationChecking:this.pending.has(selected.id)});}
     if(path==='/api/conversations'){
@@ -201,7 +208,9 @@ export class EvalWorkspaceService {
     if(path==='/api/overlap-examples')return send(200,skillOverlapExamples());
     if(path==='/api/eval-view'){
       this.startHistory().catch(()=>{});const options=Object.fromEntries(url.searchParams);
-      const result=(options.view==='diagnosis'?diagnosisView:windowView)(this.data,options);result.progress={...this.progress};return send(200,result);
+      if(id&&id!=='all')options.project=String(this.data.projects.findIndex(p=>p.id===id));
+      options.period=[1,7,30].includes(Number(period))?Number(period):7;
+      const result=(options.view==='diagnosis'?diagnosisView:windowView)({...this.data,latest:Date.now()},options);result.progress={...this.progress};return send(200,result);
     }
     // The allowlist is independent of the request path; no arbitrary file read.
     const allowed=new Set(readdirSync(uiRoot).filter(name=>/\.(?:css|js|mjs)$/.test(name)).map(name=>'/'+name));

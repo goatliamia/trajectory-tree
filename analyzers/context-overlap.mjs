@@ -17,6 +17,7 @@ export function contextTextItems(preset) {
       evidence:row.template||row.staticComplete===false||kind==='injections'?'static-fragment':'current-file',
       sourceLine:row.line||null,version:row.version||null,modifiedAt:row.modifiedAt||null,
       skillName:isSkill({kind})?row.name:null,reads:row.usage?.count??row.usage?.events?.length??null,
+      ...(row.workspaceIds?{workspaceIds:row.workspaceIds,workspaceNames:row.workspaceNames}:{}),
       text,contentHash:hash(text),...extra});
   };
   for(const row of preset.instructions||[]) {
@@ -26,7 +27,7 @@ export function contextTextItems(preset) {
   }
   for(const row of preset.system||[])add(row,'system','body',row.body);
   for(const row of preset.injections||[])add(row,'injections','body',row.body);
-  for(const row of preset.skills||[]){
+  for(const row of (preset.skills||[]).flatMap(skill=>skill.variants??[skill])){
     add(row,'catalog','description',row.description);
     if(row.whenToUse)add(row,'catalog','whenToUse',row.whenToUse);
     add(row,'skills','body',row.body);
@@ -108,6 +109,7 @@ export function compareContextItems(input,{minCharacters=64}={}) {
   for(const positions of index.values())for(let a=0;a<positions.length;a++)for(let b=a+1;b<positions.length;b++){
     const first=positions[a],second=positions[b];if(first.i===second.i)continue;
     const l=first.i<second.i?first:second,r=first.i<second.i?second:first,key=l.i+':'+r.i;
+    if(items[l.i].workspaceIds&&items[r.i].workspaceIds&&!items[l.i].workspaceIds.some(id=>items[r.i].workspaceIds.includes(id)))continue;
     if(isSkill(items[l.i])&&isSkill(items[r.i])&&items[l.i].origin==='official'&&items[r.i].origin==='official')continue;
     let candidate=candidates.get(key);if(!candidate){candidate={l:l.i,r:r.i,seeds:new Map()};candidates.set(key,candidate);}
     const diagonal=l.at-r.at;

@@ -16,11 +16,11 @@ export async function loadManagementSdk(anchor) {
   const local = createRequire(import.meta.url);
   anchor ??= local.resolve('@deepseek-ai/dsh/package.json');
   const sdk = createRequire(anchor), load = name => import(pathToFileURL(sdk.resolve(name)).href);
-  const [boot, manager, operations, atomic] = await Promise.all([
+  const [boot, manager, operations, atomic, include] = await Promise.all([
     load('@deepseek-ai/dsh-app-boot'), load('@deepseek-ai/dsh-plugin-manager'),
-    load('@deepseek-ai/dsh-plugin-manager/operations'), load('@deepseek-ai/dsh-atomic-write'),
+    load('@deepseek-ai/dsh-plugin-manager/operations'), load('@deepseek-ai/dsh-atomic-write'),load('@deepseek-ai/cordis-plugin-include'),
   ]);
-  return { anchor, sdk, boot, manager, operations, atomic, yaml:sdk('yaml'), parse:sdk('acorn').parse };
+  return { anchor, sdk, boot, manager, operations, atomic, include, nativeYaml:sdk('js-yaml'), yaml:sdk('yaml'), parse:sdk('acorn').parse };
 }
 
 export async function readComposition(api, {home, profileRoot}) {
@@ -99,7 +99,9 @@ export function yamlNode(document, value, yaml) {
   return node;
 }
 export function parsePatch(text, yaml) {
-  const doc=yaml.parseDocument(text??'[]\n',{customTags:[{tag:'tag:yaml.org,2002:js',resolve:value=>({__jsExpr:value})}]});
+  // Match dsh-config-editor: the editable YAML tree keeps expression scalars as
+  // strings. The official Include schema decodes them for Cordis composition.
+  const doc=yaml.parseDocument(text??'[]\n',{customTags:[{tag:'tag:yaml.org,2002:js',resolve:value=>value}]});
   if(doc.errors.length||!yaml.isSeq(doc.contents))throw new Error('DSH 配置无法安全编辑，请先修复配置文件');
   return doc;
 }
@@ -144,6 +146,7 @@ export function applyOwnedPatch(api,config,before,patch){
   const existing=document.contents.items.findLastIndex(n=>api.yaml.isMap(n)&&n.commentBefore?.includes(marker)&&n.get('id')===patch.id);
   const node=yamlNode(document,patch,api.yaml);node.commentBefore=marker;
   if(existing<0)document.add(node);else document.contents.items[existing]=node;
-  const after=String(document),entries=api.boot.composeEntries([...config.bundleLayers,parsePatch(after,api.yaml).toJS(),config.homePatches]);
+  const after=String(document),patches=api.nativeYaml.load(after,{schema:api.include.entryListSchema});
+  const entries=api.boot.composeEntries([...config.bundleLayers,patches,config.homePatches]);
   return {after,entries};
 }

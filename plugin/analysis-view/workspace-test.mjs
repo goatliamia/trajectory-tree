@@ -19,12 +19,12 @@ test('history batches refresh Skill charts and freshness without rebuilding conf
     p.skillManagement=buildSkillManagement(p,{capturedAt:now-10000});return p;
   };
   const configuration={presets:[preset('standard'),preset('ptc')],workspace:{path:root},coverage:{}};
-  const entry=(id,mode,time)=>({id,presetUsage:{id,preset:mode,createdAt:firstRead-100,lastAt:time,title:id,
+  const entry=(id,mode,time)=>({id,project:0,turns:[{no:1,at:time}],presetUsage:{id,preset:mode,createdAt:firstRead-100,lastAt:time,title:id,
     skills:[{name:'guide',loads:1,catalogs:1,loadSeq:8,loadEvents:[{seq:8,time,kind:'skill'}]}],tools:[]}});
   let rows=[entry('first','standard',firstRead),entry('other','ptc',now)],collects=0;
   let resume,firstBatch;const gate=new Promise(resolve=>{resume=resolve;}),published=new Promise(resolve=>{firstBatch=resolve;});
   const overview={scope:()=>({sessions:rows.map(row=>({id:row.id,cwd:root}))}),async *stream(){
-    yield {type:'start',projects:[],latest:now,models:[],categories:[]};
+    yield {type:'start',projects:[{id:'work'}],latest:now,models:[],categories:[]};
     for(const [index,session]of rows.entries()){
       yield {type:'session',session,done:index+1,unread:0,models:[]};
       if(index===0){firstBatch();await gate;}

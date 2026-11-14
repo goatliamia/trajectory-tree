@@ -22,6 +22,14 @@ export function flattenConfiguredRows(entries, scope, environment, inherited = '
   });
 }
 
+export function configuredPresets(entries,environment={}) {
+  return entries.flatMap(row=>{
+    if(configuredEnablement(row.disabled,environment)==='disabled')return [];
+    if(row.name==='@deepseek-ai/dsh-agent-preset')return [row];
+    return row.group&&Array.isArray(row.config)?configuredPresets(row.config,environment):[];
+  }).sort((a,b)=>(a.config.order??0)-(b.config.order??0));
+}
+
 export function winningSkillCandidates(candidates, {includeDisabled=false}={}) {
   const winners = new Map();
   for (const candidate of [...candidates].sort((a,b) => a.rank - b.rank)) if (!winners.has(candidate.name)) winners.set(candidate.name, candidate);

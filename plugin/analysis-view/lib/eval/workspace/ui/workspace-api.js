@@ -3,7 +3,8 @@ export function apiUrl(path){
   const base=window.__trajectoryWorkspace?.base;
   if(!base)return path;
   const url=new URL(base+path,location.origin),workspace=new URL(location.href).searchParams.get('workspace');
-  if(workspace)url.searchParams.set('workspace',workspace);return url.href;
+  if(workspace)url.searchParams.set('workspace',workspace);
+  if(!url.searchParams.has('period'))url.searchParams.set('period',new URL(location.href).searchParams.get('period')??'7');return url.href;
 }
 export const apiFetch=(path,options)=>fetch(apiUrl(path),options);
 

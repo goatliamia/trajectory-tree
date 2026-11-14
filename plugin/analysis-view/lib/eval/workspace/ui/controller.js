@@ -14,7 +14,10 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
   state.preset=query.get('preset');state.category='all';state.origin=null;state.bundle=null;
   const tabs={home:'首页',skills:'Skill 管理',diagnosis:'诊断',window:'上下文窗口'};
   state.tab=Object.hasOwn(tabs,query.get('tab'))?query.get('tab'):'home';
-  const ui={originFilter:'all',skillPeriod:30,skillQuery:'',skillOrigin:'all',skillSort:'usage',skillUnused:false,skillRange:null,skillKind:'all',skillActivity:'all',skillChanged:false,overlapExample:'trigger'};
+  const period=[1,7,30].includes(Number(query.get('period')))?Number(query.get('period')):7;
+  const ui={originFilter:'all',skillPeriod:period,skillQuery:'',skillOrigin:'all',skillSort:'usage',skillUnused:false,skillRange:null,skillKind:'all',skillActivity:'all',skillChanged:false,overlapExample:'trigger'};
+  $('time-range').value=String(period);
+  $('time-range').onchange=()=>{const url=new URL(location.href);url.searchParams.set('period',$('time-range').value);location.assign(url);};
   const detailUi={skillRange:null,skillKind:'all'};
   state.diagnosisScope=query.get('diagnosis_scope')==='context'?'context':'records';
   $('retained-panel').innerHTML='<nav class="diagnosis-scope" aria-label="诊断范围"><button type="button" data-diagnosis-scope="records">执行记录</button><button type="button" data-diagnosis-scope="context">加载项</button></nav><div id="eval-analysis-panel"></div><div id="context-analysis-panel" hidden></div>';
@@ -107,7 +110,8 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
   }
   function openSkillView(html,label='Skill 管理'){$('skill-dialog-label').textContent=label==='全部预设'?'Skill / 全部预设':current().name+' / '+label;$('skill-detail').innerHTML=html;if(!$('skill-dialog').open)$('skill-dialog').showModal();$('skill-dialog').scrollTop=0;}
   function detailSkill(name){return [...current().skills,...current().disabledSkills??[]].find(s=>s.name===name)??getData().presets.flatMap(p=>[...p.skills,...p.disabledSkills??[]]).find(s=>s.name===name);}
-  function showSkill(name){const skill=detailSkill(name);if(skill)openSkillView(renderSkillDetail(current(),skill,{...ui,...detailUi},documentBody,getData()),'全部预设');}
+  function showSkill(name){if(detailUi.name!==name){detailUi.name=name;detailUi.skillVariant=0;}const skill=detailSkill(name);if(skill)openSkillView(renderSkillDetail(current(),skill,{...ui,...detailUi},documentBody,getData()),'全部预设');}
+  $('skill-detail').addEventListener('change',event=>{if(event.target.matches('[data-skill-variant]')){detailUi.skillVariant=Number(event.target.value);showSkill(event.target.dataset.skillVariant);}});
   function handleSkillAction(event){const button=event.target.closest('[data-skill-action]');if(!button)return;const a=button.dataset,p=current();
     if(['show-overlap-example','overlap-example'].includes(a.skillAction)){ui.overlapExample=a.example;openSkillView(renderOverlapExamples(getData().demoExamples,ui.overlapExample),'重合分析示例');return;}
     if(a.skillAction==='activity'){ui.skillActivity=ui.skillActivity===a.value?'all':a.value;ui.skillChanged=false;ui.skillUnused=false;renderSkillPanel();return;}
@@ -195,9 +199,9 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     if(!data.presets.length)throw Error('当前工作区没有可读取的预设');
     renderOverview();
     if(nativeWorkspace()){
-      const location=$('workspace-name');location.innerHTML='';const select=document.createElement('select');select.setAttribute('aria-label','选择工作区');
+      const select=$('workspace-scope');select.innerHTML='<option value="all">全部工作区</option>';
       for(const workspace of data.workspaces??[]){const option=document.createElement('option');option.value=workspace.id;option.textContent=workspace.name;option.selected=workspace.id===data.workspace.id;select.append(option);}
-      select.onchange=()=>{const url=new URL(window.location.href);url.searchParams.set('workspace',select.value);window.location.assign(url);};location.append(select);
+      select.value=data.workspace.id??'all';select.onchange=()=>{const url=new URL(window.location.href);url.searchParams.set('workspace',select.value);window.location.assign(url);};
       showProgress(data.progress);if(!pollStarted){pollStarted=true;poll();}
     }
   }

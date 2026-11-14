@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": "analyzers/context-overlap.mjs",
-      "sha256": "d502fa8dd5f415b400a7c245de8bbb996d1a3723783169ced29d269c100326bf"
+      "sha256": "b096db2aa0ff33c1dab8f818a0d85632c691561a464c4ec6217b8d89909308a6"
     },
     {
       "path": "analyzers/eval-insights.mjs",
@@ -15,15 +15,15 @@
     },
     {
       "path": "analyzers/preset-current.mjs",
-      "sha256": "a3dcb0e3a804073923002ec22b5b0f5b34e65b094055476a81a157b7c00aae9e"
+      "sha256": "fceb3d6e64049753f77785a2e1d7dc7a523e6b3b288197acdd6348fc44f1ec3d"
     },
     {
       "path": "analyzers/preset-skill-management.mjs",
-      "sha256": "c65f07d9d2028bad62a58d524bc4d5e6d510963fa2877339eab4fafae39c6481"
+      "sha256": "1d9364c7e67db83d5ca0810eb46d9b2e66b8cc67e3f1bfc2b75756c6ce4bf24f"
     },
     {
       "path": "analyzers/preset-statistics.mjs",
-      "sha256": "c8dd60825a3c84fa116cc1d8e449adf29f7b24ce98cbe41fbfaf4cf81d770833"
+      "sha256": "2c20849aa3cf111bab11818e1884ab5b462ac294e36691b15842431e8acba80d"
     },
     {
       "path": "analyzers/skill-description-candidates.mjs",
@@ -38,12 +38,20 @@
       "sha256": "85025633f7e742e5a89444bef34fd7a5b55ba12ee0e515ebf55a171568c82593"
     },
     {
+      "path": "analyzers/workspace-presets.mjs",
+      "sha256": "6899df06fcb60467f3ffbcdd331b256d8990657861d4fd0c5afd008bd6848ab7"
+    },
+    {
       "path": "lib/context-diagnosis.mjs",
       "sha256": "daeaf83d655e323a0d8043acecb3b18deca9a0641257244fbec4fe941ccb482e"
     },
     {
       "path": "lib/dsh-current-preset.mjs",
-      "sha256": "704e3d3c7843e285922a93376960aeb47c38c0b671309b35492fe7106dd3304a"
+      "sha256": "35fb9aafa61accb3883cd5a78a03a98019c89df53d5f1e950e4eb2fa78dd6ecd"
+    },
+    {
+      "path": "lib/dsh-skill-catalog.mjs",
+      "sha256": "7e1696d6b774c49e10bc87c4ea6a075b68d20e5ef18e5d224747cddab318cab4"
     },
     {
       "path": "lib/lifecycle-observation.mjs",
@@ -67,7 +75,7 @@
     },
     {
       "path": "scripts/dsh-management-config.mjs",
-      "sha256": "91091fba098169e47f3616696a6a30b94979720f7b1000352b2dea2fd584739a"
+      "sha256": "4f10ef2aba294114655c8263f9c6f11e5afc735511a35f9ccfb1df46a3a43a65"
     },
     {
       "path": "scripts/dsh-management-http.mjs",
@@ -75,7 +83,7 @@
     },
     {
       "path": "scripts/dsh-management.mjs",
-      "sha256": "739ae4d0b3bba779f19aecc106d89515cf963dfae45aac3a7af44193ec2a6559"
+      "sha256": "10ed509862a565cc86244a5dd67a34e3230f1d0b8d30a77f72bbc379757b5671"
     },
     {
       "path": "scripts/preset-source-inventory.mjs",

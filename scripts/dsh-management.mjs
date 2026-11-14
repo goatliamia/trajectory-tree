@@ -7,6 +7,7 @@ import { configurationReceipt } from '../lib/lifecycle-observation.mjs';
 import { loadManagementSdk, readComposition, configurationTargets, hash, textFile, toolPatch, toolEnabledIn, presetSkillPatch, applyOwnedPatch, allEntries } from './dsh-management-config.mjs';
 
 import { disabledSkillNames, POLICY_MODULE } from '../plugin/analysis-view/lib/skill-policy.js';
+import { readManagementSkills } from '../lib/dsh-skill-catalog.mjs';
 
 const publicTarget=t=>Object.fromEntries(Object.entries(t).filter(([key])=>!key.startsWith('_')));
 
@@ -17,15 +18,17 @@ async function resolvedDestination(file){
 
 const cacheNotice='工具声明变化会破坏已加载相关工具的会话的前缀缓存复用。建议确认相关对话不再使用这些工具后再停用。';
 export class DshManagement {
-  constructor({home=join(homedir(),'.dsh'),profileRoot=join(home,'profiles','web'),workspace=process.cwd(),storage=resolve('.dsh/preset-context-demo/management'),readSnapshot,api,clock=Date.now,reconcile}={}){
-    Object.assign(this,{home:resolve(home),profileRoot:resolve(profileRoot),workspace:resolve(workspace),storage:resolve(storage),readSnapshot,clock,reconcile});
-    this.api=api?Promise.resolve(api):loadManagementSdk();this.plans=new Map();this.queue=Promise.resolve();
+  constructor({home=join(homedir(),'.dsh'),profileRoot=join(home,'profiles','web'),workspace=process.cwd(),workspaces,storage=resolve('.dsh/preset-context-demo/management'),readSnapshot,api,clock=Date.now,reconcile,editConfig}={}){
+    Object.assign(this,{home:resolve(home),profileRoot:resolve(profileRoot),workspace:resolve(workspace),workspaces,storage:resolve(storage),readSnapshot,clock,reconcile,editConfig});
+    this.api=api?Promise.resolve(api):loadManagementSdk();this.plans=new Map();this.queue=Promise.resolve();this.skillNames=new Map();
+    this.readSnapshot??=async({config,preset,name})=>readManagementSkills({entries:config.entries,sdk:(await this.api).sdk,home:this.home,
+      cwd:typeof this.workspaces==='function'?this.workspaces():this.workspaces??this.workspace,preset,name});
   }
   async state(){return JSON.parse(await textFile(join(this.storage,'state.json'))??'{"skills":{},"operations":[]}');}
-  async inventory(preset){
-    const api=await this.api, config=await readComposition(api,this),snapshot=await this.readSnapshot(),state=await this.state();
+  async inventory(preset,{skillOnly=false,name}={}){
+    const api=await this.api, config=await readComposition(api,this),snapshot=await this.readSnapshot({config,preset,name}),state=await this.state();
     const current=snapshot.presets.find(p=>p.id===preset);if(!current)throw new Error('预设不存在');
-    const targets=await configurationTargets(api,config,this.profileRoot,preset);
+    const targets=skillOnly?[]:await configurationTargets(api,config,this.profileRoot,preset);
     targets.push(...await this.skillTargets(current,config,api));
     return {api,config,state,targets};
   }
@@ -40,15 +43,17 @@ export class DshManagement {
       }catch{reason='Skill 文件已变化，请刷新';}
       if(nativeInvocation?.modelInvocable===false&&nativeInvocation?.userInvocable===false)reason='此 Skill 的源文件已停用，需先恢复文件调用策略';
       if(!available)reason='当前 DSH 尚未安装轨迹树 Skill 策略组件';
-      targets.push({id:hash(['skill',this.workspace,current.id,skill.name]),kind:'skill',name:skill.name,
+      targets.push({id:hash(['skill',this.profileRoot,current.id,skill.name]),kind:'skill',name:skill.name,
         enabled:!blocked.has(skill.name)&&(nativeInvocation?.modelInvocable!==false||nativeInvocation?.userInvocable!==false),
         source:skill.path,origin:skill.provenance?.origin??(skill.package?'official':'personal'),scope:current.name+' 预设',preset:current.id,
         affected:[skill.name],method:'预设 Skill 策略',reason,_skill:skill,_sourceText:sourceText});
     }
+    for(const target of targets)this.skillNames.set(target.id,target.name);
+    while(this.skillNames.size>1024)this.skillNames.delete(this.skillNames.keys().next().value);
     return targets;
   }
   async skillScopes(name){
-    const api=await this.api,config=await readComposition(api,this),snapshot=await this.readSnapshot();
+    const api=await this.api,config=await readComposition(api,this),snapshot=await this.readSnapshot({config,name});
     const rows=[];
     for(const preset of snapshot.presets){
       const target=(await this.skillTargets({...preset,skills:preset.skills.filter(s=>s.name===name),disabledSkills:(preset.disabledSkills??[]).filter(s=>s.name===name)},config,api))[0];
@@ -59,7 +64,9 @@ export class DshManagement {
   async list(preset){const {targets,state}=await this.inventory(preset);return {targets:targets.map(publicTarget),recent:state.operations.slice(-5).reverse(),runtime:'not-connected'};}
   async preview({preset,id,enabled}){
     if(typeof enabled!=='boolean')throw new Error('缺少目标状态');
-    const context=await this.inventory(preset),target=context.targets.find(t=>t.id===id);
+    // The hint only selects which inventory to read. Identity and source are
+    // still resolved from fresh configuration and provider results below.
+    const context=await this.inventory(preset,{skillOnly:this.skillNames.has(id),name:this.skillNames.get(id)}),target=context.targets.find(t=>t.id===id);
     if(!target)throw new Error('当前配置中没有此项，请刷新');
     if(target.reason)throw new Error(target.reason);
     if(target.enabled===enabled)throw new Error('此项已经处于所选状态，请刷新');
@@ -77,8 +84,9 @@ export class DshManagement {
       change={type:'bundle',file:config.manifestFile,before:await textFile(config.manifestFile),bundles:enabled?[...previous,target.source]:previous.filter(n=>n!==target.source)};
     }else{
       const patch=target.kind==='tool'?toolPatch(api,config,target,enabled):presetSkillPatch(config,preset,target._skill,enabled);
-      const before=await textFile(config.patchFile),applied=applyOwnedPatch(api,config,before,patch);
-      change={type:'patch',file:config.patchFile,before,after:applied.after};
+      const before=await textFile(config.patchFile),native=Boolean(this.editConfig&&Object.hasOwn(patch,'config'));
+      const applied=native?{entries:api.boot.composeEntries([...config.bundleLayers,before===null?[]:api.boot.loadOverlayPatches('dsh',config.patchFile),[patch],config.homePatches])}:applyOwnedPatch(api,config,before,patch);
+      change=native?{type:'native-config',file:config.patchFile,before,patch,currentConfig:allEntries(config.entries).find(row=>row.id===patch.id)?.config??{}}:{type:'patch',file:config.patchFile,before,after:applied.after};
       if(target.kind==='tool'&&toolEnabledIn(applied.entries,target)!==enabled)throw new Error('更高优先级配置覆盖了此开关，请在原配置中修改');
       if(target.kind==='skill'){
         const declaration=allEntries(applied.entries).find(r=>r.config?.id===preset&&r.name==='@deepseek-ai/dsh-agent-preset');
@@ -97,7 +105,7 @@ export class DshManagement {
   }
   commit(token){
     const task=this.queue.catch(()=>{}).then(()=>this.applyPlan(token)).then(async receipt=>{
-      if(receipt.configurationVerified&&this.reconcile){
+      if(receipt.configurationVerified&&receipt.runtime!=='applied'&&this.reconcile){
         try{
           const result=await this.reconcile(receipt);receipt.runtime=result.application;receipt.runtimeResult=result;
           receipt.message=result.application==='applied'?'配置已应用':result.application==='restart-required'?'配置已保存，重启 DSH 后生效':'配置已保存，运行应用未完成';
@@ -113,8 +121,8 @@ export class DshManagement {
     const plan=this.plans.get(token);this.plans.delete(token);
     if(!plan||plan.expires<this.clock())throw new Error('操作确认已失效，请重新打开');
     const api=await this.api;
-    return api.atomic.withFileLock(join(this.profileRoot,'package.json'),async()=>{
-      const context=await this.inventory(plan.preset),target=context.targets.find(t=>t.id===plan.id);
+    const apply=async()=>{
+      const context=await this.inventory(plan.preset,{skillOnly:plan.target.kind==='skill',name:plan.target.kind==='skill'?plan.target.name:undefined}),target=context.targets.find(t=>t.id===plan.id);
       if(!target||target.reason||context.config.fingerprint!==plan.fingerprint||hash(context.state)!==plan.stateHash)throw new Error('配置已变化，请刷新并重新确认');
       const change=plan.change;
       if(await textFile(change.file)!==change.before||await resolvedDestination(change.file)!==plan.realFile)throw new Error('文件已变化，请刷新并重新确认');
@@ -125,25 +133,31 @@ export class DshManagement {
       const receipt={id:operationId,time:this.clock(),kind:target.kind,name:target.name,source:target.source,preset:plan.preset,enabled:plan.enabled,
         status:'prepared',file:change.file,runtime:'not-observed',cleanup:'unknown'};
       await api.atomic.writeFileAtomic(backup,JSON.stringify({receipt,change,target:publicTarget(target)},null,2),{mode:0o600});
-      if(change.type==='bundle'){
+      if(change.type==='native-config'){
+        await this.editConfig(change,target.kind==='skill'?{path:target.source,text:target._sourceText}:null);
+        receipt.runtime='applied';
+      }else if(change.type==='bundle'){
         const manifest=context.config.manifest;manifest.dsh={...manifest.dsh,profile:{...manifest.dsh?.profile,bundles:change.bundles}};
         await api.operations.saveManifest(this.profileRoot,manifest);
       }else{await mkdir(dirname(change.file),{recursive:true});await api.atomic.writeFileAtomic(change.file,change.after,{mode:0o600});}
       const actual=await textFile(change.file);
-      let verified=change.type==='bundle'?JSON.stringify(JSON.parse(actual).dsh.profile.bundles)===JSON.stringify(change.bundles):actual===change.after;
+      let verified=change.type==='native-config'||(change.type==='bundle'?JSON.stringify(JSON.parse(actual).dsh.profile.bundles)===JSON.stringify(change.bundles):actual===change.after);
+      if(change.type==='native-config')change.after=actual;
       if(target.kind==='tool')verified&&=toolEnabledIn((await readComposition(api,this)).entries,target)===plan.enabled;
       if(target.kind==='skill'){
         const current=allEntries((await readComposition(api,this)).entries).find(r=>r.name==='@deepseek-ai/dsh-agent-preset'&&r.config?.id===plan.preset);
         verified&&=Boolean(current)&&disabledSkillNames(current.config.plugins).has(target.name)!==plan.enabled;
       }
       receipt.status=verified?'configuration-saved':'verification-failed';Object.assign(receipt,configurationReceipt(verified));
+      if(change.type==='native-config'&&verified)receipt.runtime='applied';
       const state=context.state;
       state.operations.push(receipt);state.operations=state.operations.slice(-80);
       try { await api.atomic.writeFileAtomic(join(this.storage,'state.json'),JSON.stringify(state),{mode:0o600}); }
       catch { receipt.recordWarning='配置已写入，但操作记录保存失败；备份仍在本地，请先刷新配置。'; }
       try{await api.atomic.writeFileAtomic(backup,JSON.stringify({receipt,change,target:publicTarget(target)},null,2),{mode:0o600});}
       catch{receipt.recordWarning='配置已写入，但最终收据保存失败；保存前的备份仍在本地，请先刷新配置。';}
-      return {...receipt,message:verified?'配置已保存，运行状态待核对':'配置写入后核对未通过，请查看原配置',backup};
-    },{waitMs:3000});
+      return {...receipt,message:verified?(receipt.runtime==='applied'?'配置已应用':'配置已保存，运行状态待核对'):'配置写入后核对未通过，请查看原配置',backup};
+    };
+    return plan.change.type==='native-config'?apply():api.atomic.withFileLock(join(this.profileRoot,'package.json'),apply,{waitMs:3000});
   }
 }

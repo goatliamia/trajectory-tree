@@ -27,3 +27,9 @@ test('visible usage follows current records even when the cached analysis is emp
   assert.equal(skillWindow(preset).events.length,0,'an empty refreshed result must not fall back to stale events');
   assert.equal(skillModifiedAfterRead(skill),false);
 });
+
+test('today shows hourly readings rather than a single daily point',()=>{
+  const now=Date.parse('2026-11-14T12:30:00+08:00'),preset={statistics:{usage:{asOf:now,period:1}},skills:[{name:'guide',usage:{events:[{time:now-1000,kind:'skill'}]}}]};
+  const result=skillWindow(preset);
+  assert.equal(result.bins.length,24);assert.equal(result.bins[12].total,1);assert.equal(result.hourly,true);
+});

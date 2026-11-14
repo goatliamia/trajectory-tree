@@ -37,8 +37,15 @@ export function skillToolRepetition(skills,tools){
 export function currentSkillUsage(preset){
   const skills=[...preset.skills,...preset.disabledSkills??[]];
   for(const skill of skills){
+    const pathKey=path=>String(path??'').replaceAll('\\','/').toLowerCase();
+    for(const variant of skill.variants??[]){
+      const events=(skill.usage?.events??[]).filter(event=>event.path?pathKey(event.path)===pathKey(variant.path):skill.variants.length===1);
+      const lastLoadedAt=events.reduce((latest,event)=>event.time==null?latest:Math.max(latest??0,event.time),null);
+      variant.freshness={modifiedAt:variant.modifiedAt,lastLoadedAt,
+        modifiedAfterLastRead:lastLoadedAt!=null&&variant.modifiedAt>lastLoadedAt,basis:'file-time-and-source-path-records'};
+    }
     skill.freshness={modifiedAt:skill.modifiedAt,lastLoadedAt:skill.usage?.lastLoadedAt??null,
-      modifiedAfterLastRead:skill.usage?.lastLoadedAt!=null&&skill.modifiedAt>skill.usage.lastLoadedAt,
+      modifiedAfterLastRead:skill.variants?.length?skill.variants.some(v=>v.freshness.modifiedAfterLastRead):skill.usage?.lastLoadedAt!=null&&skill.modifiedAt>skill.usage.lastLoadedAt,
       basis:'file-time-and-same-name-records'};
   }
   return {events:skills.flatMap(skill=>(skill.usage?.events??[]).map(event=>({...event,name:skill.name}))).sort((a,b)=>(a.time??0)-(b.time??0))};

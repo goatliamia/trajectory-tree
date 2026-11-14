@@ -1,7 +1,7 @@
 const sum=rows=>rows.reduce((total,value)=>total+value,0);
 const measured=row=>Number.isFinite(row.measuredTokens)&&row.measuredTokens>=0;
 
-export function attachCurrentUsage(preset, history, limit=20) {
+export function attachCurrentUsage(preset, history, limit=history?.limit??20) {
   const sessions=(history?.sessions??[]).filter(row=>row.preset===preset.id).sort((a,b)=>b.lastAt-a.lastAt).slice(0,limit);
   for(const kind of ['tools','skills'])for(const current of [...preset[kind],...(kind==='skills'?preset.disabledSkills??[]:[])]){
     const samples=sessions.flatMap(session=>{
@@ -20,7 +20,7 @@ export function attachCurrentUsage(preset, history, limit=20) {
       current.usage.untimed=Math.max(0,count-events.filter(row=>row.time!=null).length);
     }
   }
-  return {sessions:sessions.length,limit,asOf:history?.generatedAt??null,
+  return {sessions:sessions.length,limit,asOf:history?.generatedAt??null,period:history?.range?.period??null,
     from:sessions.length?Math.min(...sessions.map(row=>row.createdAt)):null,to:sessions.length?Math.max(...sessions.map(row=>row.lastAt)):null};
 }
 
@@ -38,6 +38,10 @@ export function summarizeCurrentPreset(preset, history, {estimate,estimateTool,p
   for(const row of preset.instructions)row.measuredTokens=row.tokens;
   // Only literal context registrations can be measured without materializing a live request.
   for(const row of preset.injections)row.measuredTokens=typeof row.staticText==='string'?estimate(row.staticText):null;
+  return summarizePresetInventory(preset,history);
+}
+
+export function summarizePresetInventory(preset,history){
   const categories=[
     ['system','系统提示'],['instructions','AGENTS.md'],['tools','工具定义'],['skills','Skill 目录'],['injections','环境注入'],
   ].map(([id,label])=>{const rows=preset[id];return {id,label,items:rows.length,measured:rows.filter(measured).length,pending:rows.filter(row=>!measured(row)).length,

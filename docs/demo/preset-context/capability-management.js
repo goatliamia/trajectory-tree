@@ -66,7 +66,7 @@ export function installCapabilityManagement({current,getData,onSaved,openSkill})
       const result=await request('commit',{token:plan.token});if(!result.configurationVerified)throw Error('配置核对未通过，请刷新查看');
       updateState(block,plan.enabled);
       panel.innerHTML=`<span class="capability-saved">${result.runtime==='applied'?'配置已应用':result.runtime==='restart-required'?'已保存 · 重启 DSH 后生效':'已保存 · 等待核对运行状态'}${plan.target.kind==='skill'&&result.runtime==='applied'?' · 新会话采用更新后的预设':''}</span>${result.recordWarning?'<p class="capability-error">'+esc(result.recordWarning)+'</p>':''}`;
-      try{await onSaved();}catch{panel.insertAdjacentHTML('beforeend','<span>统计暂未刷新</span>');}
+      Promise.resolve().then(()=>onSaved()).catch(()=>{if(panel.isConnected)panel.insertAdjacentHTML('beforeend','<span>统计暂未刷新</span>');});
     }catch(error){panel.innerHTML=`<p class="capability-error" role="alert">${esc(error.message)}</p>`;}
     finally{pending.delete(block);block.querySelectorAll('button').forEach(b=>b.disabled=false);}
   }

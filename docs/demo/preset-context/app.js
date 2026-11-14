@@ -4,7 +4,6 @@ const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const tokens=value=>value==null?'—':value>=1000?(value/1000).toFixed(1)+'k':Math.round(value).toLocaleString('zh-CN');
 const date=value=>new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(value);
-const descriptions={standard:'常规工具与工作指令',ptc:'通过代码执行调用工具',minimal:'精简提示与基础能力',cordis:'工作工具、插件与配置能力'};
 const categoryInfo={
   system:{label:'系统提示',color:'system',title:'系统提示',description:'预设引导与当前插件注册的提示片段。'},
   instructions:{label:'AGENTS.md',color:'inject',title:'工作指令',description:'按当前工作目录读取的指令文件。'},

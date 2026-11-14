@@ -35,6 +35,7 @@ jobs:
           @deepseek-ai/dsh-token-meter@0.2.2-rc.3
           @deepseek-ai/dsh-tools@0.2.2-rc.3
           @deepseek-ai/dsh-experimental-client-ui-stats@0.2.2-rc.3
+          @deepseek-ai/dsh-config-editor@0.2.2-rc.3
       - name: Check shared assets and host skills are synchronized
         run: |
           node scripts/sync-view-assets.mjs --check
@@ -49,6 +50,8 @@ jobs:
           plugin/analysis-view/overview-cache-test.mjs
           plugin/analysis-view/workspace-test.mjs
           analyzers/skill-window-test.mjs
+          analyzers/workspace-presets-test.mjs
+          scripts/dsh-native-config-test.mjs
           lib/context-diagnosis-test.mjs
           analyzers/context-overlap-test.mjs
           plugin/trajectory-tools/inspect-test.mjs

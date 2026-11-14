@@ -9,7 +9,7 @@ const date=ts=>new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'
 const time=value=>value==null?'—':value>=60000?n(value/60000)+' 分':value>=1000?n(value/1000)+' 秒':n(value)+' ms';
 const metricValue=(value,unit)=>value==null?'—':unit==='ms'?time(value):n(value)+(unit==='%'?'%':'');
 const select=(key,label,values,value)=>`<label class="analysis-select"><span>${label}</span><select data-eval-control="${key}" aria-label="${label}">${values.map(([v,text])=>`<option value="${e(v)}" ${String(v)===String(value)?'selected':''}>${e(text)}</option>`).join('')}</select></label>`;
-function filters(data,state){return `<div class="analysis-filters">${select('period','时间',[[30,'近 30 天'],[90,'近 90 天'],['all','全部时间']],state.period)}${select('project','项目',[['all','全部项目'],...data.scope.projects.map(p=>[p.index,p.name])],state.project)}<span>${data.scope.sessions} 个会话 · ${n(data.scope.turns)} 轮</span><button data-eval-action="method">统计口径 ↗</button></div>`;}
+function filters(data,state){return `<div class="analysis-filters"><span>${data.scope.sessions} 个会话 · ${n(data.scope.turns)} 轮</span><button data-eval-action="method">统计口径 ↗</button></div>`;}
 const familyColors=['#f59a36','#3485ed','#9561dd','#1aaa91','#e879a9','#b7b7b7','#5b9fe8','#b7b7b7','#d49b00','#c442a7','#3ab4a4','#8053e3'];
 function feedbackDistribution(data){
   if(data.mode==='wait'){const count=data.groups.reduce((n,g)=>n+g.count,0),duration=data.groups.reduce((n,g)=>n+g.durationMs,0),returned=data.groups.reduce((n,g)=>n+g.entries.filter(r=>r.status==='returned').length,0);return `<section class="feedback-distribution"><div class="feedback-distribution-heading"><div><strong>${count}</strong><span>次长调用</span><small>调用时长合计 ${time(duration)}</small></div><span><i></i>${returned} 次非报错返回</span></div><div class="feedback-spectrum">${data.groups.map((g,index)=>`<button data-eval-action="group" data-index="${index}" style="flex:${g.count};--family:${toolColor(g.tool)}" aria-label="${e(g.tool)}，${g.count} 次长调用"></button>`).join('')}</div><div class="feedback-spectrum-key">${data.groups.map((g,index)=>`<button data-eval-action="group" data-index="${index}"><i style="background:${toolColor(g.tool)}"></i>${toolNameHtml(g.tool)} <b>${g.count}</b></button>`).join('')}</div></section>`;}
@@ -44,7 +44,8 @@ function recordChain(r){
 }
 export function installEvalViews(container){
   const requestedLayout=new URLSearchParams(location.search).get('diag_layout');
-  const common={period:30,project:'all'},states={diagnosis:{mode:'review',layout:['matrix','bars','heatmap'].includes(requestedLayout)?requestedLayout:'matrix',family:'all',direction:'all',expanded:false},window:{mode:'tool',metric:'errors',model:'all',tool:'all'}};
+  const requestedPeriod=Number(new URL(location.href).searchParams.get('period'));
+  const common={period:[1,7,30].includes(requestedPeriod)?requestedPeriod:7,project:'all'},states={diagnosis:{mode:'review',layout:['matrix','bars','heatmap'].includes(requestedLayout)?requestedLayout:'matrix',family:'all',direction:'all',expanded:false},window:{mode:'tool',metric:'errors',model:'all',tool:'all'}};
   const dialog=document.getElementById('eval-dialog'),body=document.getElementById('eval-dialog-body');let preset,view,data,controller,reviewSelection,version=0;
   let frameSources=new Map();
   body.addEventListener('toggle',event=>{if(!event.target.matches('details.analysis-record')||!event.target.open)return;const target=event.target.querySelector('[data-code-frame-id]');if(!target)return;target.innerHTML=renderDiagnosticFrames(frameSources.get(target.dataset.codeFrameId)??[]);target.removeAttribute('data-code-frame-id');},true);

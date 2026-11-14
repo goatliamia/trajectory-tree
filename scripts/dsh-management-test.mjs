@@ -5,12 +5,22 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import http from 'node:http';
 import { DshManagement } from './dsh-management.mjs';
-import { loadManagementSdk, readComposition, allEntries, textFile } from './dsh-management-config.mjs';
+import { loadManagementSdk, readComposition, allEntries, textFile, parsePatch,applyOwnedPatch } from './dsh-management-config.mjs';
 import { managementHttp } from './dsh-management-http.mjs';
 import { assessTeardown } from '../lib/lifecycle-observation.mjs';
+import {readManagementSkills} from '../lib/dsh-skill-catalog.mjs';
 
 test('native configuration, reversible Skill policy and stale confirmation',async t=>{
   const api=await loadManagementSdk();
+  await t.test('existing tagged JavaScript expressions survive repeated edits to other preset rows',()=>{
+    const source='- id: old-preset\n  config:\n    paths:\n      - !!js "process.platform" # keep this comment\n';
+    const expected=parsePatch(source,api.yaml).toJS();let text=source;
+    for(let i=0;i<3;i++){
+      const doc=parsePatch(text,api.yaml);doc.add({id:'unrelated-'+i,config:{enabled:true}});text=String(doc);
+      assert.deepEqual(parsePatch(text,api.yaml).toJS()[0],expected[0]);assert.match(text,/# keep this comment/);
+      assert.doesNotMatch(text,/\[object Object\]/);
+    }
+  });
   await mkdir('.dsh/management-tests',{recursive:true});
   const root=await mkdtemp(resolve('.dsh/management-tests/fixture-')),home=join(root,'home'),workspace=join(root,'project'),profileRoot=join(home,'profiles','web'),bundle=join(profileRoot,'node_modules','fixture-bundle');
   await mkdir(bundle,{recursive:true});await mkdir(join(workspace,'.git'),{recursive:true});
@@ -19,7 +29,7 @@ test('native configuration, reversible Skill policy and stale confirmation',asyn
   await writeFile(join(bundle,'package.json'),JSON.stringify({name:'fixture-bundle',version:'1.0.0',type:'module',main:'index.js',dsh:{bundle:{patch:'cordis.patch.yml'}}}));
   await writeFile(join(bundle,'index.js'),`throw Error('management must not execute plugin code');\nexport function apply(ctx){ctx.tools.register({name:'fixture_a',description:'a'});ctx.tools.register({name:'fixture_b',description:'b'});}`);
   const preset=id=>({id:'preset-'+id,name:'@deepseek-ai/dsh-agent-preset',config:{id,plugins:[{id:'files',name:'@deepseek-ai/dsh-tool-fs',config:{read:true,write:true,description:{__jsExpr:'process.platform'}}},{id:'fixture',name:'fixture-bundle'},{id:'skills',name:'@deepseek-ai/dsh-skill-filesystem',config:{includeDefaultRoots:true}}]}});
-  const patch={insert:[preset('standard'),preset('ptc')]};
+  const patch={insert:[preset('standard'),preset('ptc'),{...preset('research-custom'),config:{...preset('research-custom').config,name:'研究工作'}}]};
   await writeFile(join(bundle,'cordis.patch.yml'),api.yaml.stringify([patch]));
   await writeFile(join(profileRoot,'cordis.patch.yml'),'# preserve this comment\n[]\n');
   const policyPackage=join(profileRoot,'node_modules','dsh-analysis-view');await mkdir(policyPackage,{recursive:true});
@@ -38,7 +48,7 @@ test('native configuration, reversible Skill policy and stale confirmation',asyn
       for(const c of [...list].sort((a,b)=>a.rank-b.rank))if(!winners.has(c.name))winners.set(c.name,c);
       const skills=[],disabledSkills=[];
       for(const c of winners.values()){const loaded=await provider.get(c,{cwd:workspace});if(!loaded)continue;(c.invocation?.modelInvocable===false?disabledSkills:skills).push({...c,path:loaded.path,package:c.source==='custom'?'fixture-skill-bundle':null});}
-      return {presets:['standard','ptc'].map(id=>({id,skills,disabledSkills}))};
+      return {presets:['standard','ptc','research-custom'].map(id=>({id,name:id,skills,disabledSkills}))};
     }finally{await provider.dispose();}
   }
   const service=new DshManagement({home,profileRoot,workspace,storage:join(root,'audit'),readSnapshot,api});
@@ -88,6 +98,51 @@ test('native configuration, reversible Skill policy and stale confirmation',asyn
     assert.equal(await textFile(join(workspace,'.dsh','skills','built-in','SKILL.md')),null);
     const scopes=await service.skillScopes('built-in');assert.equal(scopes.rows.find(r=>r.preset==='standard').enabled,false);assert.equal(scopes.rows.find(r=>r.preset==='ptc').enabled,true);
     await flip('skill','built-in',true);assert.equal((await pick('skill','built-in')).enabled,true);
+  });
+  await t.test('native Skill management discovers custom presets and the switch is independent of workspace',async()=>{
+    const other=join(root,'other-project');await mkdir(other,{recursive:true});
+    const options={home,profileRoot,workspaces:[workspace,other],storage:join(root,'audit'),api};
+    const first=new DshManagement({...options,workspace}),second=new DshManagement({...options,workspace:other});
+    const a=(await first.skillScopes('mine')).rows.find(row=>row.preset==='research-custom');
+    const b=(await second.skillScopes('mine')).rows.find(row=>row.preset==='research-custom');
+    assert.equal(a.presetName,'研究工作');assert.equal(a.id,b.id);assert.equal(a.enabled,true);
+    const p=await first.preview({preset:'research-custom',id:a.id,enabled:false});
+    const saved=await first.commit(p.token);assert.equal(saved.configurationVerified,true);
+    assert.equal((await second.skillScopes('mine')).rows.find(row=>row.preset==='research-custom').enabled,false);
+    assert.equal((await second.skillScopes('mine')).rows.find(row=>row.preset==='standard').enabled,true);
+    assert.equal(await textFile(join(skillDir,'SKILL.md')),source);
+    await second.commit((await second.preview({preset:'research-custom',id:a.id,enabled:true})).token);
+    const stale=await first.preview({preset:'research-custom',id:a.id,enabled:false});
+    await writeFile(join(skillDir,'SKILL.md'),source+'\nNew content.\n');
+    await assert.rejects(first.commit(stale.token),/Skill 正文已变化/);
+    await writeFile(join(skillDir,'SKILL.md'),source);
+  });
+  await t.test('workspace files are visible only through an enabled Skill provider and its configured roots',async()=>{
+    const {entries}=await readComposition(api,{home,profileRoot});
+    const options={sdk:api.sdk,home,cwd:workspace,preset:'research-custom',name:'mine'};
+    const find=rows=>allEntries(rows).find(row=>row.config?.id==='research-custom').config.plugins.find(row=>row.name==='@deepseek-ai/dsh-skill-filesystem');
+    const disabled=structuredClone(entries);find(disabled).disabled=true;
+    const restricted=structuredClone(entries);find(restricted).config.includeDefaultRoots=false;
+    for(const rows of [disabled,restricted]){
+      const snapshot=await readManagementSkills({...options,entries:rows});
+      assert.deepEqual(snapshot.presets[0].skills,[]);assert.deepEqual(snapshot.presets[0].disabledSkills,[]);
+    }
+    const enabled=await readManagementSkills({...options,entries});assert.equal(enabled.presets[0].skills[0].name,'mine');
+  });
+  await t.test('native preset changes delegate locking and application to the editor exactly once',async()=>{
+    let edits=0,reconciles=0;
+    const native=new DshManagement({home,profileRoot,workspace,storage:join(root,'native-audit'),readSnapshot,api,
+      editConfig:async change=>api.atomic.withFileLock(join(profileRoot,'package.json'),async()=>{
+        edits++;assert.equal(await textFile(change.file),change.before);
+        const config=await readComposition(api,{home,profileRoot});
+        const prepared=applyOwnedPatch(api,config,change.before,change.patch);await writeFile(change.file,prepared.after);
+      },{waitMs:100}),reconcile:async()=>{reconciles++;throw Error('native edit already reconciled');}});
+    const target=(await native.skillScopes('mine')).rows.find(row=>row.preset==='standard');
+    for(const enabled of [false,true]){
+      const receipt=await native.commit((await native.preview({preset:'standard',id:target.id,enabled})).token);
+      assert.equal(receipt.runtime,'applied');assert.equal(receipt.configurationVerified,true);
+    }
+    assert.equal(edits,2);assert.equal(reconciles,0);assert.equal(await textFile(join(skillDir,'SKILL.md')),source);
   });
   await t.test('bundle deselection preserves installed package; official writer re-enables it',async()=>{
     // The fixture supplies presets, so use a second installed bundle for this test.
