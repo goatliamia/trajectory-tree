@@ -38,6 +38,8 @@ jobs:
           @deepseek-ai/dsh-config-editor@0.2.2-rc.3
           @deepseek-ai/dsh-agent-instructions@0.2.2-rc.3
           @deepseek-ai/dsh-skill-filesystem@0.2.2-rc.3
+          @deepseek-ai/dsh-plugin-manager@0.2.2-rc.3
+          acorn@8.19.0
       - name: Check shared assets and host skills are synchronized
         run: |
           node scripts/sync-view-assets.mjs --check
