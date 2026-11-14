@@ -32,7 +32,7 @@
     // 文件行画在基线下方 78px,再留标签高度;基线太靠下时这一行会被画布裁掉,
     // 所以按"文件行 + 底部刻度"反推一个安全基线,而不是固定 height-96。
     const fileRow = overviewLayers.has('files') ? 46 : 0;
-    const base = Math.min(rawBase, height - 20 - fileRow - 78);
+    let base = Math.min(rawBase, height - 20 - fileRow - 78);
     const gap = Math.max(128, Math.min(176, (viewportWidth - gutter * 2) / count));
     const width = Math.max(viewportWidth, gutter * 2 + gap * count);
     const start = (width - gap * count) / 2, x = index => start + (index + .5) * gap;
@@ -45,22 +45,18 @@
       for (const c of CONTEXT_CATEGORIES) { const value = info.parts[c.key] || 0; if (value > 0) plus += value; else minus -= value; }
       sideUp = Math.max(sideUp, plus); sideDown = Math.max(sideDown, minus);
     }
-    const band = scale.pixels * 2;
     // 顶部是步标题与材料行所在的安全区;柱子不能长进去,否则会盖住上方视图,
     // 而这里滚轮是缩放、没有额外的纵向滚动可以躲。
-    const topSafe = 150;
-    const wantedUp = sideUp + sideDown > 0 ? Math.max(28, band * sideUp / (sideUp + sideDown)) : scale.pixels;
-    const upPixels = Math.max(28, Math.min(wantedUp, base - topSafe));
-    const downPixels = band - upPixels;
-    const upSide = { limit: Math.max(1, sideUp), pixels: upPixels }, downSide = { limit: Math.max(1, sideDown), pixels: downPixels };
-    const gridTop = base - upPixels, gridBottom = base + downPixels;
+    const topSafe = 110;
+    const contextGeometry = actionContextGeometry(sideUp, sideDown, scale.limit, topSafe, base);
+    const upSide = contextGeometry.up, downSide = contextGeometry.down;
+    if (showContext && sideUp + sideDown > 0) base = contextGeometry.base;
+    const gridTop = base - upSide.pixels, gridBottom = base + downSide.pixels;
     let html = ui('<title>第 ') + t.number + ui(' 轮 · 逐步行动</title><desc>每个图标是一段模型处理及随后发起的工具操作，步内可能经历请求重试。上下文与主线共用零点，向上增加、向下减少。步骤间距表示顺序，不表示耗时。</desc>'), axisLabels = '';
     html += '<defs><pattern id="review-action-negative" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M0 5L5 0" stroke="var(--surface)" stroke-opacity=".6"/></pattern></defs>';
     if (showContext) {
-      html += '<path d="M' + gutter + ' ' + gridTop + 'H' + (width - gutter) + '" class="review-context-grid"/>';
-      html += '<path d="M' + gutter + ' ' + gridBottom + 'H' + (width - gutter) + '" class="review-context-grid"/>';
-      axisLabels += brText(gutter - 7, gridTop + 3, reviewSigned(upSide.limit), 'review-context-axis', 'end');
-      axisLabels += brText(gutter - 7, gridBottom + 3, reviewSigned(-downSide.limit), 'review-context-axis', 'end');
+      if (sideUp) { html += '<path d="M' + gutter + ' ' + gridTop + 'H' + (width - gutter) + '" class="review-context-grid"/>'; axisLabels += brText(gutter - 7, gridTop + 3, reviewSigned(upSide.limit), 'review-context-axis', 'end'); }
+      if (sideDown) { html += '<path d="M' + gutter + ' ' + gridBottom + 'H' + (width - gutter) + '" class="review-context-grid"/>'; axisLabels += brText(gutter - 7, gridBottom + 3, reviewSigned(-downSide.limit), 'review-context-axis', 'end'); }
     }
     html += '<path d="M' + (x(0) - 36) + ' ' + base + 'H' + (x(count - 1) + 36) + '" class="br-trunk"/>';
     steps.forEach((step, index) => {
@@ -106,7 +102,9 @@
           if (!amount) continue;
           const edge = base - sign * side.height;
           const labelY = sign > 0 ? Math.min(base - 27, edge - 9) : Math.max(base + 78, edge + 15);
-          part += brText(pos, labelY, (info.initial ? ui('初始 ') : '') + reviewSigned(amount * sign) + (side.overflow ? ui(' · 收起') : ''), 'review-context-overflow-label');
+          const batch = info.current?.contextSteps;
+          const batchLabel = batch?.length > 1 ? ' · ' + batch[0] + '–' + batch.at(-1) + (globalThis.__trajectoryLocale === 'en' ? ' combined' : ' 步合并') : '';
+          part += brText(pos, labelY, (info.initial ? ui('初始 ') : '') + reviewSigned(amount * sign) + (side.overflow ? ui(' · 收起') : '') + batchLabel, 'review-context-overflow-label');
           if (side.overflow) {
             part += '<rect x="' + (pos - 20) + '" y="' + (edge - 4 * sign - 4) + '" width="40" height="8" rx="3" class="review-context-capped"/>';
             for (const dx of [-4, 0, 4]) part += '<circle cx="' + (pos + dx) + '" cy="' + (edge - 4 * sign) + '" r=".9" class="review-context-capped-dot"/>';
@@ -172,8 +170,8 @@
       brText(viewportWidth - gutter, 18, count + ui(' 步') + (showTime ? ' · ' + reviewDuration(endOf(t) - t.start) : '') + (failures ? ' · ' + failures + ui(' 步受阻') : '') + goalText, 'br-note', 'end') +
       brText(gutter, height - 12, showContext ? ui('每步上下文变化 · 显示至 ±') + reviewTokens(scale.limit) : ui('步骤从左到右排列'), 'br-axis', 'start') +
       brText(viewportWidth - gutter, height - 12, ui('间距表示顺序 · 耗时见上方'), 'br-axis', 'end') + '</g>';
-    reviewActionFileFrame = { t, x, base, gutter, height, viewportWidth, viewportLeft };
-    html += '<g id="review-files-layer">' + reviewActionFiles(t, x, base, viewport.scrollLeft + gutter, viewport.scrollLeft + viewportWidth - gutter) + '</g>';
+    reviewActionFileFrame = { t, x, base, fileBase: gridBottom, gutter, height, viewportWidth, viewportLeft };
+    html += '<g id="review-files-layer">' + reviewActionFiles(t, x, gridBottom, viewport.scrollLeft + gutter, viewport.scrollLeft + viewportWidth - gutter) + '</g>';
     const graph = $('graph');
     graph.setAttribute('viewBox', '0 0 ' + width + ' ' + height); graph.setAttribute('height', height);
     graph.style.width = width + 'px'; graph.innerHTML = html;

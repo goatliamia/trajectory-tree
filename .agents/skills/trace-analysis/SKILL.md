@@ -9,9 +9,9 @@ Respond and write reports in the language of the user's current request unless t
 
 ## 从轨迹树或 Eval 的选区开始
 
-从草稿给出的查询和日志切点开始。选中多轮时，对照关键转折。选中多条枝条时，先核对查询匹配了多少所选调用，再沿与问题相关的记录追读原文。切点无法校验时，说明哪些记录还未核实，并从原视图重新取得选区。
+从草稿的查询开始，保留其会话、切点和来源绑定；沿返回的续查入口读与问题有关的原文。选中多轮时对照关键转折，圈选多个调用时核对匹配范围。已有数据足以支持判断就直接分析，不为收齐各类指标补跑查询。历史图表的切点无法校验时重新取得选区。
 
-按用户选的关注点组织回答，引用关键记录，串起行动、反馈和实际结果。引用指标时交代样本覆盖，未记录的时长、用量和结果保留为未知。
+按用户关注点串起行动、反馈和实际结果，引用关键记录。沿工具给出的计量口径使用数据；仅在覆盖缺口影响结论时说明。
 
 ## 综合诊断
 
@@ -48,3 +48,5 @@ Respond and write reports in the language of the user's current request unless t
 需要交付报告时，按[报告写作](../../../report/WRITING.md)组织。
 
 需要 HTML 报告时读[组件用法](../../../report/AUTHORING.md)；其中报告 CLI 位于本目录相对路径 `../../../scripts/trajectory-report.mjs`。
+
+草稿带有取证快照时，查询 CLI 使用 `--host codex|pi|claude --evidence "<快照路径>"`，保留草稿参数。快照固定了图中记录，不改用正在增长的会话文件。

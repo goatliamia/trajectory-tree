@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { contextByTurn, CONTEXT_CATEGORIES, recoveredStepNumbers, contextDisplayScale, contextDisplaySide, contextBarAmounts } from './context-model.mjs';
+import { contextByTurn, CONTEXT_CATEGORIES, recoveredStepNumbers, contextDisplayScale, contextDisplaySide, contextBarAmounts, actionContextGeometry } from './context-model.mjs';
+
+const actionGeometry = actionContextGeometry(9800, 200000, 10000, 150, 410);
+assert.ok(contextDisplaySide(4500, actionGeometry.up).height > 50, 'Compaction does not flatten ordinary additions');
+assert.ok(Math.abs(actionGeometry.up.pixels / actionGeometry.up.limit - actionGeometry.down.pixels / actionGeometry.down.limit) < 1e-10);
+assert.equal(contextDisplaySide(200000, actionGeometry.down).overflow, true);
 import { durationGroups, semanticZoomTarget } from './navigation-model.mjs';
 import { retryMeaning } from './meaning.mjs';
 

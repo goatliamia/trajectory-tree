@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './codex-context-anchors-test.mjs';
 import { readFileSync } from 'node:fs';
 import { adaptCodexThread, classifyCodexItem, commandReadEvidence, parseCodexRollout } from './codex-adapter.mjs';
 import { fileObjects } from '../docs/demo/layout-review/file-model.mjs';

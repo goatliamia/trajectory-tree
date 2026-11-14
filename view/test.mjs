@@ -11,6 +11,9 @@ import {datasetFromNative,loadPortableSource} from '../plugin/portable-tools/sou
 import {generateTraceView} from './generate.mjs';
 import {startViewServer} from './serve.mjs';
 import {readBoundedFile} from '../lib/bounded-file.mjs';
+import {readEvidenceFile} from '../plugin/portable-tools/evidence-file.mjs';
+import {fileService} from '../plugin/portable-tools/runtime.mjs';
+import {executeTool} from '../plugin/portable-tools/tools.mjs';
 const directory=await mkdtemp(join(tmpdir(),'trajectory-view-test-'));let serving;
 try{
  const input=createPiSample({revision:'view-entry-test'}),copy=JSON.stringify(input);
@@ -18,6 +21,13 @@ try{
  assert.equal(JSON.stringify(input),copy,'Generation does not mutate the native session');
  assert.equal(view.synthetic,true);assert.equal(view.session,input.header.id);
  const html=await readFile(view.output,'utf8');assert.ok(html.includes('data:font/woff2;base64,'));assert.ok(!html.includes('url(\'/fonts/'));
+ assert.ok(html.includes('id="diagnosis-editor"') && html.includes('__bindDiagnosisGesture'),'Portable trace shares selection and draft editor');
+ assert.ok(html.includes('pi:'+input.header.id+':cut:'),'Drafts carry the query identity of the frozen source');
+ const evidence=await readEvidenceFile(view.evidenceFile,'pi');
+ const queryService=fileService({host:'pi',evidenceFile:view.evidenceFile},{rebuildSnapshots:true});
+ try { const inspected=await executeTool(queryService,'trajectory_inspect',{view:'overview',cut:evidence.cut,logId:evidence.logId,samples:false});assert.equal(inspected.logId,evidence.logId); }
+ finally {queryService.dispose();}
+ await assert.rejects(()=>readEvidenceFile(view.evidenceFile,'codex'),/host mismatch/);
  const english=await generateTraceView({host:'pi',input,locale:'en-US',output:join(directory,'en.html')});
  assert.equal(english.locale,'en');assert.equal(english.capabilities.chatJump,false);assert.equal(english.capabilities.childHistory,'unavailable');
  const englishHtml=await readFile(english.output,'utf8');

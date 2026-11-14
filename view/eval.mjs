@@ -51,7 +51,14 @@ export function portableRuntime(payload) {
   };
 }
 
-export function writeHostEvalPage(dataset, output, { locale, attributions, section } = {}) {
+export function portableDiagnosis(dataset) {
+  const scoped = datasetAtCut(dataset, dataset.payload.sessions[0].lastSeq), session = scoped.payload.sessions[0];
+  const source = diagnosisSource(session, null, { host: scoped.host, logId: scoped.logId, file: session.source?.file });
+  source.rounds = session.turns.map(turn => ({ number: turn.number, ms: turn.durationMs ?? null, calls: turn.calls, errors: turn.errors }));
+  return source;
+}
+
+export function writeHostEvalPage(dataset, output, { locale, attributions, section, evidenceFile } = {}) {
   const { payload, logId, host, records, commandScripts } = datasetAtCut(dataset, dataset.payload.sessions[0].lastSeq);
   const session = payload.sessions[0];
   const argumentsBySeq = new Map(records.map(record => [record.seq, record.arguments ?? record.body?.arguments]));
@@ -64,7 +71,7 @@ export function writeHostEvalPage(dataset, output, { locale, attributions, secti
   }));
   const data = buildEvalData(session, portableRuntime(payload), { host, synthetic: payload.synthetic, turnLimit: EVAL_DETAIL_TURNS, attributions, argumentsBySeq, resultsBySeq, commandScripts });
   const html = renderEvalPage(data, { integrated: true, mode: host, locale, section,
-    diagnosis: diagnosisSource(session, data, { host, logId, file: session.source?.file }) });
+    diagnosis: {...diagnosisSource(session, data, { host, logId, file: session.source?.file }),evidenceFile} });
   const path = resolve(output);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, html);

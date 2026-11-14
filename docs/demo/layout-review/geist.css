@@ -199,7 +199,7 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-review .review-operation-change{border-radius:6px;padding:5px 10px;background:var(--surface)}
 .geist-review .review-step-footer{padding-top:10px}
 .geist-review .review-step-footer>div>span,.geist-review .review-step-footer>div>button{font-size:11px}
-.geist-review .step-panel.geist-step{display:flex;flex-direction:column;flex:0 0 auto;min-height:0;max-height:280px;gap:18px;padding:12px 24px 24px;background:var(--surface);border:0;box-shadow:none}
+.geist-review .step-panel.geist-step{display:flex;flex-direction:column;flex:0 0 auto;min-height:0;max-height:280px;gap:14px;padding:20px 24px 24px;background:var(--surface);border:0;box-shadow:none}
 .geist-step-meta{display:flex;align-items:center;justify-content:space-between;gap:20px;font:12px/20px var(--sans);color:var(--muted)}
 .geist-step-meta>span{display:flex;align-items:center;flex-wrap:wrap;gap:4px 14px}
 .geist-step-meta b{font-weight:500;color:var(--ink)}

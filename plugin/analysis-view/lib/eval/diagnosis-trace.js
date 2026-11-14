@@ -64,8 +64,8 @@
     function actionChoices() {
       const row = turn(), step = row.steps[selectedStep];
       const facts = stepInsight(row, step, session.overview.episodes, reviewContextData.callFacts).calls;
-      return [...panel.querySelectorAll('.geist-operation')].map((node, index) => {
-        const fact = facts[index];
+      return [...panel.querySelectorAll('.geist-tool-record[data-call-seq]')].map(node => {
+        const fact = facts.find(row => row.seq === Number(node.dataset.callSeq));
         if (!Number.isSafeInteger(fact?.seq)) return { node };
         const failed = session.overview.episodes.some(episode => episode.failureSeqs.includes(fact.seq));
         const selection = failed ? { kind: 'failure', seq: fact.seq }
@@ -187,7 +187,7 @@
       surfaceFor(target) {
         if (session.id !== data.mainSession || !session.turns.length || view === 'overview' && !overviewProjection) return null;
         if (viewport.contains(target)) return viewport;
-        return view === 'path' && target.closest('#step-panel .geist-operation') ? panel : null;
+        return view === 'path' && target.closest('#step-panel .geist-tool-record') ? panel : null;
       },
       point, region,
     });

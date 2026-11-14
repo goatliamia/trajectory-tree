@@ -3,6 +3,7 @@ import { win32, posix } from 'node:path';
 import { omitCodexImages, omitImageLabels } from './codex-images.mjs';
 import { attributeToolFailure, commandPowerShellEdition, powerShellScript } from '../plugin/trajectory-tools/lib/tool-attribution.js';
 import {inputToolMeasure,settleToolMeasure,recordedDiagnostics} from '../lib/tool-feedback.mjs';
+import {codexContextAnchors,compositionAtOrdinal} from './codex-context-anchors.mjs';
 
 const keys = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
 const empty = () => Object.fromEntries(keys.map(k => [k, 0]));
@@ -185,7 +186,7 @@ export function parseCodexRollout(text, { capturedAt, threadId, skillMaterials =
       for (const item of p.replacement_history || []) if (/<skill_(?:content|instructions)\b/.test(flat(item.content))) skills.push({ kind: 'retained-skill-content', time: Date.parse(row.timestamp), source: 'local-rollout', estimate: true });
     }
   }
-  return { completed, usage, compositions, compactions, contexts, skills, collaboration, declarations, current: { ...state }, latestUsage, modelContextWindow: window,
+  return { completed, contextAnchors: codexContextAnchors(rows), usage, compositions, compactions, contexts, skills, collaboration, declarations, current: { ...state }, latestUsage, modelContextWindow: window,
     evidence: { source: 'local-rollout', unstable: true, rows: rows.length, malformedLines: malformed, cutoff: capturedAt ?? null, textEstimate: 'CJK characters + other characters / 4; visible text only; excludes hidden reasoning, images, serialization and unrecorded instructions' } };
 }
 
@@ -202,7 +203,7 @@ export function adaptCodexThread(snapshot, options = {}) {
     const observedSpan = Number.isFinite(turn.startedAt) && Number.isFinite(turn.completedAt) && turn.completedAt >= turn.startedAt;
     const durationMs = Number.isFinite(turn.durationMs) && turn.durationMs >= 0 ? turn.durationMs
       : observedSpan ? end - start : null;
-    const prompts = [], steps = [], markers = [], compactions = [];
+    const prompts = [], steps = [], markers = [], compactions = [], contextItems = new Map();
     const output = { id: turn.id, number: index + 1, seq: ++seq, start, end, endObserved: observedSpan, durationMs,
       endSeq: null, reason: { kind: turn.status === 'inProgress' ? 'running' : turn.status }, prompts, steps, retries: [], markers, title: '', errors: 0 };
     let ordinalPosition = start;
@@ -229,6 +230,7 @@ export function adaptCodexThread(snapshot, options = {}) {
         continue;
       }
       const step = { number: steps.length + 1, seq: itemSeq, start: a, end: b, endSeq: itemSeq, assistantSeq: itemSeq, assistantTime: a, reply: null, calls: [], retries: [], markers: [], inTok: null, cacheTok: null, outTok: null, endObserved: precise, timingSource: precise ? 'local-rollout' : 'ordinal-only', errors: 0, semanticUnit: 'observed-action' };
+      contextItems.set(step, item.id);
       if (item.type === 'agentMessage') { step.reply = excerpt(item.text, 12000); step.phase = item.phase; steps.push(step); continue; }
       if (!['commandExecution', 'mcpToolCall', 'dynamicToolCall', 'fileChange', 'webSearch', 'imageView', 'collabAgentToolCall'].includes(item.type)) continue;
       const cls = classifyCodexItem(item), state = status(item), resultSeq = state === 'unknown' ? null : ++seq;
@@ -302,8 +304,11 @@ export function adaptCodexThread(snapshot, options = {}) {
     // Request-like entries here are renderer compatibility points sampled AFTER
     // observed actions. Their semanticUnit prevents presenting them as requests.
     for (const step of steps) if (local) {
-      const row = local.compositions.findLast(r => r.time <= step.end);
-      if (row) requests.push({ turn: output.number, step: step.number, seq: step.seq, time: step.end, ...Object.fromEntries(keys.map(k => [k, row[k]])), total: keys.reduce((n, k) => n + row[k], 0), source: 'estimate', semanticUnit: 'visible-retained-text-after-action', activeMs: null });
+      const anchor = local.contextAnchors.get(contextItems.get(step));
+      const row = anchor ? compositionAtOrdinal(local.compositions, anchor.ordinal) : null;
+      if (row) requests.push({ turn: output.number, step: step.number, seq: step.seq, time: step.end, ...Object.fromEntries(keys.map(k => [k, row[k]])), total: keys.reduce((n, k) => n + row[k], 0), source: 'estimate', semanticUnit: 'visible-retained-text-after-action', activeMs: null,
+        contextLine: anchor.ordinal, contextBasis: anchor.basis,
+        ...(anchor.basis === 'batch-result' ? { contextSteps: steps.filter(s => anchor.members.includes(contextItems.get(s))).map(s => s.number) } : {}) });
     }
     return output;
   });

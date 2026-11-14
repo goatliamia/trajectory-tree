@@ -69,6 +69,16 @@ export function contextDisplaySide(amount, scale) {
   return { height, factor: amount > 0 ? height / amount : 0, overflow: amount > scale.limit };
 }
 
+// One token has the same height above and below zero. Cap large replacements
+// using the ordinary-addition scale so a compaction cannot flatten additions.
+export function actionContextGeometry(increase, decrease, limit, top, bottom) {
+  const up = Math.min(increase, limit), down = Math.min(decrease, limit);
+  const factor = Math.max(1, bottom - top) / Math.max(1, up + down);
+  return { base: bottom - down * factor,
+    up: { limit: Math.max(1, up), pixels: up * factor },
+    down: { limit: Math.max(1, down), pixels: down * factor } };
+}
+
 export function recoveredStepNumbers(turn, episodes) {
   const successfulCalls = new Set(episodes.filter(e => e.turn === turn.number).flatMap(e => e.pairs.map(p => p.successSeq)));
   return new Set(turn.steps.filter(s => !s.calls.some(c => c.status === 'error') &&

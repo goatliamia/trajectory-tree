@@ -61,12 +61,16 @@ try{
   const schema=run('trajectory-query.mjs',['--tool','schema']);assert.equal(schema.tools.length,4);
   const view=run('trajectory-view.mjs',[...source,'--out',join(directory,'view.html')]);assert.equal(view.ok,true);assert.equal(view.host,host);
   assert.match(readFileSync(view.output,'utf8'), /SIL OPEN FONT LICENSE Version 1\.1/);
+  assert.ok(readFileSync(view.output,'utf8').includes('__bindDiagnosisGesture'),'Trace selection is included in the actual package');
+  const frozen=JSON.parse(readFileSync(view.evidenceFile,'utf8')).data;
+  const frozenQuery=run('trajectory-query.mjs',['--host',host,'--evidence',view.evidenceFile,'--tool','trajectory_inspect','--args',JSON.stringify({view:'overview',cut:frozen.cut,logId:frozen.logId,samples:false})]);
+  assert.equal(frozenQuery.logId,frozen.logId,'Exported evidence is readable through the packaged CLI');
   const evaluation=run('trajectory-view.mjs',[...source,'--eval','--lang','en','--out',join(directory,'eval.html')]);
   assert.equal(evaluation.view,'eval');assert.equal(evaluation.host,host);
   const evalHtml=readFileSync(evaluation.output,'utf8');
   assert.ok(evalHtml.includes('installUi("en", false)')&&evalHtml.includes('id="diagnosis-editor"'));
   assert.ok(evalHtml.includes('Code execution analysis')&&evalHtml.includes('references/code-execution.md'),'Packaged Eval includes code execution and its diagnosis method');
-  assert.ok(evalHtml.includes('id="eval-findings"')&&evalHtml.includes('references/disposition.md'),'Packaged Eval includes shared program signals and investigation methods');
+  assert.ok(evalHtml.includes('id="eval-findings"')&&readFileSync(join(skillRoot,'trace-analysis/SKILL.md'),'utf8').includes('references/disposition.md'),'Signals remain in Eval; disposition methods are discovered through the skill');
   assert.match(evalHtml, /SIL OPEN FONT LICENSE Version 1\.1/);
   const code=run('trajectory-view.mjs',[...source,'--code','--lang','en','--out',join(directory,'code.html')]);
   assert.equal(code.view,'eval');assert.equal(code.session,evaluation.session);assert.equal(code.cut,evaluation.cut);

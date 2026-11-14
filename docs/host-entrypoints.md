@@ -93,6 +93,10 @@ node scripts/trajectory-view.mjs --host pi --file session.jsonl --open
 
 在会回收后台子进程的受管终端中，加 `--keep-alive` 保留当前执行会话作为预览服务。链接实际可打开后再交付，不能只以生成命令返回 URL 为准。
 
+便携轨迹页支持与 DSH 相同的长按点选、圈选和 `Shift+Enter` 选区。确认后可编辑问题并复制诊断草稿；Pi 另提供已有的 `/trajectory --draft` 装填命令。Codex / Claude Code 不自动发送到对话。
+
+出图同时生成带内容哈希的 `*.evidence.json`，草稿指向这份固定证据。查询使用 `trajectory-query.mjs --host <宿主> --evidence "<文件>" --tool <工具名> --request args.json`，继续保留 `cut`、`logId` 和工具返回的续查参数。对话增长不会改变导出图的来源。快照只保存在本机、沿用查询大小上限，预览服务不暴露快照下载接口；分享 HTML 不会自动携带原文快照。删除导出产物时一并删除对应快照。
+
 独立视图文件包含字体；本地服务只绑定 127.0.0.1，只暴露随机路径对应的一个生成文件，不监听历史变化。同一输出文件复用服务，闲置 15 分钟或总运行 1 小时后关闭。生成器不会调用模型或修改原会话。
 
 报告核心一同封装。`trajectory-report` 的 query/prepare 可使用 `--host codex` 或 `--host pi --file ...`；DSH 沿用宿主连接。AI 选证据、写 Markdown、声明组件，渲染器装配 HTML。

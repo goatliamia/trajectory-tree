@@ -90,8 +90,9 @@
     }
     if (kind === 'context') {
       const { current, previous, byStep, focus, categories, net } = selection;
-      const ref = row => t(`第 ${row.turn} 轮${byStep ? `第 ${row.step} 步` : '末次有记录的'}请求（响应 #${row.seq}）`,
-        byStep ? `turn ${row.turn}, step ${row.step} (response #${row.seq})` : `last recorded request in turn ${row.turn} (response #${row.seq})`);
+      const ref = row => portable() ? t(`第 ${row.turn} 轮 · 动作 ${row.step} 后（#${row.seq}）`, `turn ${row.turn}, after action ${row.step} (#${row.seq})`)
+        : t(`第 ${row.turn} 轮${byStep ? `第 ${row.step} 步` : '末次有记录的'}请求（响应 #${row.seq}）`,
+          byStep ? `turn ${row.turn}, step ${row.step} (response #${row.seq})` : `last recorded request in turn ${row.turn} (response #${row.seq})`);
       const parts = categories.filter(row => Number.isFinite(row.after) && (!previous || row.delta || row.key === focus))
         .sort((a, b) => Number(b.key === focus) - Number(a.key === focus) ||
           Math.abs(b.delta ?? b.after) - Math.abs(a.delta ?? a.after));
@@ -100,7 +101,7 @@
         : `${ui(row.label)} ${fmt(row.after)}`);
       return { kind, current, previous,
         label: `${turnLabel(current.turn)}${byStep ? ` · ${stepLabel(current.step)}` : ''} · ${previous ? t('上下文增量', 'Context change') : t('上下文构成', 'Context composition')}`,
-        scope: byStep ? t('请求对照', 'Request comparison') : t('轮末请求', 'Last request in turn'),
+        scope: portable() ? t('记录文本估算', 'Recorded text estimate') : byStep ? t('请求对照', 'Request comparison') : t('轮末请求', 'Last request in turn'),
         facts: [previous ? t(`比较 ${ref(previous)} 到 ${ref(current)}`, `Compare ${ref(previous)} with ${ref(current)}`)
           : t(`观察 ${ref(current)}`, `Inspect ${ref(current)}`),
           previous ? t(`构成估算净变化 ${signed(net)} token`, `Estimated net change ${signed(net)} tokens`) : '',
@@ -369,21 +370,19 @@
       item.kind==='finding'&&item.sources.length>1?t(`范围包含 ${item.sources.length} 段会话，各自切点和查询见下方。`,
         `Scope includes ${item.sources.length} sessions, with individual cuts and queries below.`):
         t(`范围为会话 ${data.session} 截至 #${data.cut}。`, `Scope: session ${data.session} through #${data.cut}.`),
-      ...(data.host === 'claude' && data.file ? [`Transcript ${data.file}`] : []),
+      ...(portable() && data.evidenceFile ? [t(`取证快照：${data.evidenceFile}。用 trajectory-query CLI 的 --host ${data.host} --evidence 参数读取此文件。`,
+        `Evidence: ${data.evidenceFile}. Read this file with trajectory-query CLI --host ${data.host} --evidence.`)] : portable() && data.file ? [`Source ${data.file}`] : []),
       t(`选中${item.label}（${item.scope}）${facts.length ? ' · ' + facts.join('。') : ''}。`,
         `Selected: ${item.label} (${item.scope})${facts.length ? ' · ' + facts.join('. ') : ''}.`),
       t(entry ? `采用「${question.method}」方法。` : `使用 trace-analysis 的「${question.method}」方法。`,
         entry ? `Apply the ${methods[question.method]} method.` : `Apply the ${methods[question.method]} method from trace-analysis.`),
       ...(item.kind === 'execution'||item.codeExecution ? [t('读取 trace-analysis 的 references/code-execution.md，沿具体执行链调查。',
         'Read references/code-execution.md from trace-analysis and investigate the actual execution chain.')] : []),
-      ...(item.kind==='finding'?[t('这是程序归纳的调查线索。读取 references/disposition.md，按证据选择修复、恢复、补齐能力与保留知识；先核对已有后续，不重做已完成的历史工作。',
-        'These are program-generated investigation signals. Read references/disposition.md and use the evidence to choose repair, recovery, capability or reusable knowledge. Check existing follow-up before repeating completed historical work.')]:[]),
       ...(powerShell ? [item.kind==='finding'&&item.sources.length>1?t('所选来源包含 PowerShell 调用，按对应会话读取 references/powershell.md。',
         'The selected sources include PowerShell calls; use references/powershell.md in their respective sessions.'):
         t(`对 ${refs(item.powerShellSeqs)} 读取 trace-analysis 的 references/powershell.md。`,
         `For ${refs(item.powerShellSeqs)}, read references/powershell.md from trace-analysis.`)] : []),
       evidenceEntry(item, question),
-      t('引用关键记录序号，说明能确认到哪一步。', 'Cite the key record numbers and state what the evidence can confirm.'),
     ].join('\n');
     const draft = $('draft');
     const prefix = generated && draft.value.endsWith(generated)

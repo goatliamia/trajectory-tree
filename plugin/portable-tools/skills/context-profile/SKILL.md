@@ -22,3 +22,5 @@ Respond and write reports in the language of the user's current request unless t
 交付按[报告写作](../../../../report/WRITING.md)组织。
 
 需要 HTML 报告时读[组件用法](../../../../report/AUTHORING.md)；其中报告 CLI 位于本目录相对路径 `../../../../scripts/trajectory-report.mjs`。
+
+草稿带有取证快照时，查询 CLI 使用 `--host pi --evidence "<快照路径>"`，保留草稿参数。快照固定了图中记录，不改用正在增长的会话文件。

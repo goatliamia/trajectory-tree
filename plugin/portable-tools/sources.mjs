@@ -8,6 +8,7 @@ import { readCodexRollout, validateCodexRollout } from '../../analyzers/codex-ro
 import { readClaudeTranscript } from '../../analyzers/claude-reader.mjs';
 import { projectClaudeTranscript, finalizeClaudeDataset } from '../../analyzers/claude-adapter.mjs';
 import { powerShellScript } from '../trajectory-tools/lib/tool-attribution.js';
+import {readEvidenceFile} from './evidence-file.mjs';
 
 export const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export function visible(value, parameters = false) {
@@ -19,6 +20,18 @@ export function visible(value, parameters = false) {
 }
 const strings = value => typeof value === 'string' ? value : Array.isArray(value) ? value.map(strings).join('\n') : value && typeof value === 'object' ? Object.values(value).map(strings).filter(Boolean).join('\n') : '';
 export const recordText = record => strings(record.body);
+function compactPresentation(payload) {
+  const excerpt = value => value == null ? value : {text:'',omitted:(value.text?.length || 0)+(value.omitted || 0)};
+  for (const turn of payload.sessions[0].turns) {
+    turn.prompts = turn.prompts.map(p => ({...p,text:p.text.slice(0,1000),omitted:(p.omitted || 0)+Math.max(0,p.text.length-1000)}));
+    for (const step of turn.steps) { step.reply=excerpt(step.reply); for (const call of step.calls) {call.args=excerpt(call.args);call.result=excerpt(call.result);} }
+  }
+  delete payload.context.callFacts; delete payload.context.declarations;
+  for (const file of payload.context.fileOperations) if (file.diff) {file.diffCharacters=(file.diff.text?.length || 0)+(file.diff.omitted || 0);delete file.diff;}
+}
+export function compactPortableDataset(data) {
+  const payload=structuredClone(data.payload); compactPresentation(payload); return {...data,payload};
+}
 
 // An Eval draft can be sent after the host has appended another turn. Verify
 // the same projected prefix instead of treating any append as a new log.
@@ -55,7 +68,7 @@ export function datasetAtCut(data, cut) {
 export function datasetFromNative(host, native, options = {}) {
   if (host === 'claude') {
     const projected = projectClaudeTranscript(native);
-    return finalizeClaudeDataset(datasetFromNative('pi', projected), native, projected);
+    return finalizeClaudeDataset(datasetFromNative('pi', projected, options), native, projected);
   }
   if (!['pi', 'codex'].includes(host)) throw Error('Unsupported native host');
   if (host === 'codex') native = omitCodexImageValues(native);
@@ -160,14 +173,7 @@ export function datasetFromNative(host, native, options = {}) {
   const all = [...records.values()].sort((a, b) => a.seq - b.seq);
   // Tools retain full native bodies above. The renderer's duplicated excerpts
   // and diffs are unnecessary in this query cache; keep their exact sizes.
-  const compactExcerpt = value => value == null ? value : { text: '', omitted: (value.text?.length || 0) + (value.omitted || 0) };
-  for (const turn of session.turns) {
-    turn.prompts = turn.prompts.map(p => ({ ...p, text: p.text.slice(0, 1000), omitted: (p.omitted || 0) + Math.max(0, p.text.length - 1000) }));
-    for (const step of turn.steps) { step.reply = compactExcerpt(step.reply); for (const call of step.calls) { call.args = compactExcerpt(call.args); call.result = compactExcerpt(call.result); } }
-  }
-  delete payload.context.callFacts;
-  delete payload.context.declarations;
-  for (const file of payload.context.fileOperations) if (file.diff) { file.diffCharacters = (file.diff.text?.length || 0) + (file.diff.omitted || 0); delete file.diff; }
+  if (!options.presentation) compactPresentation(payload);
   const fingerprint = hash({ host, session: session.id, records: all.map(r => [r.seq, r.nativeHash]), usage: payload.context.usage, current: payload.context.current });
   return { host, session: session.id, payload, records: all, fingerprint, logId: host + ':' + session.id + ':' + fingerprint.slice(0, 16), synthetic: payload.synthetic === true,
     ...(commandScripts ? { commandScripts: Object.fromEntries(commandScripts) } : {}) };
@@ -175,6 +181,7 @@ export function datasetFromNative(host, native, options = {}) {
 
 export async function loadPortableSource(spec, signal) {
   signal?.throwIfAborted();
+  if (spec.evidenceFile) return readEvidenceFile(spec.evidenceFile,spec.host,signal);
   if (spec.host === 'pi') return datasetFromNative('pi', spec.input || await readPiSession(spec.file, { ...spec, signal }));
   if (spec.host === 'claude') return datasetFromNative('claude', spec.input || await readClaudeTranscript(spec.file, { signal }));
   if (spec.host !== 'codex') throw Error('Supported hosts: pi, codex, claude');

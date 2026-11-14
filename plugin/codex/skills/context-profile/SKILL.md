@@ -21,6 +21,8 @@ Respond and write reports in the language of the user's current request unless t
 
 交付按[报告写作](../../../../report/WRITING.md)组织。
 
-未连接取证工具时，将查询的参数对象写入 `args.json`。用 Node 运行本目录相对路径 `../../../../scripts/trajectory-query.mjs --host codex --tool <工具名> --request <args.json>`。默认当前会话，指定会话加 `--thread ID`。工具声明用 `--tool schema` 获取。
+通过 CLI 取证：将查询参数写入 `args.json`，用 Node 运行本目录相对路径 `../../../../scripts/trajectory-query.mjs --host codex --tool <工具名> --request <args.json>`。默认当前会话，指定会话加 `--thread ID`。工具声明用 `--tool schema` 获取。
 
 需要 HTML 报告时读[组件用法](../../../../report/AUTHORING.md)；其中报告 CLI 位于本目录相对路径 `../../../../scripts/trajectory-report.mjs`。
+
+草稿带有取证快照时，查询 CLI 使用 `--host codex --evidence "<快照路径>"`，保留草稿参数。快照固定了图中记录，不改用正在增长的会话文件。

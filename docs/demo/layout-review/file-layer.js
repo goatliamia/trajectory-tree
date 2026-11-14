@@ -8,10 +8,10 @@
     requestAnimationFrame(() => {
       reviewFilesFramePending = false;
       if (view !== 'path' || !reviewActionFileFrame || !$('review-files-layer')) return;
-      const { t, x, base, gutter } = reviewActionFileFrame, vp = $('graph-scroll');
+      const { t, x, base, fileBase = base, gutter } = reviewActionFileFrame, vp = $('graph-scroll');
       const left = vp.scrollLeft;
       reviewActionFileFrame.viewportLeft = left;
-      $('review-files-layer').innerHTML = reviewActionFiles(t, x, base, left + gutter, left + reviewActionFileFrame.viewportWidth - gutter);
+      $('review-files-layer').innerHTML = reviewActionFiles(t, x, fileBase, left + gutter, left + reviewActionFileFrame.viewportWidth - gutter);
       reviewFilesBind();
     });
   }

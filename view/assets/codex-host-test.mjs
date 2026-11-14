@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { ui } from '../../lib/i18n.mjs';
+import {CONTEXT_CATEGORIES} from '../../docs/demo/layout-review/context-model.mjs';
 
 const calls = [[0,10],[20,30],[25,35]].map(([start,end],seq) => ({seq,start,end,durationMs:end-start,timingSource:'local-rollout',status:'returned',name:'run'}));
 const context = vm.createContext({
   ui: text => ui(text,'en'),
+  CONTEXT_CATEGORIES: structuredClone(CONTEXT_CATEGORIES), __trajectoryLocale:'en',
   data:{evidence:{}}, session:{turns:[{number:1,steps:[{number:1,calls},{number:2,calls:[{seq:4,start:0,end:0,timingSource:'ordinal-only',status:'unknown',name:'run',durationMs:null}]}]}]},
   header(){}, geistRenderContextOverview(){}, reviewOpenStepDetail(){}, geistArrangeCaption(){}, reviewRenderStepSummary(){},
   geistStatsByStep:new Map(), document:{createElement:()=>({})},

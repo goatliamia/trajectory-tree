@@ -39,11 +39,12 @@ for(const [host,{base,prefix,dsh}]of Object.entries(hosts))for(const skill of ds
    if (['codex', 'claude'].includes(host)) {
     const source = host === 'claude' ? ' --file "<transcript_path>"' : '';
     const binding = host === 'claude' ? '优先使用草稿中的 transcript 路径，其次使用会话绑定提供的路径。' : '默认当前会话，指定会话加 `--thread ID`。';
-    text += '\n未连接取证工具时，将查询的参数对象写入 `args.json`。用 Node 运行本目录相对路径 `' +
+    text += '\n通过 CLI 取证：将查询参数写入 `args.json`，用 Node 运行本目录相对路径 `' +
       prefix + 'scripts/trajectory-query.mjs --host ' + host + source + ' --tool <工具名> --request <args.json>`。' +
       binding + '工具声明用 `--tool schema` 获取。\n';
    }
    if(!dsh)text+='\n需要 HTML 报告时读[组件用法]('+prefix+'report/AUTHORING.md)；其中报告 CLI 位于本目录相对路径 `'+prefix+'scripts/trajectory-report.mjs`。\n';
+   if(!dsh)text+='\n草稿带有取证快照时，查询 CLI 使用 `--host '+(host==='project'?'codex|pi|claude':host)+' --evidence "<快照路径>"`，保留草稿参数。快照固定了图中记录，不改用正在增长的会话文件。\n';
   }
   emit(base+'/'+skill.name+path.slice(('skill/'+skill.name).length),text);
  }

@@ -5,7 +5,7 @@ import { COMMAND_TOOL, executeCommandTool } from '../plugin/portable-tools/comma
 import { commandCrOptions } from '../analyzers/cr-pwsh.mjs';
 const argv = process.argv.slice(2), option = name => { const i = argv.indexOf(name); return i < 0 ? undefined : argv[i + 1]; };
 if (argv.includes('--help')) {
-  console.log('node scripts/trajectory-query.mjs --host pi|codex|claude --file <native-session.jsonl|official-snapshot.json> [--thread ID] [--capture file] [--leaf ID] [--api-only] [--tool schema|trajectory_inspect|trajectory_read|trajectory_search|trajectory_graph|trajectory_command_diagnose] [--request args.json | --args JSON]\nCommand diagnosis accepts [--cr-root PATH] [--pwsh PATH]. Add --commands to --tool schema for its schema.');
+  console.log('node scripts/trajectory-query.mjs --host pi|codex|claude [--file native-session | --thread ID | --evidence exported.evidence.json] [--capture file] [--leaf ID] [--api-only] [--tool schema|trajectory_inspect|trajectory_read|trajectory_search|trajectory_graph|trajectory_command_diagnose] [--request args.json | --args JSON]\nCommand diagnosis accepts [--cr-root PATH] [--pwsh PATH]. Add --commands to --tool schema for its schema.');
 } else if (option('--tool') === 'schema') {
   const tools = argv.includes('--commands') ? [COMMAND_TOOL] : TOOLS;
   console.log(JSON.stringify({tools:tools.map(({name,description,inputSchema})=>({name,description,inputSchema}))}));

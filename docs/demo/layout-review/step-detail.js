@@ -140,7 +140,6 @@
         (reviewHasChange(fact) ? '<button class="review-detail-link" data-detail-change="' + fact.seq + '">' + (fact.tone === 'bad' ? ui('查看原计划改动') : ui('查看改动对比')) + ' ↗</button>' : '') + '</div>').join('') +
       (insight.reply ? ui('<div class="review-detail-section"><h3>回复摘录</h3><p>') + esc(insight.reply) + '</p></div>' : '') +
       (insight.links.length ? ui('<div class="review-detail-section"><h3>后续记录</h3>') + insight.links.map(l => '<button class="review-detail-link" data-detail-step="' + l.step + '">' + esc(l.text) + ' ↗</button>').join('<br>') + ui('<p class="review-detail-muted">依据同一轮中工具与完整参数一致的失败、成功记录。</p></div>') : '') +
-      (insight.following ? ui('<div class="review-detail-section"><h3>接下来</h3><button class="review-detail-link" data-detail-step="') + insight.following.step + ui('">第 ') + insight.following.step + ui(' 步 · ') + esc(insight.following.text) + ' ↗</button></div>' : '') +
       (info ? ui('<div class="review-detail-section"><h3>本步请求上下文</h3><p>已有 ≈') + reviewTokens(info.total) + ' tokens；' + (info.initial ? ui('首次载入 ') : ui('相比上次请求 ')) + reviewSigned(info.amount) + ui('。</p><p class="review-detail-muted">请求发出前的估算构成，不含本次回复。</p></div>') : '') +
       ui('<button class="review-detail-link" id="review-detail-record">查看调用与返回原文 ↗</button>');
     reviewOpenDetail({ title: ui('第 ') + step.number + ui(' 步 · 前后文与依据'), subtitle: ui('第 ') + t.number + ui(' 轮 · ') + reviewActionStepLabel(step), html,

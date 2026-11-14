@@ -1,6 +1,9 @@
   // Host adapter only. Geometry, result branches, file selection and navigation
   // stay in the shared renderer. Codex actions are NOT model-request steps.
   const codexMeta = data.evidence;
+  const codexUi = (zh, en) => globalThis.__trajectoryLocale === 'en' ? en : zh;
+  const codexContextNote = codexUi('Codex 上下文读取尚不完整，以下按已记录文本估算。', 'Codex context coverage is partial. Estimates use recorded text.');
+  CONTEXT_CATEGORIES.find(category => category.key === 'assistant').label = codexUi('助手消息', 'Assistant messages');
   const codexNumber = value => value == null ? ui('未记录') : Math.abs(value) >= 1000 ? (value / 1000).toFixed(1) + 'k' : String(Math.round(value));
   const codexOriginalHeader = header;
   header = function() {
@@ -25,7 +28,7 @@
   };
   geistShowCurrentSource = function(key, summary) {
     const item = summary.categories.find(c => c.key === key), category = geistContextCategory(key);
-    openDrawer(category.label, ui('可见保留文本估算 · estimate'), '<div class="review-context-headline"><strong>≈' + codexNumber(item?.value) + ui('</strong><span>tokens 的文本估算量</span></div><p class="review-explain">从本机 rollout 的消息、工具定义、调用与返回识别来源；发生压缩时按 replacement_history 重建可见保留文本。中文字符计 1，其余字符除以 4。</p><p class="review-quiet">这不是官方分类 token 数，未包含图片、隐藏推理和未记录内容；不能由此证明某项内容实际进入了下一次请求。上方实际输入量独立读取最近请求用量。</p>'));
+    openDrawer(category.label, ui('可见保留文本估算 · estimate'), '<div class="review-context-headline"><strong>≈' + codexNumber(item?.value) + '</strong><span>tokens</span></div><p class="review-explain">' + codexContextNote + '</p>');
   };
   const codexContextOverviewBase = geistRenderContextOverview;
   geistRenderContextOverview = function() {
@@ -41,11 +44,20 @@
     region.append(note);
   };
   // Replace DSH-specific explanation drawers, while keeping the common bars.
-  reviewOpenContext = function(number) {
+  reviewOpenContext = function(number, stepNumber) {
+    if (stepNumber != null) {
+      const step = brRound(number).steps.find(s => s.number === stepNumber), info = step && reviewStepContext(brRound(number), step);
+      if (!info) return;
+      const parts = CONTEXT_CATEGORIES.filter(c => info.parts[c.key]).map(c => '<div class="source-row"><span>' + c.label + '</span>' + reviewSigned(info.parts[c.key]) + '</div>').join('');
+      const batch = info.current.contextSteps;
+      openDrawer(ui('第 ') + number + ui(' 轮') + ' · ' + ui('第 ') + stepNumber + ui(' 步'), codexUi('文本变化估算', 'Estimated text change'),
+        '<p class="review-explain">' + codexContextNote + '</p>' + (batch?.length > 1 ? '<p>' + codexUi('第 ', 'Steps ') + batch.join('、') + codexUi(' 步的工具结果合并返回。', ': combined tool result.') + '</p>' : '') + parts);
+      return;
+    }
     const row = reviewContextMap.get(number), samples = reviewContextData.requests.filter(r => r.turn === number), usages = reviewContextData.usage.filter(u => u.turnId === brRound(number).id);
     const changed = row ? CONTEXT_CATEGORIES.filter(c => row.isBaseline ? row.parts[c.key].after > 0 : row.parts[c.key].delta !== 0) : [];
     const parts = row ? changed.map(c => '<div class="source-row"><span>' + c.label + ui('</span>末次 ≈') + codexNumber(row.parts[c.key].after) + (row.isBaseline ? '' : ui(' · 变化 ') + (row.parts[c.key].delta > 0 ? '+' : '') + codexNumber(row.parts[c.key].delta)) + '</div>').join('') || ui('<p>本轮没有识别到可见文本来源变化。</p>') : ui('<p>没有本机可见文本构成记录。</p>');
-    openDrawer(ui('第 ') + number + ui(' 轮 · 来源估算'), 'estimate · ' + samples.length + ui(' 个动作后取样'), ui('<p class="review-explain">按可见保留文本估算，压缩时按替换历史重建。它表达文本来源变化，不是逐请求 token 计量。缺少的图片、隐藏推理和未记录内容不当作零。</p>') + parts + (usages.length ? ui('<h3>实际请求用量 · local-rollout</h3><p>本轮 ') + usages.length + ui(' 条响应计量；末条输入 ') + codexNumber(usages.at(-1).usage.input_tokens) + ui('，输出 ') + codexNumber(usages.at(-1).usage.output_tokens) + ui(' tokens。输入是该请求看到的上下文，跨请求累计会重复计算。</p>') : ''));
+    openDrawer(ui('第 ') + number + ui(' 轮 · 来源估算'), 'estimate · ' + samples.length + ui(' 个动作后取样'), '<p class="review-explain">' + codexContextNote + '</p>' + parts + (usages.length ? ui('<h3>实际请求用量 · local-rollout</h3><p>本轮 ') + usages.length + ui(' 条响应计量；末条输入 ') + codexNumber(usages.at(-1).usage.input_tokens) + ui('，输出 ') + codexNumber(usages.at(-1).usage.output_tokens) + ' tokens。</p>' : ''));
   };
   reviewOpenContextSources = function(key = 'system') { const summary = contextOverview(geistContextSnapshot?.pressure, null, reviewContextData.current); geistShowCurrentSource(key, summary); };
   reviewOpenCompaction = function(seqs) {
