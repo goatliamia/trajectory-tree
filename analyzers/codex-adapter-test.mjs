@@ -56,8 +56,8 @@ const lookups = adaptCodexThread(lookupFixture);
 const lookupSession = lookups.sessions[0];
 const lookupCalls = lookupSession.turns[0].steps.flatMap(step => step.calls);
 assert.deepEqual(lookupCalls.map(call => [call.name, call.classification.kind, call.status]), [
-  ['commandExecution', 'query', 'error'], ['commandExecution', 'query', 'returned'],
-  ['cua_repl/js', 'query', 'error'], ['web_search', 'query', 'returned'],
+  ['grep', 'query', 'error'], ['grep', 'query', 'returned'],
+  ['cua_repl/js', 'other', 'error'], ['web_search', 'query', 'returned'],
 ]);
 assert.ok(collectToolResults(lookupSession, lookups.context.callFacts, []).some(branch =>
   branch.kind === 'query' && branch.calls.some(call => call.id === 'local-match')));

@@ -223,7 +223,9 @@ window.__geistBoot = () => {
     read:'<circle cx="0" cy="0" r="4.4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.2 3.2 L6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
     write:'<path d="M-4.4 4.4 L-3.3 0.9 L3.1 -5.5 L5.2 -3.4 L-1.2 3 Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>',
     run:'<path d="M-4 -4 L-0.6 0 L-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M0.6 4 H5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
-    query:'<circle cx="0" cy="0" r="4.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M-4.4 0 H4.4 M0 -4.4 C-2.4 -1.5 -2.4 1.5 0 4.4 C2.4 1.5 2.4 -1.5 0 -4.4" fill="none" stroke="currentColor" stroke-width="1"/>',
+    query:'<circle cx="0" cy="0" r="4.4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.2 3.2L6 6" stroke="currentColor" stroke-width="1.5"/>',
+    web:'<circle cx="0" cy="0" r="4.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M-4.4 0 H4.4 M0 -4.4 C-2.4 -1.5 -2.4 1.5 0 4.4 C2.4 1.5 2.4 -1.5 0 -4.4" fill="none" stroke="currentColor" stroke-width="1"/>',
+    mixed:'<rect x="-5" y="-5" width="7" height="7" rx="1"/><path d="M5-2v7h-7"/>',
     other:'<circle cx="0" cy="0" r="2.3" fill="currentColor"/>',
   };
   const COND_NAME={FS_NOT_OBSERVED:ui('目标文件尚未读取'),FS_STALE_VERSION:ui('文件版本已变化'),SESSION_QUERY_PERSISTENCE_FAILED:ui('历史存储不可用'),TOOL_TIMEOUT:ui('调用超时'),TOOL_ERROR:ui('调用报错')};
@@ -392,7 +394,7 @@ window.__geistBoot = () => {
         part += '<g class="review-action-badge ' + kind + '" transform="translate(' + bx + ' ' + by + ')"><title>' + label + '</title>' +
           '<circle r="7.5"/><text text-anchor="middle" y="3.2">' + glyph + '</text></g>';
       });
-      const icon = step.calls.length && step.calls.every(c => /^查询/.test(reviewContextData.callFacts?.[c.seq]?.title || '')) ? STEP_ICON.query : stepIcon(step);
+      const icon = stepIcon(step);
       const toolNames = [...new Set(step.calls.map(call => call.name))];
       part += '<g transform="translate(' + pos + ' ' + base + ')" class="review-action-icon"' + (toolNames.length === 1 ? ' style="stroke:' + globalThis.__trajectoryToolColor(toolNames[0]) + '"' : '') + '>' + icon + '</g>';
       part += reviewToolStepLabel(step, pos, base + 34);
@@ -3492,9 +3494,20 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   const geistOutcomeLayoutCache = new Map();
   const geistReportIcon = '<path d="M-4-6h5l3 3v9h-8zM1-6v3h3M-1-0.5h3M-1 2.5h3"/>';
   const geistOperationKindBase = callKind;
-  callKind = function(call) { const family = reviewContextData.callFacts?.[call.seq]?.operation?.family; return ({ read: 'read', write: 'write', search: 'query', web: 'query', command: 'run', process: 'run' })[family] || geistOperationKindBase(call); };
-  const geistOperationIconBase = stepIcon;
-  stepIcon = function(step) { const family = reviewContextData.callFacts?.[step.calls[0]?.seq]?.operation?.family; return family === 'read' ? geistReportIcon : family === 'search' ? STEP_ICON.read : geistOperationIconBase(step); };
+  function geistCallFamily(call) { const family=globalThis.__trajectoryToolFamily(call); return family==='other' ? reviewContextData.callFacts?.[call.seq]?.operation?.family || family : family; }
+  callKind = function(call) { return ({ read: 'read', write: 'write', search: 'query', web: 'query', command: 'run', process: 'run' })[geistCallFamily(call)] || geistOperationKindBase(call); };
+  function geistFamilyGlyph(family) {
+    if (family==='read') return geistReportIcon;
+    if (family==='search') return STEP_ICON.query;
+    if (family==='web') return STEP_ICON.web;
+    if (family==='write') return STEP_ICON.write;
+    if (family==='command') return STEP_ICON.run;
+    if (family==='process' || family==='pending') return '<circle r="5"/><path d="M0-3v3l2 1"/>';
+    if (family==='coordination') return '<path d="M-4-5v7q0 3 4 3h4M-4-1h5q3 0 3-4"/><circle cx="-4" cy="-5" r="1"/><circle cx="4" cy="-5" r="1"/>';
+    if (family==='application') return '<rect x="-6" y="-4" width="12" height="8" rx="1"/><path d="M-2 6h4M0 4v2"/>';
+    return family==='mixed' ? STEP_ICON.mixed : STEP_ICON.other;
+  }
+  stepIcon = function(step) { const families=[...new Set(step.calls.map(geistCallFamily))]; return geistFamilyGlyph(families.length>1?'mixed':families[0]); };
   const geistOperationStepLabelBase = reviewActionStepLabel;
   reviewActionStepLabel = function(step) {
     if (!step.calls.some(call => reviewContextData.callFacts?.[call.seq]?.operation)) return geistOperationStepLabelBase(step);
@@ -3528,15 +3541,17 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     if (result.kind === 'error') return brCap(x, y);
     if (result.kind === 'recovered') return brCap(x, y);
     if (result.recorded) {
-      const kind = result.kind === 'pending' ? 'pending' : result.family || result.kind;
-      const glyph = kind === 'read' ? geistReportIcon : kind === 'write' ? STEP_ICON.write : kind === 'search' ? STEP_ICON.read : kind === 'command' ? STEP_ICON.run : kind === 'pending' || kind === 'process' ? '<circle r="5"/><path d="M0-3v3l2 1"/>' : kind === 'coordination' ? '<path d="M-4-5v7q0 3 4 3h4M-4-1h5q3 0 3-4"/><circle cx="-4" cy="-5" r="1"/><circle cx="4" cy="-5" r="1"/>' : STEP_ICON.query;
+      const families=[...new Set(result.calls.map(geistCallFamily))];
+      const kind = result.kind === 'pending' ? 'pending' : families.length>1 ? 'mixed' : families[0] || result.family || result.kind;
+      const glyph = geistFamilyGlyph(kind);
       return '<g transform="translate(' + x + ' ' + y + ')" class="geist-result-glyph ' + (kind === 'write' ? 'change' : kind) + '">' + glyph + '</g>';
     }
     if (result.kind === 'check') {
       const failed = result.calls.some(c => /^命令输出报告：FAIL\b/i.test(c.fact?.outcome || '') || /^\s*FAIL\b/im.test(c.result?.text || ''));
       return '<g transform="translate(' + x + ' ' + y + ')" class="geist-result-glyph ' + (failed ? 'error' : 'check') + '">' + geistReportIcon + '</g>';
     }
-    return '<g transform="translate(' + x + ' ' + y + ')" class="geist-result-glyph ' + result.kind + '">' + STEP_ICON[result.kind === 'change' ? 'write' : result.kind === 'read' ? 'read' : 'query'] + '</g>';
+    const families=[...new Set(result.calls.map(geistCallFamily))];
+    return '<g transform="translate(' + x + ' ' + y + ')" class="geist-result-glyph ' + result.kind + '">' + geistFamilyGlyph(families.length>1?'mixed':families[0] || 'other') + '</g>';
   }
   function geistResultBranchBody(p, base) {
     const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;
@@ -3847,7 +3862,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       if (item.querySelector('.br-check') || [ui('结果还不清楚'), ui('结果未确认')].some(label => item.textContent.includes(label))) item.remove();
     });
     if (key && !key.querySelector('.geist-result-key')) {
-      key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + STEP_ICON.read + ui('</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">') + STEP_ICON.write + ui('</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">') + geistReportIcon + ui('</svg>检查输出</span>'));
+      key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + geistReportIcon + ui('</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">') + STEP_ICON.write + ui('</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">') + geistReportIcon + ui('</svg>检查输出</span>'));
     }
     if (key && overviewLayers.has('duration') && view !== 'path' && !key.querySelector('.geist-tool-time-key')) {
       key.insertAdjacentHTML('beforeend', ui('<span class="geist-tool-time-key" title="官方记录中工具从调用到返回的时间区间；点击本步工具时间查看覆盖与累计口径"><i></i>') + (view === 'path' ? ui('步内工具时段') : ui('工具执行区间')) + '</span>');

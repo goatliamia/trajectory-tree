@@ -5,9 +5,20 @@
   const geistOutcomeLayoutCache = new Map();
   const geistReportIcon = '<path d="M-4-6h5l3 3v9h-8zM1-6v3h3M-1-0.5h3M-1 2.5h3"/>';
   const geistOperationKindBase = callKind;
-  callKind = function(call) { const family = reviewContextData.callFacts?.[call.seq]?.operation?.family; return ({ read: 'read', write: 'write', search: 'query', web: 'query', command: 'run', process: 'run' })[family] || geistOperationKindBase(call); };
-  const geistOperationIconBase = stepIcon;
-  stepIcon = function(step) { const family = reviewContextData.callFacts?.[step.calls[0]?.seq]?.operation?.family; return family === 'read' ? geistReportIcon : family === 'search' ? STEP_ICON.read : geistOperationIconBase(step); };
+  function geistCallFamily(call) { const family=globalThis.__trajectoryToolFamily(call); return family==='other' ? reviewContextData.callFacts?.[call.seq]?.operation?.family || family : family; }
+  callKind = function(call) { return ({ read: 'read', write: 'write', search: 'query', web: 'query', command: 'run', process: 'run' })[geistCallFamily(call)] || geistOperationKindBase(call); };
+  function geistFamilyGlyph(family) {
+    if (family==='read') return geistReportIcon;
+    if (family==='search') return STEP_ICON.query;
+    if (family==='web') return STEP_ICON.web;
+    if (family==='write') return STEP_ICON.write;
+    if (family==='command') return STEP_ICON.run;
+    if (family==='process' || family==='pending') return '<circle r="5"/><path d="M0-3v3l2 1"/>';
+    if (family==='coordination') return '<path d="M-4-5v7q0 3 4 3h4M-4-1h5q3 0 3-4"/><circle cx="-4" cy="-5" r="1"/><circle cx="4" cy="-5" r="1"/>';
+    if (family==='application') return '<rect x="-6" y="-4" width="12" height="8" rx="1"/><path d="M-2 6h4M0 4v2"/>';
+    return family==='mixed' ? STEP_ICON.mixed : STEP_ICON.other;
+  }
+  stepIcon = function(step) { const families=[...new Set(step.calls.map(geistCallFamily))]; return geistFamilyGlyph(families.length>1?'mixed':families[0]); };
   const geistOperationStepLabelBase = reviewActionStepLabel;
   reviewActionStepLabel = function(step) {
     if (!step.calls.some(call => reviewContextData.callFacts?.[call.seq]?.operation)) return geistOperationStepLabelBase(step);
@@ -41,15 +52,17 @@
     if (result.kind === 'error') return brCap(x, y);
     if (result.kind === 'recovered') return brCap(x, y);
     if (result.recorded) {
-      const kind = result.kind === 'pending' ? 'pending' : result.family || result.kind;
-      const glyph = kind === 'read' ? geistReportIcon : kind === 'write' ? STEP_ICON.write : kind === 'search' ? STEP_ICON.read : kind === 'command' ? STEP_ICON.run : kind === 'pending' || kind === 'process' ? '<circle r="5"/><path d="M0-3v3l2 1"/>' : kind === 'coordination' ? '<path d="M-4-5v7q0 3 4 3h4M-4-1h5q3 0 3-4"/><circle cx="-4" cy="-5" r="1"/><circle cx="4" cy="-5" r="1"/>' : STEP_ICON.query;
+      const families=[...new Set(result.calls.map(geistCallFamily))];
+      const kind = result.kind === 'pending' ? 'pending' : families.length>1 ? 'mixed' : families[0] || result.family || result.kind;
+      const glyph = geistFamilyGlyph(kind);
       return '<g transform="translate(' + x + ' ' + y + ')" class="geist-result-glyph ' + (kind === 'write' ? 'change' : kind) + '">' + glyph + '</g>';
     }
     if (result.kind === 'check') {
       const failed = result.calls.some(c => /^命令输出报告：FAIL\b/i.test(c.fact?.outcome || '') || /^\s*FAIL\b/im.test(c.result?.text || ''));
       return '<g transform="translate(' + x + ' ' + y + ')" class="geist-result-glyph ' + (failed ? 'error' : 'check') + '">' + geistReportIcon + '</g>';
     }
-    return '<g transform="translate(' + x + ' ' + y + ')" class="geist-result-glyph ' + result.kind + '">' + STEP_ICON[result.kind === 'change' ? 'write' : result.kind === 'read' ? 'read' : 'query'] + '</g>';
+    const families=[...new Set(result.calls.map(geistCallFamily))];
+    return '<g transform="translate(' + x + ' ' + y + ')" class="geist-result-glyph ' + result.kind + '">' + geistFamilyGlyph(families.length>1?'mixed':families[0] || 'other') + '</g>';
   }
   function geistResultBranchBody(p, base) {
     const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;
@@ -360,7 +373,7 @@
       if (item.querySelector('.br-check') || [ui('结果还不清楚'), ui('结果未确认')].some(label => item.textContent.includes(label))) item.remove();
     });
     if (key && !key.querySelector('.geist-result-key')) {
-      key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + STEP_ICON.read + ui('</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">') + STEP_ICON.write + ui('</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">') + geistReportIcon + ui('</svg>检查输出</span>'));
+      key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + geistReportIcon + ui('</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">') + STEP_ICON.write + ui('</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">') + geistReportIcon + ui('</svg>检查输出</span>'));
     }
     if (key && overviewLayers.has('duration') && view !== 'path' && !key.querySelector('.geist-tool-time-key')) {
       key.insertAdjacentHTML('beforeend', ui('<span class="geist-tool-time-key" title="官方记录中工具从调用到返回的时间区间；点击本步工具时间查看覆盖与累计口径"><i></i>') + (view === 'path' ? ui('步内工具时段') : ui('工具执行区间')) + '</span>');

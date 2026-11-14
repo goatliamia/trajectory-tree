@@ -146,7 +146,7 @@ export function finalizeClaudeDataset(data, native, projected = projectClaudeTra
         call.signature = input ? hash([call.nativeName, canonical(input)]) : null;
         if (!input) call.args = null;
         if (call.error) call.error.code = 'CLAUDE_TOOL_ERROR';
-        call.semanticKind = ({ Read: 'read', Write: 'write', Edit: 'write', Bash: 'run' })[call.nativeName] || 'other';
+        call.semanticKind = ({read:'read',write:'write',search:'query',web:'query',command:'run',process:'run'})[call.semanticFamily] || 'other';
         const fact = data.payload.context.callFacts?.[call.seq];
         if (fact && typeof path === 'string' && path && ['Read', 'Write', 'Edit'].includes(call.nativeName)) {
           const filename = path.replace(/\\/g, '/').split('/').at(-1);

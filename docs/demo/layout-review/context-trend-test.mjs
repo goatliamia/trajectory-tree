@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
-import { compactTrendPolyline } from './context-trend-model.mjs';
+import { compactTrendPolyline, stepTrendPolyline, chronologicalContextSamples } from './context-trend-model.mjs';
+
+const samples=chronologicalContextSamples([{time:10,ordinal:1,v:1},{time:40,ordinal:4,v:4},{time:20,ordinal:2,v:2},{time:20,ordinal:3,v:0}]);
+assert.deepEqual(samples.map(row=>row.ordinal),[1,2,3,4]);
+const stairs=stepTrendPolyline(samples.map(row=>[row.time,row.v])).map(p=>p.split(',').map(Number));
+assert.deepEqual(stairs,[[10,1],[20,1],[20,2],[20,0],[40,0],[40,4]],'Same-time compaction is vertical; later values do not form diagonals');
+for(let i=1;i<stairs.length;i++){const a=stairs[i-1],b=stairs[i];assert.ok(b[0]>=a[0]);assert.ok(a[0]===b[0]||a[1]===b[1]);}
 
 // A dense straight run is identical SVG geometry after compaction.
 const flat = Array.from({ length: 10000 }, (_, x) => [x / 10, 42]);

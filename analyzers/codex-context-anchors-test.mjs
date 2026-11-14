@@ -30,4 +30,12 @@ const ambiguous=codexContextAnchors([
   {ordinal:4,type:'response_item',payload:{type:'function_call_output',call_id:'a'}},
 ]);
 assert.equal(ambiguous.get('unknown').basis,'completion','Overlapping envelopes do not invent parentage');
+const background=structuredClone(snapshot);
+background.thread.turns[0].items.push({id:'background',type:'commandExecution',command:'node server.mjs',status:'completed',exitCode:0});
+const late=[...records,row(50,'turn_context',{turn_id:'next'}),response(60,{type:'custom_tool_call',call_id:'later',input:'another command'}),
+  row(8000,'event_msg',{type:'item_completed',item:{id:'background',type:'CommandExecution'},started_at_ms:start+5,completed_at_ms:start+8000}),
+  response(8001,{type:'custom_tool_call_output',call_id:'later',output:'new context'})];
+const lateResult=adaptCodexThread(background,{rollout:late.map(JSON.stringify).join('\n')});
+assert.equal(lateResult.context.requests.length,3,'Late process termination does not sample future context into an earlier turn');
+assert.ok(lateResult.context.timeline.some(row=>row.time===start+8001),'Trend retains actual context persistence independently');
 console.log('Codex context anchors passed: delayed persistence, combined returns, own reply and ambiguous envelopes.');

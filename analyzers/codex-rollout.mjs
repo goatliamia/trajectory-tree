@@ -6,12 +6,18 @@ import { jsonlFrames } from '../lib/jsonl-frames.mjs';
 import { omitCodexImages } from './codex-images.mjs';
 
 const maxBytes = 128 * 1024 * 1024;
+const maxSourceBytes = 512 * 1024 * 1024;
 const decompress = typeof zlib.zstdDecompress === 'function' ? promisify(zlib.zstdDecompress) : null;
 
-async function compactRollout(chunks, signal) {
+export async function compactRollout(chunks, signal, retainedLimit = maxBytes) {
   const decoder = new StringDecoder('utf8');
-  const lines = [];
-  const frames = jsonlFrames((line, ending) => lines.push(omitCodexImages(line), ending));
+  const lines = []; let retainedBytes = 0;
+  const frames = jsonlFrames((line, ending) => {
+    const compact = omitCodexImages(line);
+    retainedBytes += Buffer.byteLength(compact) + Buffer.byteLength(ending);
+    if (retainedBytes > retainedLimit) throw Error('Codex rollout text exceeds 128 MiB after image omission');
+    lines.push(compact, ending);
+  });
   for await (const bytes of chunks) {
     for (let offset = 0; offset < bytes.length; offset += 64 * 1024) {
       signal?.throwIfAborted();
@@ -35,7 +41,7 @@ export function validateCodexRollout(text, threadId) {
 export async function readCodexRollout(file, { signal, required = false } = {}) {
   if (!file) return null;
   const paths = /\.zst$/i.test(file) ? [file] : [file, file + '.zst'];
-  const options = { maxBytes, signal, overflow: 'Codex rollout exceeds 128 MiB' };
+  const options = { maxBytes:maxSourceBytes, signal, overflow: 'Codex rollout source exceeds 512 MiB' };
   let missing;
   for (const path of paths) {
     try {
@@ -45,7 +51,7 @@ export async function readCodexRollout(file, { signal, required = false } = {}) 
         if (!required) return null;
         throw Error('Reading a Zstandard rollout requires a Node runtime with zstd support');
       }
-      const bytes = await decompress(compressed, { maxOutputLength: maxBytes });
+      const bytes = await decompress(compressed, { maxOutputLength: maxSourceBytes });
       signal?.throwIfAborted();
       return await compactRollout([bytes], signal);
     } catch (error) {

@@ -18,6 +18,7 @@ const assets={
  'usage.mjs':readFileSync(new URL('plugin/trajectory-tools/lib/usage.js',root),'utf8').replace('./inspect-models/cache-efficiency.js','../../cache-efficiency.js'),
  'scope-index.mjs':readFileSync(new URL('lib/scope-index.mjs',root),'utf8'),
  'tool-colors.mjs':readFileSync(new URL('lib/tool-colors.mjs',root),'utf8'),
+ 'tool-behavior.mjs':readFileSync(new URL('lib/tool-behavior.mjs',root),'utf8'),
  'tool-feedback.mjs':readFileSync(new URL('lib/tool-feedback.mjs',root),'utf8'),
 };
 let changed=false;

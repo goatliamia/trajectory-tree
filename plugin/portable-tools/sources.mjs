@@ -44,11 +44,13 @@ export function datasetAtCut(data, cut) {
     throw Error('The selected turn changed after the cut; reopen Eval');
   }
   const numbers = new Set(turns.map(t => t.number)), ids = new Set(turns.map(t => t.id));
+  const contextLine = context.requests.reduce((last,row) => numbers.has(row.turn) && inside(row.seq) ? Math.max(last,row.contextLine || 0) : last,0);
   const records = data.records.filter(r => inside(r.seq));
   const scoped = {
     ...context, cutoffSeq: cut, current: null, scope: null,
     usage: context.usage.filter(r => data.host === 'codex' ? ids.has(r.turnId) : numbers.has(r.turn) && inside(r.seq)),
     requests: context.requests.filter(r => numbers.has(r.turn) && inside(r.seq)),
+    timeline: context.timeline?.filter(row => row.ordinal <= contextLine),
     fileOperations: context.fileOperations.filter(r => numbers.has(r.turn) && inside(r.seq)),
     boundaries: context.boundaries.filter(r => inside(r.seq)),
     skillEvents: context.skillEvents.filter(r => inside(r.seq)),

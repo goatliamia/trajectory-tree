@@ -4,6 +4,7 @@ import { omitCodexImages, omitImageLabels } from './codex-images.mjs';
 import { attributeToolFailure, commandPowerShellEdition, powerShellScript } from '../plugin/trajectory-tools/lib/tool-attribution.js';
 import {inputToolMeasure,settleToolMeasure,recordedDiagnostics} from '../lib/tool-feedback.mjs';
 import {codexContextAnchors,compositionAtOrdinal} from './codex-context-anchors.mjs';
+import {commandIntent} from '../lib/tool-behavior.mjs';
 
 const keys = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
 const empty = () => Object.fromEntries(keys.map(k => [k, 0]));
@@ -69,21 +70,22 @@ export function commandReadEvidence(command, commandActions = []) {
 export function classifyCodexItem(item) {
   if (item.type === 'fileChange') return { kind: 'write', title: '修改文件', evidence: 'official-api:fileChange' };
   if (item.type === 'commandExecution') {
-    const cmd = commandBody(item.command), reads = commandReadEvidence(item.command, item.commandActions);
+    const cmd = commandBody(item.command), intent = commandIntent(cmd);
+    const reads = commandReadEvidence(item.command, item.commandActions).filter(read => intent.family==='read' || read.basis!=='literal-read-command');
     if (reads.some(r => /(?:^|[\\/])SKILL\.md$/i.test(r.path))) return { kind: 'read', title: '读取技能说明', reads, evidence: 'command-and-result' };
     if (reads.length) return { kind: 'read', title: '读取 ' + pathBase(reads[0].path) + (reads.length > 1 ? ' 等文件' : ''), reads, evidence: 'command-and-result' };
-    if (/\brg\b|\bSelect-String\b|\bgrep\b/.test(cmd)) return { kind: 'query', title: /--files\b/.test(cmd) ? '查找文件' : '查找文件内容', evidence: 'command' };
+    if (intent.family==='search') return { kind: 'query', family:'search', tool:intent.tool, title: intent.tool==='glob' ? '查找文件' : '查找文件内容', evidence: 'command' };
     if (/\b(?:test|self-test|--test|npm\s+test|pnpm\s+test)\b/i.test(cmd)) return { kind: 'run', title: '运行验证', evidence: 'command' };
     if (/\b(?:build|build-[\w-]+\.mjs)\b/i.test(cmd)) return { kind: 'run', title: '构建预览', evidence: 'command' };
-    if (/\bGet-ChildItem\b|\bls\b/.test(cmd)) return { kind: 'query', title: '查看目录', evidence: 'command' };
     return { kind: 'run', title: '运行命令', evidence: 'official-api:commandExecution' };
   }
   if (item.type === 'mcpToolCall') {
     const source = [item.server, item.tool].join('/'), arg = item.arguments || {};
-    return { kind: /search|query|find|list|get|read/.test(item.tool) || item.readOnlyHint ? 'query' : 'other', title: /cua_repl/.test(source) ? (arg.title || '操作浏览器／应用') : (arg.title || '调用 ' + source), evidence: 'official-api:mcpToolCall', source: { server: item.server, tool: item.tool, pluginId: item.pluginId ?? null, appContext: item.appContext ?? null } };
+    const application=/cua_repl/.test(source);
+    return { kind: application ? 'other' : /search|query|find|list|get|read/.test(item.tool) || item.readOnlyHint ? 'query' : 'other', ...(application?{family:'application'}:{}), title: application ? (arg.title || '操作浏览器／应用') : (arg.title || '调用 ' + source), evidence: 'official-api:mcpToolCall', source: { server: item.server, tool: item.tool, pluginId: item.pluginId ?? null, appContext: item.appContext ?? null } };
   }
   if (item.type === 'dynamicToolCall') return { kind: 'other', title: '调用 ' + [item.namespace, item.tool].filter(Boolean).join('/'), evidence: 'official-api:dynamicToolCall' };
-  if (item.type === 'webSearch') return { kind: 'query', title: '查询网页', evidence: 'official-api:webSearch' };
+  if (item.type === 'webSearch') return { kind: 'query', family:'web', title: '查询网页', evidence: 'official-api:webSearch' };
   if (item.type === 'imageView') return { kind: 'read', title: '查看图片', evidence: 'official-api:imageView' };
   if (item.type === 'collabAgentToolCall') return { kind: 'other', title: item.tool === 'spawnAgent' ? '启动子 Agent' : '协调子 Agent', evidence: 'official-api:collabAgentToolCall' };
   return { kind: 'other', title: item.type, evidence: 'official-api' };
@@ -240,7 +242,7 @@ export function adaptCodexThread(snapshot, options = {}) {
       const result = item.type === 'commandExecution' ? item.aggregatedOutput : item.type === 'mcpToolCall' ? flat(item.result?.content) : item.type === 'dynamicToolCall' ? flat(item.contentItems) : item.type === 'fileChange' ? (item.changes || []).map(c => c.diff || '').join('\n') : JSON.stringify(item.results || item.states || item.agentsStates || '');
       const nativeName = ['mcpToolCall', 'dynamicToolCall'].includes(item.type)
         ? [item.server || item.namespace, item.tool].filter(Boolean).join('/') : item.type;
-      const name = ({ read: 'read', write: 'apply_patch', run: 'pwsh' })[cls.kind]
+      const name = cls.tool ?? ({ read: 'read', write: 'apply_patch', run: commandPowerShellEdition(item.command) ? 'pwsh' : 'shell' })[cls.kind]
         ?? (item.type === 'webSearch' ? 'web_search' : nativeName);
       const target = item.changes?.[0]?.path || cls.reads?.[0]?.path || item.path || null;
       const call = { id: item.id, seq: itemSeq, name, nativeName, classification: cls, signature: hash(JSON.stringify([item.type, args])), target, args: excerpt(JSON.stringify(args), 22000), start: a, end: state === 'unknown' ? null : b, resultSeq, status: state, error: state === 'error' ? { code: item.exitCode != null ? 'EXIT_' + item.exitCode : 'TOOL_ERROR', message: short(item.error || result, 180) } : null, result: excerpt(result, 18000), durationMs: Number.isFinite(item.durationMs) && item.durationMs >= 0 ? item.durationMs : precise ? b - a : null, timingSource: step.timingSource, source: cls.source };
@@ -305,8 +307,9 @@ export function adaptCodexThread(snapshot, options = {}) {
     // observed actions. Their semanticUnit prevents presenting them as requests.
     for (const step of steps) if (local) {
       const anchor = local.contextAnchors.get(contextItems.get(step));
+      if (anchor?.basis === 'completion' && output.end != null && step.end >= output.end + 1000) continue;
       const row = anchor ? compositionAtOrdinal(local.compositions, anchor.ordinal) : null;
-      if (row) requests.push({ turn: output.number, step: step.number, seq: step.seq, time: step.end, ...Object.fromEntries(keys.map(k => [k, row[k]])), total: keys.reduce((n, k) => n + row[k], 0), source: 'estimate', semanticUnit: 'visible-retained-text-after-action', activeMs: null,
+      if (row) requests.push({ turn: output.number, step: step.number, seq: step.seq, time: anchor.time ?? step.end, ...Object.fromEntries(keys.map(k => [k, row[k]])), total: keys.reduce((n, k) => n + row[k], 0), source: 'estimate', semanticUnit: 'visible-retained-text-after-action', activeMs: null,
         contextLine: anchor.ordinal, contextBasis: anchor.basis,
         ...(anchor.basis === 'batch-result' ? { contextSteps: steps.filter(s => anchor.members.includes(contextItems.get(s))).map(s => s.number) } : {}) });
     }
@@ -327,7 +330,10 @@ export function adaptCodexThread(snapshot, options = {}) {
   const current = local?.current ?? null;
   const session = { id: thread.id, title: thread.name || 'Codex 当前对话', parentSession: thread.parentThreadId, source: { host: 'codex', name: snapshot.source, file: thread.path, session: thread.id, cwd: thread.cwd, provider: thread.modelProvider }, firstSeq: 0, lastSeq: seq, eventCount: events.length, diagnostics: { replacementEventsExcluded: 0, unmatchedResults: 0, duplicateResults: 0, unresolvedCalls: turns.flatMap(t => t.steps).flatMap(s => s.calls).filter(c => c.resultSeq == null).length }, turns, communications: [], totals, overview: { rulesVersion: 1, episodes, retries: [], representatives: episodes.map(e => e.id) } };
   const evidence = { api: { source: 'official-api', name: snapshot.source }, local: local?.evidence ?? null, timingMatched, visibleEvents: events.length, context: { estimate: true, semantics: 'visible text retained in local history, not full model input', incomplete: true, knownCategories: current ? keys.filter(k => current[k] > 0) : [], unknown: ['unrecorded request serialization', 'image tokens', 'hidden reasoning', 'unrecorded system/tool definitions'] }, model: 'Configured model is current thread metadata; per-turn model comes only from local turn_context.' };
+  // Trend time belongs to persisted context, not to a background process that
+  // may terminate several turns after its original tool response was delivered.
+  const timeline = local?.compositions.map(row => ({...row,source:'estimate'})) || [];
   return { schema: 1, generatedAt: snapshot.capturedAt, mainSession: thread.id, sessions: [session], host: 'codex', events,
-    context: { session: thread.id, cutoffSeq: seq, eventCount: events.length, source: { name: 'Codex official history + optional local rollout; independent visible-text estimate' }, requests, boundaries, retries: [], retryStarted: [], callFacts, fileOperations, supplementSources: [], current, route: { model: local?.contexts.at(-1)?.model || thread.model, provider: thread.modelProvider, reasoningEffort: local?.contexts.at(-1)?.reasoningEffort || thread.reasoningEffort }, skillEvents: [...skillEvents, ...(local?.skills || [])], collaborationEvents, compactions: local?.compactions || [], declarations: local?.declarations || [], usage: local?.usage || [] },
+    context: { session: thread.id, cutoffSeq: seq, eventCount: events.length, source: { name: 'Codex official history + optional local rollout; independent visible-text estimate' }, requests, timeline, boundaries, retries: [], retryStarted: [], callFacts, fileOperations, supplementSources: [], current, route: { model: local?.contexts.at(-1)?.model || thread.model, provider: thread.modelProvider, reasoningEffort: local?.contexts.at(-1)?.reasoningEffort || thread.reasoningEffort }, skillEvents: [...skillEvents, ...(local?.skills || [])], collaborationEvents, compactions: local?.compactions || [], declarations: local?.declarations || [], usage: local?.usage || [] },
     officialStats: { session: thread.id, source: { name: 'Codex native usage telemetry (local rollout)' }, snapshot: { turns: [], steps: [], stepCount: 0 }, context: { pressure: { pressureTokens: local?.latestUsage?.input_tokens ?? null, contextWindow: local?.modelContextWindow ?? null }, breakdown: null, source: 'local-rollout token_count; last completed request input, not projected current occupancy' } }, evidence };
 }

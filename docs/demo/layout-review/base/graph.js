@@ -162,7 +162,9 @@
     read:'<circle cx="0" cy="0" r="4.4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.2 3.2 L6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
     write:'<path d="M-4.4 4.4 L-3.3 0.9 L3.1 -5.5 L5.2 -3.4 L-1.2 3 Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>',
     run:'<path d="M-4 -4 L-0.6 0 L-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M0.6 4 H5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
-    query:'<circle cx="0" cy="0" r="4.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M-4.4 0 H4.4 M0 -4.4 C-2.4 -1.5 -2.4 1.5 0 4.4 C2.4 1.5 2.4 -1.5 0 -4.4" fill="none" stroke="currentColor" stroke-width="1"/>',
+    query:'<circle cx="0" cy="0" r="4.4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.2 3.2L6 6" stroke="currentColor" stroke-width="1.5"/>',
+    web:'<circle cx="0" cy="0" r="4.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M-4.4 0 H4.4 M0 -4.4 C-2.4 -1.5 -2.4 1.5 0 4.4 C2.4 1.5 2.4 -1.5 0 -4.4" fill="none" stroke="currentColor" stroke-width="1"/>',
+    mixed:'<rect x="-5" y="-5" width="7" height="7" rx="1"/><path d="M5-2v7h-7"/>',
     other:'<circle cx="0" cy="0" r="2.3" fill="currentColor"/>',
   };
   const COND_NAME={FS_NOT_OBSERVED:ui('目标文件尚未读取'),FS_STALE_VERSION:ui('文件版本已变化'),SESSION_QUERY_PERSISTENCE_FAILED:ui('历史存储不可用'),TOOL_TIMEOUT:ui('调用超时'),TOOL_ERROR:ui('调用报错')};

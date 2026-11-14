@@ -389,8 +389,39 @@ body{margin:0;background:var(--bg)}
 [data-tool-tone="6"]{--tt-tool-color:var(--tt-tool-tone-6);}
 [data-tool-tone="7"]{--tt-tool-color:var(--tt-tool-tone-7);}
 .tt-tool-name{color:var(--tt-tool-color);font-weight:500}
-.tt-tool-measure{display:inline-flex;gap:4px;font:11px var(--font-mono,monospace);white-space:nowrap}.tt-measure-added{color:var(--dsw-alias-state-success-primary,#22c55e)}.tt-measure-removed{color:var(--dsw-alias-state-error-primary,#ec1313)}.tt-measure-muted{color:var(--muted,#777)}.tt-feedback-peek{display:block;font-size:12px;line-height:1.5;color:var(--muted,#777);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:6px}.tt-feedback-peek b{color:#b84b50;font:11px var(--font-mono,monospace);font-weight:500}.tt-code-feedback{margin:15px 0;font-size:12px;min-width:0}.tt-code-feedback header{display:flex;gap:12px;flex-wrap:wrap;align-items:baseline;margin-bottom:9px}.tt-code-feedback header>span{color:#a2464b}.tt-code-feedback header>strong{font-weight:500;overflow-wrap:anywhere}.tt-code-lines{overflow:auto;background:var(--surface,#fafafa);padding:9px 0;border-radius:5px}.tt-code-line,.tt-code-caret{display:grid;grid-template-columns:38px minmax(max-content,1fr);line-height:1.7;font:12px/1.7 var(--font-mono,monospace);min-width:100%;width:max-content}.tt-code-line code,.tt-code-caret code{white-space:pre;padding:0 12px 0 8px;background:transparent;color:inherit;font:inherit}.tt-line-number{text-align:right;padding-right:8px;color:#999;user-select:none}.tt-code-line.is-error{background:#e5484d10;box-shadow:inset 2px 0 #e5484d}.tt-code-line.is-error .tt-line-number,.tt-code-caret{color:#c72b31}.tt-code-hit{background:transparent;color:inherit;text-decoration:underline wavy #c72b31;text-underline-offset:3px;display:inline-block;min-width:.65ch}.tt-code-reason{font-size:12px!important;line-height:1.65!important;color:#a2333a!important;margin:8px 0!important;overflow-wrap:anywhere}.tt-code-reason small{display:block;font:11px var(--font-mono,monospace);color:#888;margin-top:3px}</style><script>(()=>{const fixedToolTones={"read":0,"glob":1,"grep":1,"edit":2,"write":2,"apply_patch":2,"pwsh":4,"powershell":4,"shell":4,"bash":4,"web_fetch":5,"web_search":5,"ask_user_question":3,"todo_write":7,"subagent":5,"subagent_fork":5};function toolToneIndex(name) {
+.tt-tool-measure{display:inline-flex;gap:4px;font:11px var(--font-mono,monospace);white-space:nowrap}.tt-measure-added{color:var(--dsw-alias-state-success-primary,#22c55e)}.tt-measure-removed{color:var(--dsw-alias-state-error-primary,#ec1313)}.tt-measure-muted{color:var(--muted,#777)}.tt-feedback-peek{display:block;font-size:12px;line-height:1.5;color:var(--muted,#777);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:6px}.tt-feedback-peek b{color:#b84b50;font:11px var(--font-mono,monospace);font-weight:500}.tt-code-feedback{margin:15px 0;font-size:12px;min-width:0}.tt-code-feedback header{display:flex;gap:12px;flex-wrap:wrap;align-items:baseline;margin-bottom:9px}.tt-code-feedback header>span{color:#a2464b}.tt-code-feedback header>strong{font-weight:500;overflow-wrap:anywhere}.tt-code-lines{overflow:auto;background:var(--surface,#fafafa);padding:9px 0;border-radius:5px}.tt-code-line,.tt-code-caret{display:grid;grid-template-columns:38px minmax(max-content,1fr);line-height:1.7;font:12px/1.7 var(--font-mono,monospace);min-width:100%;width:max-content}.tt-code-line code,.tt-code-caret code{white-space:pre;padding:0 12px 0 8px;background:transparent;color:inherit;font:inherit}.tt-line-number{text-align:right;padding-right:8px;color:#999;user-select:none}.tt-code-line.is-error{background:#e5484d10;box-shadow:inset 2px 0 #e5484d}.tt-code-line.is-error .tt-line-number,.tt-code-caret{color:#c72b31}.tt-code-hit{background:transparent;color:inherit;text-decoration:underline wavy #c72b31;text-underline-offset:3px;display:inline-block;min-width:.65ch}.tt-code-reason{font-size:12px!important;line-height:1.65!important;color:#a2333a!important;margin:8px 0!important;overflow-wrap:anywhere}.tt-code-reason small{display:block;font:11px var(--font-mono,monospace);color:#888;margin-top:3px}</style><script>(()=>{const toolAliases={"Read":"read","Write":"write","Edit":"edit","MultiEdit":"multi_edit","Grep":"grep","Glob":"glob","Bash":"bash","WebSearch":"web_search","WebFetch":"web_fetch","AskUserQuestion":"ask_user_question","TodoWrite":"todo_write","Task":"subagent"};function canonicalToolName(name) { return toolAliases[name] || name; }
+function commandIntent(command) {
+  let body = Array.isArray(command) ? String(command.at(-1) || '') : String(command || '');
+  const wrapper = body.match(/^\s*(?:&\s*)?["']?(?:[^\r\n"']*[\\/])?(?:pwsh|powershell)(?:\.exe)?["']?\s+[\s\S]*?-Command\s+([\s\S]*)$/i);
+  if (wrapper) {body=wrapper[1].trim();if (/^["']/.test(body) && body.at(-1)===body[0]) body=body.slice(1,-1);}
+  const head = body.trim().match(/^(?:&\s*)?(?:"([^"\n]+)"|'([^'\n]+)'|([^\s;|]+))\s*([\s\S]*)$/);
+  const verb = (head?.[1] || head?.[2] || head?.[3] || '').split(/[\\/]/).at(-1).replace(/\.exe$/i,'').toLowerCase(), rest=head?.[4] || '';
+  const options = rest.replace(/"(?:\\.|`.|[^"\\])*"|'(?:''|[^'])*'/g,'');
+  if (['rg','grep','select-string'].includes(verb) || verb==='git' && /^grep\b/.test(rest)) return {family:'search',tool:verb==='rg' && /(?:^|\s)--files(?:\s|$)/.test(options)?'glob':'grep'};
+  if (['get-childitem','ls','dir'].includes(verb)) return {family:'search',tool:'glob'};
+  if (['get-content','gc','cat','head','tail'].includes(verb)) return {family:'read',tool:'read'};
+  return {family:'command'};
+}
+function toolVisualFamily(call) {
+  const declared=call.classification?.family || call.semanticFamily;
+  if (declared) return declared;
+  const name=canonicalToolName(call.name || call.nativeName || '');
+  let args=call.args || call.arguments || {};
+  if (args?.text != null) {try{args=JSON.parse(args.text);}catch{args={};}}
+  if (['read','read_file','read_text_file','read_image'].includes(name)) return 'read';
+  if (['edit','multi_edit','write','write_file','apply_patch'].includes(name)) return 'write';
+  if (['grep','glob','search','trajectory_search','trajectory_read','session_search','session_event_search'].includes(name)) return 'search';
+  if (['web_search','web_fetch','fetch_url'].includes(name)) return 'web';
+  if (['pwsh','powershell','bash','shell','terminal','exec_command','commandExecution'].includes(name)) return commandIntent(args.command ?? args.cmd).family;
+  if (/^run_?code$/i.test(name)) return 'command';
+  if (/^(job_|get_terminal|write_stdin)/.test(name)) return 'process';
+  if (['subagent','subagent_fork','send_message','list_agents','team_task_update','update_goal','create_goal','get_goal','todo_write'].includes(name)) return 'coordination';
+  const kind=call.classification?.kind || call.semanticKind;
+  return ({read:'read',write:'write',run:'command',query:'search'})[kind] || 'other';
+}
+Object.assign(globalThis,{__trajectoryCanonicalTool:canonicalToolName,__trajectoryToolFamily:toolVisualFamily});})();(()=>{const canonicalToolName=globalThis.__trajectoryCanonicalTool;const fixedToolTones={"read":0,"glob":1,"grep":1,"edit":2,"write":2,"apply_patch":2,"pwsh":4,"powershell":4,"shell":4,"bash":4,"web_fetch":5,"web_search":5,"ask_user_question":3,"todo_write":7,"subagent":5,"subagent_fork":5};function toolToneIndex(name) {
   if (name == null) return 7;
+  name=canonicalToolName(name);
   if (Object.hasOwn(fixedToolTones, name)) return fixedToolTones[name];
   let hash = 0;
   for (let index = 0; index < name.length; index++) hash = (hash * 31 + name.charCodeAt(index)) % 9973;

@@ -3,6 +3,7 @@ import { posix, win32 } from 'node:path';
 import { commandReadEvidence } from './codex-adapter.mjs';
 import { attributeToolFailure, powerShellScript, isProgramTool, isShellTool } from '../plugin/trajectory-tools/lib/tool-attribution.js';
 import { inputToolMeasure, settleToolMeasure, recordedDiagnostics } from '../lib/tool-feedback.mjs';
+import {canonicalToolName,toolVisualFamily} from '../lib/tool-behavior.mjs';
 
 const categories = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
 const empty = () => Object.fromEntries(categories.map(k => [k, 0]));
@@ -115,6 +116,7 @@ export function adaptPiSession(input) {
     latestUsage = message.usage ?? null;
     if (message.usage) usage.push({ turn: currentTurn.number, step: number, seq: entrySeq, time: at, usage: message.usage, source, synthetic, semanticUnit: 'assistant-usage' });
     for (const native of (Array.isArray(message.content) ? message.content : []).filter(c => c.type === 'toolCall')) {
+      const toolName = canonicalToolName(native.name);
       const resultEntry = resultById.get(native.id), result = resultEntry?.message;
       const matches = row => row && (!row.event.toolName || row.event.toolName === native.name) && Number.isFinite(row.observedAt);
       const rawBegin = starts.get(native.id), rawFinish = ends.get(native.id);
@@ -123,7 +125,7 @@ export function adaptPiSession(input) {
       const completeTiming = begin && finish && begin.observedAt <= finish.observedAt;
       const observedEnd = finish?.observedAt ?? result?.timestamp ?? null;
       const start = completeTiming ? begin.observedAt : observedEnd ?? begin?.observedAt ?? responseEnd, end = observedEnd;
-      const call = { id: native.id, seq: callSeq, name: native.name === 'bash' ? 'bash' : native.name, nativeName: native.name, signature: signature(native.name, native.arguments), target: native.arguments.path || null, args: excerpt(JSON.stringify(native.arguments)), start, end, startSeq: completeTiming ? callSeq : null, observedStart: begin?.observedAt ?? null, observedEnd, resultSeq: result ? ++seq : null, status: state, error: result?.isError ? { code: 'PI_TOOL_ERROR', message: text(result.content).slice(0, 180) } : null, result: result ? excerpt(text(result.content)) : null, durationMs: finish?.event.durationMs ?? result?.durationMs ?? null, timingSource: completeTiming ? source + '-capture' : 'unrecorded-start', source, synthetic };
+      const call = { id: native.id, seq: callSeq, name: native.name, nativeName: native.name, signature: signature(native.name, native.arguments), target: native.arguments.path || native.arguments.file_path || native.arguments.filePath || null, args: excerpt(JSON.stringify(native.arguments)), start, end, startSeq: completeTiming ? callSeq : null, observedStart: begin?.observedAt ?? null, observedEnd, resultSeq: result ? ++seq : null, status: state, error: result?.isError ? { code: 'PI_TOOL_ERROR', message: text(result.content).slice(0, 180) } : null, result: result ? excerpt(text(result.content)) : null, durationMs: finish?.event.durationMs ?? result?.durationMs ?? null, timingSource: completeTiming ? source + '-capture' : 'unrecorded-start', source, synthetic };
       // Project feedback before excerpts truncate the native arguments/results.
       const feedbackName = native.name.toLowerCase(), measure = inputToolMeasure(feedbackName, native.arguments);
       call.measure = result ? settleToolMeasure(feedbackName, measure, text(result.content), state) : measure;
@@ -139,9 +141,10 @@ export function adaptPiSession(input) {
         stderr: result.details?.stderr, interrupted: result.details?.interrupted,
         command: native.arguments.command ?? native.arguments.cmd });
       const shell = isShellTool(native.name), shellReads = shell ? commandReadEvidence(native.arguments.command || '') : [];
-      const shellSearch = shell && /\b(?:rg|grep|Select-String)\b/.test(native.arguments.command || '');
-      call.semanticKind = native.name === 'read' || shellReads.length ? 'read' : ['edit', 'write'].includes(native.name) ? 'write' : shellSearch ? 'query' : shell ? 'run' : 'other';
-      const title = native.name === 'read' ? (/SKILL\.md$/i.test(call.target) ? '读取技能材料 ' : '读取 ') + basename(call.target) : ['edit', 'write'].includes(native.name) ? (native.name === 'edit' ? '修改 ' : '写入 ') + basename(call.target) : shell ? (shellSearch ? '查询文件内容' : shellReads.length ? '读取 ' + basename(shellReads[0].path) : /\b(?:test|--test|vitest|pytest)\b/.test(native.arguments.command || '') ? '运行验证' : '运行命令') : '调用 ' + native.name;
+      call.semanticFamily = toolVisualFamily(call);
+      const shellSearch = shell && call.semanticFamily==='search';
+      call.semanticKind = ({read:'read',write:'write',search:'query',web:'query',command:'run',process:'run'})[call.semanticFamily] || 'other';
+      const title = toolName === 'read' ? (/SKILL\.md$/i.test(call.target) ? '读取技能材料 ' : '读取 ') + basename(call.target) : ['edit', 'write'].includes(toolName) ? (toolName === 'edit' ? '修改 ' : '写入 ') + basename(call.target) : shell ? (shellSearch ? '查询文件内容' : call.semanticFamily==='read' && shellReads.length ? '读取 ' + basename(shellReads[0].path) : /\b(?:test|--test|vitest|pytest)\b/.test(native.arguments.command || '') ? '运行验证' : '运行命令') : '调用 ' + native.name;
       let outcome = state === 'error' ? '工具返回错误：' + text(result.content).slice(0, 170) : state === 'unknown' ? '没有配对的返回记录。' : text(result.content).slice(0, 170) || '已返回结果。';
       if (shell && state === 'returned' && /^PASS/m.test(text(result.content))) outcome = '命令输出报告：PASS · ' + text(result.content).replace(/\n/g, ' · ');
       const edit = native.arguments.edits?.[0], preview = native.name === 'edit' && edit ? { before: edit.oldText, after: edit.newText, partial: native.arguments.edits.length !== 1 } : native.name === 'write' ? { before: '', after: native.arguments.content, partial: false } : null;

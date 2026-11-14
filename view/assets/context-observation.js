@@ -81,14 +81,23 @@
   let studySeriesCache, studyProjectionCache;
   function studySeries() {
     const categories = studyCategories(), mask = categories.map(c => c.key).join(':');
-    if (studySeriesCache?.rows === reviewContextRequests && studySeriesCache.mask === mask) return studySeriesCache;
+    const source = reviewContextData.timeline?.length ? reviewContextData.timeline : reviewContextRequests;
+    if (studySeriesCache?.source === source && studySeriesCache.mask === mask) return studySeriesCache;
+    const rows = chronologicalContextSamples(source);
     let maximum = 0;
-    const values = reviewContextRequests.map(row => {
+    const values = rows.map(row => {
       let sum = 0;
       const upper = categories.map(c => sum += Number(row[c.key] || 0));
       maximum = Math.max(maximum, sum); return upper;
     });
-    return studySeriesCache = { rows: reviewContextRequests, mask, categories, values, maximum };
+    const numbers = new Map(session.turns.map(turn => [turn.id,turn.number])), lastByTurn = new Map();
+    for (const row of rows) { const number = row.turn ?? numbers.get(row.turnId); if (number != null) lastByTurn.set(number,row); }
+    return studySeriesCache = { source, rows, mask, categories, values, maximum, lastByTurn };
+  }
+  function studyStockSummary(number) {
+    if (!reviewContextData.timeline?.length) return reviewContextMap.get(number);
+    const sample = studySeries().lastByTurn.get(number);
+    return sample ? {turn:number,parts:Object.fromEntries(CONTEXT_CATEGORIES.map(c=>[c.key,{after:sample[c.key] || 0}]))} : null;
   }
   function studyStockLayer(layout, base, left, right, visible) {
     if (!studyShowTotal || view !== 'overview') return '';
@@ -113,9 +122,9 @@
     }
     html += brText(left + 6, base - pixels - 14, studyMeaning.title + ' · ' + studyLabel(), 'study-stock-title', 'start');
     html += '<g clip-path="url(#study-stock-clip)">';
-    let lower = compactTrendPolyline(shown.map(p => [p.x, y(0)]));
+    let lower = stepTrendPolyline(shown.map(p => [p.x, y(0)]));
     for (const [index, category] of series.categories.entries()) {
-      const upper = compactTrendPolyline(shown.map(p => [p.x, y(series.values[p.index][index])]));
+      const upper = stepTrendPolyline(shown.map(p => [p.x, y(series.values[p.index][index])]));
       const d = 'M' + upper.join('L') + 'L' + [...lower].reverse().join('L') + 'Z';
       html += '<path data-study-area="' + category.key + '" d="' + d + '" fill="' + category.color + '" class="study-stock-fill"/>';
       html += '<path d="M' + upper.join('L') + '" stroke="' + category.color + '" class="study-stock-edge"/>';
@@ -124,7 +133,7 @@
     html += '</g>';
     for (const entry of layout) {
       if (!visible(entry.x, entry.end)) continue;
-      const row = reviewContextMap.get(entry.turn.number); if (!row) continue;
+      const row = studyStockSummary(entry.turn.number); if (!row) continue;
       html += brGroup('class="study-stock-turn" data-stock-turn="' + row.turn + '"', '<rect class="br-hit" x="' + entry.x + '" y="' + (stockBase - pixels) + '" width="' + Math.max(1, entry.end - entry.x) + '" height="' + pixels + '"/>', studyStockNote(row) + ui('；点击查看保留量'));
     }
     return html;
@@ -143,7 +152,7 @@
     return ui('第 ') + row.turn + ui(' 轮 · ') + studyLabel() + ui(' 保留 ≈') + reviewTokens(amount);
   }
   function studyOpenStock(number) {
-    const row = reviewContextMap.get(number); if (!row) return;
+    const row = studyStockSummary(number); if (!row) return;
     const total = studyCategories().reduce((n, c) => n + row.parts[c.key].after, 0);
     const all = CONTEXT_CATEGORIES.reduce((n, c) => n + row.parts[c.key].after, 0);
     let html = '<div class="review-context-headline"><strong>≈' + reviewTokens(total) + ui('</strong><span>tokens · 选中构成保留量</span></div>');
@@ -176,7 +185,7 @@
   function studyBindStock() {
     const graph = $('graph'); if (graph.dataset.studyStockBound) return;
     graph.dataset.studyStockBound = 'true';
-    const record = event => { const node = event.target.closest('[data-stock-turn]'); return node && graph.contains(node) ? reviewContextMap.get(Number(node.dataset.stockTurn)) : null; };
+    const record = event => { const node = event.target.closest('[data-stock-turn]'); return node && graph.contains(node) ? studyStockSummary(Number(node.dataset.stockTurn)) : null; };
     graph.addEventListener('mouseover', event => { const row = record(event); if (row) tlReadout(studyStockNote(row)); });
     graph.addEventListener('click', event => { const row = record(event); if (row) { event.stopPropagation(); studyOpenStock(row.turn); } });
     graph.addEventListener('keydown', event => { const row = record(event); if (row && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); studyOpenStock(row.turn); } });

@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import * as zlib from 'node:zlib';
 import {createPiSample} from '../analyzers/pi-sample.mjs';
 import {readCodexSnapshot} from '../analyzers/codex-reader.mjs';
-import {readCodexRollout} from '../analyzers/codex-rollout.mjs';
+import {readCodexRollout,compactRollout} from '../analyzers/codex-rollout.mjs';
 import {parseCodexRollout} from '../analyzers/codex-adapter.mjs';
 import {datasetFromNative,loadPortableSource} from '../plugin/portable-tools/sources.mjs';
 import {generateTraceView} from './generate.mjs';
@@ -69,6 +69,8 @@ try{
    {timestamp:at,type:'token_usage_record',payload:{turn_id:'turn',response_id:'sample',usage:{input_tokens:1234,output_tokens:98}}},
  ];
  const rawRollout=rows.map(JSON.stringify).join('\r\n');
+ assert.ok((await compactRollout([Buffer.from(rawRollout)],undefined,6000)).length < 6000,'Embedded image bytes do not consume the retained-text budget');
+ await assert.rejects(()=>compactRollout([Buffer.from('plain text')],undefined,3),/text exceeds/);
  await writeFile(sessionFile,JSON.stringify(source).replaceAll('/','\\/'));
  await writeFile(rolloutFile,rawRollout);
  const stored=await readCodexSnapshot(sessionFile),local=await readCodexRollout(rolloutFile);

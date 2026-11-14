@@ -74,6 +74,8 @@ jobs:
           view/assets/pi-host-test.mjs
           view/assets/codex-host-test.mjs
           lib/i18n-test.mjs
+          lib/tool-behavior-test.mjs
+          docs/demo/layout-review/context-trend-test.mjs
           plugin/analysis-view/self-test.mjs
           plugin/analysis-view/eval-test.mjs
           plugin/analysis-view/code-execution-test.mjs

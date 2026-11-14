@@ -16,3 +16,19 @@ function compactTrendPolyline(points) {
   }
   return line.map(([x, y]) => x / 100 + ',' + y / 100);
 }
+
+// A retained-text snapshot holds until the next recorded change. Never draw a
+// slope that suggests gradual growth (or compaction) between observations.
+function stepTrendPolyline(points) {
+  const stairs = [];
+  for (const [x,y] of points) {
+    if (stairs.length) stairs.push([x,stairs.at(-1)[1]]);
+    stairs.push([x,y]);
+  }
+  return compactTrendPolyline(stairs);
+}
+
+function chronologicalContextSamples(rows) {
+  return rows.filter(row => Number.isFinite(row.time)).slice().sort((a,b) =>
+    a.time-b.time || (a.ordinal ?? a.contextLine ?? a.seq ?? 0)-(b.ordinal ?? b.contextLine ?? b.seq ?? 0));
+}

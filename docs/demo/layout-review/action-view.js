@@ -144,7 +144,7 @@
         part += '<g class="review-action-badge ' + kind + '" transform="translate(' + bx + ' ' + by + ')"><title>' + label + '</title>' +
           '<circle r="7.5"/><text text-anchor="middle" y="3.2">' + glyph + '</text></g>';
       });
-      const icon = step.calls.length && step.calls.every(c => /^查询/.test(reviewContextData.callFacts?.[c.seq]?.title || '')) ? STEP_ICON.query : stepIcon(step);
+      const icon = stepIcon(step);
       const toolNames = [...new Set(step.calls.map(call => call.name))];
       part += '<g transform="translate(' + pos + ' ' + base + ')" class="review-action-icon"' + (toolNames.length === 1 ? ' style="stroke:' + globalThis.__trajectoryToolColor(toolNames[0]) + '"' : '') + '>' + icon + '</g>';
       part += reviewToolStepLabel(step, pos, base + 34);
