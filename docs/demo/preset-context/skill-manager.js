@@ -1,4 +1,4 @@
-import { renderSkillLandscape } from './skill-visuals.js';
+import { renderSkillLandscape, skillModifiedAfterRead } from './skill-visuals.js';
 import { skillPresetControls } from './capability-management.js';
 import { renderOverlapExamples } from './overlap-preview.js';
 import { originInfo } from './variants.js';
@@ -13,7 +13,10 @@ const kinds={skill:'Skill 调用',read:'正文读取',manual:'手动唤起'};
 
 export function skillWindow(preset,period=30,names=null){
   const asOf=preset.statistics.usage.asOf??preset.skillManagement?.capturedAt??Date.now();
-  const source=(preset.skillManagement?.events??[]).filter(event=>event.time!=null&&event.time<=asOf&&(!names||names.has(event.name)));
+  // Usage is refreshed independently of the static description analysis.
+  const eventsBySkill=Array.isArray(preset.skills)?[...preset.skills,...preset.disabledSkills??[]]
+    .flatMap(skill=>(skill.usage?.events??[]).map(event=>({...event,name:skill.name}))):preset.skillManagement?.events??[];
+  const source=eventsBySkill.filter(event=>event.time!=null&&event.time<=asOf&&(!names||names.has(event.name)));
   const end=Math.floor((asOf+ZONE)/DAY)*DAY-ZONE+DAY;
   const start=period==='all'?Math.floor(((Math.min(...source.map(row=>row.time),asOf))+ZONE)/DAY)*DAY-ZONE:end-Number(period)*DAY;
   const span=Math.max(1,Math.ceil((end-start)/DAY)),step=Math.max(1,Math.ceil(span/30));
@@ -55,7 +58,7 @@ export function renderSkills(preset,data,ui){
   const current=preset.skills.filter(s=>(origin==='all'||s.provenance?.origin===origin));
   const window=skillWindow(preset,period,new Set(current.map(s=>s.name))),selected=selectSkillEvents(window,ui),counts=new Map();for(const event of selected)counts.set(event.name,(counts.get(event.name)??0)+1);
   const chartFiltered=ui.skillRange||ui.skillKind&&ui.skillKind!=='all';
-  const rows=current.filter(s=>(!chartFiltered||counts.has(s.name))&&(!ui.skillActivity||ui.skillActivity==='all'||ui.skillActivity==='read'&&counts.has(s.name)||ui.skillActivity==='unread'&&!counts.has(s.name))&&(!ui.skillChanged||s.freshness?.modifiedAfterLastRead)&&(!ui.skillUnused||s.usage.unusedCandidate)&&(!search||[s.name,s.description,s.sourceLabel].join(' ').toLowerCase().includes(search))).sort((a,b)=>ui.skillSort==='size'?b.bodyTokens-a.bodyTokens:ui.skillSort==='updated'?b.modifiedAt-a.modifiedAt:ui.skillSort==='last'?(b.usage.lastLoadedAt??0)-(a.usage.lastLoadedAt??0):(counts.get(b.name)??0)-(counts.get(a.name)??0)||a.name.localeCompare(b.name));
+  const rows=current.filter(s=>(!chartFiltered||counts.has(s.name))&&(!ui.skillActivity||ui.skillActivity==='all'||ui.skillActivity==='read'&&counts.has(s.name)||ui.skillActivity==='unread'&&!counts.has(s.name))&&(!ui.skillChanged||skillModifiedAfterRead(s))&&(!ui.skillUnused||s.usage.unusedCandidate)&&(!search||[s.name,s.description,s.sourceLabel].join(' ').toLowerCase().includes(search))).sort((a,b)=>ui.skillSort==='size'?b.bodyTokens-a.bodyTokens:ui.skillSort==='updated'?b.modifiedAt-a.modifiedAt:ui.skillSort==='last'?(b.usage.lastLoadedAt??0)-(a.usage.lastLoadedAt??0):(counts.get(b.name)??0)-(counts.get(a.name)??0)||a.name.localeCompare(b.name));
   const pairs=analysis?.pairs??[],repetitions=analysis?.repetitions,repeatCount=repetitions?.checks.filter(row=>row.matches.length).length??0;
   return `<div class="skills-heading"><div><h2>Skill 管理</h2><p>使用记录、内容大小与维护情况。</p></div><span>${preset.skills.length} 项当前 Skill</span></div><div class="skill-overview-strip"><span><b>${preset.skills.length}</b> 项当前 Skill</span><span>正文合计 <b>≈ ${n(preset.statistics.skillBodies)}</b> tokens</span><span>最近 ${preset.statistics.usage.sessions} 个同预设会话</span></div>
   <div class="skill-controls"><select id="skill-period" aria-label="调用图时间范围">${[[30,'近 30 天'],[90,'近 90 天'],['all','全部观察窗口']].map(([v,label])=>`<option value="${v}" ${String(v)===String(period)?'selected':''}>${label}</option>`).join('')}</select><select id="skill-origin" aria-label="Skill 来源">${[['all','全部来源'],['official','DSH 官方'],['personal','我的内容'],['plugin','我的插件']].map(([v,label])=>`<option value="${v}" ${v===origin?'selected':''}>${label}</option>`).join('')}</select></div>

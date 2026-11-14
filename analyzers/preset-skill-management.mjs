@@ -34,15 +34,19 @@ export function skillToolRepetition(skills,tools){
   });
   return {checks,comparedTools:available.length,totalTools:tools.length,basis:'shared-long-statements',guidance:'每项事实说明一次；保留关键约束、适用场景和工作流程。'};
 }
-export function buildSkillManagement(preset,{capturedAt=Date.now()}={}){
-  for(const skill of preset.skills){
-    skill.contentHash=contentHash(skill.body);
+export function currentSkillUsage(preset){
+  const skills=[...preset.skills,...preset.disabledSkills??[]];
+  for(const skill of skills){
     skill.freshness={modifiedAt:skill.modifiedAt,lastLoadedAt:skill.usage?.lastLoadedAt??null,
       modifiedAfterLastRead:skill.usage?.lastLoadedAt!=null&&skill.modifiedAt>skill.usage.lastLoadedAt,
       basis:'file-time-and-same-name-records'};
   }
+  return {events:skills.flatMap(skill=>(skill.usage?.events??[]).map(event=>({...event,name:skill.name}))).sort((a,b)=>(a.time??0)-(b.time??0))};
+}
+export function buildSkillManagement(preset,{capturedAt=Date.now()}={}){
+  for(const skill of preset.skills)skill.contentHash=contentHash(skill.body);
   const repetitions=skillToolRepetition(preset.skills,preset.tools),descriptions=analyzeSkillDescriptions(preset.skills);
   return {schema:'skill-management/3',capturedAt,pairs:descriptions.pairs,descriptions,repetitions,references:skillReferences(preset.skills),
     loadBasis:'successful-skill-load-or-body-read',features:'sparse-local-terms',embeddings:false,modelsDownloaded:false,
-    events:[...preset.skills,...preset.disabledSkills??[]].flatMap(skill=>(skill.usage?.events??[]).map(event=>({...event,name:skill.name}))).sort((a,b)=>(a.time??0)-(b.time??0))};
+    ...currentSkillUsage(preset)};
 }

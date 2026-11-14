@@ -9,6 +9,7 @@ import {enrichFindingPowerShell} from './pwsh-evidence.mjs';
 import {collectCurrentPreset} from './workspace/runtime/lib/dsh-current-preset.mjs';
 import {projectPresetContext} from './workspace/runtime/analyzers/preset-context.mjs';
 import {currentUsageStatistics} from './workspace/runtime/analyzers/preset-statistics.mjs';
+import {currentSkillUsage} from './workspace/runtime/analyzers/preset-skill-management.mjs';
 import {contextOverlap} from './workspace/runtime/analyzers/context-overlap.mjs';
 import {diagnosisView,windowView} from './workspace/runtime/analyzers/eval-insights.mjs';
 import {skillOverlapExamples} from './workspace/runtime/analyzers/skill-overlap-demo.mjs';
@@ -131,7 +132,12 @@ export class EvalWorkspaceService {
       if(!cached||refresh)cached={at:Date.now(),value:await task};else task.catch(()=>{});
     }
     const result=structuredClone(cached.value),history=this.history();
-    for(const preset of result.presets)Object.assign(preset.statistics,currentUsageStatistics(preset,history));
+    for(const preset of result.presets){
+      Object.assign(preset.statistics,currentUsageStatistics(preset,history));
+      // Configuration snapshots carry static analyses, while usage arrives in
+      // later history batches. Refresh their event list and freshness together.
+      Object.assign(preset.skillManagement,currentSkillUsage(preset));
+    }
     result.coverage.historyAsOf=history.generatedAt;result.workspaces=this.workspaces();result.workspace.id=workspace.id;
     result.progress={...this.progress,configurationChecking:this.pending.has(workspace.id)};return result;
   }

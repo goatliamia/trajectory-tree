@@ -30,7 +30,8 @@ const hosts={
 };
 for(const [host,{base,prefix,dsh}]of Object.entries(hosts))for(const skill of dsh?[...DIAGNOSIS_SKILLS,QUERY_SKILL]:DIAGNOSIS_SKILLS){
  for(const path of files('skill/'+skill.name)){
-  let text=readFileSync(new URL('../'+path,import.meta.url),'utf8');
+  let text=readFileSync(new URL('../'+path,import.meta.url),'utf8')
+    .replace(/<!-- host:dsh -->\r?\n([\s\S]*?)<!-- \/host:dsh -->\r?\n?/g,(_block,body)=>dsh?body:'');
   if(path.endsWith('/SKILL.md')){
    if(dsh)text=dshFrontmatter(text,skill);
    if(['codex','pi','claude'].includes(host))text=text.replace(/^description: /m,'description: '+({codex:'Codex',pi:'Pi',claude:'Claude Code'}[host])+'：');

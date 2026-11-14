@@ -47,6 +47,8 @@ jobs:
           plugin/analysis-view/stages-test.mjs
           plugin/analysis-view/resources-test.mjs
           plugin/analysis-view/overview-cache-test.mjs
+          plugin/analysis-view/workspace-test.mjs
+          analyzers/skill-window-test.mjs
           lib/context-diagnosis-test.mjs
           analyzers/context-overlap-test.mjs
           plugin/trajectory-tools/inspect-test.mjs

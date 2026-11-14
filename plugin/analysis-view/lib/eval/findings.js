@@ -26,11 +26,14 @@
     return [...groups.values()].map(source=>({...source,seqs:[...new Set(source.seqs)],powerShellSeqs:[...new Set(source.powerShellSeqs)]}));
   }
   function selection(group,direction) {
+    const signal=group.signals?.find(row=>row.direction===direction);
     return {kind:'finding',label:title(group),sources:sourcesFor(group.entries),direction,method:group.method,
       codeExecution:group.entries.some(row=>/^(pwsh|powershell|bash|shell|exec_command|commandExecution|run_code|runcode)$/i.test(row.tool)),
       facts:[t(`程序按相同信号归组：${group.count} 条记录，${group.turns} 轮，${group.sessions} 段会话。`,`Program-grouped signal: ${group.count} records, ${group.turns} turns, ${group.sessions} sessions.`),
         group.kind==='wait'?t('这里只观察到长调用，是否影响推进需要沿任务核对。','Long calls are observed; investigate whether they held up the task.'):
-          t(`其中 ${group.paired} 条有同轮同参非报错返回；改参和跨轮处理仍需核对。`,`${group.paired} have later same-argument non-error returns in the same turn; changed arguments and later turns need investigation.`)]};
+          t(`其中 ${group.paired} 条有同轮同参非报错返回；改参和跨轮处理仍需核对。`,`${group.paired} have later same-argument non-error returns in the same turn; changed arguments and later turns need investigation.`),
+        ...(signal?[t('程序线索','Program signal')+' '+signal.rule+'：'+ui(signal.summary),
+          ...(signal.factors??[]).slice(0,3).map(factor=>t('程序线索的核对因素：','Signal review factor: ')+ui(factor))]:[])]};
   }
   function hints(group) {
     const focus=group.focus;

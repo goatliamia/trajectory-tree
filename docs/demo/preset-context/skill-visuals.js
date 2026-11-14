@@ -1,12 +1,13 @@
 import { renderOverlapOverview } from './overlap-preview.js';
 const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=value=>value>=1000?(value/1000).toFixed(1)+'k':Number(value??0).toLocaleString('zh-CN');
+export const skillModifiedAfterRead=skill=>skill.usage?.lastLoadedAt!=null&&skill.modifiedAt>skill.usage.lastLoadedAt;
 function coverage(skills,counts,ui){
-  const used=skills.filter(s=>(counts.get(s.name)??0)>0).length,total=skills.length,changes=skills.filter(s=>s.freshness?.modifiedAfterLastRead).length;
+  const used=skills.filter(s=>(counts.get(s.name)??0)>0).length,total=skills.length,changes=skills.filter(skillModifiedAfterRead).length;
   return `<section class="skill-reading-summary" aria-label="读取覆盖与文件更新"><div class="reading-coverage-group"><div class="reading-summary-label"><h3>读取覆盖</h3><span>${total} 项当前 Skill</span></div><div class="reading-coverage-values">${[['read','有读取记录',used],['unread','无读取记录',total-used]].map(([id,label,value])=>`<button data-skill-action="activity" data-value="${id}" aria-pressed="${ui.skillActivity===id}" ${value?'':'disabled'}><strong>${value}</strong><span>${label}</span><i>${ui.skillActivity===id?'✓':'↗'}</i></button>`).join('')}</div><div class="reading-coverage-bar" aria-hidden="true"><span style="width:${total?used/total*100:0}%"></span></div></div>
   <div class="reading-changes-group"><div class="reading-summary-label"><h3>文件更新</h3></div><button id="skill-changed-trigger" data-skill-action="changed" aria-pressed="${Boolean(ui.skillChanged)}" ${changes?'':'disabled'} title="文件修改时间晚于最近一次同名 Skill 读取"><strong>${changes}</strong><span>项在最近读取后有修改</span>${changes?'<i>↗</i>':''}</button></div></section>`;
 }
-function skillMatches(skill,counts,ui){return (!ui.skillActivity||ui.skillActivity==='all'||ui.skillActivity==='read'&&(counts.get(skill.name)??0)>0||ui.skillActivity==='unread'&&!(counts.get(skill.name)??0))&&(!ui.skillChanged||skill.freshness?.modifiedAfterLastRead);}
+function skillMatches(skill,counts,ui){return (!ui.skillActivity||ui.skillActivity==='all'||ui.skillActivity==='read'&&(counts.get(skill.name)??0)>0||ui.skillActivity==='unread'&&!(counts.get(skill.name)??0))&&(!ui.skillChanged||skillModifiedAfterRead(skill));}
 function coverageSelection(skills,counts,ui){
   if((!ui.skillActivity||ui.skillActivity==='all')&&!ui.skillChanged)return '';
   const selected=skills.filter(s=>skillMatches(s,counts,ui));

@@ -75,6 +75,21 @@ test('browser and server group exactly the same source populations',()=>{
   assert.equal(JSON.stringify(context.__trajectorySummarizeFindings(rows)),JSON.stringify(summarizeFindings(rows)));
 });
 
+test('single-session diagnosis drafts carry the selected rule and its review factors',()=>{
+  const row={seq:2,result:3,turn:1,tool:'pwsh',status:'error',code:'COMMAND_NOT_FOUND',certainty:'confirmed',source:{host:'dsh',session:'one',cut:5}};
+  const group=summarizeFindings([row]).groups[0],before=JSON.stringify(group);
+  const context=vm.createContext({});vm.runInContext(readFileSync(new URL('./lib/eval/findings.js',import.meta.url),'utf8'),context);
+  const selected=context.__trajectoryFindingSelection(group,'capability');
+  const rule=group.signals.find(signal=>signal.direction==='capability');
+  assert.ok(selected.facts.some(fact=>fact.includes(rule.rule)&&fact.includes(rule.summary)));
+  for(const factor of rule.factors)assert.ok(selected.facts.some(fact=>fact.includes(factor)));
+  assert.equal(selected.sources[0].session,'one');assert.equal(selected.sources[0].cut,5);
+  const unassigned=context.__trajectoryFindingSelection(group,'knowledge');
+  assert.equal(unassigned.direction,'knowledge','users can still investigate a direction without a program signal');
+  assert.ok(!unassigned.facts.some(fact=>fact.includes('D-K')),'no rule is invented for an unassigned direction');
+  assert.equal(JSON.stringify(group),before);
+});
+
 test('rc2 approval decisions remain distinct from unavailable services and capabilities',()=>{
   const row={seq:2,result:3,turn:1,tool:'write',status:'error',certainty:'confirmed'};
   const codes=['APPROVAL_REJECTED','APPROVAL_CANCELLED','APPROVAL_UNAVAILABLE','TOOL_CONTEXT_UNAVAILABLE','UNKNOWN_TOOL','TOOL_ACTIVATION_FAILED'];

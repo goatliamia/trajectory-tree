@@ -10,7 +10,7 @@ disable-model-invocation: true
 
 用户要项目总览时，改用 `--host claude --overview --dir "<transcript 所在目录>" --open`。也可以重复 `--file` 选定记录。用 `--lang en` 或 `--lang zh-CN` 固定界面语言。
 
-用户指定代码执行、PowerShell 或 PTC 报错时，用 `--code` 替代 `--eval`，直接进入同一 transcript 的代码执行分析。运行指标、代码执行与处理线索共用同一切点。
+用户指定命令、脚本或 PowerShell 报错时，用 `--code` 替代 `--eval`，直接进入同一 transcript 的代码执行分析。运行指标、代码执行与处理线索共用同一切点。
 
 在 Eval 里选择范围和指标，将整段诊断草稿贴回 Claude Code 提示框，确认范围后发送。草稿已带 `/trajectory-tree:trace-analysis`。取证时使用草稿中的 transcript 路径并保留 `cut` 和 `logId`。如果工具无法校验原切点，重新打开同一 transcript 的 Eval 获取选区。
 

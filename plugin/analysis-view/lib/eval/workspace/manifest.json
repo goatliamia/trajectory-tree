@@ -19,7 +19,7 @@
     },
     {
       "path": "analyzers/preset-skill-management.mjs",
-      "sha256": "991a5bc3ce58c71404bbc29ee46bc25a539debb6dabc677bb00316b1384d3d83"
+      "sha256": "c65f07d9d2028bad62a58d524bc4d5e6d510963fa2877339eab4fafae39c6481"
     },
     {
       "path": "analyzers/preset-statistics.mjs",
