@@ -16,6 +16,78 @@
   const reviewReportedInput = sample => Number.isFinite(sample?.reportedInput)
     ? '<p class="review-quiet">' + ui('宿主上报的请求输入（含缓存）') + ' <b>' + sample.reportedInput.toLocaleString() + ' tokens</b></p>'
     : '';
+  // 花费只按宿主上报的 usage 计价,不拿估算构成乘单价。usage 行晚到时按当前数据现取。
+  const reviewContextUsageRows = () => Array.isArray(reviewContextData.usage) ? reviewContextData.usage : [];
+  const reviewMoney = value => {
+    if (!Number.isFinite(value)) return '—';
+    if (value === 0) return '¥0';
+    if (value >= 1) return '¥' + value.toFixed(2);
+    if (value >= 0.01) return '¥' + value.toFixed(3);
+    if (value >= 0.0001) return '¥' + value.toFixed(4);
+    return '¥' + value.toPrecision(2);
+  };
+  const reviewCostBuckets = [
+    { key: 'miss', result: 'miss', label: '未命中输入', color: '#c94b52' },
+    { key: 'hit', result: 'hit', label: '缓存命中输入', color: '#3f9163' },
+    { key: 'out', result: 'output', label: '输出', color: '#5286bf' },
+  ];
+  function reviewPriceUsage(row) {
+    if (typeof priceRequest !== 'function') return null;
+    const usage = row.usage, known = value => Number.isFinite(value) && value >= 0;
+    const input = known(usage.uncachedInputTokens) ? usage.uncachedInputTokens : null;
+    const hit = known(usage.cacheReadTokens) ? usage.cacheReadTokens : null;
+    const output = known(usage.outputTokens) ? usage.outputTokens : null;
+    return priceRequest({ provider: row.provider, model: row.model, time: row.time, input, cacheRead: hit,
+      cacheWrite: null, output, unknown: usage.available === false || input === null || hit === null || output === null });
+  }
+  // 一项都不能少:只有全部请求都按官方价目计价时才合计金额,否则写明缺哪一种。
+  function reviewCostBlock(rows, title = '本轮花费') {
+    const samples = Array.isArray(rows) ? rows.filter(row => row && row.usage) : [];
+    if (!samples.length || typeof priceRequest !== 'function') return '';
+    const priced = [], unpriced = [], reasons = { 'unknown-usage': 0, provider: 0, model: 0 };
+    for (const row of samples) {
+      const result = reviewPriceUsage(row);
+      if (result === null) return '';
+      (result.priced ? priced : unpriced).push({ row, result });
+      if (!result.priced) reasons[result.reason] = (reasons[result.reason] || 0) + 1;
+    }
+    let html = '<section class="review-cost"><h3 class="review-cost-title">' + ui(title) + '</h3>';
+    if (!priced.length) {
+      const why = [];
+      if (reasons.provider) why.push(reasons.provider + ui(' 次不是官方 API'));
+      if (reasons.model) why.push(reasons.model + ui(' 次模型不在价目表'));
+      if (reasons['unknown-usage']) why.push(reasons['unknown-usage'] + ui(' 次没有完整上报 usage'));
+      return html + '<p class="review-quiet">' + ui('这些请求不能按官方价目计价：') + why.join(' · ') + ui('。因此不合计金额。') + '</p></section>';
+    }
+    const totals = { miss: { tokens: 0, cost: 0 }, hit: { tokens: 0, cost: 0 }, out: { tokens: 0, cost: 0 } };
+    for (const { result } of priced) for (const b of reviewCostBuckets) {
+      totals[b.key].tokens += result.tokens[b.result]; totals[b.key].cost += result.cost[b.result];
+    }
+    const total = totals.miss.cost + totals.hit.cost + totals.out.cost;
+    const share = key => total > 0 ? totals[key].cost / total * 100 : 0;
+    const peak = priced.filter(item => item.result.peak).length;
+    html += '<div class="review-cost-head"><strong>' + reviewMoney(total) + '</strong><span>' +
+      priced.length + ui('次请求') + ui(' · 官方价目估算') + (peak ? ui(' · 含 ') + peak + ui(' 次峰时') : '') + '</span></div>';
+    if (total > 0) html += '<div class="review-cost-bar" role="img" aria-label="' +
+      reviewCostBuckets.map(b => ui(b.label) + ' ' + Math.round(share(b.key)) + '%').join(' · ') + '">' +
+      reviewCostBuckets.filter(b => share(b.key) > 0).map(b =>
+        '<i style="width:' + share(b.key).toFixed(2) + '%;background:' + b.color + '"></i>').join('') + '</div>';
+    for (const b of reviewCostBuckets) {
+      html += '<div class="review-cost-row"><div><i style="background:' + b.color + '"></i><span>' + ui(b.label) + '</span><b>' +
+        Math.round(share(b.key)) + '%</b></div><small>' + totals[b.key].tokens.toLocaleString() + ' tokens · ≈ ' +
+        reviewMoney(totals[b.key].cost) + '</small></div>';
+    }
+    if (unpriced.length) html += '<p class="review-quiet">' + unpriced.length + ui(' 次请求未计入：不是官方 API、模型不在价目表或 usage 不完整。') + '</p>';
+    const models = [...new Set(priced.map(item => item.row.model))];
+    const rates = models.length === 1 && typeof DEEPSEEK_PRICES === 'object' ? DEEPSEEK_PRICES[models[0]] : null;
+    if (rates) html += '<p class="review-cost-note">' + ui('单价（元/百万 tokens，谷/峰）：') +
+      ui('未命中输入') + ' ' + rates.cacheMiss[0] + '/' + rates.cacheMiss[1] + ' · ' +
+      ui('缓存命中输入') + ' ' + rates.cacheHit[0] + '/' + rates.cacheHit[1] + ' · ' +
+      ui('输出') + ' ' + rates.output[0] + '/' + rates.output[1] + '</p>';
+    else if (models.length > 1) html += '<p class="review-cost-note">' + ui('本轮涉及多个模型，按各自价目计价。') + '</p>';
+    html += '<p class="review-cost-note">' + ui('按 DeepSeek 官方价目估算；峰时为北京时间工作日 9–12、14–18。缓存写入不单独计价，这不是累计花费。') + '</p></section>';
+    return html;
+  }
   function reviewDuration(ms) {
     const seconds = Math.max(0, Math.round(ms / 1000));
     if (seconds < 60) return seconds + ui('秒');
@@ -170,6 +242,7 @@
     const max = Math.max(1, ...CONTEXT_CATEGORIES.map(c => Math.abs(row.parts[c.key][row.isBaseline ? 'after' : 'delta'])));
     let html = '<div class="review-context-headline"><strong>' + (row.isBaseline ? reviewTokens(row.total) : reviewSigned(row.net)) + '</strong><span>' + (row.isBaseline ? ui('首轮末次请求 · 已有上下文') : ui('tokens · 净变化')) + '</span></div>';
     html += reviewReportedInput(reviewContextRequests.findLast(sample => sample.turn === row.turn));
+    html += reviewCostBlock(reviewContextUsageRows().filter(item => item.turn === row.turn));
     if (row.isBaseline) html += ui('<p class="review-context-change-note">首次请求已经带着约 ') + reviewTokens(CONTEXT_CATEGORIES.reduce((n, c) => n + (first[c.key] || 0), 0)) + ui(' tokens，并不是空白。下面同时列出首次请求与本轮末次请求的构成。</p>');
     if (!row.isBaseline && (row.increase || row.decrease)) html += '<div class="review-context-totals">' +
       (row.increase ? ui('<span>增加 <b>') + reviewSigned(row.increase) + '</b></span>' : '') +
@@ -243,6 +316,7 @@
       ? '<div class="review-context-headline"><strong>≈' + reviewTokens(info.total) + '</strong><span>' + ui('tokens · 首次请求已有量') + '</span></div>'
       : '<div class="review-context-headline"><strong>' + reviewSigned(info.amount) + '</strong><span>' + ui('tokens · 本步净变化') + '</span></div>';
     html += reviewReportedInput(info.current);
+    html += reviewCostBlock(reviewContextUsageRows().filter(item => item.turn === t.number && item.step === stepNumber), '本步花费');
     if (!info.initial && (increase || decrease)) html += '<div class="review-context-totals">' +
       (increase ? ui('<span>增加 <b>') + reviewSigned(increase) + '</b></span>' : '') +
       (decrease ? ui('<span>减少 <b>') + reviewSigned(-decrease) + '</b></span>' : '') + '</div>';

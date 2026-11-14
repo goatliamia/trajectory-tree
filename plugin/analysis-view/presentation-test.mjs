@@ -22,6 +22,10 @@ assert.equal(vm.runInNewContext('let studyShowTotal=false;const view="overview";
 // Exercise the shipped control markup: merely finding a label in the script
 // does not prove the builder actually emitted its checkbox.
 const renderer=read('./lib/trace/page.js');
+assert.match(renderer,/window\.__traceFocusTurn = function/,'The page exposes the deep-link focus entry');
+assert.match(renderer,/function reviewCostBlock\(/,'The context drawer ships the cost block');
+assert.match(renderer,/const DEEPSEEK_PRICES = \{/,'The generated page carries the shared price table');
+assert.match(read('./lib/trace/dsh-bridge.js'),/focusRequestedTurn/,'The bridge consumes the turn parameter');
 const controls=renderer.match(/layerBox\.innerHTML=[\s\S]*?\.join\(''\);/);
 assert.ok(controls,'Overview control markup is available');
 for(const locale of ['zh-CN','en']){

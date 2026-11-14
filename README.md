@@ -1,4 +1,4 @@
-﻿<h1 align="center"><img src="docs/media/trajectory-tree-cover.png" alt="Trajectory Tree · 轨迹树"></h1>
+<h1 align="center"><img src="docs/media/trajectory-tree-cover.png" alt="Trajectory Tree · 轨迹树"></h1>
 
 <p align="center"><strong>从对话日志，看见 Agent 怎样工作。</strong></p>
 <p align="center">轨迹树 · Eval · 点选诊断 · 可视化报告</p>
@@ -224,7 +224,9 @@ node scripts/sync-view-assets.mjs --check
 npm test --prefix plugin/trajectory-tools
 npm test --prefix plugin/portable-tools
 node plugin/analysis-view/presentation-test.mjs
+node plugin/analysis-view/chat-action-test.mjs
 node plugin/analysis-view/perf-test.mjs
+node docs/demo/layout-review/context-cost-test.mjs
 ```
 
 `plugin/` 提供宿主接入，`analyzers/` 处理原生记录，`view/` 与 `report/` 提供视图和报告组件。公开展示素材可由 `node scripts/build-readme-media.mjs --serve 3099` 重现。

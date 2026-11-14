@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { gzip, gunzip } from "node:zlib";
 import { promisify } from "node:util";
 import { summarizeCacheEfficiency } from "./cache-efficiency.js";
+import { priceRequests } from "./trace/models/context-cost-model.mjs";
 import { incident } from "./incident-shape.js";
 import { TraceCache, traceSource } from "./trace-cache.js";
 import { TraceStages } from "./trace-stages.js";
@@ -180,72 +181,6 @@ export function deriveHarnessResponse(kinds) {
  * A request whose adapter reported no usage is `unknown`, never zero; a single missing
  * field is null and is excluded from the sums.
  */
-/** DeepSeek 官方 API 价目(元 / 百万 tokens):[空闲时段, 高峰时段],见 api-docs.deepseek.com 的模型与价格页。 */
-const DEEPSEEK_PRICES = {
-  "deepseek-flash": { cacheHit: [0.02, 0.04], cacheMiss: [1, 2], output: [4, 8] },
-  "deepseek-v4-pro": { cacheHit: [0.15, 0.3], cacheMiss: [4.5, 9], output: [13.5, 27] },
-};
-
-/** 高峰是北京时间周一至周五 9:00–12:00、14:00–18:00;其余(含周末)按空闲时段算。 */
-function isPeakTime(time) {
-  if (typeof time !== "number") return false;
-  const beijing = new Date(time + 8 * 3600 * 1000);
-  const day = beijing.getUTCDay();
-  const hour = beijing.getUTCHours();
-  return day >= 1 && day <= 5 && ((hour >= 9 && hour < 12) || (hour >= 14 && hour < 18));
-}
-
-/** 只给"官方 API + 已知模型"的请求计价,其余计数不猜价。 */
-function computePricing(requests) {
-  const models = new Set();
-  const cost = { miss: 0, hit: 0, output: 0 };
-  const tokens = { miss: 0, hit: 0, output: 0 };
-  let priced = 0;
-  let unpriced = 0;
-  let peakRequests = 0;
-  for (const row of requests) {
-    const provider = typeof row.provider === "string" ? row.provider : null;
-    const model = typeof row.model === "string" ? row.model : null;
-    if (row.unknown || provider === null || model === null || !provider.startsWith("deepseek")) {
-      unpriced += 1;
-      continue;
-    }
-    models.add(model);
-    const table = DEEPSEEK_PRICES[model];
-    if (table === undefined) {
-      unpriced += 1;
-      continue;
-    }
-    const peak = isPeakTime(row.time);
-    if (peak) peakRequests += 1;
-    const slot = peak ? 1 : 0;
-    const miss = row.input || 0;
-    const hit = row.cacheRead || 0;
-    const out = row.output || 0;
-    cost.miss += (miss / 1e6) * table.cacheMiss[slot];
-    cost.hit += (hit / 1e6) * table.cacheHit[slot];
-    cost.output += (out / 1e6) * table.output[slot];
-    tokens.miss += miss;
-    tokens.hit += hit;
-    tokens.output += out;
-    priced += 1;
-  }
-  const perM = (value, count) => (count === 0 ? null : (value / count) * 1e6);
-  const pricedModels = [...models];
-  return {
-    currency: "CNY",
-    models: pricedModels,
-    // 只有一个模型时给出它的价目([空闲, 高峰]),面板按"未命中 / 命中 / 输出 × 峰/谷"排成小表。
-    rates: pricedModels.length === 1 ? DEEPSEEK_PRICES[pricedModels[0]] : null,
-    priced,
-    unpriced,
-    peakRequests,
-    total: cost.miss + cost.hit + cost.output,
-    cost,
-    perM: { miss: perM(cost.miss, tokens.miss), hit: perM(cost.hit, tokens.hit), output: perM(cost.output, tokens.output) },
-  };
-}
-
 export function computeCost(events) {
   const requests = [];
   for (const e of events || []) {
@@ -298,7 +233,7 @@ export function computeCost(events) {
       ...summarizeCacheEfficiency(list),
     };
   });
-  const pricing = computePricing(requests);
+  const pricing = priceRequests(requests);
   return {
     requestCount: requests.length,
     unknownRequests: requests.filter((row) => row.unknown).length,

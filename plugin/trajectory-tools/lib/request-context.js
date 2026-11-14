@@ -90,11 +90,17 @@ export function buildRequestContext(events, meter, registeredProjections = []) {
     }
 
     if (event.type === 'assistant/message' && !replacement(event) && count(data.turn) && count(data.step)) {
-      const input = requestUsageEvidence(data.usage).promptTokens;
+      const evidence = requestUsageEvidence(data.usage), input = evidence.promptTokens;
       if (input !== null) pressureTokens = input;
       const estimated = canEstimate && headerSeq !== null && event.surfaceOp === 'append';
       requests.push({ seq: event.seq, turn: data.turn, step: data.step, time: event.time,
-        headerSeq, reportedInput: input, ...(estimated ? totals() : { total: null }) });
+        headerSeq, reportedInput: input,
+        provider: typeof data.message?.source?.provider === 'string' ? data.message.source.provider : null,
+        model: typeof data.message?.source?.model === 'string' ? data.message.source.model : null,
+        usage: { uncachedInputTokens: evidence.uncachedInputTokens, cacheReadTokens: evidence.cacheReadTokens,
+          cacheWriteTokens: evidence.cacheWriteTokens, outputTokens: evidence.outputTokens, promptTokens: evidence.promptTokens,
+          cacheRate: evidence.cacheRate, available: evidence.available, consistent: evidence.consistent, denominator: evidence.denominator },
+        ...(estimated ? totals() : { total: null }) });
     }
     if (!canEstimate) continue;
     for (const [seq, message] of projectedAt.get(event.seq) ?? []) {

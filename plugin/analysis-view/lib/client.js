@@ -157,6 +157,10 @@ window.__ModuleLoader__.load({
 .av-eval-metrics dt{color:var(--dsw-alias-label-secondary);font-size:12px}
 .av-eval-metrics dd{margin:3px 0 0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .av-eval-list code{overflow-wrap:anywhere}
+.av-jump{display:inline-flex;align-items:center;justify-content:center;width:calc(28px + var(--dsh-content-font-delta,0px));height:calc(28px + var(--dsh-content-font-delta,0px));padding:6px;border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-tertiary);text-decoration:none}
+.av-jump svg{width:calc(17px + var(--dsh-content-font-delta,0px));height:calc(17px + var(--dsh-content-font-delta,0px))}
+@media(hover:hover){.av-jump:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}}
+.av-jump:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
 `;
     let styleUsers = 0;
     const ensureStyle = () => {
@@ -1316,6 +1320,37 @@ window.__ModuleLoader__.load({
       }));
     }
 
+    // 回合收尾的操作行里加一个入口:新标签打开独立的路径页,并带上这一轮的编号。
+    // 插槽只给 messageId,所以从对话快照里反查它所在的轮;查不到就不显示,不猜轮号。
+    // 反查放进内层组件,外层只在运行时提供 useChat 时才挂载它,保证 hook 调用位置稳定。
+    function TraceJumpAction(props) {
+      return typeof props?.useChat === "function" ? h(TraceJumpLink, props) : null;
+    }
+    function TraceJumpLink(props) {
+      const { sessionId, messageId, useChat } = props;
+      const turn = useChat(snapshot => {
+        for (const key of snapshot.order) {
+          const node = snapshot.nodes.get(key);
+          if (!node || node.kind !== "turn-tail" || !node.data) continue;
+          const closing = node.data.closing;
+          if (closing && closing.finalNode && closing.finalNode.messageId === messageId) return node.data.turn;
+        }
+        return null;
+      });
+      if (!Number.isSafeInteger(turn) || typeof sessionId !== "string" || !sessionId) return null;
+      const label = cmUi("在轨迹树中查看这一轮", "Open this turn in the trajectory tree");
+      return h("a", {
+        className: "av-jump",
+        href: "/analysis-view/trace?session=" + encodeURIComponent(sessionId) + "&turn=" + turn + "&staged=1",
+        target: "_blank", rel: "noopener noreferrer", title: label, "aria-label": label,
+      }, h("svg", { width: 17, height: 17, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
+        h("path", { d: "M4 2.5v11", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" }),
+        h("circle", { cx: 4, cy: 4, r: 1.5, fill: "currentColor" }),
+        h("circle", { cx: 4, cy: 8, r: 1.5, fill: "currentColor" }),
+        h("path", { d: "M4 8h6", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" }),
+        h("circle", { cx: 11.5, cy: 8, r: 1.5, fill: "currentColor" })));
+    }
+
     function mountOverview(slots) {
       const id = "trajectory-eval-overview";
       const main = slots.inject("main", () => slots.register({ name: "main", key: id }, EvalOverviewPanel));
@@ -1779,6 +1814,11 @@ window.__ModuleLoader__.load({
             return { hooks: { trajectory: { getSnapshot: () => target.getSnapshot(), subscribe: (listener) => target.subscribe(listener) } }, sessionId };
           },
         }, EvalDashboardPanel));
+        slots.inject("conversation.chat.assistant-actions", () => slots.register({
+          name: "conversation.chat.assistant-actions",
+          id: "analysis-trace-jump",
+          order: 25,
+        }, TraceJumpAction));
       },
     };
   },

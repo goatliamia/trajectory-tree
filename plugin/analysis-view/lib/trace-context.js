@@ -41,7 +41,11 @@ export function traceRequestLayer(events, series) {
       tools: [...new Set(replaced.map(r => r.tool).filter(Boolean))], replaced });
   }
   boundaries.sort((a, b) => a.seq - b.seq);
+  // 用量记录按全部请求行走：总价可能估不出来，供应方回报的桶仍然在。
+  const usage = series?.requests.map(row => ({ seq: row.seq, turn: row.turn, step: row.step, time: row.time,
+    provider: row.provider, model: row.model, usage: row.usage })) ?? [];
   return { boundaries, requests: series?.requests.filter(row => Number.isFinite(row.total)) ?? [],
+    usage,
     ...(series?.current ? { current: series.current } : {}), ...(series?.route ? { route: series.route } : {}) };
 }
 

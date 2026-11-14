@@ -48,3 +48,18 @@
 .review-round-card>div button:hover{background:var(--soft)}
 .review-toolbar button:disabled{opacity:.3;cursor:default}
 @media(prefers-color-scheme:dark){.review-duration-band{fill:#242e3b;stroke:#425268}.review-duration-hit:hover .review-duration-band{fill:#33435a}.review-duration-value{fill:#9fb4cf}.review-context-capped-dot{fill:#8eb4dc}.review-context-overflow-label{fill:#a1bedb}.review-overlay-scale,.review-round-card b,.review-round-card>div button{color:#9fbddc}}
+
+/* 花费:按宿主上报的 usage 计价;金额条只分未命中、命中、输出三类。 */
+.review-cost-title{font:500 12px var(--sans);color:var(--branch-ink);margin:20px 0 8px}
+.review-cost-head{display:flex;align-items:baseline;gap:10px;margin-bottom:7px}
+.review-cost-head strong{font:500 26px var(--mono);letter-spacing:-.5px;color:var(--branch-ink)}
+.review-cost-head span{font-size:11px;color:var(--muted)}
+.review-cost-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--line);margin:7px 0 9px}
+.review-cost-bar i{display:block;height:100%}
+.review-cost-row{padding:7px 0;border-bottom:1px solid var(--line)}
+.review-cost-row>div{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--branch-ink)}
+.review-cost-row>div i{width:7px;height:7px;border-radius:2px;flex:none}
+.review-cost-row>div b{margin-left:auto;font:500 12px var(--mono)}
+.review-cost-row small{display:block;font:10px/1.7 var(--mono);color:var(--muted);margin-top:2px}
+.review-cost-note{font-size:10px;line-height:1.7;color:var(--muted);margin:8px 0 0}
+.review-cost{margin:0 0 6px}

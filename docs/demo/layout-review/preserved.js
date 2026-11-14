@@ -258,3 +258,11 @@
     $('review-state').textContent = reviewStress ? ui('160 处合成受阻 · 仅测试密集布局') : session.turns.length + ui(' 轮真实记录');
     overviewScale = 1; $('graph-scroll').scrollLeft = 0; closeDrawer(); renderOverview();
   }
+  // DSH 深链 ?turn=N:桥在 core 就绪后调用,按轮号选中这一轮并滚到它的位置。
+  window.__traceFocusTurn = function(number) {
+    if (!Number.isSafeInteger(number)) return false;
+    const index = session.turns.findIndex(turn => turn.number === number);
+    if (index < 0) return false;
+    selectTurn(index);
+    return true;
+  };

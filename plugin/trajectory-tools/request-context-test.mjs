@@ -17,7 +17,7 @@ message('user/message', 'user', 3, { kind: 'user' });
 message('user/message', 'user', 1, { kind: 'runtime-context' });
 message('user/message', 'user', 2, { kind: 'skill-catalog' });
 const firstHeader = event('request/header', { header: { tokens: 8 } });
-const firstResponse = message('assistant/message', 'assistant', 9, { kind: 'model' },
+const firstResponse = message('assistant/message', 'assistant', 9, { kind: 'model', provider: 'fixture', model: 'fixture-1' },
   { turn: 1, step: 1, usage: { inputTokens: 20, cacheReadTokens: 10, cacheWriteTokens: 3 } });
 event('tool/call', { callId: 'skill-load', name: 'skill' });
 message('tool/result', 'tool', 6, { kind: 'tool', callId: 'skill-load' });
@@ -43,9 +43,15 @@ test('request context estimates the native pre-response surface and separates re
   const result = buildRequestContext(rows, meter);
   assert.deepEqual(result.requests, [
     { seq: firstResponse, time: firstResponse * 10, turn: 1, step: 1, headerSeq: firstHeader,
-      reportedInput: 33, system: 4, tools: 8, user: 3, inject: 1, skill: 2, assistant: 0, tool: 0, total: 18 },
+      reportedInput: 33, provider: 'fixture', model: 'fixture-1',
+      usage: { uncachedInputTokens: 20, cacheReadTokens: 10, cacheWriteTokens: 3, outputTokens: null,
+        promptTokens: 33, cacheRate: 10 / 33, available: true, consistent: true, denominator: 'disjoint-input-buckets' },
+      system: 4, tools: 8, user: 3, inject: 1, skill: 2, assistant: 0, tool: 0, total: 18 },
     { seq: secondResponse, time: secondResponse * 10, turn: 2, step: 1, headerSeq: secondHeader,
-      reportedInput: null, system: 5, tools: 10, user: 3, inject: 1, skill: 8, assistant: 9, tool: 2, total: 38 },
+      reportedInput: null, provider: null, model: null,
+      usage: { uncachedInputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null,
+        promptTokens: null, cacheRate: null, available: false, consistent: true, denominator: 'unavailable' },
+      system: 5, tools: 10, user: 3, inject: 1, skill: 8, assistant: 9, tool: 2, total: 38 },
   ]);
   assert.equal(result.current.assistant, 20);
   assert.deepEqual(result.pressure, { pressureTokens: 33, contextWindow: 1000 });
@@ -55,7 +61,37 @@ test('partial logs retain measured input without pricing a missing prefix', () =
   const result = buildRequestContext(rows.slice(1), { ...meter, foldSurface: () => assert.fail('prefix must be complete') });
   assert.equal(result.requests[0].total, null);
   assert.equal(result.requests[0].reportedInput, 33);
+  assert.equal(result.requests[0].provider, 'fixture');
+  assert.equal(result.requests[0].model, 'fixture-1');
+  assert.equal(result.requests[0].usage.available, true);
+  assert.equal(result.requests[0].usage.denominator, 'disjoint-input-buckets');
   assert.equal(result.current, null);
+});
+
+test('usage buckets survive an unpriced surface and flag inconsistent reports', () => {
+  const request = (seq, usage, source = { kind: 'model' }) => ({ seq, time: seq * 10, type: 'assistant/message',
+    surfaceOp: 'append', data: { turn: 1, step: seq, usage, message: { role: 'assistant', units: 1, source } } });
+  const events = [
+    request(1, { inputTokens: 5, cacheReadTokens: 3, cacheWriteTokens: 2, outputTokens: 4, totalTokens: 14 },
+      { kind: 'model', provider: 'fixture', model: 'fixture-1' }),
+    request(2, { inputTokens: 7, cacheReadTokens: 1, cacheWriteTokens: 2 }),
+    request(3, { inputTokens: 9, cacheReadTokens: 1, cacheWriteTokens: 0, outputTokens: 2, totalTokens: 100 }),
+    request(4, undefined),
+  ];
+  const result = buildRequestContext(events, meter);
+  assert.deepEqual(result.requests.map(row => row.total), [null, null, null, null]);
+  assert.deepEqual(result.requests.map(row => [row.provider, row.model]),
+    [['fixture', 'fixture-1'], [null, null], [null, null], [null, null]]);
+  assert.deepEqual(result.requests.map(row => row.usage), [
+    { uncachedInputTokens: 5, cacheReadTokens: 3, cacheWriteTokens: 2, outputTokens: 4,
+      promptTokens: 10, cacheRate: 0.3, available: true, consistent: true, denominator: 'reported-total-minus-output' },
+    { uncachedInputTokens: 7, cacheReadTokens: 1, cacheWriteTokens: 2, outputTokens: null,
+      promptTokens: 10, cacheRate: 0.1, available: true, consistent: true, denominator: 'disjoint-input-buckets' },
+    { uncachedInputTokens: 9, cacheReadTokens: 1, cacheWriteTokens: 0, outputTokens: 2,
+      promptTokens: null, cacheRate: null, available: true, consistent: false, denominator: 'inconsistent' },
+    { uncachedInputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null,
+      promptTokens: null, cacheRate: null, available: false, consistent: true, denominator: 'unavailable' },
+  ]);
 });
 
 test('a message projection changes only later context samples', () => {

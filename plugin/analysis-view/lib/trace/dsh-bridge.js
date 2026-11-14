@@ -6,6 +6,19 @@
   const loading = payload.traceLoad, sessionId = loading?.sessionId || payload.mainSession;
   const official = {}, pendingTurns = new Map(), readyTurns = new Set(), pendingStages = new Map();
   const timing = window.__traceStages = { shell: performance.now() };
+  // 深链 ?turn=N:页面脚本就绪后按轮号选中;轮还没画出来就等下一帧重试。
+  const requestedTurn = (() => {
+    const raw = new URLSearchParams(location.search).get('turn');
+    if (raw === null || raw === '') return null;
+    const value = Number(raw);
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  })();
+  const focusRequestedTurn = (attempt = 0) => {
+    if (requestedTurn === null) return;
+    let focused = false;
+    try { focused = window.__traceFocusTurn?.(requestedTurn) === true; } catch { focused = false; }
+    if (!focused && attempt < 90) requestAnimationFrame(() => focusRequestedTurn(attempt + 1));
+  };
   const viewer = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   let booted = false, cut = null, contextCut = null, officialKey = '', active = true, generation = 0, controller = new AbortController(), coreWork;
   const cancelled = () => new DOMException('Trace view paused', 'AbortError');
@@ -25,6 +38,7 @@
     booted = true;
     try {
       window.__geistBoot(); timing.shellReady = performance.now(); announce();
+      if (!loading) focusRequestedTurn();
       if (!loading) { timing.core = performance.now(); requestAnimationFrame(() => requestAnimationFrame(() => { timing.corePaint = performance.now(); })); }
     }
     catch (error) {
@@ -96,6 +110,7 @@
         if (initial) apply(core, 'core');
         else apply({ traceVersion: core.traceVersion, traceAssets: core.traceAssets, traceCapabilities: core.traceCapabilities, traceStatus: { refresh: 'loading' } });
         timing.core = performance.now(); announce();
+        if (initial) focusRequestedTurn();
         const coreGeneration = generation;
         requestAnimationFrame(() => requestAnimationFrame(async () => {
           if (!active || generation !== coreGeneration) return;

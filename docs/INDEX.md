@@ -7,7 +7,7 @@ Trajectory Tree 把 DSH、Pi、Codex 和 Claude Code 的会话记录组织成执
 | 正式接入审查 | 收拢诊断装填职责，检查 Eval 转正、持久化缓存与跨宿主安装闭环 | [本轮设计与验收](release-review.md) |
 | 模型取证入口 | 各宿主实际工具/CLI、已确认的接入缺口与统一配置查询设计 | [现状与工具设计](model-access-review.md) |
 | 宿主接入 | 读取宿主原生记录并保留分支、事件定位和数据粒度 | [各宿主命令与打包](host-entrypoints.md) · [能力与语言](host-compatibility.md) · [适配器](../analyzers/) |
-| 轨迹树 | 浏览行动路径、工具反馈、文件、目标和上下文变化 | [路径页](analysis-view-design.md) · [页面装配](../view/render.mjs) · [DSH 加载](../plugin/analysis-view/lib/trace-stages.js) |
+| 轨迹树 | 浏览行动路径、工具反馈、文件、目标和上下文变化；回合收尾可跳到该轮，上下文抽屉给出该轮花费 | [路径页](analysis-view-design.md) · [统计口径](metric-framework.md) · [页面装配](../view/render.mjs) · [DSH 加载](../plugin/analysis-view/lib/trace-stages.js) |
 | 单会话 Eval | 在同一切点查看轮次耗时、用量、工具和报错，按选区生成诊断草稿 | [统计口径](metric-framework.md) · [数据模型](../plugin/analysis-view/lib/eval/data.mjs) · [便携入口](../view/eval.mjs) |
 | Eval 总览 | 按预设查看当前配置、Skill 使用、诊断和窗口表现；保留历史证据与跨重启缓存 | [总览入口](host-entrypoints.md#eval-总览) · [首页设计](eval-home.md) · [正式服务](../plugin/analysis-view/lib/eval/workspace-service.mjs) · [便携总览](../plugin/analysis-view/lib/eval/overview/) |
 | 取证查询 | 从摘要下钻到原始记录、关联调用、文件或统计切点 | [DSH 工具](../plugin/trajectory-tools/README.md) · [便携 CLI / MCP / Pi](../plugin/portable-tools/README.md) · [字段](trajectory-fields.md) |
