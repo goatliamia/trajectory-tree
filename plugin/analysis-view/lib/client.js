@@ -1375,6 +1375,8 @@ window.__ModuleLoader__.load({
       const href = traceTurnHref(sessionId, turn);
       // 先切页签;页签不可用时才保留链接的原生新标签行为(中键、右键也仍然有效)。
       const open = (event) => {
+        // ⌘/Ctrl/Shift/Alt 点击保持浏览器原生的新标签行为。
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         pendingTraceFocus = { sessionId, turn, at: Date.now() };
         if (activateTraceView()) return;

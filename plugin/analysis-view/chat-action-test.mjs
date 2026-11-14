@@ -89,6 +89,12 @@ assert.equal(event.prevented, true, 'the primary click is handled in place');
 assert.deepEqual(clicked, ['trace'], 'the Trajectory Tree tab is selected');
 assert.equal(opened.length, 0, 'the in-place jump does not open a browser tab');
 
+// A modified click keeps the native new-tab behavior of the link.
+const modified = { ctrlKey: true, preventDefault() { this.prevented = true; } };
+jump.props.onClick(modified);
+assert.equal(modified.prevented, undefined, 'Ctrl-click is left to the browser');
+assert.deepEqual(clicked, ['trace'], 'Ctrl-click does not switch the view');
+
 // When the tab cannot be found (e.g. collapsed into More), the link falls back to a new tab.
 globalWindow.document.querySelector = () => null;
 const fallback = render({ sessionId: 'session-abc', messageId: 'msg-1', useChat });
