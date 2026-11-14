@@ -54,7 +54,7 @@ export class EvalWorkspaceService {
       overview.augment=(id,cwd,observation,signal,data)=>this.augment(id,cwd,observation,signal,data);
     }
   }
-  workspaces(){return [...(this.ctx.get('workspaceRegistry')?.list?.()??[])].map(w=>({id:w.id,name:w.title||basename(w.path),path:w.path}));}
+  workspaces(){return [...(this.ctx.get('workspaceRegistry')?.list?.()??[])].map(w=>({id:w.id,name:w.title||basename(w.path)||w.path,path:w.path}));}
   workspace(id){
     const rows=this.workspaces();
     if(!rows.length)throw Error('请先在 DSH 中登记工作区');

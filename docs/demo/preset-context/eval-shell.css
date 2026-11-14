@@ -1,4 +1,5 @@
 /* Eval hierarchy over the selected desk design; shared tokens remain the source. */
+.skill-chart-selection button:disabled{color:var(--tt-muted);cursor:default;opacity:.6}.skill-trend .chart-grid,.skill-trend .skill-trend-line,.skill-trend .skill-trend-area{pointer-events:none}
 [hidden]{display:none!important}.eval-nav{display:flex;align-items:center;gap:9px;text-decoration:none;color:var(--tt-ink)}.eval-nav svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5}.eval-nav>span{font-size:10px;color:var(--tt-muted);margin-left:auto}.breadcrumb strong{font-weight:400;color:var(--tt-ink)}
 .page-title{padding:27px 0 25px}.page-title h1{font-size:27px}.page-title .title-line{gap:12px}.page-title p{margin-top:8px}.workspace-tabs{margin-bottom:26px;gap:30px}.workspace-tabs>button{white-space:nowrap}.quiet-badge{font-size:10px}.workspace-tabs span{font-size:10px}
 .eval-home-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;gap:16px}.eval-home-heading h2{font-size:15px;font-weight:550}.eval-home-heading>span{font-size:11px;color:var(--tt-muted)}

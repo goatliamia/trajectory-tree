@@ -6,7 +6,7 @@ const tokens=value=>value==null?'—':value>=1000?(value/1000).toFixed(1)+'k':Ma
 const date=value=>new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(value);
 const categoryInfo={
   system:{label:'系统提示',color:'system',title:'系统提示',description:'预设引导与当前插件注册的提示片段。'},
-  instructions:{label:'AGENTS.md',color:'inject',title:'工作指令',description:'按当前工作目录读取的指令文件。'},
+  instructions:{label:'AGENTS.md',color:'user',title:'工作指令',description:'按当前工作目录读取的指令文件。'},
   tools:{label:'工具定义',color:'tools',title:'工具定义',description:'当前配置中已识别的工具声明，按名称查看用途与来源。'},
   skills:{label:'Skill 目录',color:'skill',title:'Skill 目录',description:'名称与用途进入目录；正文按需加载。'},
   injections:{label:'环境注入',color:'inject',title:'环境与插件补充',description:'当前配置注册的环境片段和消息来源，具体内容随运行状态变化。'},
@@ -33,8 +33,8 @@ function metadata(pairs){return '<dl class="entity-source">'+pairs.filter(([,val
 function reader(text,label='当前正文',metric=''){return '<div class="reader-title"><strong>'+esc(label)+'</strong><span>'+esc(metric)+'</span></div><div class="document">'+documentBody(text)+'</div>';}
 function entity(row,index,kind=state.category){const key=kind+':'+index;let title,description='',meta='',amount='',amountLabel='',body='';
   if(kind==='instructions'){
-    title=row.displayPath;meta=row.scope+' · 当前文件 · '+date(row.modifiedAt);amount='≈ '+tokens(row.tokens);amountLabel='tokens · 文件正文';
-    body=metadata([['文件位置',row.path,true],['加载来源',row.package,true],['文件状态',row.omitted?'超过当前预算，未完整带入':row.truncated?'按当前预算截短':'当前文件可读取']])+reader(row.body,'当前文件正文',row.bytes.toLocaleString('zh-CN')+' bytes');
+    title=row.scope==='个人指令'?row.displayPath:(row.workspaceNames?.[0]?row.workspaceNames[0]+' / ':'')+row.displayPath;description=(row.workspaceNames??[]).filter(Boolean).slice(0,3).join('、')+(row.workspaceNames?.length>3?' 等 '+row.workspaceNames.length+' 个工作区':'');meta=row.scope+' · 当前文件 · '+date(row.modifiedAt);amount='≈ '+tokens(row.tokens);amountLabel='tokens · 文件正文';
+    body=metadata([['文件位置',row.path,true],['加载来源',row.package,true],['适用工作区',row.workspaceNames?.filter(Boolean).join('、')],['加载方式',row.scope==='个人指令'?'个人全局指令链':'从项目根目录到会话工作目录，按目录层级加载'],['文件状态',row.omitted?'超出预算，开局未带入':row.truncated?'按当前预算截短':'当前来源文件可读取']])+reader(row.body,'当前文件正文',row.bytes.toLocaleString('zh-CN')+' bytes');
   }else if(kind==='skills'){
     title=row.name;description=row.description;meta=row.sourceLabel+(row.package?' · '+row.package:'');amount='≈ '+tokens(row.catalogTokens);amountLabel='tokens · 名称与描述';
     body=metadata([['来源',row.sourceLabel],['提供方',row.package??row.provider??'本地 Skill 文件',true],['文件位置',row.path,true],['修改时间',date(row.modifiedAt)]])+reader(row.body,'当前 Skill 正文','约 '+tokens(row.bodyTokens)+' tokens · 按需加载');

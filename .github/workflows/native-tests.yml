@@ -51,6 +51,7 @@ jobs:
           plugin/analysis-view/workspace-test.mjs
           analyzers/skill-window-test.mjs
           analyzers/workspace-presets-test.mjs
+          analyzers/eval-home-test.mjs
           scripts/dsh-native-config-test.mjs
           lib/context-diagnosis-test.mjs
           analyzers/context-overlap-test.mjs

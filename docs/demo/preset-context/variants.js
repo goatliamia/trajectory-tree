@@ -1,3 +1,4 @@
+import {originIcon} from './origin-icons.js';
 import { renderHomeOverview } from './home-overview.js';
 export const layouts=[{id:'desk',letter:'A',name:'拼装卡片'},{id:'canvas',letter:'B',name:'来源地图'},{id:'shelf',letter:'C',name:'配置书架'}];
 export const originInfo={
@@ -11,7 +12,7 @@ const n=value=>value==null?'待组装':value>=1000?(value/1000).toFixed(1)+'k':M
 const num=value=>Number(value??0).toLocaleString('zh-CN');
 const keys=['system','instructions','tools','skills','injections'];
 const titles={system:'系统提示',instructions:'AGENTS.md',tools:'工具',skills:'Skill',injections:'环境与消息'};
-const icon=(id,size='')=>`<span class="origin-icon ${id} ${size}" aria-hidden="true">${originInfo[id].symbol}</span>`;
+const icon=(id,size='')=>`<span class="origin-icon ${id} ${size}" aria-hidden="true">${originIcon(id)}</span>`;
 const action=(kind,extra='')=>`data-action="category" data-kind="${kind}" ${extra}`;
 
 export function entriesOf(preset){return keys.flatMap(kind=>preset[kind].map((row,index)=>({row,index,kind,origin:row.provenance?.origin??'unknown'})));}
@@ -35,7 +36,7 @@ function groupSentence(group){
   return [group.tools?group.tools+' 个工具':'',group.skills?group.skills+' 项 Skill':'',group.instructions?group.instructions+' 份指令':''].filter(Boolean).join(' · ')||group.items.length+' 项提示与环境内容';
 }
 function examples(group){
-  if(group.id==='personal')return group.items.filter(item=>['instructions','skills'].includes(item.kind)).slice(0,3).map(item=>item.row.displayPath??item.row.name);
+  if(group.id==='personal')return [...new Set(group.items.filter(item=>['instructions','skills'].includes(item.kind)).map(item=>item.row.displayPath??item.row.name))].slice(0,3);
   if(group.id==='official')return [group.tools?'文件、执行与工作工具':'',group.items.some(item=>item.kind==='system')?'身份与系统提示':'',group.skills?'预设 Skill':''].filter(Boolean);
   return group.bundles.slice(0,3).map(bundleLabel);
 }

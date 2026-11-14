@@ -39,7 +39,7 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     panel.querySelector('[data-fan-center-share]').textContent=linked?.dataset.fanShare&&linked.dataset.fanShare!=='—'?'占已计量 '+linked.dataset.fanShare:card?'暂无已计量占用':'tokens · 估算';
   }
   function updateUrl(){const url=new URL(location.href);url.searchParams.set('layout',state.layout);url.searchParams.set('preset',state.preset);url.searchParams.set('tab',state.tab);url.searchParams.set('diagnosis_scope',state.diagnosisScope);url.searchParams.delete('skill_view');history.replaceState(null,'',url);}
-  function renderSkillPanel(){const focused=document.activeElement?.id,position=focused==='skill-query'?$('skill-query').selectionStart:null;$('skill-management-panel').innerHTML=renderSkills(current(),getData(),ui);if(focused&&focused.startsWith('skill-')){$(focused)?.focus();if(position!=null)$('skill-query')?.setSelectionRange(position,position);}}
+  function renderSkillPanel(restoreFocus=true){const focused=document.activeElement?.id,position=focused==='skill-query'?$('skill-query').selectionStart:null;$('skill-management-panel').innerHTML=renderSkills(current(),getData(),ui);if(restoreFocus&&focused&&focused.startsWith('skill-')){$(focused)?.focus({preventScroll:true});if(position!=null)$('skill-query')?.setSelectionRange(position,position);}}
   function renderOverview(){const data=getData(),preset=current();
     document.body.dataset.layout=state.tab==='home'?state.layout:'desk';
     document.querySelector('.design-switcher').hidden=true;
@@ -64,8 +64,8 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     if(state.tab==='skills')renderSkillPanel();
     updateUrl();
   }
-  function openDetail({kind='all',origin=null,bundle=null,unused=false,usageState='all',index}={}){
-    state.category=kind;state.origin=origin;state.bundle=bundle;state.unused=unused;state.usageState=usageState;state.query='';
+  function openDetail({kind='all',origin=null,bundle=null,unused=false,usageState='all',instructionScope='all',index}={}){
+    state.category=kind;state.origin=origin;state.bundle=bundle;state.unused=unused;state.usageState=usageState;state.instructionScope=instructionScope;state.query='';
     state.open=index!==undefined?kind+':'+index:kind==='instructions'&&current().instructions.length===1?'instructions:0':null;
     $('search').value='';renderDetail();
     if(!$('detail-dialog').open)$('detail-dialog').showModal();
@@ -75,8 +75,8 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
   function renderDetail(){
     const p=current(),data=getData(),all=entriesOf(p);
     const scoped=all.filter(item=>(!state.origin||item.origin===state.origin)&&(!state.bundle||item.row.provenance?.bundle===state.bundle));
-    const selected=scoped.filter(item=>state.category==='all'||item.kind===state.category);
-    const rows=selected.filter(item=>(!state.unused||item.row.usage?.unusedCandidate)&&(!state.usageState||state.usageState==='all'||currentUsageState(item.row)===state.usageState)&&(!state.query||[item.row.name,item.row.displayPath,item.row.package,item.row.description,item.row.sourceLabel].filter(Boolean).join(' ').toLowerCase().includes(state.query.toLowerCase())));
+    const selected=scoped.filter(item=>(state.category==='all'||item.kind===state.category)&&(state.category!=='instructions'||state.instructionScope==='all'||(item.row.scope==='个人指令')===(state.instructionScope==='personal')));
+    const rows=selected.filter(item=>(!state.unused||item.row.usage?.unusedCandidate)&&(!state.usageState||state.usageState==='all'||currentUsageState(item.row)===state.usageState)&&(!state.query||[item.row.name,item.row.displayPath,item.row.package,item.row.description,item.row.sourceLabel,...item.row.workspaceNames??[]].filter(Boolean).join(' ').toLowerCase().includes(state.query.toLowerCase())));
     const origin=originInfo[state.origin],bundle=data.bundleInventory?.find(row=>row.name===state.bundle);
     const title=state.bundle?bundleLabel(bundle):origin?.name??categoryInfo[state.category]?.title??'当前内容';
     $('detail-breadcrumb').textContent=p.name+' / '+(origin?.name??'当前上下文');
@@ -88,6 +88,13 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     $('categories').innerHTML=[['all','全部'],...Object.entries(categoryInfo).map(([id,c])=>[id,c.label])].map(([id,label])=>`<button class="category-button" data-detail-category="${id}" aria-pressed="${id===state.category}">${label}<small>${id==='all'?scoped.length:scoped.filter(item=>item.kind===id).length}</small></button>`).join('');
     const known=selected.filter(item=>item.row.measuredTokens!=null),size=known.reduce((sum,item)=>sum+item.row.measuredTokens,0),pending=selected.length-known.length;
     $('detail-context').innerHTML=`<span>已计量 <strong>${known.length?'≈ '+tokens(size)+' tokens':'—'}</strong></span><span>${pending} 项待组装</span>${state.origin||state.bundle?'<span>来源保留在每项内容上</span>':''}`;
+    if(state.category==='instructions'){
+      $('section-description').textContent='开局带入个人全局指令与会话工作目录对应的项目目录链；成功操作更深目录的文件后，再补充适用指令。';
+      if(state.instructionScope!=='all'){
+        $('detail-context').innerHTML+=`<div class="home-detail-usage"><strong>${state.instructionScope==='personal'?'个人全局':'项目指令'} · ${rows.length} 份</strong><button type="button" id="home-clear-instructions">查看全部 ×</button></div>`;
+        $('home-clear-instructions').onclick=()=>{state.instructionScope='all';renderDetail();};
+      }
+    }
     if(state.usageState&&state.usageState!=='all'){
       const label=state.usageState==='used'?(state.category==='skills'?'正文有读取':'有调用记录'):state.usageState==='unused'?'未见使用':'记录不足';
       $('detail-context').innerHTML+=`<div class="home-detail-usage"><strong>${label} · ${rows.length} 项</strong><button type="button" id="home-clear-usage">查看全部 ×</button></div>`;
@@ -125,10 +132,10 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
       if(a.skillAction==='kind')selection.skillKind=selection.skillKind===a.kind?'all':a.kind;
       if(a.skillAction==='clear-chart'){selection.skillRange=null;selection.skillKind='all';}
       if(scope)showSkill(scope);
-      else renderSkillPanel();
+      else renderSkillPanel(false);
       const root=scope?$('skill-detail'):$('skill-management-panel');
       const next=a.skillAction==='date'?root.querySelector(`[data-skill-action="date"][data-start="${a.start}"]`):a.skillAction==='kind'?root.querySelector(`[data-skill-action="kind"][data-kind="${a.kind}"]`):root.querySelector('[data-skill-action="date"][tabindex="0"]');
-      next?.focus({preventScroll:true});return;
+      if(event.type==='keydown'||document.body.dataset.input==='keyboard')next?.focus({preventScroll:true});return;
     }
     if(a.skillAction==='open'){detailUi.skillRange=null;detailUi.skillKind='all';showSkill(a.name);}
     if(a.skillAction==='compare')openSkillView(renderSkillComparison(p,a.left,a.right,a.from),'Description 对照');
@@ -150,7 +157,7 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     root.addEventListener('keydown',event=>{const column=event.target.closest('[data-chart-label]');if(!column){if(['Enter',' '].includes(event.key)&&event.target.matches('g[data-skill-action],path[data-skill-action],text[data-skill-action]')){event.preventDefault();handleSkillAction(event);}return;}
       if(['Enter',' '].includes(event.key)){event.preventDefault();handleSkillAction(event);}
       if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const columns=[...column.parentElement.querySelectorAll('[data-chart-label]')],i=columns.indexOf(column);const next=event.key==='Home'?columns[0]:event.key==='End'?columns.at(-1):columns[Math.max(0,Math.min(columns.length-1,i+(event.key==='ArrowRight'?1:-1)))];columns.forEach(node=>node.tabIndex=node===next?0:-1);next.focus();}
-      if(event.key==='Escape'){event.preventDefault();event.stopPropagation();root.querySelectorAll('.skill-chart-tooltip').forEach(tip=>tip.hidden=true);}
+      if(event.key==='Escape'){event.preventDefault();event.stopPropagation();root.querySelector('[data-skill-action="clear-chart"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true}));root.querySelectorAll('.skill-chart-tooltip').forEach(tip=>tip.hidden=true);}
     });
   }
   const skillVisualRoot=$('skill-management-panel');
@@ -166,13 +173,16 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
   $('overview-panel').onclick=event=>{const button=event.target.closest('[data-action]');if(!button)return;
     const a=button.dataset;
     if(a.action==='eval-tab'){state.tab=a.tab;renderOverview();$('workspace-tabs').scrollIntoView({block:'start',behavior:'smooth'});}
-    if(a.action==='category')openDetail({kind:a.kind,unused:a.unused==='true',usageState:a.usageState||'all',index:a.index===undefined?undefined:Number(a.index)});
+    if(a.action==='category')openDetail({kind:a.kind,unused:a.unused==='true',usageState:a.usageState||'all',instructionScope:a.instructionScope||'all',index:a.index===undefined?undefined:Number(a.index)});
     if(a.action==='origin')openDetail({origin:a.origin});
     if(a.action==='bundle')openDetail({bundle:a.bundle});
     if(a.action==='about')about();
     if(a.action==='filter-origin'){ui.originFilter=a.origin;renderOverview();}
   };
   $('overview-panel').onkeydown=event=>{if((event.key==='Enter'||event.key===' ')&&event.target.matches('circle[data-action],path[data-action]')){event.preventDefault();const target=event.target.dataset;if(target.action==='origin')openDetail({origin:target.origin});else openDetail({kind:target.kind,usageState:target.usageState||'all'});}};
+  function highlightComposition(kind){$('overview-panel').querySelectorAll('[data-composition-kind]').forEach(node=>node.classList.toggle('is-linked',Boolean(kind&&node.dataset.compositionKind===kind)));}
+  for(const type of ['pointerover','focusin'])$('overview-panel').addEventListener(type,event=>highlightComposition(event.target.closest('[data-composition-kind]')?.dataset.compositionKind));
+  for(const type of ['pointerout','focusout'])$('overview-panel').addEventListener(type,event=>highlightComposition(event.relatedTarget instanceof Element?event.relatedTarget.closest('[data-composition-kind]')?.dataset.compositionKind:null));
   $('overview-panel').addEventListener('pointerover',event=>{const linked=event.target.closest('[data-fan-link]');if(linked)highlightOrigin(linked.dataset.fanLink);});
   $('overview-panel').addEventListener('pointerout',event=>{if(!event.target.closest('[data-fan-link]'))return;const next=event.relatedTarget instanceof Element?event.relatedTarget.closest('[data-fan-link]'):null;const focused=document.activeElement?.closest('[data-fan-link]');highlightOrigin(next?.dataset.fanLink??focused?.dataset.fanLink??null);});
   $('overview-panel').addEventListener('focusin',event=>{const linked=event.target.closest('[data-fan-link]');if(linked)highlightOrigin(linked.dataset.fanLink);});
@@ -200,7 +210,7 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     renderOverview();
     if(nativeWorkspace()){
       const select=$('workspace-scope');select.innerHTML='<option value="all">全部工作区</option>';
-      for(const workspace of data.workspaces??[]){const option=document.createElement('option');option.value=workspace.id;option.textContent=workspace.name;option.selected=workspace.id===data.workspace.id;select.append(option);}
+      for(const workspace of data.workspaces??[]){const option=document.createElement('option');option.value=workspace.id;option.textContent=workspace.name||workspace.path;option.selected=workspace.id===data.workspace.id;select.append(option);}
       select.value=data.workspace.id??'all';select.onchange=()=>{const url=new URL(window.location.href);url.searchParams.set('workspace',select.value);window.location.assign(url);};
       showProgress(data.progress);if(!pollStarted){pollStarted=true;poll();}
     }
@@ -213,6 +223,6 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
       if(progress.revision!==progressRevision&&!document.querySelector('dialog[open]')){progressRevision=progress.revision;evalViews.invalidate();await load();}
     }catch{}finally{polling=false;setTimeout(poll,2000);}
   }
-  $('refresh').onclick=async()=>{const button=$('refresh'),usage=state.tab!=='home'&&!(state.tab==='diagnosis'&&state.diagnosisScope==='context');button.disabled=true;button.textContent=usage?'读取使用记录…':'读取中…';try{const response=await apiFetch(usage?'/api/refresh-usage':'/api/refresh',{method:'POST'});if(!response.ok)throw Error('刷新未完成，请重试');evalViews.invalidate();await load();$('load-error').hidden=true;}catch(error){$('load-error').hidden=false;$('load-error').textContent=error.message;}finally{button.disabled=false;button.textContent=state.tab!=='home'&&!(state.tab==='diagnosis'&&state.diagnosisScope==='context')?'刷新使用记录':'刷新配置';}};
+  $('refresh').onclick=async()=>{ui.skillRange=null;ui.skillKind='all';ui.skillActivity='all';ui.skillChanged=false;ui.skillUnused=false;detailUi.skillRange=null;detailUi.skillKind='all';if(state.tab==='skills')renderSkillPanel(false);const button=$('refresh'),usage=state.tab!=='home'&&!(state.tab==='diagnosis'&&state.diagnosisScope==='context');button.disabled=true;button.textContent=usage?'读取使用记录…':'读取中…';try{const response=await apiFetch(usage?'/api/refresh-usage':'/api/refresh',{method:'POST'});if(!response.ok)throw Error('刷新未完成，请重试');evalViews.invalidate();await load();$('load-error').hidden=true;}catch(error){$('load-error').hidden=false;$('load-error').textContent=error.message;}finally{button.disabled=false;button.textContent=state.tab!=='home'&&!(state.tab==='diagnosis'&&state.diagnosisScope==='context')?'刷新使用记录':'刷新配置';}};
   load().catch(error=>{$('load-error').hidden=false;$('load-error').textContent=error.message;});
 }

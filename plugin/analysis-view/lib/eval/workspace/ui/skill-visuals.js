@@ -1,3 +1,4 @@
+import {tileLayout} from './treemap.js';
 import { renderOverlapOverview } from './overlap-preview.js';
 const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=value=>value>=1000?(value/1000).toFixed(1)+'k':Number(value??0).toLocaleString('zh-CN');
@@ -13,19 +14,7 @@ function coverageSelection(skills,counts,ui){
   const selected=skills.filter(s=>skillMatches(s,counts,ui));
   return `<div class="skill-coverage-selection" role="status"><div><strong>${ui.skillChanged?'最近读取后有修改':ui.skillActivity==='read'?'有读取记录':'无读取记录'} <span>${selected.length} 项</span></strong><button data-skill-action="clear-activity">清除选择 ×</button></div><div class="skill-selected-names">${selected.map(s=>`<button data-skill-action="open" data-name="${e(s.name)}">${e(s.name)} <span>${counts.get(s.name)??0} 次 ↗</span></button>`).join('')||'<span>当前范围没有符合条件的 Skill</span>'}</div></div>`;
 }
-function tileLayout(items,width,height){
-  const total=items.reduce((sum,row)=>sum+row.weight,0),pending=items.map(row=>({...row,area:row.weight/total*width*height})),out=[];
-  let x=0,y=0,w=width,h=height;
-  const worst=(row,side)=>{const areas=row.map(r=>r.area),sum=areas.reduce((a,b)=>a+b,0);return Math.max(side*side*Math.max(...areas)/(sum*sum),sum*sum/(side*side*Math.min(...areas)));};
-  while(pending.length){
-    const side=Math.min(w,h),row=[pending.shift()];
-    while(pending.length&&worst([...row,pending[0]],side)<=worst(row,side))row.push(pending.shift());
-    const sum=row.reduce((n,r)=>n+r.area,0);
-    if(w>=h){const rw=sum/h;let ry=y;for(const r of row){const rh=r.area/rw;out.push({...r,x,y:ry,w:rw,h:rh});ry+=rh;}x+=rw;w-=rw;}
-    else{const rh=sum/w;let rx=x;for(const r of row){const rw=r.area/rh;out.push({...r,x:rx,y,w:rw,h:rh});rx+=rw;}y+=rh;h-=rh;}
-  }
-  return out;
-}
+
 function usageMap(skills,counts,ui){
   const sorted=skills.filter(s=>s.bodyTokens>0).slice().sort((a,b)=>b.bodyTokens-a.bodyTokens),totalReads=skills.reduce((sum,s)=>sum+(counts.get(s.name)??0),0);
   if(!sorted.length)return '<div class="skill-graph-empty">当前没有可计量的正文。</div>';
