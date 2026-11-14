@@ -505,7 +505,8 @@ async function checkFindings(page) {
   const board=page.locator('#eval-findings');
   await board.locator('.df-table tbody tr').first().click();
   await board.locator('[data-df-ask="overall"]').click();
-  assert.match(await page.locator('#draft').inputValue(),/references\/disposition\.md/);
+  assert.match(await page.locator('#draft').inputValue(),/\$trace-analysis/);
+  assert.match(await page.locator('#draft').inputValue(),/--evidence/);
   assert.match(await page.locator('#draft').inputValue(),/"logId":/);
   await page.locator('#close-editor').click();
   await page.locator('#scope').selectOption('1');
