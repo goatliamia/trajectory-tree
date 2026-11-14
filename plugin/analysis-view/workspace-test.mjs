@@ -55,3 +55,20 @@ test('history batches refresh Skill charts and freshness without rebuilding conf
   assert.deepEqual(cleared.presets[0].skillManagement.events,[]);
   assert.equal(cleared.presets[0].skills[0].freshness.lastLoadedAt,null);
 });
+
+test('global configuration is collected once while usage still spans all workspaces',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'trajectory-global-')),anchor=join(root,'runtime.json');await writeFile(anchor,'{"version":"fixture"}');
+  const now=Date.now(),seen=[],workspaces=[{id:'one',path:join(root,'one')},{id:'two',path:join(root,'two')}];
+  const collect=async options=>{
+    seen.push(options);const p={id:'custom',configurationScope:options.configurationScope??'workspace',skills:[],disabledSkills:[],tools:[],system:[],instructions:[],injections:[]};
+    p.statistics=summarizeCurrentPreset(p,null,{estimate:text=>text.length});p.skillManagement=buildSkillManagement(p);
+    return {presets:[p],workspace:{path:options.cwd},coverage:{}};
+  };
+  const service=new EvalWorkspaceService({get:key=>key==='workspaceRegistry'?{list:()=>workspaces}:undefined},{},{profile:{home:root,dir:root,installAnchor:anchor},collect});
+  t.after(async()=>{service.dispose();assert.ok(root.startsWith(join(tmpdir(),'trajectory-global-')));await rm(root,{recursive:true,force:true});});
+  service.data={projects:workspaces,sessions:workspaces.map((w,project)=>({id:w.id,project,turns:[{no:1,at:now}],presetUsage:{id:w.id,preset:'custom',lastAt:now,tools:[],skills:[]}}))};
+  const global=await service.current('all');assert.equal(seen.length,1);assert.equal(seen[0].configurationScope,'global');
+  assert.equal(global.presets[0].configurationScope,'global');assert.equal(global.presets[0].statistics.usage.sessions,2);
+  const selected=await service.current('one');assert.equal(selected.presets[0].configurationScope,'workspace');assert.equal(selected.presets[0].statistics.usage.sessions,1);
+  workspaces.length=0;assert.equal(service.workspace('all').scope,'all','global configuration does not require a registered project');
+});

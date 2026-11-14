@@ -58,7 +58,7 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     $('overview-panel').innerHTML=renderLayout(preset,data,state.layout,ui,categoryInfo);
     $('design-options').innerHTML=layouts.map(row=>`<button type="button" data-layout-choice="${row.id}" aria-pressed="${row.id===state.layout}"><span>${row.letter}</span>${row.name}</button>`).join('');
     $('preset-title').textContent='Eval';
-    $('preset-subtitle').textContent='配置与使用分析';
+    $('preset-subtitle').textContent=preset.configurationScope==='global'?'全局配置 · 跨工作区使用':'当前工作区配置与使用';
     $('captured-at').textContent=date(state.tab==='home'||contextSelected?data.capturedAt:preset.statistics.usage.asOf??data.capturedAt)+' 采集';
     $('footer-status').textContent=state.tab==='home'||contextSelected?'本地配置 · '+date(data.capturedAt):'本地使用记录 · '+date(preset.statistics.usage.asOf??data.capturedAt);
     presetNavigation.render();
@@ -90,7 +90,7 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     const known=selected.filter(item=>item.row.measuredTokens!=null),size=known.reduce((sum,item)=>sum+item.row.measuredTokens,0),pending=selected.length-known.length;
     $('detail-context').innerHTML=`<span>已计量 <strong>${known.length?'≈ '+tokens(size)+' tokens':'—'}</strong></span><span>${pending} 项待组装</span>${state.origin||state.bundle?'<span>来源保留在每项内容上</span>':''}`;
     if(state.category==='instructions'){
-      $('section-description').textContent='开局带入个人全局指令与会话工作目录对应的项目目录链；成功操作更深目录的文件后，再补充适用指令。';
+      $('section-description').textContent=p.configurationScope==='global'?'当前预设的个人全局指令。':'开局带入个人全局指令与会话工作目录对应的项目目录链；成功操作更深目录的文件后，再补充适用指令。';
       if(state.instructionScope!=='all'){
         $('detail-context').innerHTML+=`<div class="home-detail-usage"><strong>${state.instructionScope==='personal'?'个人全局':'项目指令'} · ${rows.length} 份</strong><button type="button" id="home-clear-instructions">查看全部 ×</button></div>`;
         $('home-clear-instructions').onclick=()=>{state.instructionScope='all';renderDetail();};
@@ -113,7 +113,7 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
   }
   function about(){const data=getData(),p=current(),u=p.statistics.usage;
     $('source-dialog').querySelector('h2').textContent='来源与统计口径';
-    $('source-detail').innerHTML=`<p>当前配置读取于 ${esc(date(data.capturedAt))}，工作目录 <code>${esc(data.workspace.path)}</code>。</p><p><strong>来源使用 DSH 原生插件管理器的只读清单。</strong>官方标记与 installation / profile 来源、插件中文名称和图标均沿用本机 DSH 元数据。没有按包名前缀猜测归属。</p><p>“我的指令与 Skill”按实际文件来源归类，加载器的官方身份不改变文件归属。未匹配的内容单列待确认。</p><p>体积来自 DSH 估算器。动态片段未计入总量，Skill 只计目录；正文按需加载。${p.toolMode==='PTC'?'PTC 的工具声明计量不等于 SDK 组装体积。':''}</p><p>使用背景来自同预设最近 ${u.sessions} 个已读会话（跨项目），按当前能力名称关联。至少 3 个会话可见且零次使用才列为“未见使用”。${u.sessions?'记录覆盖 '+esc(date(u.from))+' 至 '+esc(date(u.to))+'；历史采集于 '+esc(date(u.asOf))+'。':''}</p><p>原文仅保留现版本。所有配置和记录留在本机，尚未连接实时请求组装。</p>`;
+    $('source-detail').innerHTML=`<p>当前配置读取于 ${esc(date(data.capturedAt))}，${p.configurationScope==='global'?'范围为预设全局配置，使用统计覆盖全部工作区':'工作目录 <code>'+esc(data.workspace.path)+'</code>'}。</p><p><strong>来源使用 DSH 原生插件管理器的只读清单。</strong>官方标记与 installation / profile 来源、插件中文名称和图标均沿用本机 DSH 元数据。没有按包名前缀猜测归属。</p><p>“我的指令与 Skill”按实际文件来源归类，加载器的官方身份不改变文件归属。未匹配的内容单列待确认。</p><p>体积来自 DSH 估算器。动态片段未计入总量，Skill 只计目录；正文按需加载。${p.toolMode==='PTC'?'PTC 的工具声明计量不等于 SDK 组装体积。':''}</p><p>使用背景来自同预设最近 ${u.sessions} 个已读会话（跨项目），按当前能力名称关联。至少 3 个会话可见且零次使用才列为“未见使用”。${u.sessions?'记录覆盖 '+esc(date(u.from))+' 至 '+esc(date(u.to))+'；历史采集于 '+esc(date(u.asOf))+'。':''}</p><p>原文仅保留现版本。所有配置和记录留在本机，尚未连接实时请求组装。</p>`;
     $('source-dialog').showModal();
   }
   function openSkillView(html,label='Skill 管理'){$('skill-dialog-label').textContent=label==='全部预设'?'Skill / 全部预设':current().name+' / '+label;$('skill-detail').innerHTML=html;if(!$('skill-dialog').open)$('skill-dialog').showModal();$('skill-dialog').scrollTop=0;}

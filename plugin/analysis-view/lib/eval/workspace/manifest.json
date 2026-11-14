@@ -39,7 +39,7 @@
     },
     {
       "path": "analyzers/workspace-presets.mjs",
-      "sha256": "6899df06fcb60467f3ffbcdd331b256d8990657861d4fd0c5afd008bd6848ab7"
+      "sha256": "754cf9ab17a76c1a523f10b1da4dd63347775eef053fe24ba5a9a87ce7e27eac"
     },
     {
       "path": "lib/context-diagnosis.mjs",
@@ -47,7 +47,7 @@
     },
     {
       "path": "lib/dsh-current-preset.mjs",
-      "sha256": "35fb9aafa61accb3883cd5a78a03a98019c89df53d5f1e950e4eb2fa78dd6ecd"
+      "sha256": "aeb2a57cb40352c3e4cf8315421810dbe0929f0fd87def39587fe4cc7dd3b1e9"
     },
     {
       "path": "lib/dsh-skill-catalog.mjs",

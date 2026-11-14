@@ -9,7 +9,7 @@ import {summarizePresetInventory} from '../../analyzers/preset-statistics.mjs';
 import {buildSkillManagement} from '../../analyzers/preset-skill-management.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url)),files=new Map();let server,origin;
 function preset(id){
-  const p={id,name:id,toolMode:'直接工具',instructions:[],skills:[],disabledSkills:[],injections:[],modules:[],
+  const p={id,name:id,configurationScope:'global',toolMode:'直接工具',instructions:[],skills:[],disabledSkills:[],injections:[],modules:[],
     system:[{name:'Identity',body:'Fixture',measuredTokens:5,provenance:{origin:'official'}}],tools:[{name:'read',description:'Read a file',measuredTokens:20,provenance:{origin:'official'}}]};
   p.statistics=summarizePresetInventory(p,null);p.skillManagement=buildSkillManagement(p);return p;
 }

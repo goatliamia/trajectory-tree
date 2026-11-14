@@ -32,7 +32,7 @@ function copy(file){
   });
   write(target(file),transformed);
 }
-for(const file of ['lib/dsh-current-preset.mjs','lib/context-diagnosis.mjs','analyzers/preset-context.mjs','analyzers/context-overlap.mjs','analyzers/eval-insights.mjs','analyzers/skill-overlap-demo.mjs','scripts/dsh-management.mjs','scripts/dsh-management-http.mjs'])copy(join(root,file));
+for(const file of ['lib/dsh-current-preset.mjs','lib/context-diagnosis.mjs','analyzers/workspace-presets.mjs','analyzers/preset-context.mjs','analyzers/context-overlap.mjs','analyzers/eval-insights.mjs','analyzers/skill-overlap-demo.mjs','scripts/dsh-management.mjs','scripts/dsh-management-http.mjs'])copy(join(root,file));
 const assets=join(root,'docs/demo/preset-context');
 for(const entry of readdirSync(assets,{withFileTypes:true})){
   if(!entry.isFile()||!['.js','.css','.html'].includes(extname(entry.name))||entry.name==='trace-extension.js')continue;

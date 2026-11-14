@@ -1,6 +1,8 @@
 import {summarizePresetInventory} from './preset-statistics.mjs';
 const unique=rows=>[...new Map(rows.map(row=>[JSON.stringify(row),row])).values()];
 const key=row=>JSON.stringify([row.name,row.path??row.file,row.package,row.entry,row.body??row.staticText??row.description]);
+// Explicit cross-project source inventory only. These sources are not co-loaded;
+// the default Eval configuration is collected without a project cwd instead.
 export function mergeWorkspaceConfigurations(snapshots){
   if(!snapshots.length)throw Error('请先在 DSH 中登记工作区');
   const result={...snapshots[0],workspace:{id:'all',name:'全部工作区',path:'',scope:'all'},workspaces:snapshots.map(s=>s.workspace),presets:[]};

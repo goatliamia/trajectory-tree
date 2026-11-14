@@ -8,7 +8,7 @@ import {OverviewDiskCache} from './overview/persisted-cache.mjs';
 import {enrichFindingPowerShell} from './pwsh-evidence.mjs';
 import {editNativeConfig} from './native-config-edit.mjs';
 import {collectCurrentPreset,collectCurrentWorkspaces} from './workspace/runtime/lib/dsh-current-preset.mjs';
-import {mergeWorkspaceConfigurations,scopedUsageHistory} from './workspace/runtime/analyzers/workspace-presets.mjs';
+import {scopedUsageHistory} from './workspace/runtime/analyzers/workspace-presets.mjs';
 import {projectPresetContext} from './workspace/runtime/analyzers/preset-context.mjs';
 import {currentUsageStatistics} from './workspace/runtime/analyzers/preset-statistics.mjs';
 import {currentSkillUsage} from './workspace/runtime/analyzers/preset-skill-management.mjs';
@@ -42,7 +42,7 @@ export function overviewProjectionVersion(profile){
 export class EvalWorkspaceService {
   constructor(ctx,overview,{profile=ctx.get('profileContext'),cr,cacheRoot,collect=collectCurrentPreset,collectAll}={}){
     this.ctx=ctx;this.overview=overview;this.profile=profile;this.cr=cr;this.collect=collect;
-    this.collectAll=collectAll??(collect===collectCurrentPreset?collectCurrentWorkspaces:async options=>mergeWorkspaceConfigurations(await Promise.all(options.workspaces.map(async workspace=>({...await collect({...options,cwd:workspace.path}),workspace})))));
+    this.collectAll=collectAll??(collect===collectCurrentPreset?collectCurrentWorkspaces:options=>collect({...options,configurationScope:'global'}));
     this.controller=new AbortController();this.configs=new Map();this.managers=new Map();this.pending=new Map();this.lastViewed=Date.now();
     this.data={host:'dsh',latest:Date.now(),projects:[],sessions:[],models:[],categories:[],failures:[]};
     this.progress={loading:false,done:0,total:0,unread:0,revision:0};
@@ -57,7 +57,6 @@ export class EvalWorkspaceService {
   workspaces(){return [...(this.ctx.get('workspaceRegistry')?.list?.()??[])].map(w=>({id:w.id,name:w.title||basename(w.path)||w.path,path:w.path}));}
   workspace(id){
     const rows=this.workspaces();
-    if(!rows.length)throw Error('请先在 DSH 中登记工作区');
     if(!id||id==='all')return {id:'all',name:'全部工作区',path:'',scope:'all'};
     const selected=rows.find(w=>w.id===id);
     if(!selected)throw Error('请先在 DSH 中登记工作区');return selected;
