@@ -1,4 +1,5 @@
-import {tileLayout} from './treemap.js';
+import {composition} from './home-composition.js';
+export {composition,compositionGroups} from './home-composition.js';
 import {originIcon} from './origin-icons.js';
 const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=value=>Number(value||0).toLocaleString('zh-CN');
@@ -51,33 +52,7 @@ function instructions(p){
     <p class="home-instruction-rule">${p.scopeAllWorkspaces?'会话按工作目录加载对应项目指令。':'开局加载个人指令与项目目录链；进入更深目录时按需补充。'}</p>
     <button class="home-text-link" ${category('instructions')}>查看文件与适用范围 ${arrow}</button></section>`;
 }
-const compositionOrigins={official:{name:'DSH 官方',short:'官方'},personal:{name:'个人与项目',short:'个人'},plugin:{name:'我装的插件',short:'插件'},unknown:{name:'来源待确认',short:'待确认'}};
-export function compositionGroups(p){
-  const groups=Object.entries(compositionOrigins).map(([id,names])=>({id,...names,tokens:0,pending:0,categories:[]}));
-  for(const category of p.statistics.categories){
-    const rows=(p[category.id]??[]).flatMap(row=>category.id==='skills'?row.variants??[row]:[row]);
-    for(const group of groups){
-      const own=rows.filter(row=>(row.provenance?.origin??'unknown')===group.id);if(!own.length)continue;
-      const measured=own.filter(row=>Number.isFinite(row.measuredTokens)&&row.measuredTokens>=0),tokens=measured.reduce((sum,row)=>sum+row.measuredTokens,0);
-      group.categories.push({...category,items:own.length,tokens:measured.length?tokens:null,pending:own.length-measured.length});
-      group.tokens+=tokens;group.pending+=own.length-measured.length;
-    }
-  }
-  return groups.filter(group=>group.categories.length);
-}
-export function composition(p,info){
-  const groups=compositionGroups(p),total=groups.reduce((sum,g)=>sum+g.tokens,0),height=260;
-  const label=c=>c.id==='instructions'?'AGENTS.md':c.label;
-  const action=(g,c)=>category(c.id,`data-origin="${g.id}" data-composition-key="${g.id}:${c.id}"`);
-  return `<section class="home-composition"><header class="home-section-heading"><div><h2>静态内容分布</h2><p class="home-map-description">按来源分区 · 面积表示 tokens${p.scopeAllWorkspaces?' · 全工作区来源去重':''}</p></div><span>已计量 ≈ ${compact(total)} tokens</span></header>
-    ${total?`<div class="home-composition-origins" role="group" aria-label="按官方、个人和插件来源分区的矩形树图">${groups.filter(g=>g.tokens>0).map(g=>{
-      const width=1000*g.tokens/total,cells=tileLayout(g.categories.filter(c=>c.tokens>0).map(c=>({...c,weight:c.tokens})).sort((a,b)=>b.weight-a.weight),width,height);
-      return `<section class="home-source-band" style="flex:${g.tokens};--group:var(--origin-${g.id},var(--tt-muted))" aria-label="${g.name}"><button class="home-source-caption" data-action="origin" data-origin="${g.id}"><strong><i></i><span class="source-full-name">${g.name}</span><span class="source-short-name">${g.short}</span></strong><small>${pct(g.tokens,total)}</small></button><div class="home-source-map">${cells.map(c=>`<button class="home-composition-tile" ${action(g,c)} style="left:${c.x/width*100}%;top:${c.y/height*100}%;width:${c.w/width*100}%;height:${c.h/height*100}%" aria-label="${g.name} · ${label(c)}，${compact(c.tokens)} tokens，查看内容" title="${g.name} · ${label(c)} · ${n(c.tokens)} tokens"><span class="home-tile-content"><strong class="home-tile-name">${label(c)}</strong><span class="home-tile-amount">${compact(c.tokens)}<small> tokens</small></span><span class="home-tile-detail">${c.items} 项 · ${pct(c.tokens,total)}</span></span></button>`).join('')}</div></section>`;
-    }).join('')}</div>`:'<p class="home-map-empty">当前没有可计量的静态内容。</p>'}
-    <div class="home-source-keys">${groups.map(g=>`<section style="--group:var(--origin-${g.id},var(--tt-muted))"><button class="home-source-key-title" data-action="origin" data-origin="${g.id}"><span><i></i>${g.name}</span><strong>${g.tokens?compact(g.tokens)+' tokens':'待组装'} ${arrow}</strong></button>${g.categories.map(c=>`<button class="home-source-key-row" ${action(g,c)}><span>${label(c)}</span><strong>${compact(c.tokens)}</strong>${c.pending?`<small>${c.pending} 项待组装</small>`:''}</button>`).join('')}</section>`).join('')}</div></section>`;
-}
-
 export function renderHomeOverview(p,data,info,groups){
   const usage=p.statistics.usage;
-  return `<div class="layout-desk home-overview">${originSection(p,groups)}<div class="home-activity-grid"><section class="home-usage"><header class="home-section-heading"><h2>使用覆盖</h2><span>${(usage.period===1?'今天':'近 '+(usage.period??7)+' 天')+' · '+usage.sessions+' 个同预设会话'}</span></header><div class="home-usage-grid">${useGauge(p,'tools',data.progress?.loading)}${useGauge(p,'skills',data.progress?.loading)}</div><p class="home-usage-note">“未见使用”基于至少 3 个可见会话；其余单列为记录不足。</p></section>${instructions(p)}</div>${composition(p,info)}<button class="home-system-link" ${category('system')}><span class="home-system-symbol" aria-hidden="true">✳</span><span><strong>系统提示词</strong><small>身份前缀、Harness 与插件提供的片段</small></span>${arrow}</button></div>`;
+  return `<div class="layout-desk home-overview">${originSection(p,groups)}<div class="home-activity-grid"><section class="home-usage"><header class="home-section-heading"><h2>使用覆盖</h2><span>${(usage.period===1?'今天':'近 '+(usage.period??7)+' 天')+' · '+usage.sessions+' 个同预设会话'}</span></header><div class="home-usage-grid">${useGauge(p,'tools',data.progress?.loading)}${useGauge(p,'skills',data.progress?.loading)}</div><p class="home-usage-note">“未见使用”基于至少 3 个可见会话；其余单列为记录不足。</p></section>${instructions(p)}</div>${composition(p)}<button class="home-system-link" ${category('system')}><span class="home-system-symbol" aria-hidden="true">✳</span><span><strong>系统提示词</strong><small>身份前缀、Harness 与插件提供的片段</small></span>${arrow}</button></div>`;
 }

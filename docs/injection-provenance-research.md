@@ -1,6 +1,52 @@
 # 上下文注入来源与位置：旧研究的新版本复核
 
-复核日期：2026-10-30。范围为本机安装的 DSH `0.2.2-alpha.2`，不是对上游最新版本或正在运行进程的版本判断。本次只读源码与已有日志，执行离线合成探针，不向真实会话注入内容，也未调用模型。
+## 2026-11-14：rc3 的真实插件核验
+
+**能够监测，但监听注册、产生内容和正式进入会话要分别取证。** 已用本机 DSH `0.2.2-rc.3` 的原生 Cordis 和实际安装插件完成隔离验证，并重新读取五份已有会话日志。没有启动 AgentLoop、调用模型或写入真实会话；这也不表示正在运行的 DSH 已启用新的完整监测器。
+
+可复现入口：[probe-injection-hooks.mjs](../scripts/probe-injection-hooks.mjs)。仅依赖本机已安装 DSH；默认输出 `.dsh/injection-hook-probe/report.json`，不作为每次启动必跑的检查或 CI 依赖。插件可选参数为本机 `closure-state` 的入口路径：
+
+```powershell
+node scripts/probe-injection-hooks.mjs
+node scripts/probe-injection-hooks.mjs --closure-state <插件入口路径> --controlled-closure
+```
+
+| 实际插件 | 注册入口 | 本次观察到的内容 |
+| --- | --- | --- |
+| 官方 `dsh-time-context` | `agent/pre-step` | 第一次返回 `time-context` 消息，261 字符；将消息交给其官方投影后，紧接着的步骤没有重复消息 |
+| 官方 `dsh-harness-dev-context` | `systemPrompt.section/context` | 实际组装得到 `harness:source`、`app:web-surface` 两个系统片段和两个环境片段；Web URL 使用隔离输入 |
+| 已安装的 `closure-state` | `tools/result` + `agent/pre-step` | 无相关修改时没有输出；用隔离的修改事件及过期证书事实触发后，真实插件返回 211 字符的 `plugin:closure-state`，下一步不重复 |
+| 已安装的 `dsh-context` 0.83.1 | `agent/pre-step` | 源码中该监听只给缺失 ID 的输入消息补 ID；不是新增正文。这一项只核对源码，没有挂载整个插件 |
+| 已安装的 Design Protocol | 工具、Web 路由；客户端主题等事件 | 所查注册不是模型消息注入；UI 监听不能计入上下文内容 |
+
+`--controlled-closure` 只在 `.dsh/injection-hook-probe/closure-fixture` 创建固定的证书输出脚本，通过进程内环境变量交给真实插件。合成的 `edit` 元数据没有执行文件编辑，不读取实际证书库。报告明确标记这是**真实插件处理受控事实**，不是自然发生的真实会话反馈。退出时恢复环境变量并释放全部隔离插件。
+
+### 监听的归属与启动顺序
+
+原生 `internal/listener` 回调的 `this` 是注册监听的 Cordis Context，因此早期观察可拿到 `fiber.runtime.name`。本次识别出 `time-context → agent/pre-step`、`closure-state → tools/result / agent/pre-step`；真实卸载后，消息产出和环境片段均归零。
+
+有两个实现条件：
+
+- **观察必须足够早。** 后安装的观察者没有收到之前监听的重放；本次晚安装观察结果为空。正式接入应随宿主早期挂载，不能将热加载后的空清单显示为“没有注入”。
+- **观察者必须返回 `undefined`。** `internal/listener` 走 bail 机制，返回真值会拦截原注册。只记归属与入口，不替换用户监听，不读取私有 hook 表。
+
+注册记录只证明“具备在哪个入口参与的能力”。实际内容仍要看原生组装结果或 `pre-step` 最终返回；请求准入失败时，返回的消息也可能没有进入会话。Probe 的证据层级分别标为 `assembled-with-controlled-web-url` 与 `pre-step-returned-not-request-sent`。
+
+### 与已有会话记录交叉核对
+
+从已有索引选择最近五份具备未播种开局基线且文件可读的日志，重新解码并使用现有 `projectPresetContext` 和官方 SurfaceManager 还原。五份开局中都出现了 `time-context` 和 `runtime-context`；后者包含 `working-directory:current`、`sandbox:policy`、`approval:policy`、`harness:source`、`app:web-surface`。这证明这些内容在相应历史会话中已正式留下记录，超出了“源码里可能注册”的证据。
+
+这些历史消息的 `recordedPlugin` 均为空：`source.kind` 与 section 名能识别生产者形态，仍不能直接当作完整插件归属。日志头 `version: 4` 是日志格式版本，不能把这些历史样本称为 rc3 新建会话。原文、会话身份和文件路径只保留在忽略目录 `.dsh/injection-hook-probe/log-evidence.json`。
+
+### 产品接入边界
+
+当前总览已收集系统/环境注册与声明的消息来源，轨迹投影可读正式消息；尚未将所有监听入口、运行时注册归属和正式消息串成统一的实时链路。下一步可在现有来源详情内补充三层信息：**绑定入口 → 本次产生的片段 → 对应会话记录**。没有产出就显示条件或未触发，不填虚假的 token 数；按事件只保留标识、摘要计量和证据位置，不复制整份请求。
+
+旧 Runtime 仓库的入口分层可继续复用，不能迁移旧实验的成本比例。本次验证也没有测量 provider 线上 token 位置或模型对注入的采纳程度。
+
+---
+
+以下为 2026-10-30 的复核，范围为当时本机安装的 DSH `0.2.2-alpha.2`。其中“当前”指该次复核版本，不是上游最新版本或正在运行进程的版本判断。当时只读源码与已有日志，执行离线合成探针，不向真实会话注入内容，也未调用模型。
 
 ## 结论
 

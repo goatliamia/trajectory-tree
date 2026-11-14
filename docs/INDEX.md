@@ -15,6 +15,7 @@ Trajectory Tree 把 DSH、Pi、Codex 和 Claude Code 的会话记录组织成执
 | 诊断方法 | 把用户的关注点变成可执行的取证步骤，并给出可核查的改法 | [诊断入口与方法索引](diagnostic-prompts.md) · [过程诊断](../skill/trace-analysis/SKILL.md) · [静态剖面](../skill/context-profile/SKILL.md) |
 | 诊断判定规则 | 识别反馈与执行层，直接生成四类处置线索；图、详情和装填共用依据与调查指南 | [规则与验收](diagnostic-rules.md) · [旧记录复核](diagnostic-rules.md#当前真实记录的基线) · [独立处置规则](../plugin/analysis-view/lib/eval/diagnostic-rules.mjs) |
 | 上下文重合指标 | 在当前预设跨系统提示、项目指令、工具说明、Skill 与注入片段比较相同文本，展示原句、来源、加载位置与覆盖比例 | [指标口径与入口](context-overlap.md) · [分析器](../analyzers/context-overlap.mjs) |
+| 注入来源研究 | 核对插件绑定入口、条件触发、实际消息与归属边界；包含 rc3 真实插件的隔离探针 | [机制与验证](injection-provenance-research.md) · [可复现探针](../scripts/probe-injection-hooks.mjs) |
 | 加载项管理 | 右侧抽屉汇总 Skill 使用情况，按预设独立停用与恢复；工具、插件明确作用范围与缓存影响 | [交互与原生路径](capability-management.md) · [可撤回覆盖](capability-management.md#可撤回覆盖与原生清理) · [策略组件](../plugin/analysis-view/lib/skill-policy.js) |
 | 报告 | 从 Eval 同切点指标组织结论、交叉分布、证据流程图与构成图，装配为独立 HTML | [Eval 数据与组件](../report/AUTHORING.md#使用-eval-指标) · [流程图](../report/flow.mjs) · [编写流程](report-authoring-workflow.md) · [渲染入口](../scripts/trajectory-report.mjs) |
 | 测试与分发 | 检查关系、记录覆盖、浏览器交互及真实归档包入口 | [关系与回归](relation-ci.md) · [验收语料](../experiments/README.md#任务验收-eval) · [包验收](../scripts/test-trajectory-packages.mjs) |

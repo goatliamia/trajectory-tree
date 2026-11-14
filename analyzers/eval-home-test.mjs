@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {tileLayout} from '../docs/demo/preset-context/treemap.js';
 import {instructionSummary,composition,compositionGroups} from '../docs/demo/preset-context/home-overview.js';
+import {compositionLayout} from '../docs/demo/preset-context/home-composition.js';
 
 test('treemap preserves measured areas without merging or inflating small categories',()=>{
   for(const weights of [[83,69,9.6,7.4,.91],[1],[0,0],[7,2,1]]){
@@ -20,7 +21,7 @@ test('instruction summary separates shared files from workspace-specific sources
 });
 test('unknown and zero-size content remain labeled outside the measured area',()=>{
   const p={tools:[{measuredTokens:100,provenance:{origin:'official'}}],system:[{measuredTokens:null,provenance:{origin:'official'}}],skills:[{measuredTokens:0,provenance:{origin:'personal'}}],statistics:{total:100,categories:[{id:'tools',label:'工具定义'},{id:'system',label:'系统提示'},{id:'skills',label:'Skill 目录'}]}};
-  const html=composition(p,{tools:{color:'tools'},system:{color:'system'},skills:{color:'skill'}});
+  const html=composition(p);
   assert.equal((html.match(/class="home-composition-tile"/g)??[]).length,1);assert.match(html,/系统提示/);assert.match(html,/1 项待组装/);assert.match(html,/Skill 目录/);
 });
 
@@ -30,5 +31,17 @@ test('composition separates ownership within one content category and keeps the 
   const groups=compositionGroups(p),by=id=>groups.find(g=>g.id===id);
   assert.equal(by('official').tokens,85);assert.equal(by('personal').tokens,15);assert.equal(by('plugin').tokens,20);
   assert.equal(groups.reduce((sum,g)=>sum+g.tokens,0),120);
-  const html=composition(p,{});assert.match(html,/data-origin="official" data-composition-key="official:tools"/);assert.match(html,/data-origin="plugin" data-composition-key="plugin:tools"/);
+  const html=composition(p);assert.match(html,/data-composition-key="official:tools:0:0"/);assert.match(html,/data-composition-key="plugin:tools:1:0"/);
+  assert.equal(by('personal').leaves[0].variantIndex,1,'mixed-origin Skill variants retain their own detail target');
+});
+
+test('leaf layout preserves each source file and individual tool at the same area scale',()=>{
+  const row=(name,origin,measuredTokens,extra={})=>({name,provenance:{origin},measuredTokens,...extra});
+  const p={instructions:[row('AGENTS.md','personal',4700,{displayPath:'AGENTS.md',workspaceNames:['Project A']}),row('AGENTS.md','personal',1200,{displayPath:'AGENTS.md',workspaceNames:['Project B']})],tools:[row('read','official',600),row('edit','official',300),row('compose','plugin',70)],statistics:{categories:[{id:'instructions',label:'AGENTS.md'},{id:'tools',label:'工具定义'}]}};
+  const groups=compositionGroups(p),total=groups.reduce((n,g)=>n+g.tokens,0),layout=compositionLayout(groups),cells=layout.flatMap(g=>g.cells);
+  assert.equal(cells.length,5);assert.equal(new Set(cells.map(c=>c.key)).size,5);
+  assert.deepEqual(groups.find(g=>g.id==='personal').leaves.map(l=>l.name),['Project A/AGENTS.md','Project B/AGENTS.md']);
+  for(const c of cells)assert.ok(Math.abs(c.w*c.h/(1000*420)-c.tokens/total)<1e-8);
+  const plugin=layout.find(g=>g.id==='plugin');assert.ok(plugin.w>plugin.h,'small source occupies a wide region rather than a thin vertical strip');
+  assert.deepEqual(compositionLayout([]),[]);
 });

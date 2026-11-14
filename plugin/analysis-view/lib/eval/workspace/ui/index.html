@@ -14,7 +14,7 @@
 <body data-layout="desk">
 <div class="app-shell">
   <main>
-    <header class="page-header"><div class="eval-identity"><div class="eval-heading"><h1 id="preset-title">Eval</h1><label class="preset-switch"><span>预设</span><select id="preset-select" aria-label="选择当前预设"></select></label><span class="quiet-badge" id="default-label" hidden>默认</span></div><p id="preset-subtitle">配置与使用分析</p></div><div class="header-actions"><select id="workspace-scope" aria-label="工作区范围"><option value="all">全部工作区</option></select><select id="time-range" aria-label="统计时间范围"><option value="1">今天</option><option value="7" selected>近 7 天</option><option value="30">近 30 天</option></select><span id="captured-at"></span><button class="tt-button" id="refresh" type="button">刷新配置</button></div></header>
+    <header class="page-header"><div class="eval-identity"><div class="eval-heading"><h1 id="preset-title">Eval</h1><div id="preset-navigator" class="preset-navigator"></div></div><p id="preset-subtitle">配置与使用分析</p></div><div class="header-actions"><select id="workspace-scope" aria-label="工作区范围"><option value="all">全部工作区</option></select><select id="time-range" aria-label="统计时间范围"><option value="1">今天</option><option value="7" selected>近 7 天</option><option value="30">近 30 天</option></select><span id="captured-at"></span><button class="tt-button" id="refresh" type="button">刷新配置</button></div></header>
     <section class="design-switcher" aria-label="界面方案" hidden>
       <div class="design-caption"><span>布局探索</span><small>同一份真实数据</small></div>
       <div id="design-options" class="design-options" role="group" aria-label="切换界面方案"></div>
