@@ -30,7 +30,7 @@ A DSH Web GUI plugin providing two views for the current conversation.
 - **Trajectory Tree** shows the execution path, turn details and evidence layers.
 - **Eval** shows output against elapsed time, tool comparisons, and recorded errors. Scope the charts to the session or one of the latest 120 turns. In the scatter plot, select either comparison card and click a point to replace that turn. Open **Detailed metrics** for the underlying metrics and records.
 - In the tree, hold to select an item or hold and drag to select a region. In Eval, start a diagnosis from the chart details. **Fill conversation** appends the editable draft to the current composer, where you can review and send it.
-- The finished turn's action row links to that turn in the Trajectory Tree, opened in a new tab. The context drawer shows that turn's or step's cost split across uncached input, cached input and output; the amount is estimated from DeepSeek's official price table and only totaled when every request is official, has complete usage, and has a priced model.
+- The finished turn's action row opens that turn in the conversation's Trajectory Tree view and selects it; only when the view tab is unavailable does it fall back to the same deep link in a new tab. The context drawer shows that turn's or step's cost split across uncached input, cached input and output; the amount is estimated from DeepSeek's official price table and only totaled when every request is official, has complete usage, and has a priced model.
 
 ### Runtime evidence in Eval
 
@@ -113,7 +113,7 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
 - **轨迹树**浏览执行路径、逐轮详情和证据图层。
 - **评估**展示输出量与轮次耗时、工具对照和报错分布。可选整段会话或最近 120 轮中的一轮。点一张对照卡，再点散点可更换这一侧的轮次。原有指标与证据可在「统计明细」查看。
 - 在轨迹图上长按可选中对象，长按后拖动可圈选。在 Eval 图表详情中直接提问。选择关注点并编辑草稿后，点「填入对话」会把草稿追加到当前会话的输入框，等你检查后发送。
-- 回合收尾的操作行里有「在轨迹树中查看这一轮」，新标签打开该轮的路径页。上下文的轮/步抽屉里给出这一轮或这一步的花费：按未命中输入、缓存命中输入和输出分金额，只在官方 API、usage 完整且模型有价目时合计，金额是官方挂牌价的估算。
+- 回合收尾的操作行里有「在轨迹树中查看这一轮」，点击切到本会话的「轨迹树」页签并选中该轮；页签不可用时才新标签打开同一深链。上下文的轮/步抽屉里给出这一轮或这一步的花费：按未命中输入、缓存命中输入和输出分金额，只在官方 API、usage 完整且模型有价目时合计，金额是官方挂牌价的估算。
 
 ### 评估里的运行证据
 

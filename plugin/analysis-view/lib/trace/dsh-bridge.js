@@ -6,13 +6,14 @@
   const loading = payload.traceLoad, sessionId = loading?.sessionId || payload.mainSession;
   const official = {}, pendingTurns = new Map(), readyTurns = new Set(), pendingStages = new Map();
   const timing = window.__traceStages = { shell: performance.now() };
-  // 深链 ?turn=N:页面脚本就绪后按轮号选中;轮还没画出来就等下一帧重试。
-  const requestedTurn = (() => {
-    const raw = new URLSearchParams(location.search).get('turn');
-    if (raw === null || raw === '') return null;
-    const value = Number(raw);
-    return Number.isSafeInteger(value) && value >= 0 ? value : null;
-  })();
+  // 深链 ?turn=N,或会话里切页签时由宿主发来的 focus 消息:页面脚本就绪后按轮号选中。
+  const parseTurn = value => {
+    const raw = value === null || value === undefined ? '' : String(value);
+    if (raw === '') return null;
+    const number = Number(raw);
+    return Number.isSafeInteger(number) && number >= 0 ? number : null;
+  };
+  let requestedTurn = parseTurn(new URLSearchParams(location.search).get('turn'));
   const focusRequestedTurn = (attempt = 0) => {
     if (requestedTurn === null) return;
     let focused = false;
@@ -141,6 +142,11 @@
     if (!message || (message.sessionId && message.sessionId !== sessionId)) return;
     if (message.type === 'analysis-trace-visibility') { message.visible ? resume() : pause(); return; }
     if (message.type === 'analysis-trace-refresh') { if (active) start(true); return; }
+    if (message.type === 'analysis-trace-focus-turn') {
+      const turn = parseTurn(message.turn);
+      if (turn !== null) { requestedTurn = turn; focusRequestedTurn(); }
+      return;
+    }
     if (message.type !== 'analysis-trace-data' || !message.payload) return;
     const key = JSON.stringify(message.payload);
     if (key === officialKey) return;

@@ -824,6 +824,22 @@ window.__ModuleLoader__.load({
     // Removing or reparenting an iframe destroys its browsing context. Keep one
     // connected layer; the view's placeholder supplies its bounds while visible.
     const traceFrame = { element: null, layer: null, session: null, ready: false, version: null, assets: null, active: false, expiry: null };
+    // 从对话操作行跳到轨迹树时先记下这一轮,等 PathView 挂载/就绪后交给页面。
+    // 只认最近一次、且五秒内的请求,避免切走又切回时跳到旧位置。
+    let pendingTraceFocus = null;
+    function takePendingTraceFocus(sessionId) {
+      const pending = pendingTraceFocus;
+      if (!pending || pending.sessionId !== sessionId) return null;
+      if (Date.now() - pending.at > 5000) { pendingTraceFocus = null; return null; }
+      pendingTraceFocus = null;
+      return pending.turn;
+    }
+    function flushTraceFocus(frame, sessionId) {
+      if (!frame || !frame.contentWindow) return;
+      const turn = takePendingTraceFocus(sessionId);
+      if (turn === null) return;
+      frame.contentWindow.postMessage({ type: "analysis-trace-focus-turn", sessionId, turn }, location.origin);
+    }
     function receiveDiagnosisDraft(event, frame, sessionId, ctx, openView) {
       const message = event.data;
       if (event.origin !== window.location.origin || event.source !== frame?.contentWindow ||
@@ -949,6 +965,7 @@ window.__ModuleLoader__.load({
           traceFrame.ready = version !== undefined && version !== null;
           traceFrame.version = version ?? traceFrame.version;
           post();
+          flushTraceFocus(frame, sessionId);
         };
         const onMessage = (event) => {
           if (event.origin !== location.origin || event.source !== frame.contentWindow || !event.data || event.data.type !== "analysis-trace-ready") return;
@@ -959,6 +976,7 @@ window.__ModuleLoader__.load({
           // this detail yet, so the requests are not deduplicated against the previous one.
           if (!traceFrame.active) frame.contentWindow?.postMessage({ type: "analysis-trace-visibility", sessionId, visible: false }, location.origin);
           post();
+          flushTraceFocus(frame, sessionId);
         };
         window.addEventListener("message", onMessage);
         frame.addEventListener("load", onLoad);
@@ -1320,11 +1338,26 @@ window.__ModuleLoader__.load({
       }));
     }
 
-    // 回合收尾的操作行里加一个入口:新标签打开独立的路径页,并带上这一轮的编号。
+    // 回合收尾的操作行里加一个入口:切到本会话的「轨迹树」页签,并让页面选中这一轮。
     // 插槽只给 messageId,所以从对话快照里反查它所在的轮;查不到就不显示,不猜轮号。
     // 反查放进内层组件,外层只在运行时提供 useChat 时才挂载它,保证 hook 调用位置稳定。
     function TraceJumpAction(props) {
       return typeof props?.useChat === "function" ? h(TraceJumpLink, props) : null;
+    }
+    function traceTurnHref(sessionId, turn) {
+      return "/analysis-view/trace?session=" + encodeURIComponent(sessionId) + "&turn=" + turn + "&staged=1";
+    }
+    // 页签栏里按注册时的标签找「轨迹树」。找不到(例如被收进 More)就返回 false,由调用方兜底。
+    function activateTraceView() {
+      if (typeof document === "undefined") return false;
+      const tabs = document.querySelector("[data-conversation-tabs]");
+      if (!tabs || typeof tabs.querySelectorAll !== "function") return false;
+      const label = cmUi("轨迹树", "Trajectory Tree");
+      const target = Array.from(tabs.querySelectorAll('[role="tab"]'))
+        .find(node => (node.textContent || "").trim() === label);
+      if (!target || typeof target.click !== "function") return false;
+      target.click();
+      return true;
     }
     function TraceJumpLink(props) {
       const { sessionId, messageId, useChat } = props;
@@ -1339,10 +1372,19 @@ window.__ModuleLoader__.load({
       });
       if (!Number.isSafeInteger(turn) || typeof sessionId !== "string" || !sessionId) return null;
       const label = cmUi("在轨迹树中查看这一轮", "Open this turn in the trajectory tree");
+      const href = traceTurnHref(sessionId, turn);
+      // 先切页签;页签不可用时才保留链接的原生新标签行为(中键、右键也仍然有效)。
+      const open = (event) => {
+        event.preventDefault();
+        pendingTraceFocus = { sessionId, turn, at: Date.now() };
+        if (activateTraceView()) return;
+        pendingTraceFocus = null;
+        window.open(href, "_blank", "noopener,noreferrer");
+      };
       return h("a", {
         className: "av-jump",
-        href: "/analysis-view/trace?session=" + encodeURIComponent(sessionId) + "&turn=" + turn + "&staged=1",
-        target: "_blank", rel: "noopener noreferrer", title: label, "aria-label": label,
+        href, target: "_blank", rel: "noopener noreferrer", title: label, "aria-label": label,
+        onClick: open,
       }, h("svg", { width: 17, height: 17, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
         h("path", { d: "M4 2.5v11", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" }),
         h("circle", { cx: 4, cy: 4, r: 1.5, fill: "currentColor" }),
