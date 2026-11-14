@@ -17,6 +17,7 @@ before(async()=>{
   const ui=join(root,'docs/demo/preset-context');for(const name of await readdir(ui))if(/\.(js|css|html)$/.test(name))files.set('/'+name,join(ui,name));
   for(const name of ['tokens.css','primitives.css'])files.set('/design/'+name,join(root,'design',name));
   for(const name of ['tool-colors','tool-feedback'])files.set('/'+name+'.js',join(root,'lib',name+'.mjs'));
+  files.set('/tool-behavior.mjs',join(root,'lib/tool-behavior.mjs'));
   for(const name of ['Geist-Variable.woff2','GeistMono-Variable.woff2'])files.set('/fonts/'+name,join(root,'docs/demo/layout-review/fonts',name));
   const config={workspace:{id:'all',name:'全部工作区'},workspaces:[],presets:[preset('custom-a'),preset('custom-b'),...Array.from({length:26},(_,i)=>preset('custom-long-preset-'+i))],defaultPreset:'custom-a',capturedAt:Date.now(),coverage:{issues:[]},bundleInventory:[],progress:{revision:0,complete:true}};
   server=createServer(async(req,res)=>{
@@ -28,7 +29,7 @@ before(async()=>{
     if(['/tool-colors.css','/tool-feedback.css'].includes(path))return res.writeHead(200,{'content-type':'text/css'}).end('');
     if(!files.has(path))return res.writeHead(404).end();
     let content=await readFile(files.get(path));if(path==='/index.html')content=content.toString().replace('<head>','<head><script>window.__trajectoryWorkspace={native:true,base:""};</script>');
-    res.writeHead(200,{'content-type':{'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2'}[extname(path)]}).end(content);
+    res.writeHead(200,{'content-type':{'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.woff2':'font/woff2'}[extname(path)]}).end(content);
   });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));origin='http://127.0.0.1:'+server.address().port;
 });
 after(()=>new Promise(resolve=>server.close(resolve)));

@@ -17,6 +17,7 @@ const root=resolve('.dsh/preset-context-demo'),assets=resolve('docs/demo/preset-
 const files=new Map([['/',join(root,'index.html')],['/data.json',join(root,'current-data.json')],['/trace.html',join(root,'trace.html')],['/app.js',join(assets,'app.js')],['/style.css',join(assets,'style.css')],['/design/tokens.css',join(root,'tokens.css')],['/design/primitives.css',resolve('design/primitives.css')],['/fonts/Geist-Variable.woff2',resolve('docs/demo/layout-review/fonts/Geist-Variable.woff2')],['/fonts/GeistMono-Variable.woff2',resolve('docs/demo/layout-review/fonts/GeistMono-Variable.woff2')]]);
 const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.woff2':'font/woff2'};
 files.set('/tool-colors.js',resolve('lib/tool-colors.mjs'));
+files.set('/tool-behavior.mjs',resolve('lib/tool-behavior.mjs'));
 files.set('/tool-feedback.js',resolve('lib/tool-feedback.mjs'));
 files.set('/action-path.html',resolve('.dsh/layout-review/geist.html'));
 for(const name of ['variants.js','variants.css','controller.js','skill-manager.js','skill-manager.css','eval-shell.css','eval-views.js','eval-redesign.css','eval-visuals.css','skill-visuals.js','diagnosis-designs.js','diagnosis-review.js','overlap-preview.js'])files.set('/'+name,join(assets,name));

@@ -1,12 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {EvalWorkspaceService} from './lib/eval/workspace-service.mjs';
 import {summarizeCurrentPreset} from '../../analyzers/preset-statistics.mjs';
 import {buildSkillManagement} from '../../analyzers/preset-skill-management.mjs';
 import {skillWindow,renderSkills} from '../../docs/demo/preset-context/skill-manager.js';
+
+test('published Eval browser modules include every relative dependency',async()=>{
+  const root=new URL('./lib/eval/workspace/ui/',import.meta.url),seen=new Set();
+  async function visit(url){
+    assert.ok(url.href.startsWith(root.href),'browser imports stay in the published UI');
+    if(seen.has(url.href))return;seen.add(url.href);
+    const source=await readFile(url,'utf8');
+    for(const match of source.matchAll(/(?:\bfrom\s*|\bimport\s*|\bimport\(\s*)['"](\.[^'"]+)['"]/g))await visit(new URL(match[1],url));
+  }
+  await visit(new URL('app.js',root));
+});
 
 test('history batches refresh Skill charts and freshness without rebuilding configuration analyses',async t=>{
   const root=await mkdtemp(join(tmpdir(),'trajectory-workspace-'));

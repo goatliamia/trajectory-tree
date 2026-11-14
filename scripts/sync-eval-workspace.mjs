@@ -42,6 +42,7 @@ for(const entry of readdirSync(assets,{withFileTypes:true})){
 }
 for(const [name,content] of [
   ['tool-colors.js',readFileSync(join(root,'lib/tool-colors.mjs'),'utf8')],
+  ['tool-behavior.mjs',readFileSync(join(root,'lib/tool-behavior.mjs'),'utf8')],
   ['tool-feedback.js',readFileSync(join(root,'lib/tool-feedback.mjs'),'utf8')],
   ['tool-colors.css',toolColorCss()],['tool-feedback.css',toolFeedbackCss()],
   ['design/tokens.css',visualTokenCss()],['design/primitives.css',readFileSync(join(root,'design/primitives.css'),'utf8')],
