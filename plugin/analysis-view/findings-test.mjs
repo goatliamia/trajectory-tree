@@ -143,7 +143,8 @@ test('overview program entries resolve through the existing exact-cut portable q
     const html=renderOverviewPage({locale:'en',data:{host:'codex',sessions:[projected],models:model.models,projects:[{name:'sample'}],categories:[]}});
     assert.ok(html.includes('id="overview-findings"'));
     assert.ok(!html.includes('id="session-page"')&&!html.includes('mountSessionEval'));
-    assert.ok(html.includes('diagnosis-editor')&&html.includes('references/disposition.md'));
+    assert.ok(html.includes('diagnosis-editor'));
+    assert.ok(readFileSync(new URL('../../skill/trace-analysis/SKILL.md',import.meta.url),'utf8').includes('references/disposition.md'),'The shared analysis skill provides disposition methods');
     for(const [,script] of html.matchAll(/<script(?![^>]*type="application\/json")[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(script);
   }finally{service.dispose();}
 });
