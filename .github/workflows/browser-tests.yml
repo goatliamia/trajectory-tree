@@ -39,4 +39,4 @@ jobs:
         working-directory: plugin/portable-tools
       - run: npx --no-install playwright install --with-deps $BROWSERS
       - name: Run the selected browser checks
-        run: node --test --test-name-pattern="${BROWSERS// /|}" smoke-test.mjs
+        run: node --test --test-name-pattern="${BROWSERS// /|}" smoke-test.mjs eval-host-test.mjs

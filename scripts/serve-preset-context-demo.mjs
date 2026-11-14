@@ -22,7 +22,7 @@ files.set('/action-path.html',resolve('.dsh/layout-review/geist.html'));
 for(const name of ['variants.js','variants.css','controller.js','skill-manager.js','skill-manager.css','eval-shell.css','eval-views.js','eval-redesign.css','eval-visuals.css','skill-visuals.js','diagnosis-designs.js','diagnosis-review.js','overlap-preview.js'])files.set('/'+name,join(assets,name));
 let evalCache;
 let overlapCache;
-for(const name of ['context-overlap.js','context-overlap.css','home-overview.js','home-overview.css','treemap.js','origin-icons.js'])files.set('/'+name,join(assets,name));
+for(const name of ['context-overlap.js','context-overlap.css','home-overview.js','home-overview.css','treemap.js','origin-icons.js','host-theme.js','host-theme.css'])files.set('/'+name,join(assets,name));
 files.set('/workspace-api.js',join(assets,'workspace-api.js'));
 async function overlapData(preset){
   const file=join(root,'current-data.json'),info=await stat(file);

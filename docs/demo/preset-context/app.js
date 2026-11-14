@@ -1,5 +1,7 @@
 import { toolNameHtml } from './tool-colors.js';
 import { managementButton } from './capability-management.js';
+import {followDshTheme} from './host-theme.js';
+followDshTheme();
 const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const tokens=value=>value==null?'—':value>=1000?(value/1000).toFixed(1)+'k':Math.round(value).toLocaleString('zh-CN');

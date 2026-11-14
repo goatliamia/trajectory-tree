@@ -18,7 +18,7 @@ function coverageSelection(skills,counts,ui){
 function usageMap(skills,counts,ui){
   const sorted=skills.filter(s=>s.bodyTokens>0).slice().sort((a,b)=>b.bodyTokens-a.bodyTokens),totalReads=skills.reduce((sum,s)=>sum+(counts.get(s.name)??0),0);
   if(!sorted.length)return '<div class="skill-graph-empty">当前没有可计量的正文。</div>';
-  const shades=['#f1f1f1','#e4f1ff','#bddcff','#7fbafa','#3485ed'],level=share=>share===0?0:share<.1?1:share<.25?2:share<.5?3:4;
+  const shades=Array.from({length:5},(_,i)=>'var(--skill-read-'+i+')'),level=share=>share===0?0:share<.1?1:share<.25?2:share<.5?3:4;
   const width=Math.max(310,globalThis.document?.getElementById('skill-management-panel')?.clientWidth||800),height=width<560?340:352;
   const cells=tileLayout(sorted.map((s,index)=>({name:s.name,weight:s.bodyTokens,reads:counts.get(s.name)??0,code:String(index+1).padStart(2,'0'),matches:skillMatches(s,counts,ui)})),width,height).map(cell=>{
     const share=totalReads?cell.reads/totalReads:0;

@@ -45,7 +45,6 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     document.querySelector('.design-switcher').hidden=true;
     $('overview-panel').hidden=state.tab!=='home';$('skill-management-panel').hidden=state.tab!=='skills';
     const retained=['diagnosis','window'].includes(state.tab);$('retained-panel').hidden=!retained;
-    $('tab-crumb').textContent=tabs[state.tab];
     const contextSelected=state.tab==='diagnosis'&&state.diagnosisScope==='context';
     diagnosisScope.hidden=state.tab!=='diagnosis';diagnosisScope.querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.diagnosisScope===state.diagnosisScope)));
     $('eval-analysis-panel').hidden=contextSelected;$('context-analysis-panel').hidden=!contextSelected;
@@ -56,11 +55,11 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     $('overview-panel').innerHTML=renderLayout(preset,data,state.layout,ui,categoryInfo);
     $('design-options').innerHTML=layouts.map(row=>`<button type="button" data-layout-choice="${row.id}" aria-pressed="${row.id===state.layout}"><span>${row.letter}</span>${row.name}</button>`).join('');
     $('preset-title').textContent='Eval';
-    $('preset-subtitle').textContent=preset.name+' · 配置与使用分析';
-    $('default-label').hidden=!preset.isDefault;$('workspace-name').textContent=data.workspace.name;$('workspace-name').title=data.workspace.path;
+    $('preset-subtitle').textContent='配置与使用分析';
+    $('default-label').hidden=!preset.isDefault;
     $('captured-at').textContent=date(state.tab==='home'||contextSelected?data.capturedAt:preset.statistics.usage.asOf??data.capturedAt)+' 采集';
     $('footer-status').textContent=state.tab==='home'||contextSelected?'本地配置 · '+date(data.capturedAt):'本地使用记录 · '+date(preset.statistics.usage.asOf??data.capturedAt);
-    $('modes').innerHTML=data.presets.map(row=>`<button type="button" class="mode-button" data-preset="${esc(row.id)}" aria-pressed="${row.id===preset.id}"><span>${esc(row.name)}</span>${row.id===preset.id?'<i aria-hidden="true"></i>':''}</button>`).join('');
+    $('preset-select').innerHTML=data.presets.map(row=>`<option value="${esc(row.id)}" ${row.id===preset.id?'selected':''}>${esc(row.name)}</option>`).join('');
     if(state.tab==='skills')renderSkillPanel();
     updateUrl();
   }
@@ -173,22 +172,22 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
   $('overview-panel').onclick=event=>{const button=event.target.closest('[data-action]');if(!button)return;
     const a=button.dataset;
     if(a.action==='eval-tab'){state.tab=a.tab;renderOverview();$('workspace-tabs').scrollIntoView({block:'start',behavior:'smooth'});}
-    if(a.action==='category')openDetail({kind:a.kind,unused:a.unused==='true',usageState:a.usageState||'all',instructionScope:a.instructionScope||'all',index:a.index===undefined?undefined:Number(a.index)});
+    if(a.action==='category')openDetail({kind:a.kind,origin:a.origin||null,unused:a.unused==='true',usageState:a.usageState||'all',instructionScope:a.instructionScope||'all',index:a.index===undefined?undefined:Number(a.index)});
     if(a.action==='origin')openDetail({origin:a.origin});
     if(a.action==='bundle')openDetail({bundle:a.bundle});
     if(a.action==='about')about();
     if(a.action==='filter-origin'){ui.originFilter=a.origin;renderOverview();}
   };
   $('overview-panel').onkeydown=event=>{if((event.key==='Enter'||event.key===' ')&&event.target.matches('circle[data-action],path[data-action]')){event.preventDefault();const target=event.target.dataset;if(target.action==='origin')openDetail({origin:target.origin});else openDetail({kind:target.kind,usageState:target.usageState||'all'});}};
-  function highlightComposition(kind){$('overview-panel').querySelectorAll('[data-composition-kind]').forEach(node=>node.classList.toggle('is-linked',Boolean(kind&&node.dataset.compositionKind===kind)));}
-  for(const type of ['pointerover','focusin'])$('overview-panel').addEventListener(type,event=>highlightComposition(event.target.closest('[data-composition-kind]')?.dataset.compositionKind));
-  for(const type of ['pointerout','focusout'])$('overview-panel').addEventListener(type,event=>highlightComposition(event.relatedTarget instanceof Element?event.relatedTarget.closest('[data-composition-kind]')?.dataset.compositionKind:null));
+  function highlightComposition(kind){$('overview-panel').querySelectorAll('[data-composition-key]').forEach(node=>node.classList.toggle('is-linked',Boolean(kind&&node.dataset.compositionKey===kind)));}
+  for(const type of ['pointerover','focusin'])$('overview-panel').addEventListener(type,event=>highlightComposition(event.target.closest('[data-composition-key]')?.dataset.compositionKey));
+  for(const type of ['pointerout','focusout'])$('overview-panel').addEventListener(type,event=>highlightComposition(event.relatedTarget instanceof Element?event.relatedTarget.closest('[data-composition-key]')?.dataset.compositionKey:null));
   $('overview-panel').addEventListener('pointerover',event=>{const linked=event.target.closest('[data-fan-link]');if(linked)highlightOrigin(linked.dataset.fanLink);});
   $('overview-panel').addEventListener('pointerout',event=>{if(!event.target.closest('[data-fan-link]'))return;const next=event.relatedTarget instanceof Element?event.relatedTarget.closest('[data-fan-link]'):null;const focused=document.activeElement?.closest('[data-fan-link]');highlightOrigin(next?.dataset.fanLink??focused?.dataset.fanLink??null);});
   $('overview-panel').addEventListener('focusin',event=>{const linked=event.target.closest('[data-fan-link]');if(linked)highlightOrigin(linked.dataset.fanLink);});
   $('overview-panel').addEventListener('focusout',event=>{if(!event.target.closest('[data-fan-link]'))return;const next=event.relatedTarget instanceof Element?event.relatedTarget.closest('[data-fan-link]'):null;highlightOrigin(next?.dataset.fanLink??null);});
   $('design-options').onclick=event=>{const button=event.target.closest('[data-layout-choice]');if(!button)return;state.layout=button.dataset.layoutChoice;ui.originFilter='all';renderOverview();window.scrollTo({top:0,behavior:'instant'});};
-  $('modes').onclick=event=>{const button=event.target.closest('[data-preset]');if(!button)return;state.preset=button.dataset.preset;ui.originFilter='all';ui.skillRange=null;ui.skillKind='all';ui.skillActivity='all';ui.skillChanged=false;renderOverview();};
+  $('preset-select').onchange=()=>{state.preset=$('preset-select').value;ui.originFilter='all';ui.skillRange=null;ui.skillKind='all';ui.skillActivity='all';ui.skillChanged=false;renderOverview();};
   $('categories').onclick=event=>{const button=event.target.closest('[data-detail-category]');if(button)openDetail({kind:button.dataset.detailCategory,origin:state.origin,bundle:state.bundle});};
   $('search').oninput=()=>{state.query=$('search').value;state.open=null;renderDetail();};
   $('unused-only').onchange=()=>{state.unused=$('unused-only').checked;state.usageState='all';state.open=null;renderDetail();};

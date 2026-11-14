@@ -1,0 +1,13 @@
+/* DSH owns theme selection. Standalone previews default to light. */
+:root{color-scheme:light}
+html[data-dsh-theme=dark]{color-scheme:dark;--tt-surface:#171717;--tt-canvas:#202020;--tt-soft:#262626;--tt-ink:#ededed;--tt-muted:#a3a3a3;--tt-line:#353535;--tt-grid:#303030;--tt-action:#70aaff;--tt-metric:#5b9bf1}
+body[data-layout=desk]{--origin-official:#477db5;--origin-plugin:#8a6aba;--origin-personal:#338b7d;--origin-official-soft:color-mix(in srgb,var(--origin-official) 8%,var(--tt-surface));--origin-plugin-soft:color-mix(in srgb,var(--origin-plugin) 8%,var(--tt-surface));--origin-personal-soft:color-mix(in srgb,var(--origin-personal) 8%,var(--tt-surface));--skill-read-0:#f1f1f1;--skill-read-1:#e4f1ff;--skill-read-2:#bddcff;--skill-read-3:#7fbafa;--skill-read-4:#3485ed}
+html[data-dsh-theme=dark] body[data-layout=desk]{--origin-official:#7ba5d8;--origin-plugin:#b19bd8;--origin-personal:#70b9aa;--skill-read-0:#272727;--skill-read-1:#23374c;--skill-read-2:#294f76;--skill-read-3:#3471af;--skill-read-4:#3485ed}
+.app-shell{display:block}.app-shell>main{width:100%;max-width:none;padding:0 32px}
+.app-shell .page-header{height:auto;min-height:98px;padding:20px 0 15px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.eval-heading{display:flex;align-items:center;gap:12px}.eval-heading h1{font-size:25px;line-height:1.25;letter-spacing:-.5px}
+.preset-switch{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tt-muted)}
+.preset-switch select{height:34px;max-width:240px;min-width:114px;padding:0 28px 0 10px;border:1px solid var(--tt-line);border-radius:6px;background:var(--tt-surface);color:var(--tt-ink);font:500 13px var(--tt-font-sans)}
+.eval-identity>p{margin-top:7px;color:var(--tt-muted);font-size:11px}.header-actions{margin-left:auto;flex-wrap:wrap}
+@media(max-width:800px){.app-shell>main{padding:0 20px}.app-shell .page-header{gap:14px}.header-actions{flex-basis:100%;margin-left:0;justify-content:flex-start}.header-actions select{min-width:0;max-width:220px}}
+@media(max-width:500px){.app-shell>main{padding:0 16px}.eval-heading{gap:9px}.preset-switch select{max-width:190px}.header-actions{gap:7px}}
