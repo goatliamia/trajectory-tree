@@ -91,6 +91,8 @@ node scripts/trajectory-view.mjs --host codex --serve
 node scripts/trajectory-view.mjs --host pi --file session.jsonl --open
 ```
 
+在会回收后台子进程的受管终端中，加 `--keep-alive` 保留当前执行会话作为预览服务。链接实际可打开后再交付，不能只以生成命令返回 URL 为准。
+
 独立视图文件包含字体；本地服务只绑定 127.0.0.1，只暴露随机路径对应的一个生成文件，不监听历史变化。同一输出文件复用服务，闲置 15 分钟或总运行 1 小时后关闭。生成器不会调用模型或修改原会话。
 
 报告核心一同封装。`trajectory-report` 的 query/prepare 可使用 `--host codex` 或 `--host pi --file ...`；DSH 沿用宿主连接。AI 选证据、写 Markdown、声明组件，渲染器装配 HTML。

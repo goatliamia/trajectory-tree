@@ -71,8 +71,10 @@ DSH 的预设/插件配置能力不能直接套给其他宿主。Pi 可提供 SD
 `context-profile` 是分析方法，`trajectory-view` 是确定性出图入口。用户可以用一句“分析当前上下文并打开轨迹图”组合两者，不必手写命令；Skill 本身不是图形组件。当前 Codex 对话可用：
 
 ```sh
-node scripts/trajectory-view.mjs --host codex --serve
+node scripts/trajectory-view.mjs --host codex --serve --keep-alive
 ```
+
+`--keep-alive` 是本次实测补上的 CLI 选项：生成结果后由同一进程保留预览服务，适用于会回收后台子进程的终端执行环境。调用方保留执行会话，服务仍沿用闲置和最长运行期限；必须验证返回的 URL 实际可打开。现有 0.2.5 安装包尚未包含这一新增选项。
 
 来源取明确的 `CODEX_THREAD_ID`，不猜最近对话。会话 Eval 加 `--eval`，代码执行加 `--code`。生成本机 HTML 并打开链接，不调用模型；Codex 内完整系统请求未被记录的部分仍不能从图中还原。
 
