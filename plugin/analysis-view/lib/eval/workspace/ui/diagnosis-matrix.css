@@ -1,0 +1,120 @@
+.dw-unified {
+  --matrix-label: minmax(190px, 1.1fr);
+  --matrix-directions: repeat(4, minmax(130px, 1fr));
+}
+.disposition-plot-toolbar {
+  display: grid;
+  grid-template-columns: var(--matrix-label) minmax(0, 4fr);
+  gap: 16px;
+  margin: 2px 0 12px;
+  min-height: 40px;
+  align-items: center;
+  font-size: 12px;
+}
+.disposition-plot-toolbar > span { color: var(--tt-muted); }
+.disposition-plot-toolbar > div { display: flex; align-items: center; gap: 20px; min-width: 0; }
+.observation-control { display: flex; align-items: center; gap: 8px; color: var(--tt-muted); flex: none; }
+.observation-control > span { font-size: 11px; }
+.observation-control select {
+  color: var(--tt-ink); background: var(--tt-surface); border: 1px solid var(--tt-line);
+  border-radius: 5px; font: 12px var(--tt-font-sans); padding: 7px 24px 7px 9px;
+  cursor: pointer; max-width: 205px;
+}
+.observation-key { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 15px; font-size: 11px; color: var(--tt-muted); }
+.observation-key > span { font-size: 10px; }
+.observation-window-key { display: flex; align-items: center; flex: 1; min-width: 160px; max-width: 320px; }
+.observation-brush { width: 100%; min-width: 0; touch-action: none; user-select: none; cursor: crosshair; }
+.observation-window-key > small { font-size: 10px; color: var(--tt-muted); white-space: nowrap; }
+.observation-brush > svg { display: block; width: 100%; height: 22px; overflow: visible; }
+.observation-brush svg line, .observation-brush svg path, .observation-window-plot svg line { stroke: var(--tt-line); stroke-width: 1; }
+.observation-brush svg g > rect { fill: transparent; }
+.observation-brush svg g { outline: none; }
+.observation-brush svg g:focus-visible > rect { stroke: var(--tt-action); stroke-width: 2; }
+.observation-axis { display: flex; justify-content: space-between; color: var(--tt-muted); font: 9px var(--tt-font-mono); margin: 0 1.6%; }
+.observation-range { fill: color-mix(in srgb, var(--tt-action) 6%, transparent); stroke: color-mix(in srgb, var(--tt-action) 35%, transparent); stroke-width: 1; pointer-events: none; }
+.dw-unified .disposition-matrix { min-width: 750px; }
+.dw-unified .disposition-matrix-head, .dw-unified .disposition-matrix-row {
+  grid-template-columns: var(--matrix-label) var(--matrix-directions);
+  gap: 8px;
+}
+.dw-unified .disposition-matrix-head { min-height: 89px; margin-bottom: 8px; align-items: end; }
+.dw-unified .disposition-axis-label { padding: 0 0 14px; font-size: 11px; }
+.dw-unified .disposition-direction-head, .dw-unified .disposition-cell { --direction-ink: color-mix(in srgb, var(--direction-color) 68%, var(--tt-ink)); }
+.dw-unified .disposition-direction-head { border-bottom: 1px solid var(--tt-line); padding: 4px 4px 13px; gap: 6px; }
+.dw-unified .disposition-direction-head > span { font-size: 12px; }
+.dw-unified .disposition-direction-head > strong { font-size: 22px; font-weight: 600; color: var(--direction-ink); }
+.disposition-direction-head > strong > em { font: 12px var(--tt-font-mono); font-style: normal; color: var(--tt-muted); }
+.dw-unified .disposition-direction-head .direction-open-label { font-size: 13px; line-height: 26px; color: var(--tt-muted); }
+.dw-unified .disposition-matrix-row { min-height: 92px; margin-bottom: 8px; }
+.dw-unified .disposition-label { gap: 7px; padding: 11px 12px 11px 0; }
+.dw-unified .disposition-label > strong { font-size: 13px; line-height: 1.5; }
+.dw-unified .disposition-label > small { font-size: 11px; }
+.dw-unified .disposition-label > .disposition-record-count { font: 13px var(--tt-font-mono); color: var(--tt-ink); }
+.disposition-record-count > small { font: 10px var(--tt-font-sans); color: var(--tt-muted); }
+.disposition-record-count > .disposition-followup { margin-left: 9px; font-size: 10px; }
+.disposition-unassigned-value { font: 11px var(--tt-font-mono); color: var(--tt-muted); }
+.disposition-unassigned-value > small { font: 10px var(--tt-font-sans); }
+.dw-unified .disposition-cell {
+  position: relative; display: flex; flex-direction: column; align-items: stretch; justify-content: stretch;
+  gap: 0; min-width: 0; border: 1px solid var(--tt-line); border-radius: 5px;
+  background: var(--tt-surface); color: var(--tt-ink); overflow: hidden;
+}
+.dw-unified .disposition-cell.has-evidence::before {
+  content: ''; position: absolute; top: 13px; left: 12px; width: 4px; height: 4px;
+  background: var(--direction-color); border-radius: 1px; pointer-events: none;
+}
+.dw-unified .disposition-cell.has-evidence {
+  border-color: color-mix(in srgb, var(--direction-color) 24%, var(--tt-line));
+  background: color-mix(in srgb, var(--direction-color) 5%, var(--tt-surface));
+}
+.dw-unified .disposition-cell.open-direction { border-color: transparent; }
+.dw-unified .disposition-cell:is(:hover, :focus-within) { background: var(--tt-soft); border-color: var(--tt-line); }
+.dw-unified .disposition-cell.selected { border-color: var(--direction-color); }
+.disposition-cell-action {
+  display: flex; flex-direction: column; align-items: stretch; text-align: left;
+  flex: 1; min-width: 0; width: 100%; padding: 10px 12px 31px;
+  color: inherit; font: inherit; border: 0; background: transparent; cursor: pointer;
+}
+.disposition-cell-action:focus-visible { outline: 2px solid var(--tt-action); outline-offset: -2px; }
+.disposition-cell-title { display: flex; align-items: center; justify-content: space-between; gap: 7px; padding-left: 10px; color: var(--tt-muted); font-size: 11px; line-height: 1.4; }
+.disposition-cell-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.disposition-cell-title > i { font: 11px var(--tt-font-sans); color: var(--tt-muted); opacity: 0; }
+.disposition-cell:hover .disposition-cell-title > i { opacity: 1; }
+.disposition-cell-readout { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 3px 7px; margin-top: 12px; }
+.disposition-cell-readout > strong { font: 14px var(--tt-font-mono); font-weight: 450; letter-spacing: -.2px; }
+.disposition-cell-readout > small { font-size: 10px; color: var(--tt-muted); }
+.disposition-cell-plot { position: absolute; bottom: 10px; left: 12px; right: 12px; color: var(--direction-color); }
+.observation-value-track { position: relative; display: block; height: 8px; }
+.observation-value-track > i, .observation-value-track > b { display: block; position: absolute; left: 0; bottom: 0; }
+.observation-value-track > i { height: 2px; background: color-mix(in srgb, var(--tt-muted) 40%, var(--tt-surface)); }
+.observation-value-track > b { height: 5px; background: var(--direction-ink); }
+.observation-window-plot { height: 20px; position: relative; }
+.observation-window-plot > svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.observation-reference { fill: color-mix(in srgb, var(--tt-muted) 40%, var(--tt-surface)); }
+.observation-current { fill: var(--direction-ink, var(--tt-action)); }
+.observation-bin { position: absolute; top: 0; bottom: 0; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.observation-bin:hover { background: color-mix(in srgb, var(--direction-color) 12%, transparent); }
+.observation-bin:focus-visible { outline: 2px solid var(--tt-action); outline-offset: 0; }
+.observation-sessions { display: grid; grid-template-columns: repeat(var(--sessions), minmax(0, 1fr)); gap: 3px; }
+.observation-session-cell { border: 0; min-width: 0; height: 19px; font: 10px var(--tt-font-mono); color: var(--tt-muted); background: var(--tt-soft); cursor: pointer; border-radius: 2px; }
+.observation-session-cell.has-records { color: var(--direction-ink); background: color-mix(in srgb, var(--direction-color) 16%, var(--tt-surface)); }
+.observation-session-cell:disabled { cursor: default; }
+.disposition-cell-invite { display: flex; align-items: center; justify-content: center; gap: 7px; flex: 1; color: var(--tt-muted); font-size: 11px; }
+.disposition-cell-invite > i { font-style: normal; font-size: 14px; opacity: .75; }
+.disposition-cell-invite > span { opacity: 0; }
+.disposition-cell.open-direction .disposition-cell-action { padding: 12px; }
+.disposition-cell:is(:hover, :focus-within) .disposition-cell-invite > span { opacity: 1; }
+.dw-unified .outside-window > .disposition-label, .dw-unified .disposition-cell.empty-range .disposition-cell-action { opacity: .5; cursor: default; }
+.dw-unified .disposition-cell.empty-range { background: var(--tt-surface); color: var(--tt-muted); }
+.dw-unified .diagnosis-chart-note { margin-top: 16px; font-size: 11px; }
+@media (max-width: 950px) {
+  .dw-unified { --matrix-label: minmax(180px, 1fr); --matrix-directions: repeat(4, minmax(125px, 1fr)); }
+  .disposition-plot-toolbar > div { gap: 12px; flex-wrap: wrap; }
+  .observation-key { font-size: 10px; gap: 6px; }
+}
+@media (max-width: 650px) {
+  .disposition-plot-toolbar { grid-template-columns: 1fr; gap: 7px; }
+  .disposition-plot-toolbar > span { display: none; }
+  .observation-control > span { display: none; }
+  .observation-window-key { min-width: 120px; }
+}

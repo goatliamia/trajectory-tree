@@ -65,7 +65,7 @@ if(process.argv.includes('--benchmark-config')){
     const url=new URL(req.url,'http://localhost');
     if(url.searchParams.get('reviewToken')===secret){res.writeHead(302,{'set-cookie':`trajectory-review=${secret}; Path=/; HttpOnly; SameSite=Strict`,'location':'/analysis-view/overview'}).end();return;}
     if(!req.headers.cookie?.split('; ').includes('trajectory-review='+secret)){res.writeHead(401).end();return;}
-    if(profileUi){const start=performance.now();res.once('finish',()=>{if(url.pathname.endsWith('/data.json')||url.pathname.endsWith('/overview'))console.log(JSON.stringify({request:url.pathname,milliseconds:Math.round(performance.now()-start),revision:service.workspace.progress.revision}));});}
+    if(profileUi){const start=performance.now();res.once('finish',()=>{if(url.pathname.endsWith('/data.json')||url.pathname.endsWith('/overview')||url.pathname.endsWith('/api/eval-view'))console.log(JSON.stringify({request:url.pathname,milliseconds:Math.round(performance.now()-start),revision:service.workspace.progress.revision}));});}
     try{
       if(url.pathname==='/review/map-benchmark'&&benchmarkPage){res.writeHead(200,{'content-type':'text/html; charset=utf-8'}).end(readFileSync(resolve(benchmarkPage)));return;}
       if(url.pathname==='/analysis-view/overview'){

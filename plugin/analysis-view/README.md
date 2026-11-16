@@ -1,5 +1,7 @@
 # 轨迹树 · Trajectory Tree
 
+右侧栏新增「当前上下文」：用 `/context-map` 或右栏入口打开，沿用轨迹图七类颜色，按内容分类展示当前构成。每个区域开头用分类标题和短色标区分；压缩后保留的摘要和替换内容直接归入当前分类。滚轮缩放、拖动平移、双击进入／返回，单击阅读正文。面板收起时停止取数和绘图；只在保留内容提交或请求头变化后合并更新，正文按需读取。数值为宿主 token-meter 的估算，范围是当前保留表面，已被替换的历史内容不在图中。
+
 A DSH Web GUI plugin for browsing the current conversation's trajectory and evaluation metrics.
 DSH Web GUI 插件提供当前会话的轨迹树与评估指标。
 

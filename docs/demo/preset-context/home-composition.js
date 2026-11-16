@@ -1,3 +1,5 @@
+// Only controlled category/mode labels use UI translation; names and bodies stay raw.
+const uiLabel=value=>globalThis.__trajectoryUi?.(value)??value;
 import {tileLayout} from './treemap.js';
 import {createZoomTreemap,zoomMapOverlay,zoomMapIndex} from './zoom-treemap.js';
 
@@ -56,7 +58,7 @@ function itemAction(item){
   return `data-action="composition-item" data-kind="${item.kind}" data-origin="${item.origin}" data-index="${item.index}" data-variant="${item.variantIndex}"`;
 }
 function focusContent(item,total){
-  return `<span class="home-focus-origin"><i></i>${escape(item.originName??origins[item.origin].name)} · ${escape(item.type)}</span><strong class="home-focus-name">${escape(item.name)}</strong><p class="home-focus-context">${escape(item.context)}</p><div class="home-focus-amount"><strong>${compact(item.tokens)}</strong><span>tokens</span></div><span class="home-focus-share">占全部已计量内容 ${percent(item.tokens,total)}</span><p class="home-focus-scope">${item.kind==='skills'?'这里计量名称与描述，正文按需加载。':item.kind==='instructions'?(item.type==='个人指令'?'通过个人全局指令链加载。':'按会话工作目录加载适用指令。'):item.kind==='tools'?'工具说明与参数定义。':'当前可读取的静态片段。'}</p><button class="home-text-link" ${itemAction(item)}>查看当前内容 <span aria-hidden="true">↗</span></button>`;
+  return `<span class="home-focus-origin"><i></i>${escape(item.originName??origins[item.origin].name)} · ${escape(uiLabel(item.type))}</span><strong class="home-focus-name">${escape(item.name)}</strong><p class="home-focus-context">${escape(item.context)}</p><div class="home-focus-amount"><strong>${compact(item.tokens)}</strong><span>tokens</span></div><span class="home-focus-share">占全部已计量内容 ${percent(item.tokens,total)}</span><p class="home-focus-scope">${item.kind==='skills'?'这里计量名称与描述，正文按需加载。':item.kind==='instructions'?(item.type==='个人指令'?'通过个人全局指令链加载。':'按会话工作目录加载适用指令。'):item.kind==='tools'?'工具说明与参数定义。':'当前可读取的静态片段。'}</p><button class="home-text-link" ${itemAction(item)}>查看当前内容 <span aria-hidden="true">↗</span></button>`;
 }
 export function composition(p,scope=null){
   const allGroups=compositionGroups(p),groups=scope?allGroups.filter(g=>g.id===scope):allGroups,total=allGroups.reduce((n,g)=>n+g.tokens,0),shown=groups.reduce((n,g)=>n+g.tokens,0),leaves=groups.flatMap(g=>g.leaves),largest=[...leaves].sort((a,b)=>b.tokens-a.tokens)[0];

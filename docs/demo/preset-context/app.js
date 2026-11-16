@@ -4,8 +4,8 @@ import {followDshTheme} from './host-theme.js';
 followDshTheme();
 const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const tokens=value=>value==null?'—':value>=1000?(value/1000).toFixed(1)+'k':Math.round(value).toLocaleString('zh-CN');
-const date=value=>new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(value);
+const tokens=value=>value==null?'—':value>=1000?(value/1000).toFixed(1)+'k':Math.round(value).toLocaleString(globalThis.__trajectoryLocale??'zh-CN');
+const date=value=>new Intl.DateTimeFormat(globalThis.__trajectoryLocale??'zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(value);
 const categoryInfo={
   system:{label:'系统提示',color:'system',title:'系统提示',description:'预设引导与当前插件注册的提示片段。'},
   instructions:{label:'AGENTS.md',color:'user',title:'工作指令',description:'按当前工作目录读取的指令文件。'},
@@ -38,11 +38,11 @@ function entity(row,index,kind=state.category){const key=kind+':'+index;let titl
     title=row.scope==='个人指令'?row.displayPath:(row.workspaceNames?.[0]?row.workspaceNames[0]+' / ':'')+row.displayPath;description=(row.workspaceNames??[]).filter(Boolean).slice(0,3).join('、')+(row.workspaceNames?.length>3?' 等 '+row.workspaceNames.length+' 个工作区':'');meta=row.scope+' · 当前文件 · '+date(row.modifiedAt);amount='≈ '+tokens(row.tokens);amountLabel='tokens · 文件正文';
     body=metadata([['文件位置',row.path,true],['加载来源',row.package,true],['适用工作区',row.workspaceNames?.filter(Boolean).join('、')],['加载方式',row.scope==='个人指令'?'个人全局指令链':'从项目根目录到会话工作目录，按目录层级加载'],['文件状态',row.omitted?'超出预算，开局未带入':row.truncated?'按当前预算截短':'当前来源文件可读取']])+reader(row.body,'当前文件正文',row.bytes.toLocaleString('zh-CN')+' bytes');
   }else if(kind==='skills'){
-    title=row.name;description=row.description;meta=row.sourceLabel+(row.package?' · '+row.package:'');amount='≈ '+tokens(row.catalogTokens);amountLabel='tokens · 名称与描述';
+    title=row.name;description=row.description;meta=(row.sourceLabel??'')+(row.package?' · '+row.package:'');amount='≈ '+tokens(row.catalogTokens);amountLabel='tokens · 名称与描述';
     body=metadata([['来源',row.sourceLabel],['提供方',row.package??row.provider??'本地 Skill 文件',true],['文件位置',row.path,true],['修改时间',date(row.modifiedAt)]])+reader(row.body,'当前 Skill 正文','约 '+tokens(row.bodyTokens)+' tokens · 按需加载');
   }else{
     title=row.name;description=kind==='tools'?(row.description||'描述含动态字段，查看当前注册位置。'):kind==='system'?(row.kind==='persona'?row.body:row.body?.split('\n')[0]||'内容由当前注册的提供方生成。'):(row.kind==='context'?'具名运行时环境片段':'按运行事件提供的上下文消息');
-    meta=row.package+(row.version?' · '+row.version:'');amount=kind==='tools'?(row.measuredTokens==null?'待组装':'≈ '+tokens(row.measuredTokens)):row.kind==='persona'?'预设':row.kind==='context'?'环境快照':kind==='injections'?'按需消息':'注册片段';if(kind==='tools')amountLabel='tokens · 声明估算';
+    meta=(row.package??'')+(row.version?' · '+row.version:'');amount=kind==='tools'?(row.measuredTokens==null?'待组装':'≈ '+tokens(row.measuredTokens)):row.kind==='persona'?'预设':row.kind==='context'?'环境快照':kind==='injections'?'按需消息':'注册片段';if(kind==='tools')amountLabel='tokens · 声明估算';
     body=metadata([['提供插件',row.package,true],['当前版本',row.version],['配置作用域',row.scope==='preset'?'所选预设':'宿主全局'],['注册位置',row.file?row.file+':'+row.line:null,true]]);
     if(row.body)body+=reader(row.body,kind==='system'&&row.kind==='persona'?'预设中的提示文本':'当前源码中的文本片段');
     if(row.code)body+='<div class="reader-title"><strong>注册位置</strong><span>当前安装源码 · 节选</span></div><pre class="registration-code">'+esc(row.code)+'</pre>';

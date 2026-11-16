@@ -1,8 +1,9 @@
+import {ui as __ttUi} from "./ui-locale.js";
 // Presets are navigation targets, separate from workspace/time filters.
 // Keep the active target visible; an anchored search handles an arbitrary list.
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function installPresetNavigation(root,{getPresets,getCurrent,onSelect}){
-  root.innerHTML='<nav class="preset-options" aria-label="选择当前预设"></nav><button type="button" class="preset-more" aria-haspopup="dialog" aria-expanded="false" aria-controls="preset-popover"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>全部预设</button><section id="preset-popover" class="preset-popover" role="dialog" aria-label="全部预设" hidden><label class="preset-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="查找预设" aria-label="查找预设" autocomplete="off"></label><div class="preset-results"></div><footer></footer></section>';
+  root.innerHTML=__ttUi('<nav class="preset-options" aria-label="选择当前预设"></nav><button type="button" class="preset-more" aria-haspopup="dialog" aria-expanded="false" aria-controls="preset-popover"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>全部预设</button><section id="preset-popover" class="preset-popover" role="dialog" aria-label="全部预设" hidden><label class="preset-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="查找预设" aria-label="查找预设" autocomplete="off"></label><div class="preset-results"></div><footer></footer></section>');
   const options=root.querySelector('.preset-options'),trigger=root.querySelector('.preset-more'),popover=root.querySelector('.preset-popover'),search=root.querySelector('input'),results=root.querySelector('.preset-results');
   let queued=false;
   function fit(){
@@ -14,12 +15,12 @@ export function installPresetNavigation(root,{getPresets,getCurrent,onSelect}){
   function scheduleFit(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;fit();});}
   function renderResults(){
     const query=search.value.trim().toLocaleLowerCase(),rows=getPresets().filter(row=>[row.id,row.name].some(s=>String(s??'').toLocaleLowerCase().includes(query)));
-    results.innerHTML=rows.length?rows.map(row=>`<button type="button" data-preset="${escape(row.id)}" aria-pressed="${row.id===getCurrent()}"><span><strong>${escape(row.name)}</strong>${row.name!==row.id?`<small>${escape(row.id)}</small>`:''}</span>${row.isDefault?'<small class="preset-default">默认</small>':''}<b aria-hidden="true">${row.id===getCurrent()?'✓':''}</b></button>`).join(''):'<p class="preset-empty">没有匹配的预设</p>';
-    popover.querySelector('footer').textContent=`${rows.length} / ${getPresets().length} 个预设`;
+    results.innerHTML=rows.length?rows.map(row=>`<button type="button" data-preset="${escape(row.id)}" aria-pressed="${row.id===getCurrent()}"><span><strong>${escape(row.name)}</strong>${row.name!==row.id?`<small>${escape(row.id)}</small>`:''}</span>${row.isDefault?__ttUi('<small class="preset-default">默认</small>'):''}<b aria-hidden="true">${row.id===getCurrent()?'✓':''}</b></button>`).join(''):__ttUi('<p class="preset-empty">没有匹配的预设</p>');
+    popover.querySelector('footer').textContent=__ttUi`${rows.length} / ${getPresets().length} 个预设`;
   }
   function close(focus=false){popover.hidden=true;trigger.setAttribute('aria-expanded','false');if(focus)trigger.focus({preventScroll:true});}
   function render(){
-    options.innerHTML=getPresets().map(row=>`<button type="button" data-preset="${escape(row.id)}" aria-pressed="${row.id===getCurrent()}" title="${escape(row.name)}${row.isDefault?' · 默认预设':''}">${escape(row.name)}</button>`).join('');
+    options.innerHTML=getPresets().map(row=>`<button type="button" data-preset="${escape(row.id)}" aria-pressed="${row.id===getCurrent()}" title="${escape(row.name)}${row.isDefault?__ttUi(' · 默认预设'):''}">${escape(row.name)}</button>`).join('');
     scheduleFit();if(!popover.hidden)renderResults();
   }
   trigger.onclick=()=>{if(!popover.hidden){close();return;}search.value='';renderResults();popover.hidden=false;trigger.setAttribute('aria-expanded','true');search.focus({preventScroll:true});};

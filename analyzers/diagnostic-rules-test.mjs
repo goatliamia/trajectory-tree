@@ -24,6 +24,9 @@ test('program feedback retains child identity while wrapper-only stderr remains 
   assert.equal(remote.layer,'remote-shell');assert.equal(remote.program,'bash');
   const wrapper=feedback('git : Cloning into project...\n    + FullyQualifiedErrorId : NativeCommandError');
   assert.equal(wrapper.code,'COMMAND_EXTERNAL_FEEDBACK');assert.equal(wrapper.certainty,'candidate');
+  const recorded=summarizeFindings([row(wrapper)]);
+  assert.equal(recorded.groups.length,1);assert.deepEqual(recorded.groups[0].directions,[],'wrapper output remains available without implying recovery');
+  assert.deepEqual(summarizeFindings([row({code:'COMMAND_EXIT_UNEXPLAINED',certainty:'confirmed'})]).groups[0].directions,[],'an unexplained exit alone does not establish a disposition');
   assert.equal(feedback('src/a.ts(1,2): error TS18048: sample',{status:'returned'}),undefined);
 });
 

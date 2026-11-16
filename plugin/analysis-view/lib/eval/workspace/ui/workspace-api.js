@@ -1,3 +1,4 @@
+import {ui as __ttUi} from "./ui-locale.js";
 export const nativeWorkspace=()=>window.__trajectoryWorkspace?.native===true;
 export function apiUrl(path){
   const base=window.__trajectoryWorkspace?.base;
@@ -22,20 +23,20 @@ export async function wireDraftActions(root,{prompt,preferredSession}={}){
   const field=typeof prompt==='function'?prompt:()=>root.querySelector('textarea')?.value??'';
   const actions=document.createElement('div');actions.className='diagnosis-delivery';
   const status=document.createElement('span');status.role='status';
-  const copy=document.createElement('button');copy.type='button';copy.className='tt-button';copy.textContent='复制草稿';
-  copy.onclick=async()=>{try{await navigator.clipboard.writeText(field());status.textContent='已复制';}catch{root.querySelector('textarea')?.select();status.textContent='请复制选中的文字';}};
+  const copy=document.createElement('button');copy.type='button';copy.className='tt-button';copy.textContent=__ttUi('复制草稿');
+  copy.onclick=async()=>{try{await navigator.clipboard.writeText(field());status.textContent=__ttUi('已复制');}catch{root.querySelector('textarea')?.select();status.textContent=__ttUi('请复制选中的文字');}};
   actions.append(copy,status);root.append(actions);
   if(!nativeWorkspace())return;
   try{
     const response=await apiFetch('/api/conversations');if(!response.ok)throw Error();
     const {sessions}=await response.json();if(!root.isConnected||!sessions.length)return;
-    const label=document.createElement('label');label.textContent='目标对话';
-    const select=document.createElement('select');select.setAttribute('aria-label','填入草稿的目标对话');
+    const label=document.createElement('label');label.textContent=__ttUi('目标对话');
+    const select=document.createElement('select');select.setAttribute('aria-label',__ttUi('填入草稿的目标对话'));
     for(const session of sessions){const option=document.createElement('option');option.value=session.id;option.textContent=session.title;select.append(option);}
     if(sessions.some(s=>s.id===preferredSession))select.value=preferredSession;
     label.append(select);
-    const fill=document.createElement('button');fill.type='button';fill.className='tt-button diagnosis-fill';fill.textContent='填入对话';
-    fill.onclick=async()=>{fill.disabled=true;status.textContent='';const applied=await sendDiagnosisDraft(field(),select.value);status.textContent=applied?'已填入，尚未发送':'未能填入，可复制草稿';fill.disabled=false;};
+    const fill=document.createElement('button');fill.type='button';fill.className='tt-button diagnosis-fill';fill.textContent=__ttUi('填入对话');
+    fill.onclick=async()=>{fill.disabled=true;status.textContent='';const applied=await sendDiagnosisDraft(field(),select.value);status.textContent=applied?__ttUi('已填入，尚未发送'):__ttUi('未能填入，可复制草稿');fill.disabled=false;};
     actions.prepend(label,fill);
-  }catch{status.textContent='目标对话暂时不可读，可复制草稿';}
+  }catch{status.textContent=__ttUi('目标对话暂时不可读，可复制草稿');}
 }

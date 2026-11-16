@@ -151,6 +151,9 @@ try{
  assert.equal(JSON.parse(readFileSync(join(dshView,'locale/zh.json'),'utf8')).meta.title,'轨迹树');
  assert.equal(JSON.parse(readFileSync(join(dshView,'locale/en.json'),'utf8')).meta.title,'Trajectory Tree');
  assert.match(readFileSync(join(dshView,'lib/trace/fonts/LICENSE.txt'),'utf8'), /SIL OPEN FONT LICENSE Version 1\.1/);
+ for(const asset of ['panel.js','panel.css','model.js','categories.mjs','zoom-treemap.js','treemap.js','ui-locale.js','i18n.mjs'])assert.ok(existsSync(join(dshView,'lib/current-context',asset)),asset+' is present in the sidebar package');
+ assert.match(readFileSync(join(dshView,'lib/current-context/panel.css'),'utf8'),/font-weight:100 900/);
+ for(const asset of ['ui-locale.js','i18n.mjs'])assert.ok(existsSync(join(dshView,'lib/eval/workspace/ui',asset)));
  execFileSync(process.execPath,[join(dshView,'self-test.mjs')],{cwd:dshView,windowsHide:true});
  execFileSync(process.execPath,[join(dshView,'search-test.mjs')],{cwd:dshView,windowsHide:true});
  execFileSync(process.execPath,['--test',join(dshView,'overview-test.mjs')],{cwd:dshView,windowsHide:true});

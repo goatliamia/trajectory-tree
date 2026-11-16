@@ -130,6 +130,74 @@ export async function readRequestContext(events, signal, projections = []) {
   catch { return buildRequestContext(events, null); }
 }
 
+// Current retained items use precisely the same surface and category rules as
+// the request series. No historical/shadowed message or live token delta enters
+// this view. Full bodies stay on the host; the sidebar receives metadata only.
+export function buildCurrentContext(events, meter, projections = []) {
+  if (!meter || !events.every((event, index) => event.seq === index)) return null;
+  const folded = meter.foldSurface(events, projections), calls = new Map(), turns = new Map(), headers = new Map();
+  let turn = 0, header, headerSeq = null, contextWindow = null;
+  for (const event of events) {
+    const data = event.data ?? {};
+    if (event.type === 'turn/start' && count(data.turn)) turn = data.turn;
+    // A replacement enters now even when it carries the old message's turn.
+    turns.set(event.seq, replacement(event) ? turn : count(data.turn) ? data.turn : turn);
+    if (event.type === 'tool/call') calls.set(data.callId, data.name);
+    if (event.type === 'request/context' && count(data.contextWindow) && data.contextWindow > 0) contextWindow = data.contextWindow;
+    if (event.type !== 'request/header' || !data.header) continue;
+    header = meter.canonicalHeader(data.header); headerSeq = event.seq;
+    const next = new Map();
+    for (const tool of header.tools ?? []) {
+      const body = JSON.stringify(tool, null, 2), previous = headers.get(tool.name);
+      next.set(tool.name, previous?.body === body ? previous : { body, seq: event.seq, turn, name: tool.name });
+    }
+    headers.clear(); for (const [key, value] of next) headers.set(key, value);
+  }
+  const items = [], bodies = new Map(), totals = Object.fromEntries(requestContextKeys.map(key => [key, 0]));
+  const add = item => {
+    const body = item.body; delete item.body;
+    items.push({ ...item, preview: body.slice(0, 240), characters: body.length }); bodies.set(item.id, body);
+    totals[item.category] += item.tokens;
+  };
+  const text = message => (message.content ?? []).map(block => {
+    if (typeof block.text === 'string') return block.text;
+    if (typeof block.thinking === 'string') return block.thinking;
+    return JSON.stringify(block);
+  }).join('\n');
+  for (const seq of folded.nodes) {
+    const event = events[seq], message = meter.deriveEventMessage(event, folded.projectedMessages);
+    if (!message) continue;
+    const category = messageCategory(message, calls), body = text(message);
+    const source = message.source;
+    const callName = calls.get(source?.callId ?? message.toolCallId);
+    const firstLine = body.split('\n', 8).map(line => line.trim()).find(Boolean);
+    const name = callName ?? source?.name ?? (['assistant', 'user'].includes(category) ? firstLine?.slice(0, 56) : null) ?? source?.kind ?? message.role;
+    add({ id: 'message-' + seq, seq, turn: turns.get(seq) ?? 0, category,
+      name: String(name), tokens: meter.estimateMessage(message), body });
+  }
+  const toolTokens = meter.estimateToolsTokens(header), definitions = [...headers.values()];
+  const sizes = definitions.map(row => row.body.length), size = sizes.reduce((a, b) => a + b, 0);
+  let allocated = 0, cumulative = 0;
+  definitions.forEach((row, index) => {
+    cumulative += sizes[index];
+    const next = size ? Math.round(cumulative / size * toolTokens) : 0;
+    add({ ...row, id: 'tool-' + row.name, category: 'tools', tokens: next - allocated }); allocated = next;
+  });
+  totals.total = requestContextKeys.reduce((sum, key) => sum + totals[key], 0);
+  items.sort((a, b) => a.turn - b.turn || a.seq - b.seq || a.id.localeCompare(b.id));
+  return { items, bodies, totals, contextWindow, headerSeq, cut: events.at(-1)?.seq ?? null };
+}
+
+export async function readCurrentContext(events, signal, projections = []) {
+  const meter = await loadSdk();
+  if (meter && !projections.some(row => row.type === 'image/offload') && events.some(row => row.type === 'image/offload')) {
+    const offload = await import('@deepseek-ai/dsh-compaction-image-offload/projection').catch(() => null);
+    if (offload?.imageOffloadProjection) projections = [...projections, offload.imageOffloadProjection];
+  }
+  signal?.throwIfAborted();
+  return buildCurrentContext(events, meter, projections);
+}
+
 export function buildRecordedModelTiming(events, { assistantStreamFirstTokenTime, isTokenDelta } = {}) {
   const turns = new Map(), steps = new Map();
   const span = (start, end) => count(start) && count(end) && end >= start ? end - start : null;

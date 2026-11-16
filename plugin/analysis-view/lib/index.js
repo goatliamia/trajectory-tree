@@ -19,6 +19,7 @@ import { evalPowerShellEvidence } from "./eval/pwsh-evidence.mjs";
 import { editorMarkup, renderEvalPage } from "./eval/render.mjs";
 import { OverviewService } from "./eval/overview/service.mjs";
 import { EvalWorkspaceService, WORKSPACE_PATH } from "./eval/workspace-service.mjs";
+import { CurrentContextService } from './current-context-service.js';
 import { parseSearchParams, searchTurns } from "./conversation-search.js";
 import { viewSettings } from "./settings.js";
 import { hostCapabilities } from './trace/shared/host-capabilities.mjs';
@@ -28,6 +29,7 @@ const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
 
 const ROUTE_PATH = "/analysis-view";
+const CURRENT_CONTEXT_ASSETS = new Set(['panel.js', 'panel.css', 'model.js', 'categories.mjs', 'i18n.mjs', 'ui-locale.js', 'treemap.js', 'zoom-treemap.js', 'zoom-treemap.css']);
 const TRACE_FONTS = { "Geist-Variable.woff2": "font/woff2", "GeistMono-Variable.woff2": "font/woff2" };
 
 let traceAssets;
@@ -704,7 +706,8 @@ export function apply(ctx, config) {
     queue: traceResources.main,
   });
   const workspace = new EvalWorkspaceService(ctx, overview);
-  ctx.effect(() => () => { workspace.dispose(); overview.dispose(); traceStages.dispose(); traceResources.dispose(); }, "analysis-view: trace resources");
+  const currentContext = new CurrentContextService(ctx, { observe: (id, signal) => observeEvents(ctx, id, signal), dispose: disposeObservation, queue: traceResources.main });
+  ctx.effect(() => () => { currentContext.dispose(); workspace.dispose(); overview.dispose(); traceStages.dispose(); traceResources.dispose(); }, "analysis-view: trace resources");
   // 面板每次切回「分析」都会拉一次;同一会话 2 秒内的重复请求复用上一次结果。
   const digestCache = new Map();
   const DIGEST_TTL_MS = 2000;
@@ -722,6 +725,29 @@ export function apply(ctx, config) {
       };
       try {
         const url = new URL(req.url || "/", "http://localhost");
+        if (url.pathname.startsWith(ROUTE_PATH + '/current-context')) {
+          if (req.method !== 'GET') return send(405, { error: 'method not allowed' });
+          const connection = ctx.get('connection');
+          if (typeof connection?.admit !== 'function') return send(503, { error: 'Web authorization unavailable' });
+          const admission = connection.admit(req);
+          if (admission.peer?.principal.kind !== 'owner') return send(admission.rejection ?? 403, { error: 'Web access required' });
+          const signal = AbortSignal.any([disconnected.signal, admission.peer.signal]);
+          if (url.pathname.startsWith(ROUTE_PATH + '/current-context-assets/')) {
+            const name = url.pathname.slice((ROUTE_PATH + '/current-context-assets/').length);
+            if (!CURRENT_CONTEXT_ASSETS.has(name)) return send(404, { error: 'asset not found' });
+            const body = readFileSync(new URL('./current-context/' + name, import.meta.url));
+            res.writeHead(200, { 'content-type': name.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8',
+              'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' }); res.end(body); return;
+          }
+          const sessionId = url.searchParams.get('session');
+          if (!sessionId || sessionId.length > 256) return send(400, { error: 'session required' });
+          if (url.pathname === ROUTE_PATH + '/current-context') return send(200, await currentContext.snapshot(sessionId, signal));
+          if (url.pathname === ROUTE_PATH + '/current-context/body') {
+            const body = await currentContext.readBody(sessionId, url.searchParams.get('version'), url.searchParams.get('item'), signal);
+            return body ? send(200, body) : send(409, { error: 'Context snapshot expired. Refresh the current context.' });
+          }
+          return send(404, { error: 'not found' });
+        }
         if (url.pathname.startsWith(WORKSPACE_PATH+'/') || url.pathname === ROUTE_PATH + "/overview" || url.pathname === ROUTE_PATH + "/overview-data") {
           const connection = ctx.get("connection");
           if (typeof connection?.admit !== "function") return send(503, { error: "Web authorization unavailable" });

@@ -8,6 +8,7 @@ Trajectory Tree 把 DSH、Pi、Codex 和 Claude Code 的会话记录组织成执
 | 模型取证入口 | 各宿主实际工具/CLI、已确认的接入缺口与统一配置查询设计 | [现状与工具设计](model-access-review.md) |
 | 宿主接入 | 读取宿主原生记录并保留分支、事件定位和数据粒度 | [各宿主命令与打包](host-entrypoints.md) · [能力与语言](host-compatibility.md) · [适配器](../analyzers/) |
 | 轨迹树 | 浏览行动路径、工具反馈、文件、目标和上下文变化；回合收尾可跳到该轮，上下文抽屉给出该轮花费 | [路径页](analysis-view-design.md) · [统计口径](metric-framework.md) · [页面装配](../view/render.mjs) · [DSH 加载](../plugin/analysis-view/lib/trace-stages.js) |
+| 当前上下文侧栏 | 按轨迹七类缩放查看当前保留内容，压缩后以保留面为准，正文按需读取 | [数据、交互、性能与源码](current-context-sidebar.md) |
 | 单会话 Eval | 在同一切点查看轮次耗时、用量、工具和报错，按选区生成诊断草稿 | [统计口径](metric-framework.md) · [数据模型](../plugin/analysis-view/lib/eval/data.mjs) · [便携入口](../view/eval.mjs) |
 | Eval 总览 | 按预设查看当前配置、Skill 使用、诊断和窗口表现；保留历史证据与跨重启缓存 | [总览入口](host-entrypoints.md#eval-总览) · [首页设计](eval-home.md) · [正式服务](../plugin/analysis-view/lib/eval/workspace-service.mjs) · [便携总览](../plugin/analysis-view/lib/eval/overview/) |
 | 取证查询 | 从摘要下钻到原始记录、关联调用、文件或统计切点 | [DSH 工具](../plugin/trajectory-tools/README.md) · [便携 CLI / MCP / Pi](../plugin/portable-tools/README.md) · [字段](trajectory-fields.md) |
@@ -30,6 +31,7 @@ Trajectory Tree 把 DSH、Pi、Codex 和 Claude Code 的会话记录组织成执
 | `plugin/analysis-view/lib/trace/page.html`、`page.js` 和轨迹模型 | [路径页移植脚本](../scripts/port-geist-page.mjs)使用 `docs/demo/layout-review/` 与 `view/assets/` |
 | `plugin/analysis-view/lib/trace/shared/` | [共享资源脚本](../scripts/sync-view-assets.mjs)从 `lib/`、视图资源与查询工具同步 |
 | `plugin/analysis-view/lib/eval/workspace/` | [Eval 同步脚本](../scripts/sync-eval-workspace.mjs)从页面源码及采集/分析模块生成安装资源 |
+| `plugin/analysis-view/lib/current-context/` | [共享资源脚本](../scripts/sync-view-assets.mjs)从 `view/current-context/` 与共用缩放、语言资源生成 |
 | 各宿主的诊断 skill | [Skill 同步脚本](../scripts/sync-host-skills.mjs)从 `skill/` 分发正文、资源和宿主元数据 |
 | `dist/trajectory-tree-*` | [宿主打包脚本](../scripts/package-trajectory.mjs)按入口依赖和资源清单生成 |
 | `.dsh/` 与 `report/out/` | 本地数据、检查和导出产物 |

@@ -6,8 +6,12 @@
       "sha256": "b096db2aa0ff33c1dab8f818a0d85632c691561a464c4ec6217b8d89909308a6"
     },
     {
+      "path": "analyzers/diagnosis-workspace.mjs",
+      "sha256": "83324e907eb2bf9d0b66ac3519675c697435ab7151d88cc0f7ecf25b7e9ea13b"
+    },
+    {
       "path": "analyzers/eval-insights.mjs",
-      "sha256": "b47fc20e61ecde838ae3a5ecb9fdc09401cc21501cba6320dd7cc05ef495b58c"
+      "sha256": "a044ce980412a1e038d7548ccdad934452778d9157b9f6122fbf983127af155d"
     },
     {
       "path": "analyzers/preset-context.mjs",
@@ -59,11 +63,11 @@
     },
     {
       "path": "plugin/analysis-view/lib/eval/diagnostic-rules.mjs",
-      "sha256": "e814b06bf52c85fef5d12eafee2e0e80d61e7b6cf0600769eeb62d29b45f69c4"
+      "sha256": "8a46c8120886a8d0bf9251ba33679e84afeb479d23cb39f5e488a81ef70943e6"
     },
     {
       "path": "plugin/analysis-view/lib/eval/findings.mjs",
-      "sha256": "12c3c79e618c630c3426a090b959487b743eea79f3a29e3d6f033ab01a42ea36"
+      "sha256": "dc4ae2e856b5059cfb88cac7c5f4d7716a339d6f1e21922dde0426d583069ab8"
     },
     {
       "path": "plugin/analysis-view/lib/skill-policy.js",

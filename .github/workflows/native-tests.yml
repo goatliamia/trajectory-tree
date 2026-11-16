@@ -53,6 +53,10 @@ jobs:
           plugin/analysis-view/resources-test.mjs
           plugin/analysis-view/overview-cache-test.mjs
           plugin/analysis-view/workspace-test.mjs
+          plugin/analysis-view/current-context-test.mjs
+          analyzers/diagnosis-workspace-test.mjs
+          analyzers/diagnostic-rules-test.mjs
+          analyzers/eval-zoom-test.mjs
           analyzers/skill-window-test.mjs
           analyzers/workspace-presets-test.mjs
           analyzers/eval-home-test.mjs
@@ -74,6 +78,8 @@ jobs:
           view/assets/pi-host-test.mjs
           view/assets/codex-host-test.mjs
           lib/i18n-test.mjs
+          view/assets/ui-locale-test.mjs
+          scripts/ui-literals-test.mjs
           lib/tool-behavior-test.mjs
           docs/demo/layout-review/context-trend-test.mjs
           plugin/analysis-view/self-test.mjs

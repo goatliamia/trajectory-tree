@@ -14,6 +14,7 @@ import {currentUsageStatistics} from './workspace/runtime/analyzers/preset-stati
 import {currentSkillUsage} from './workspace/runtime/analyzers/preset-skill-management.mjs';
 import {contextOverlap} from './workspace/runtime/analyzers/context-overlap.mjs';
 import {diagnosisView,windowView} from './workspace/runtime/analyzers/eval-insights.mjs';
+import {diagnosisWorkspace} from './workspace/runtime/analyzers/diagnosis-workspace.mjs';
 import {skillOverlapExamples} from './workspace/runtime/analyzers/skill-overlap-demo.mjs';
 import {DshManagement} from './workspace/runtime/scripts/dsh-management.mjs';
 import {loadManagementSdk} from './workspace/runtime/scripts/dsh-management-config.mjs';
@@ -209,7 +210,8 @@ export class EvalWorkspaceService {
       this.startHistory().catch(()=>{});const options=Object.fromEntries(url.searchParams);
       if(id&&id!=='all')options.project=String(this.data.projects.findIndex(p=>p.id===id));
       options.period=[1,7,30].includes(Number(period))?Number(period):7;
-      const result=(options.view==='diagnosis'?diagnosisView:windowView)({...this.data,latest:Date.now()},options);result.progress={...this.progress};return send(200,result);
+      const analyze=options.view==='investigation'?diagnosisWorkspace:options.view==='diagnosis'?diagnosisView:windowView;
+      const result=analyze({...this.data,latest:Date.now()},options);result.progress={...this.progress};return send(200,result);
     }
     // The allowlist is independent of the request path; no arbitrary file read.
     const allowed=new Set(readdirSync(uiRoot).filter(name=>/\.(?:css|js|mjs)$/.test(name)).map(name=>'/'+name));

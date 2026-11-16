@@ -6,6 +6,7 @@ window.__ModuleLoader__.load({
     const React = require("react");
     const PLUGIN_ID = "dsh-analysis-view";
     const SEARCH_KIND = "trajectory-conversation-search";
+    const CONTEXT_KIND = "trajectory-current-context";
     const hasLegacySearch = tabs => tabs?.get?.("conversation-search")?.id === "dsh-conversation-search";
     const cmUi = (zh, en) => { let stored; try { stored = window.localStorage?.getItem("trajectory-language"); } catch {} const candidates = [stored, window.document?.documentElement?.lang, ...(window.navigator?.languages || []), window.navigator?.language]; const language = candidates.find(value => typeof value === "string" && /^(?:en|zh)(?:-|$)/i.test(value)) || "en"; return /^en(?:-|$)/i.test(language) ? en : zh; };
     function useLocaleRefresh() {
@@ -1789,6 +1790,56 @@ window.__ModuleLoader__.load({
       return () => { unsubscribe(); unwatchTabs?.(); dispose?.(); };
     }
 
+    function CurrentContextPane({ sessionId, useTabInfo }) {
+      useLocaleRefresh();
+      const info = useTabInfo ? useTabInfo() : null;
+      const locale = cmUi('zh-CN', 'en');
+      const active = info?.tab?.visible !== false;
+      const host = React.useRef(null), panel = React.useRef(null), activeRef = React.useRef(active);
+      activeRef.current = active;
+      React.useEffect(() => {
+        if (!host.current || !sessionId) return;
+        host.current.textContent = cmUi('正在加载上下文视图…', 'Loading current context…');
+        let disposed = false;
+        import('/analysis-view/current-context-assets/panel.js').then(module => {
+          if (disposed) return;
+          panel.current = module.mountCurrentContext(host.current, { sessionId, active: activeRef.current });
+        }).catch(error => { if (!disposed && host.current) host.current.textContent = cmUi('上下文视图加载失败：', 'Context view failed to load: ') + error.message; });
+        return () => { disposed = true; panel.current?.destroy(); panel.current = null; };
+      }, [sessionId, locale]);
+      React.useEffect(() => {
+        panel.current?.setActive(active);
+        if (!active || !sessionId) return;
+        const source = clientCtx?.sessions?.binding(sessionId)?.eventSource;
+        const update = () => {
+          const change = source.getSnapshot().change;
+          if (change.kind === 'prepend') return;
+          const entries = change.entries ?? (change.entry ? [change.entry] : []);
+          if (change.kind === 'reset' || entries.some(row => {
+            const event = row.type === 'transient' ? null : row.event;
+            return event && (event.surfaceOp || ['request/header', 'request/context', 'compaction/prune', 'image/offload'].includes(event.type));
+          })) panel.current?.refresh();
+        };
+        return source?.subscribe(update);
+      }, [sessionId, active]);
+      return h('div', { ref: host, style: { height: '100%', minHeight: 0, minWidth: 0, overflow: 'hidden' }, 'data-current-context-session': sessionId },
+        !sessionId ? cmUi('请选择会话', 'Select a session') : null);
+    }
+
+    function mountCurrentContextSidebar(ctx) {
+      const title = () => cmUi('当前上下文', 'Current context');
+      const unregister = ctx.sidebarRightTabs.register({ id: CONTEXT_KIND, kind: CONTEXT_KIND, title,
+        guide: [{ id: CONTEXT_KIND, order: 28, title, description: () => cmUi('按内容分类缩放查看当前上下文构成。', 'Zoom into current context composition by category.') }] });
+      const detach = ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+        name: 'sidebar.right.pane.tab', key: CONTEXT_KIND, inject: sessionId => ({ sessionId }),
+      }, CurrentContextPane));
+      const command = ctx.commandUi.register({ name: 'context-map', label: title,
+        description: () => cmUi('在右侧栏查看当前保留上下文', 'Inspect retained context in the right sidebar'),
+        available: session => typeof session.sessionId === 'string' && Boolean(session.sessionId),
+        ui: { kind: 'action', run() { ctx.sidebarRight.openTab(CONTEXT_KIND); } } });
+      return () => { command?.(); detach?.(); unregister(); };
+    }
+
     /* ---------------- 注册 ---------------- */
     function AnalysisSnapshotBuilder() {
       this.snap = { order: [], nodes: new Map(), locations: new Map(), navigation: null, timeline: null, counts: { nodes: 0, upserts: 0 } };
@@ -1824,6 +1875,9 @@ window.__ModuleLoader__.load({
         ctx.uiConversation.views.register({ target: "analysis", create: () => new AnalysisSnapshotBuilder(), isActive: () => true });
         const slots = ctx.slots;
         if (!slots) return;
+        ctx.inject?.(['sidebarRightTabs', 'sidebarRight'], sidebarCtx => {
+          sidebarCtx.effect(() => mountCurrentContextSidebar(sidebarCtx), 'analysis-view: current context sidebar');
+        });
         if (typeof ctx.effect === "function") ctx.effect(() => mountOverview(slots), "analysis-view: global Eval");
         else mountOverview(slots);
         ctx.inject?.(["configForms"], settingsCtx => {

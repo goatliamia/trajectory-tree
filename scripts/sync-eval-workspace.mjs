@@ -5,6 +5,8 @@ import {createHash} from 'node:crypto';
 import {visualTokenCss} from '../design/tokens.mjs';
 import {toolColorCss} from '../lib/tool-colors.mjs';
 import {toolFeedbackCss} from '../lib/tool-feedback.mjs';
+import {i18nModuleSource} from '../lib/i18n.mjs';
+import {compileUiLiterals} from './ui-literals.mjs';
 
 const root=resolve(fileURLToPath(new URL('../',import.meta.url)));
 const out=join(root,'plugin/analysis-view/lib/eval/workspace');
@@ -32,14 +34,18 @@ function copy(file){
   });
   write(target(file),transformed);
 }
-for(const file of ['lib/dsh-current-preset.mjs','lib/context-diagnosis.mjs','analyzers/workspace-presets.mjs','analyzers/preset-context.mjs','analyzers/context-overlap.mjs','analyzers/eval-insights.mjs','analyzers/skill-overlap-demo.mjs','scripts/dsh-management.mjs','scripts/dsh-management-http.mjs'])copy(join(root,file));
+for(const file of ['lib/dsh-current-preset.mjs','lib/context-diagnosis.mjs','analyzers/workspace-presets.mjs','analyzers/preset-context.mjs','analyzers/context-overlap.mjs','analyzers/eval-insights.mjs','analyzers/diagnosis-workspace.mjs','analyzers/skill-overlap-demo.mjs','scripts/dsh-management.mjs','scripts/dsh-management-http.mjs'])copy(join(root,file));
 const assets=join(root,'docs/demo/preset-context');
 for(const entry of readdirSync(assets,{withFileTypes:true})){
   if(!entry.isFile()||!['.js','.css','.html'].includes(extname(entry.name))||entry.name==='trace-extension.js')continue;
   // Browser module imports are already relative; root-absolute API URLs are
   // resolved by the native bridge, keeping the standalone preview identical.
-  write(join(out,'ui',entry.name),readFileSync(join(assets,entry.name),'utf8').replaceAll('/fonts/','./fonts/'));
+  let content=readFileSync(join(assets,entry.name),'utf8').replaceAll('/fonts/','./fonts/');
+  if(entry.name.endsWith('.js'))content=compileUiLiterals(content);
+  write(join(out,'ui',entry.name),content);
 }
+write(join(out,'ui','ui-locale.js'),readFileSync(join(root,'view/assets/ui-locale.js'),'utf8'));
+write(join(out,'ui','i18n.mjs'),i18nModuleSource());
 for(const [name,content] of [
   ['tool-colors.js',readFileSync(join(root,'lib/tool-colors.mjs'),'utf8')],
   ['tool-behavior.mjs',readFileSync(join(root,'lib/tool-behavior.mjs'),'utf8')],

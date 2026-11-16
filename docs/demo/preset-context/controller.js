@@ -3,7 +3,7 @@ import { renderSkillBodyGroup,renderSkillCatalog,installSkillMap } from './skill
 import { installCapabilityManagement, managementButton } from './capability-management.js';
 import { renderOverlapExamples } from './overlap-preview.js';
 import { installEvalViews } from './eval-views.js';
-import { evalTabs,diagnosisScopes,evalRoute } from './eval-navigation.js';
+import { evalTabs,evalRoute } from './eval-navigation.js';
 import { installContextOverlap } from './context-overlap.js';
 import { currentUsageState } from './home-overview.js';
 import { installCompositionHover } from './home-composition.js';
@@ -23,10 +23,11 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
   $('time-range').onchange=()=>{const url=new URL(location.href);url.searchParams.set('period',$('time-range').value);location.assign(url);};
   const detailUi={skillRange:null,skillKind:'all'};
   const presetNavigation=installPresetNavigation($('preset-navigator'),{getPresets:()=>getData()?.presets??[],getCurrent:()=>getData()?current().id:null,onSelect:selectPreset});
-  $('retained-panel').innerHTML='<nav class="diagnosis-scope" aria-label="诊断维度">'+Object.entries(diagnosisScopes).map(([key,label])=>'<button type="button" data-diagnosis-scope="'+key+'">'+label+'</button>').join('')+'</nav><div id="eval-analysis-panel"></div><div id="context-analysis-panel" hidden></div>';
-  const evalViews=installEvalViews($('eval-analysis-panel')),contextView=installContextOverlap($('context-analysis-panel'));
-  const diagnosisScope=$('retained-panel').querySelector('.diagnosis-scope');
-  diagnosisScope.onclick=event=>{const button=event.target.closest('[data-diagnosis-scope]');if(!button)return;state.diagnosisScope=button.dataset.diagnosisScope;renderOverview();};
+  $('retained-panel').innerHTML='<div id="eval-analysis-panel"></div><section id="diagnosis-supply" class="diagnosis-supply" aria-labelledby="diagnosis-supply-title"><header class="diagnosis-supply-heading"><h2 id="diagnosis-supply-title">当前上下文</h2><button type="button" id="refresh-supply" class="text-action">刷新配置</button><span id="supply-status" role="status"></span></header><div id="context-analysis-panel"></div></section>';
+  const evalViews=installEvalViews($('eval-analysis-panel'),{expandComparison:state.diagnosisScope==='window'}),contextView=installContextOverlap($('context-analysis-panel'));
+  let requestSupply=state.diagnosisScope==='context',supplyStamp=null;
+  function ensureSupply(){if(state.tab!=='diagnosis'||!getData())return;const stamp=current().id+':'+getData().capturedAt;if(stamp===supplyStamp)return;supplyStamp=stamp;contextView.render(current().id);}
+  $('refresh-supply').onclick=async()=>{const button=$('refresh-supply');button.disabled=true;$('supply-status').textContent=' 正在更新…';try{const response=await apiFetch('/api/refresh',{method:'POST'});if(!response.ok)throw Error('当前配置刷新未完成');supplyStamp=null;await load();$('supply-status').textContent='';}catch(error){$('supply-status').textContent=' '+error.message;}finally{button.disabled=false;}};
   $('refresh').insertAdjacentHTML('beforebegin','<button type="button" class="tt-button" data-manage-kind="tool">管理加载项</button>');
   installCapabilityManagement({current,getData,onSaved:()=>load(),openSkill:name=>showSkill(name)});
   const skillMapView=installSkillMap($('skill-management-panel'),{openSkill:name=>showSkill(name),openCatalog:skills=>openSkillView(renderSkillCatalog(skills),'Skill 目录')});
@@ -54,19 +55,16 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     document.querySelector('.design-switcher').hidden=true;
     $('overview-panel').hidden=state.tab!=='home';$('skill-management-panel').hidden=state.tab!=='skills';
     const retained=state.tab==='diagnosis';$('retained-panel').hidden=!retained;
-    const contextSelected=state.tab==='diagnosis'&&state.diagnosisScope==='context';
-    diagnosisScope.hidden=state.tab!=='diagnosis';diagnosisScope.querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.diagnosisScope===state.diagnosisScope)));
-    $('eval-analysis-panel').hidden=contextSelected;$('context-analysis-panel').hidden=!contextSelected;
-    if(retained){$('retained-panel').setAttribute('aria-labelledby','diagnosis-tab');if(contextSelected){evalViews.cancel();contextView.render(preset.id);}else{contextView.cancel();evalViews.render(preset.id,state.diagnosisScope==='window'?'window':'diagnosis');}}else{evalViews.cancel();contextView.cancel();}
+    if(retained){$('retained-panel').setAttribute('aria-labelledby','diagnosis-tab');evalViews.render(preset.id);ensureSupply();if(requestSupply){requestSupply=false;$('diagnosis-supply').scrollIntoView({block:'start'});}}else{evalViews.cancel();contextView.cancel();supplyStamp=null;}
     $('workspace-tabs').querySelectorAll('[data-workspace-tab]').forEach(button=>{const selected=button.dataset.workspaceTab===state.tab;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;});
     $('skill-tab-count').textContent=preset.skills.length;
-    if(!$('refresh').disabled)$('refresh').textContent=state.tab!=='home'&&!contextSelected?'刷新使用记录':'刷新配置';
+    if(!$('refresh').disabled)$('refresh').textContent=state.tab!=='home'?'刷新使用记录':'刷新配置';
     if(state.tab==='home'){$('overview-panel').innerHTML=renderLayout(preset,data,state.layout,ui,categoryInfo);compositionView.mount();}
     $('design-options').innerHTML=layouts.map(row=>`<button type="button" data-layout-choice="${row.id}" aria-pressed="${row.id===state.layout}"><span>${row.letter}</span>${row.name}</button>`).join('');
     $('preset-title').textContent='Eval';
     $('preset-subtitle').textContent=preset.configurationScope==='global'?'全局配置 · 跨工作区使用':'当前工作区配置与使用';
-    $('captured-at').textContent=date(state.tab==='home'||contextSelected?data.capturedAt:preset.statistics.usage.asOf??data.capturedAt)+' 采集';
-    $('footer-status').textContent=state.tab==='home'||contextSelected?'本地配置 · '+date(data.capturedAt):'本地使用记录 · '+date(preset.statistics.usage.asOf??data.capturedAt);
+    $('captured-at').textContent=date(state.tab==='home'?data.capturedAt:preset.statistics.usage.asOf??data.capturedAt)+' 采集';
+    $('footer-status').textContent=state.tab==='home'?'本地配置 · '+date(data.capturedAt):'本地使用记录 · '+date(preset.statistics.usage.asOf??data.capturedAt);
     presetNavigation.render();
     if(state.tab==='skills')renderSkillPanel();
     updateUrl();
@@ -148,7 +146,7 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     if(a.skillAction==='open'){detailUi.skillRange=null;detailUi.skillKind='all';showSkill(a.name);}
     if(a.skillAction==='compare')openSkillView(renderSkillComparison(p,a.left,a.right,a.from),'Description 对照');
     if(a.skillAction==='events'){const scope=button.closest('[data-chart-skill]')?.dataset.chartSkill,skill=scope&&detailSkill(scope),source=skill?globalSkillPreset(getData(),p,skill):p;openSkillView(renderSkillEvents(source,scope?{...ui,...detailUi}:ui,scope),'读取记录');}
-    if(a.skillAction==='checks'||a.skillAction==='context-overlap'){$('skill-dialog').close();state.tab='diagnosis';state.diagnosisScope='context';renderOverview();}
+    if(a.skillAction==='checks'||a.skillAction==='context-overlap'){$('skill-dialog').close();state.tab='diagnosis';state.diagnosisScope='context';requestSupply=true;renderOverview();}
     if(a.skillAction==='tool'&&p.tools[Number(a.index)]){$('skill-dialog').close();openDetail({kind:'tools',index:Number(a.index)});}
   }
   $('workspace-tabs').onclick=event=>{const button=event.target.closest('[data-workspace-tab]');if(!button)return;Object.assign(state,evalRoute(button.dataset.workspaceTab,state.diagnosisScope));renderOverview();};
@@ -236,9 +234,9 @@ export function installController({$,state,categoryInfo,entity,documentBody,esc,
     try{
       if(document.hidden)return;
       const response=await apiFetch('/api/status');if(!response.ok)return;const progress=await response.json();showProgress(progress);
-      if(progress.revision!==progressRevision&&!document.querySelector('dialog[open],.zoom-treemap.holding,.zoom-treemap.opening,.zoom-map-index:not([hidden])')){progressRevision=progress.revision;evalViews.invalidate();await load();}
+      if(progress.revision!==progressRevision&&!document.querySelector('dialog[open],.zoom-treemap.holding,.zoom-treemap.opening,.zoom-map-index:not([hidden]),.dw-window-brush.selecting,.dw-window-content:focus-within,.dw-route-content:focus-within,.co-filter-menu[open],.co-results-tools:focus-within')){progressRevision=progress.revision;evalViews.invalidate();await load();}
     }catch{}finally{polling=false;setTimeout(poll,2000);}
   }
-  $('refresh').onclick=async()=>{ui.skillRange=null;ui.skillKind='all';ui.skillActivity='all';ui.skillChanged=false;ui.skillUnused=false;detailUi.skillRange=null;detailUi.skillKind='all';if(state.tab==='skills')renderSkillPanel(false);const button=$('refresh'),usage=state.tab!=='home'&&!(state.tab==='diagnosis'&&state.diagnosisScope==='context');button.disabled=true;button.textContent=usage?'读取使用记录…':'读取中…';try{const response=await apiFetch(usage?'/api/refresh-usage':'/api/refresh',{method:'POST'});if(!response.ok)throw Error('刷新未完成，请重试');evalViews.invalidate();await load();$('load-error').hidden=true;}catch(error){$('load-error').hidden=false;$('load-error').textContent=error.message;}finally{button.disabled=false;button.textContent=state.tab!=='home'&&!(state.tab==='diagnosis'&&state.diagnosisScope==='context')?'刷新使用记录':'刷新配置';}};
+  $('refresh').onclick=async()=>{ui.skillRange=null;ui.skillKind='all';ui.skillActivity='all';ui.skillChanged=false;ui.skillUnused=false;detailUi.skillRange=null;detailUi.skillKind='all';if(state.tab==='skills')renderSkillPanel(false);const button=$('refresh'),usage=state.tab!=='home';button.disabled=true;button.textContent=usage?'读取使用记录…':'读取中…';try{const response=await apiFetch(usage?'/api/refresh-usage':'/api/refresh',{method:'POST'});if(!response.ok)throw Error('刷新未完成，请重试');evalViews.invalidate();await load();$('load-error').hidden=true;}catch(error){$('load-error').hidden=false;$('load-error').textContent=error.message;}finally{button.disabled=false;button.textContent=state.tab!=='home'?'刷新使用记录':'刷新配置';}};
   load().catch(error=>{$('load-error').hidden=false;$('load-error').textContent=error.message;});
 }

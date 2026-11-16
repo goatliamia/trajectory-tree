@@ -136,7 +136,7 @@ const ctx = {
   conversation: { input: { requestDraftInitialization(target, options) {
     draftRequests.push([target, options]); return canApplyDraft ? "applied" : "blocked";
   } } },
-  commandUi: { register(command) { check("client: /trajectory is a direct UI action", command.name === "trajectory" && command.ui.kind === "action"); } },
+  commandUi: { register(command) { check("client: /" + command.name + " is a direct UI action", ['trajectory', 'context-map'].includes(command.name) && command.ui.kind === "action"); return () => {}; } },
   uiConversation: { views: { register() {} }, binding() { return { target() { return { getSnapshot() { return null; }, subscribe() { return () => {}; } }; } }; } },
   slots: {
     inject(name, register) { return register(); },
@@ -146,7 +146,7 @@ const ctx = {
       if (definition && definition.id === "path") PathView = component;
       if (definition.id === "context-manager" || definition.key === "context-manager") contextPanels.push(definition.name);
       if (definition.name === "plugins.bundle.config") settingsCard = definition;
-      if (definition.name === "sidebar.right.pane.tab") {
+      if (definition.name === "sidebar.right.pane.tab" && definition.key === 'trajectory-conversation-search') {
         searchBody = definition;
         return () => { searchBody = undefined; };
       }
@@ -161,16 +161,16 @@ check("client: 两个会话面板依次可打开", JSON.stringify(conversationPa
 check("client: 已移除左侧上下文管理入口", contextPanels.length === 0);
 check("client: settings card is registered and search starts enabled",
   settingsCard?.key === "dsh-analysis-view" && settingsCard.inject().form === form &&
-  rightTabs.size === 1 && rightTabs.has(searchBody?.key) && searchBody?.inject("session-fixture").sessionId === "session-fixture");
+  rightTabs.size === 2 && rightTabs.has('trajectory-current-context') && rightTabs.has(searchBody?.key) && searchBody?.inject("session-fixture").sessionId === "session-fixture");
 const disposeLegacy = sidebarRightTabs.register({ id: "dsh-conversation-search", kind: "conversation-search" });
 check("client: a legacy provider keeps one search entry",
-  rightTabs.size === 1 && !searchBody);
+  rightTabs.size === 2 && !searchBody);
 disposeLegacy();
-check("client: removing legacy restores the enabled search", rightTabs.size === 1 && rightTabs.has(searchBody?.key));
+check("client: removing legacy restores the enabled search", rightTabs.size === 2 && rightTabs.has(searchBody?.key));
 searchEnabled = false; notify(configListeners);
-check("client: disabling search removes both the right tab and its pane", rightTabs.size === 0 && !searchBody);
+check("client: disabling search removes both the right tab and its pane", rightTabs.size === 1 && rightTabs.has('trajectory-current-context') && !searchBody);
 searchEnabled = true; notify(configListeners);
-check("client: enabling again restores the search pane", rightTabs.size === 1 && rightTabs.has(searchBody?.key));
+check("client: enabling again restores the search pane", rightTabs.size === 2 && rightTabs.has(searchBody?.key));
 
 /* ---------------- 渲染工具 ---------------- */
 function render(component, props, seeds) {

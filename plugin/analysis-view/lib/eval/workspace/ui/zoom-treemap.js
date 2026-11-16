@@ -1,3 +1,4 @@
+import {ui as __ttUi} from "./ui-locale.js";
 // Fixed geometry, a continuous camera, and source text only for visible detail.
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function toggleZoomFocus(path,id,before,focused){
@@ -5,9 +6,9 @@ export function toggleZoomFocus(path,id,before,focused){
   if(previous)return {path:[],camera:{...previous.camera}};
   return {path:[{id,camera:{...before}}],camera:{...focused}};
 }
-export function zoomMapOverlay(){return '<canvas class="zoom-map-mini" width="112" height="68" hidden aria-label="当前视野位置"></canvas>';}
+export function zoomMapOverlay(){return __ttUi('<canvas class="zoom-map-mini" width="112" height="68" hidden aria-label="当前视野位置"></canvas>');}
 export function zoomMapIndex(items,itemAttributes=()=>'',itemClass=''){
-  return '<div class="zoom-map-index" hidden><input type="search" aria-label="查找图中内容" placeholder="查找名称、类型或来源"><div>'+items.map(item=>'<button type="button" class="'+itemClass+'" data-zoom-item="'+escape(item.id??item.key)+'" '+itemAttributes(item)+'><strong>'+escape(item.name)+'</strong><small>'+escape(item.type??item.secondary??'')+' · '+Math.round(item.weight??item.tokens).toLocaleString('zh-CN')+' tokens</small></button>').join('')+'</div></div>';
+  return __ttUi('<div class="zoom-map-index" hidden><input type="search" aria-label="查找图中内容" placeholder="查找名称、类型或来源"><div>')+items.map(item=>'<button type="button" class="'+itemClass+'" data-zoom-item="'+escape(item.id??item.key)+'" '+itemAttributes(item)+'><strong>'+escape(item.name)+'</strong><small>'+escape(item.type??item.secondary??'')+' · '+Math.round(item.weight??item.tokens).toLocaleString('zh-CN')+' tokens</small></button>').join('')+'</div></div>';
 }
 export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()=>{},onHover=()=>{},onView=()=>{},getBody=item=>item.body??'',viewState,onFrame}){
   const canvas=host.querySelector('.zoom-map-canvas'),ctx=canvas.getContext('2d');
@@ -22,7 +23,7 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
   const probe=document.createElement('span');probe.style.cssText='position:absolute;visibility:hidden;pointer-events:none';host.append(probe);
   function readColor(value){probe.style.color=value;return getComputedStyle(probe).color;}
   function readTheme(){
-    palette={surface:readColor('var(--tt-surface)'),line:readColor('var(--tt-line)'),ink:readColor('var(--tt-ink)'),muted:readColor('var(--tt-muted)'),action:readColor('var(--tt-action)')};
+    palette={surface:readColor('var(--tt-surface)'),line:readColor('var(--tt-line)'),ink:readColor('var(--tt-ink)'),muted:readColor('var(--tt-muted)'),action:readColor('var(--tt-action)'),sans:getComputedStyle(host).getPropertyValue('--tt-font-sans').trim()||'sans-serif',mono:getComputedStyle(host).getPropertyValue('--tt-font-mono').trim()||'monospace'};
     colors.clear();const references=new Set(rects.flatMap(r=>[r.fill??'var(--tt-soft)',r.stroke??'var(--tt-action)',r.ink??'var(--tt-ink)']));
     for(const value of references)colors.set(value,readColor(value));paletteDirty=false;
   }
@@ -39,6 +40,11 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
   const textWidth=(s,font)=>[...s].reduce((sum,ch)=>sum+(ch.codePointAt(0)>255?1:.61)*font,0);
   const screen=(r,c=camera)=>({x:(r.x-c.x)*fit*c.k+width/2,y:(r.y-c.y)*fit*c.k+height/2,w:r.w*fit*c.k,h:r.h*fit*c.k});
   const point=(x,y,c=target)=>({x:c.x+(x-width/2)/(fit*c.k),y:c.y+(y-height/2)/(fit*c.k)});
+  // Optional aggregate cells share fixed world bounds with their children.
+  // Zoom changes the painted and hit-tested level, never the layout.
+  const expanded=(r,c=camera)=>r.w*fit*c.k>=70&&r.h*fit*c.k>=50;
+  const visibleLevel=r=>{if(r.aggregate)return !expanded(r);const parent=r.parentId&&byId.get(r.parentId);return !parent||expanded(parent);};
+  const matchIds=ids=>{const result=new Set(ids);for(const id of result){const parent=byId.get(id)?.parentId;if(parent)result.add(parent);}return result;};
   function constrain(){
     target.k=clamp(target.k,1,MAX);
     if(target.k<=1.001){target.x=W/2;target.y=H/2;return;}
@@ -70,12 +76,15 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
   }
   function bodyFor(r){
     if(bodyCache.has(r.id)){const value=bodyCache.get(r.id);bodyCache.delete(r.id);bodyCache.set(r.id,value);return value;}
-    const original=String(getBody(r)??''),text=original.length>100000?original.slice(0,100000)+'\n…完整内容请打开详情。':original;
+    // A readable map preview is bounded independently of the full source.
+    // Keeping the whole document in the fitting loop makes long messages costly
+    // even while their text is still too small to read.
+    const original=String(getBody(r)??''),text=original.length>8192?original.slice(0,8192)+__ttUi('\n…完整内容请打开详情。'):original;
     const pad=Math.min(5,r.w*.08,r.h*.08),top=Math.min(6,r.h*.12),w=r.w-2*pad,h=r.h-top-pad;
     let lo=.12,hi=4.5;
     for(let i=0;i<6;i++){const f=(lo+hi)/2,lines=wrapBody(text,f,w);if(lines.length*f*1.5<=h)lo=f;else hi=f;}
     const body={font:lo,lines:wrapBody(text,lo,w),pad,top,lineHeight:lo*1.5};bodyCache.set(r.id,body);
-    while(bodyCache.size>12)bodyCache.delete(bodyCache.keys().next().value);return body;
+    while(bodyCache.size>128)bodyCache.delete(bodyCache.keys().next().value);return body;
   }
   function ellipsis(text,maxWidth,fontSize){
     if(textWidth(text,fontSize)<=maxWidth)return text;
@@ -87,9 +96,9 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
     const left=b.x+44;ctx.strokeStyle=palette.muted;ctx.lineWidth=1;
     ctx.strokeRect(b.x+15.5,b.y+16.5,15,21);
     for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(b.x+19,b.y+22+i*5);ctx.lineTo(b.x+27,b.y+22+i*5);ctx.stroke();}
-    ctx.fillStyle=ink;ctx.font='500 13px Geist,sans-serif';ctx.textBaseline='top';ctx.fillText(ellipsis(r.name,b.w-80,13),left,b.y+13);
-    ctx.fillStyle=palette.muted;ctx.font='10px Geist,sans-serif';ctx.fillText(ellipsis(r.secondary,b.w-80,10),left,b.y+35);
-    ctx.font='12px Geist,sans-serif';ctx.textAlign='right';ctx.fillText('↗',b.x+b.w-16,b.y+15);ctx.textAlign='left';
+    ctx.fillStyle=ink;ctx.font='500 13px '+palette.sans;ctx.textBaseline='top';ctx.fillText(ellipsis(r.name,b.w-80,13),left,b.y+13);
+    ctx.fillStyle=palette.muted;ctx.font='10px '+palette.sans;ctx.fillText(ellipsis(r.secondary,b.w-80,10),left,b.y+35);
+    ctx.font='12px '+palette.sans;ctx.textAlign='right';ctx.fillText('↗',b.x+b.w-16,b.y+15);ctx.textAlign='left';
   }
   function draw(){
     const start=performance.now();if(paletteDirty)readTheme();
@@ -97,9 +106,10 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
     const scale=fit*camera.k;
     for(const g of roots){const b=screen(g);if(b.x>width||b.y>height||b.x+b.w<0||b.y+b.h<0)continue;
       if(g.frame!==false){ctx.strokeStyle=palette.line;ctx.lineWidth=1;ctx.strokeRect(b.x+.5,b.y+.5,b.w-1,b.h-1);}
-      if(g.caption){ctx.fillStyle=palette.muted;ctx.font='10px Geist,sans-serif';ctx.textBaseline='top';ctx.fillText(g.caption,b.x,b.y-22);}
+      if(g.caption&&!g.timeline&&b.w>52){ctx.fillStyle=palette.muted;ctx.font='10px '+palette.sans;ctx.textBaseline='top';ctx.fillText(g.caption,b.x,b.y-22);}
     }
     for(const r of rects){
+      if(!visibleLevel(r))continue;
       const b=screen(r);if(b.x>width||b.y>height||b.x+b.w<0||b.y+b.h<0||b.w<.6||b.h<.6)continue;
       const dim=r.dim||!!query&&!matches.has(r.id),fill=colors.get(r.fill??'var(--tt-soft)'),ink=colors.get(r.ink??'var(--tt-ink)');ctx.globalAlpha=dim?.2:1;
       ctx.fillStyle=fill;ctx.strokeStyle=r.id===selection||r.id===hover?colors.get(r.stroke??'var(--tt-action)'):r.catalog?palette.line:palette.surface;ctx.lineWidth=r.id===selection?1.5:.8;
@@ -107,11 +117,14 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
         ctx.beginPath();ctx.moveTo(b.x+.5,b.y+.5);ctx.lineTo(b.x+b.w-10,b.y+.5);ctx.lineTo(b.x+b.w-.5,b.y+10);ctx.lineTo(b.x+b.w-.5,b.y+b.h-.5);ctx.lineTo(b.x+.5,b.y+b.h-.5);ctx.closePath();ctx.fill();ctx.stroke();
         ctx.beginPath();ctx.moveTo(b.x+b.w-10,b.y+.5);ctx.lineTo(b.x+b.w-10,b.y+10);ctx.lineTo(b.x+b.w-.5,b.y+10);ctx.stroke();
       }else{ctx.fillRect(b.x,b.y,b.w,b.h);ctx.strokeRect(b.x+.5,b.y+.5,Math.max(0,b.w-1),Math.max(0,b.h-1));}
+      // Tiny leaves only have a fill and outline. Avoid a clip stack for every
+      // unreadable cell in a dense overview.
+      if(!r.catalog&&(b.w<=45||b.h<=25)){ctx.globalAlpha=1;continue;}
       ctx.save();ctx.beginPath();ctx.rect(b.x+2,b.y+2,Math.max(0,b.w-4),Math.max(0,b.h-4));ctx.clip();
       const body=camera.k>=1.65&&b.w>110&&b.h>85?bodyFor(r):null,fontPx=body?body.font*scale:0;
       if(body&&fontPx>=2.2){
         ctx.save();ctx.beginPath();ctx.rect(b.x+3,b.y+Math.min(28,b.h*.3),b.w-6,Math.max(0,b.h-Math.min(28,b.h*.3)-3));ctx.clip();
-        ctx.translate(b.x,b.y);ctx.scale(scale,scale);ctx.font=body.font+'px GeistMono,monospace';ctx.textBaseline='top';
+        ctx.translate(b.x,b.y);ctx.scale(scale,scale);ctx.font=body.font+'px '+palette.mono;ctx.textBaseline='top';
         ctx.globalAlpha=(dim?.2:1)*clamp((fontPx-1.5)/5,.15,1);
         const start=Math.max(0,Math.floor((-b.y/scale-body.top)/body.lineHeight));
         const end=Math.min(body.lines.length,Math.ceil(((height-b.y)/scale-body.top)/body.lineHeight)+1);
@@ -123,13 +136,38 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
         const font=b.w>95?12:10,left=b.x+Math.min(11,b.w*.1),top=b.y+Math.min(12,b.h*.1);
         // Titles keep a readable screen size; the source underneath follows world scale.
         ctx.fillStyle=fill;ctx.fillRect(b.x+2,b.y+2,b.w-4,Math.min(24,b.h*.3));
-        ctx.globalAlpha=dim?.2:1;ctx.font='500 '+font+'px Geist,sans-serif';ctx.textBaseline='top';ctx.fillStyle=ink;
+        ctx.globalAlpha=dim?.2:1;ctx.font='500 '+font+'px '+palette.sans;ctx.textBaseline='top';ctx.fillStyle=ink;
         ctx.fillText(ellipsis(r.name,b.w-(left-b.x)*2,font),left,top);
-        if(fontPx<3&&b.w>85&&b.h>65){ctx.font='10px GeistMono,monospace';ctx.globalAlpha*=.75;ctx.fillText(ellipsis(r.secondary??(Math.round(r.weight).toLocaleString('zh-CN')+' tokens'),b.w-(left-b.x)*2,10),left,top+22);}
+        if(fontPx<3&&b.w>85&&b.h>65){ctx.font='10px '+palette.mono;ctx.globalAlpha*=.75;ctx.fillText(ellipsis(r.secondary??(Math.round(r.weight).toLocaleString('zh-CN')+' tokens'),b.w-(left-b.x)*2,10),left,top+22);}
       }
       ctx.restore();ctx.globalAlpha=1;
     }
-    drawMini();emitView();onFrame?.(performance.now()-start);
+    drawTimeline();drawGroupHeaders();drawMini();emitView();onFrame?.(performance.now()-start);
+  }
+  function drawGroupHeaders(){
+    for(const group of roots){
+      const header=group.header;if(!header||!Number.isFinite(header.height)||typeof header.label!=='string')continue;
+      const b=screen({...group,h:header.height});
+      if(b.w<60||b.h<12||b.x>width||b.x+b.w<0||b.y>height||b.y+b.h<0)continue;
+      ctx.fillStyle=palette.surface;ctx.fillRect(b.x,b.y,b.w,b.h);
+      ctx.fillStyle=colors.get(header.color)||palette.action;ctx.fillRect(b.x+3,b.y+Math.min(6,b.h*.22),2,Math.min(11,b.h*.55));
+      const count=b.w>170?header.count+__ttUi(' 段'):'';
+      ctx.fillStyle=palette.ink;ctx.font='500 11px '+palette.sans;ctx.textBaseline='top';
+      ctx.fillText(ellipsis(header.label,b.w-(count?65:20),11),b.x+12,b.y+Math.min(6,b.h*.22));
+      if(count){ctx.fillStyle=palette.muted;ctx.font='10px '+palette.mono;ctx.textAlign='right';ctx.fillText(count,b.x+b.w-7,b.y+Math.min(6,b.h*.22));ctx.textAlign='left';}
+      ctx.strokeStyle=palette.line;ctx.lineWidth=.6;ctx.beginPath();ctx.moveTo(b.x,b.y+b.h-.5);ctx.lineTo(b.x+b.w,b.y+b.h-.5);ctx.stroke();
+    }
+  }
+  function drawTimeline(){
+    if(!roots.some(group=>group.timeline))return;
+    ctx.fillStyle=palette.surface;ctx.fillRect(0,0,width,26);ctx.strokeStyle=palette.line;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(0,22.5);ctx.lineTo(width,22.5);ctx.stroke();
+    ctx.fillStyle=palette.muted;ctx.font='10px '+palette.sans;ctx.textBaseline='top';
+    for(const group of roots){
+      if(!group.timeline)continue;const b=screen(group);if(b.x>width||b.x+b.w<0)continue;
+      ctx.beginPath();ctx.moveTo(b.x+.5,18);ctx.lineTo(b.x+.5,26);ctx.stroke();
+      if(b.w>52)ctx.fillText(group.caption,Math.max(5,b.x+5),4);
+    }
   }
   function drawMini(){
     const mw=112,mh=68;mini.clearRect(0,0,mw,mh);mini.fillStyle=palette.surface;mini.fillRect(0,0,mw,mh);
@@ -138,7 +176,7 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
     minimap.hidden=camera.k<1.1;
   }
   function emitView(){
-    const center=rects.find(r=>camera.x>=r.x&&camera.x<=r.x+r.w&&camera.y>=r.y&&camera.y<=r.y+r.h);
+    const center=rects.find(r=>visibleLevel(r)&&camera.x>=r.x&&camera.x<=r.x+r.w&&camera.y>=r.y&&camera.y<=r.y+r.h);
     const parent=roots.find(g=>camera.x>=g.x&&camera.x<=g.x+g.w&&camera.y>=g.y&&camera.y<=g.y+g.h);
     const info={zoom:camera.k,groupId:camera.k>1.4?center?.groupId||parent?.id:null,leafId:null};
     if(center){const r=screen(center);if(camera.k>2&&r.w>width*.46&&r.h>height*.45)info.leafId=center.id;}
@@ -162,7 +200,9 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
     else{focusPath=[{id:r.id,camera:{...(focusPath[0]?.camera??target)}}];target=focused;}
     constrain();requestDraw();
   }
-  function hit(event){const b=canvas.getBoundingClientRect(),p=point(event.clientX-b.left,event.clientY-b.top,camera);return rects.find(r=>p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h);}
+  function hit(event){const b=canvas.getBoundingClientRect(),p=point(event.clientX-b.left,event.clientY-b.top,camera);
+    const header=roots.find(g=>g.header&&p.x>=g.x&&p.x<=g.x+g.w&&p.y>=g.y&&p.y<=g.y+g.header.height);
+    return (header&&byId.get(header.header.id))||rects.find(r=>visibleLevel(r)&&p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h);}
   const listen=(node,type,fn,options={})=>node.addEventListener(type,fn,{...options,signal:events.signal});
   listen(canvas,'wheel',event=>{event.preventDefault();onInteract();const b=canvas.getBoundingClientRect(),delta=event.deltaY*(event.deltaMode===1?16:1);zoomAt(Math.exp(-clamp(delta,-500,500)*.002),event.clientX-b.left,event.clientY-b.top);},{passive:false});
   listen(canvas,'pointerdown',event=>{
@@ -206,7 +246,7 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
   });
   if(input){
     listen(input,'input',()=>{
-      query=input.value.trim().toLowerCase();matches=new Set(rects.filter(r=>(r.searchText??r.name+' '+(r.type??'')+' '+(r.context??'')).toLowerCase().includes(query)).map(r=>r.id));
+      query=input.value.trim().toLowerCase();matches=matchIds(rects.filter(r=>(r.searchText??r.name+' '+(r.type??'')+' '+(r.context??'')).toLowerCase().includes(query)).map(r=>r.id));
       index.querySelectorAll('[data-zoom-item]').forEach(button=>button.hidden=!!query&&!matches.has(button.dataset.zoomItem));requestDraw();
     });
     listen(index,'keydown',event=>{
@@ -219,14 +259,16 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
   const themeObserver=new MutationObserver(()=>{paletteDirty=true;requestDraw();});
   themeObserver.observe(document.documentElement,{attributes:true,attributeFilter:['data-dsh-theme','style','class']});
   themeObserver.observe(document.body,{attributes:true,attributeFilter:['data-layout','style','class']});
-  listen(reducedMotion,'change',requestDraw);document.fonts.ready.then(requestDraw);resize();
+  listen(reducedMotion,'change',requestDraw);
+  const fontsReady=()=>{if(!destroyed){bodyCache.clear();requestDraw();}};
+  listen(document.fonts,'loadingdone',fontsReady);document.fonts.ready.then(fontsReady);resize();
   return {
-    select(id){selection=id;canvas.setAttribute('aria-label','矩形分布图，已选 '+(byId.get(id)?.name||'内容')+'。单击查看详情，双击进入或返回，滚轮缩放，拖动平移；回车查看详情，Escape 查看全图，斜杠查找。');requestDraw();},
+    select(id){selection=id;canvas.setAttribute('aria-label',__ttUi('矩形分布图，已选 ')+(byId.get(id)?.name||__ttUi('内容'))+__ttUi('。单击查看详情，双击进入或返回，滚轮缩放，拖动平移；回车查看详情，Escape 查看全图，斜杠查找。'));requestDraw();},
     focusLeaf(id){onInteract();const r=byId.get(id);if(r)focusLeaf(r);},
     focusGroup(id){onInteract();focusPath=[];const r=roots.find(g=>g.id===id);if(r)focusRect(r);},
     fitAll(){onInteract();focusPath=[];target={x:W/2,y:H/2,k:1};requestDraw();},
     zoom(factor){onInteract();zoomAt(factor);},
-    search(value,ids){query=value;matches=new Set(ids);requestDraw();},
+    search(value,ids){query=value;matches=matchIds(ids);requestDraw();},
     getState(){return {signature,camera:{...camera},target:{...target},focusPath:focusPath.map(entry=>({...entry,camera:{...entry.camera}})),selection};},
     destroy(){destroyed=true;cancelOpen();events.abort();observer.disconnect();themeObserver.disconnect();cancelAnimationFrame(raf);bodyCache.clear();probe.remove();}
   };

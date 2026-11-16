@@ -69,6 +69,7 @@ function measure(items,key){
   if(key==='returned'){const own=items.filter(r=>r.status===1);return {value:ratio(own.filter(r=>r.error?.returned!=null).length,own.length),n:own.length};}
   const definition=windowMetrics[key],values=items.map(definition.read).filter(v=>Number.isFinite(v)&&v>=0);return {value:quantile(values,key==='output'?.5:.9),n:values.length};
 }
+export {samples as windowSamples,measure as windowMeasure};
 export function windowView(data,options={}){
   const scope=evalScope(data,options),mode=options.mode==='tool'?'tool':'model',all=samples(scope,mode),metric=windowMetrics[options.metric]?.mode===mode?options.metric:mode==='model'?'ttft':'errors';
   const routes=[...new Set(all.map(r=>r.model))].map(index=>({index,...data.models[index],count:all.filter(r=>r.model===index).length})).sort((a,b)=>b.count-a.count);

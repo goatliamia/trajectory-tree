@@ -1,24 +1,27 @@
+import {ui as __ttUi} from "./ui-locale.js";
+// Only controlled category/mode labels use UI translation; names and bodies stay raw.
+const uiLabel=value=>globalThis.__trajectoryUi?.(value)??value;
 import {tileLayout} from './treemap.js';
 import {createZoomTreemap,zoomMapOverlay,zoomMapIndex} from './zoom-treemap.js';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const compact=value=>value==null?'—':value>=1000?(value/1000).toFixed(1)+'k':Math.round(value).toLocaleString('zh-CN');
 const percent=(value,total)=>total?(value/total*100).toFixed(1)+'%':'—';
-const origins={official:{name:'DSH 官方',short:'官方'},personal:{name:'个人与项目',short:'个人'},plugin:{name:'我装的插件',short:'插件'},unknown:{name:'来源待确认',short:'待确认'}};
+const origins={official:{name:__ttUi('DSH 官方'),short:__ttUi('官方')},personal:{name:__ttUi('个人与项目'),short:__ttUi('个人')},plugin:{name:__ttUi('我装的插件'),short:__ttUi('插件')},unknown:{name:__ttUi('来源待确认'),short:__ttUi('待确认')}};
 
 function itemLabel(row,kind){
-  if(kind!=='instructions')return row.name??row.displayPath??'未命名内容';
-  if(row.scope==='个人指令')return row.displayPath??row.name??'个人指令';
+  if(kind!=='instructions')return row.name??row.displayPath??__ttUi('未命名内容');
+  if(row.scope==='个人指令')return row.displayPath??row.name??__ttUi('个人指令');
   const path=row.displayPath??row.name??'AGENTS.md',workspace=row.workspaceNames?.find(Boolean);
   return workspace&&!/^(?:[A-Za-z]:|[~/])/.test(path)?workspace+'/'+path:path;
 }
 function itemContext(row,kind){
-  if(kind==='instructions')return row.scope==='个人指令'?'个人全局 · 各工作区共用':row.workspaceNames?.filter(Boolean).join('、')||'项目目录链';
-  if(kind==='skills')return row.sourceLabel??'Skill 目录';
-  return row.package??'当前预设';
+  if(kind==='instructions')return row.scope==='个人指令'?__ttUi('个人全局 · 各工作区共用'):row.workspaceNames?.filter(Boolean).join('、')||__ttUi('项目目录链');
+  if(kind==='skills')return row.sourceLabel??__ttUi('Skill 目录');
+  return row.package??__ttUi('当前预设');
 }
 export function compositionGroups(p){
-  const groups=Object.entries(origins).map(([id,names])=>({id,...names,...(id==='personal'&&p.configurationScope==='global'?{name:'个人内容'}:{}),tokens:0,pending:0,categories:[],leaves:[]}));
+  const groups=Object.entries(origins).map(([id,names])=>({id,...names,...(id==='personal'&&p.configurationScope==='global'?{name:__ttUi('个人内容')}:{}),tokens:0,pending:0,categories:[],leaves:[]}));
   for(const category of p.statistics.categories){
     const rows=(p[category.id]??[]).flatMap((row,index)=>(category.id==='skills'?row.variants??[row]:[row]).map((variant,variantIndex)=>({row:variant,index,variantIndex})));
     for(const group of groups){
@@ -28,7 +31,7 @@ export function compositionGroups(p){
       group.tokens+=tokens;group.pending+=own.length-measured.length;
       for(const {row,index,variantIndex} of measured)if(row.measuredTokens>0)group.leaves.push({
         key:`${group.id}:${category.id}:${index}:${variantIndex}`,origin:group.id,originName:group.name,kind:category.id,index,variantIndex,
-        name:itemLabel(row,category.id),type:category.id==='instructions'?(row.scope??'项目指令'):category.label,
+        name:itemLabel(row,category.id),type:category.id==='instructions'?(row.scope??__ttUi('项目指令')):category.label,
         context:itemContext(row,category.id),path:row.path??row.file??'',tokens:row.measuredTokens,weight:row.measuredTokens,
       });
     }
@@ -56,14 +59,14 @@ function itemAction(item){
   return `data-action="composition-item" data-kind="${item.kind}" data-origin="${item.origin}" data-index="${item.index}" data-variant="${item.variantIndex}"`;
 }
 function focusContent(item,total){
-  return `<span class="home-focus-origin"><i></i>${escape(item.originName??origins[item.origin].name)} · ${escape(item.type)}</span><strong class="home-focus-name">${escape(item.name)}</strong><p class="home-focus-context">${escape(item.context)}</p><div class="home-focus-amount"><strong>${compact(item.tokens)}</strong><span>tokens</span></div><span class="home-focus-share">占全部已计量内容 ${percent(item.tokens,total)}</span><p class="home-focus-scope">${item.kind==='skills'?'这里计量名称与描述，正文按需加载。':item.kind==='instructions'?(item.type==='个人指令'?'通过个人全局指令链加载。':'按会话工作目录加载适用指令。'):item.kind==='tools'?'工具说明与参数定义。':'当前可读取的静态片段。'}</p><button class="home-text-link" ${itemAction(item)}>查看当前内容 <span aria-hidden="true">↗</span></button>`;
+  return __ttUi`<span class="home-focus-origin"><i></i>${escape(item.originName??origins[item.origin].name)} · ${escape(uiLabel(item.type))}</span><strong class="home-focus-name">${escape(item.name)}</strong><p class="home-focus-context">${escape(item.context)}</p><div class="home-focus-amount"><strong>${compact(item.tokens)}</strong><span>tokens</span></div><span class="home-focus-share">占全部已计量内容 ${percent(item.tokens,total)}</span><p class="home-focus-scope">${item.kind==='skills'?__ttUi('这里计量名称与描述，正文按需加载。'):item.kind==='instructions'?(item.type==='个人指令'?__ttUi('通过个人全局指令链加载。'):__ttUi('按会话工作目录加载适用指令。')):item.kind==='tools'?__ttUi('工具说明与参数定义。'):__ttUi('当前可读取的静态片段。')}</p><button class="home-text-link" ${itemAction(item)}>查看当前内容 <span aria-hidden="true">↗</span></button>`;
 }
 export function composition(p,scope=null){
   const allGroups=compositionGroups(p),groups=scope?allGroups.filter(g=>g.id===scope):allGroups,total=allGroups.reduce((n,g)=>n+g.tokens,0),shown=groups.reduce((n,g)=>n+g.tokens,0),leaves=groups.flatMap(g=>g.leaves),largest=[...leaves].sort((a,b)=>b.tokens-a.tokens)[0];
-  return `<section class="home-composition"><header class="home-section-heading"><div><h2>静态内容分布</h2><p class="home-map-description">每块是一项工具、指令或提示 · 面积表示 tokens${p.configurationScope==='global'?' · 预设全局':''}</p></div><span>${leaves.length} 项已计量 · ≈ ${compact(shown)} tokens</span></header>
-    <div class="home-map-legend" role="group" aria-label="放大来源分区">${scope?'<button data-action="composition-origin" data-origin=""><strong>全部来源</strong><span>↶</span></button>':''}${allGroups.map(g=>`<button data-action="composition-origin" data-origin="${g.id}" aria-pressed="${scope===g.id}" title="聚焦${g.name}" style="--group:var(--origin-${g.id},var(--tt-muted))"><i></i><strong>${g.name}</strong><span>${percent(g.tokens,total)}</span></button>`).join('')}<small>点击来源聚焦</small></div>
-    ${largest?`<div class="home-map-layout"><div class="home-map-plot zoom-treemap" role="group" aria-label="按具体内容及来源分区的矩形树图"><canvas class="zoom-map-canvas" tabindex="0" aria-label="上下文分布，滚轮缩放，拖动平移，双击进入 / 返回，回车查看当前内容"></canvas>${zoomMapOverlay()}${zoomMapIndex(leaves,c=>`${itemAction(c)} data-composition-key="${c.key}" aria-label="${escape(c.name)}，${escape(c.type)}，${compact(c.tokens)} tokens，${c.originName}"`,'home-composition-tile')}</div><aside class="home-map-focus" style="--group:var(--origin-${largest.origin},var(--tt-muted))" data-composition-total="${total}" data-default-item="${escape(JSON.stringify(largest))}">${focusContent(largest,total)}</aside></div><p class="home-map-hint">单击查看详情 · 双击进入 / 返回 · 滚轮缩放 · 拖动平移 · Escape 回全图</p>`:'<p class="home-map-empty">当前没有可计量的静态内容。</p>'}
-    <div class="home-composition-pending">${groups.flatMap(g=>g.categories.filter(c=>c.pending||c.tokens===0).map(c=>`<button data-action="category" data-kind="${c.id}" data-origin="${g.id}"><i style="background:var(--origin-${g.id},var(--tt-muted))"></i>${g.short} · ${c.label}<span>${c.pending?c.pending+' 项待组装':'0 tokens'}</span><b aria-hidden="true">↗</b></button>`)).join('')}</div></section>`;
+  return __ttUi`<section class="home-composition"><header class="home-section-heading"><div><h2>静态内容分布</h2><p class="home-map-description">每块是一项工具、指令或提示 · 面积表示 tokens${p.configurationScope==='global'?__ttUi(' · 预设全局'):''}</p></div><span>${leaves.length} 项已计量 · ≈ ${compact(shown)} tokens</span></header>
+    <div class="home-map-legend" role="group" aria-label="放大来源分区">${scope?__ttUi('<button data-action="composition-origin" data-origin=""><strong>全部来源</strong><span>↶</span></button>'):''}${allGroups.map(g=>__ttUi`<button data-action="composition-origin" data-origin="${g.id}" aria-pressed="${scope===g.id}" title="聚焦${g.name}" style="--group:var(--origin-${g.id},var(--tt-muted))"><i></i><strong>${g.name}</strong><span>${percent(g.tokens,total)}</span></button>`).join('')}<small>点击来源聚焦</small></div>
+    ${largest?__ttUi`<div class="home-map-layout"><div class="home-map-plot zoom-treemap" role="group" aria-label="按具体内容及来源分区的矩形树图"><canvas class="zoom-map-canvas" tabindex="0" aria-label="上下文分布，滚轮缩放，拖动平移，双击进入 / 返回，回车查看当前内容"></canvas>${zoomMapOverlay()}${zoomMapIndex(leaves,c=>`${itemAction(c)} data-composition-key="${c.key}" aria-label="${escape(c.name)}，${escape(c.type)}，${compact(c.tokens)} tokens，${c.originName}"`,'home-composition-tile')}</div><aside class="home-map-focus" style="--group:var(--origin-${largest.origin},var(--tt-muted))" data-composition-total="${total}" data-default-item="${escape(JSON.stringify(largest))}">${focusContent(largest,total)}</aside></div><p class="home-map-hint">单击查看详情 · 双击进入 / 返回 · 滚轮缩放 · 拖动平移 · Escape 回全图</p>`:__ttUi('<p class="home-map-empty">当前没有可计量的静态内容。</p>')}
+    <div class="home-composition-pending">${groups.flatMap(g=>g.categories.filter(c=>c.pending||c.tokens===0).map(c=>`<button data-action="category" data-kind="${c.id}" data-origin="${g.id}"><i style="background:var(--origin-${g.id},var(--tt-muted))"></i>${g.short} · ${c.label}<span>${c.pending?c.pending+__ttUi(' 项待组装'):'0 tokens'}</span><b aria-hidden="true">↗</b></button>`)).join('')}</div></section>`;
 }
 export function compositionBody(preset,item){
   const parent=preset[item.kind]?.[item.index],row=item.kind==='skills'?(parent?.variants?.[item.variantIndex]??parent):parent;

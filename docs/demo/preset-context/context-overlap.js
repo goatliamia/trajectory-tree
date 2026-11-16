@@ -1,18 +1,6 @@
 import {apiFetch,wireDraftActions} from './workspace-api.js';
-const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+import {escapeHtml as e,contextKinds as kinds,itemName,coverageView,renderOverlapPair,renderOverlapPage} from './context-overlap-view.js';
 const n=value=>Number(value||0).toLocaleString('zh-CN');
-const compact=value=>value>=1000?(value/1000).toFixed(1)+'k':n(value);
-const percent=value=>(value*100).toFixed(value&&value<.01?2:1)+'%';
-const origins={official:'DSH 官方',plugin:'用户插件',personal:'个人 / 项目',unknown:'来源未归属'};
-const phases={startup:'开场配置','on-demand':'按需加载',dynamic:'动态注入片段','tool-directory':'PTC 工具目录'};
-const kinds={system:'系统提示',instructions:'项目指令',tools:'工具说明',catalog:'Skill 目录',skills:'Skill 正文',injections:'插件注入'};
-const relation={same:'全文一致',contains:'包含相同文本',fragments:'局部相同'};
-const itemName=item=>item.name+(item.field==='body'?'':item.field==='description'?' · 描述':item.field==='whenToUse'?' · 使用条件':' · '+item.field.replace('parameters/',''));
-const badges=item=>`<span class="co-origin" data-origin="${e(item.origin)}">${origins[item.origin]||origins.unknown}</span><span>${phases[item.phase]}</span>${item.evidence==='static-fragment'?'<span>静态片段</span>':''}`;
-const documentIcon='<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3.5h7l4 4v13H6V3.5h1Zm7 0v4h4M9 12h6M9 15.5h6" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
-function coverageView(item,coverage,side,{path=false}={}){
-  return `<section class="co-document" data-kind="${item.kind}"><div class="co-document-heading"><span class="co-document-icon">${documentIcon}</span><div><div class="co-document-name"><span class="co-document-side">${side}</span><h3>${e(itemName(item))}</h3></div><div class="co-source-tags"><span>${kinds[item.kind]}</span>${badges(item)}</div></div></div><div class="co-document-scale"><div><span>相同文字占全文</span><strong>${coverage==null?'—':percent(coverage)}</strong></div><div class="co-document-track" role="img" aria-label="${e(itemName(item))}：${coverage==null?'未进行自动比对':percent(coverage)+' 的文字相同'}"><span style="width:${(coverage||0)*100}%"></span></div><small>全文 ${n(item.characters)} 字符</small></div>${path?`<details class="co-source-location"><summary>来源位置</summary><code>${e(item.path||item.package||'当前配置')}</code>${item.package?`<small>${e(item.package)}</small>`:''}</details>`:''}</section>`;
-}
 
 export function installContextOverlap(container){
   let data,preset,controller,revision=0,scopeOpen=false,filterOpen=false,filter={kind:'all',phase:'all',query:''};
@@ -70,32 +58,23 @@ export function installContextOverlap(container){
   function renderPairs(){
     const list=data.pairs.filter(p=>{const items=[get(p.left),get(p.right)];return(filter.kind==='all'||items.some(i=>i.kind===filter.kind))&&(filter.phase==='all'||items.some(i=>i.phase===filter.phase))&&(!filter.query||items.some(i=>(itemName(i)+' '+i.package+' '+i.path).toLowerCase().includes(filter.query.toLowerCase())));});
     container.querySelector('.co-result-count').textContent=list.length+' 组';
-    container.querySelector('.co-pairs').innerHTML=list.map((pair,index)=>{
-      const left=get(pair.left),right=get(pair.right);
-      const excerpt=left.text.slice(pair.matches[0].left.start,pair.matches[0].left.end),quote=Array.from(excerpt.replace(/^[\s，。,:;；]+/u,'')).slice(0,180).join('');
-      return `<article class="co-pair"><header class="co-pair-heading"><span class="co-case-number">${String(index+1).padStart(2,'0')}</span><span>${pair.matches.length} 处相同片段${pair.reference?' · 正文含引用':''}</span><button type="button" data-co-pair="${pair.id}" class="co-open-pair">展开原文对照 <span aria-hidden="true">↗</span></button></header><div class="co-comparison-layout"><div class="co-document-pair">${coverageView(left,pair.leftCoverage,'A')}${coverageView(right,pair.rightCoverage,'B')}</div><section class="co-common"><div class="co-common-heading"><span>两份内容中相同的文字</span><strong>${n(pair.characters)}<small> 字符</small></strong></div><blockquote class="co-shared-quote">${e(quote)}${Array.from(excerpt.replace(/^[\s，。,:;；]+/u,'')).length>180?'…':''}</blockquote><div class="co-quote-caption">${pair.matches.length>1?'另有 '+(pair.matches.length-1)+' 处片段，可展开查看':'原文摘录'}</div></section></div></article>`;
-    }).join('')||'<div class="co-empty">当前范围未检出连续相同片段。</div>';
+    container.querySelector('.co-pairs').innerHTML=list.map(pair=>renderOverlapPair(pair,get(pair.left),get(pair.right))).join('')||'<div class="co-empty">当前范围未检出连续相同片段。</div>';
   }
   function paint(){
-    const groups=Object.entries(kinds).map(([kind,label])=>{const items=data.items.filter(i=>i.kind===kind);return{kind,label,characters:items.reduce((n,i)=>n+i.characters,0),matched:items.reduce((n,i)=>n+i.matchedCharacters,0),count:items.length};}).filter(g=>g.count);
-    const max=Math.max(1,...groups.map(g=>g.characters));
-    const matched=data.items.filter(i=>i.matchedCharacters),matchedKinds=[...new Set(matched.map(i=>kinds[i.kind]))];
-    const location=matched.length&&matched.every(i=>i.kind==='skills'&&i.phase==='on-demand')?'当前匹配均来自按需加载的 Skill 正文。':matched.length?'匹配涉及'+matchedKinds.join('、')+'。':'当前已读文本中未检出达到阈值的相同片段。';
-    container.innerHTML=`<section class="co-page"><header class="co-page-heading"><div><h2>上下文重合 <span class="co-heading-count">${n(data.summary.pairs)} 组</span></h2><p>${n(data.summary.involved)} 项内容含相同片段。${e(location)}</p></div><div class="co-page-actions"><button type="button" class="tt-button" data-co="diagnose">诊断当前加载项</button><button type="button" class="co-choose-button" data-co="choose">选择两项对照 <span aria-hidden="true">↗</span></button><button class="text-action" data-co="method">指标说明</button></div></header>
-      <div class="co-results-toolbar"><div class="co-filter-heading"><button type="button" class="co-filter-toggle" data-co="filters" aria-expanded="${filterOpen}" aria-controls="co-filters">筛选 <span aria-hidden="true">⌄</span></button><span class="co-result-count"></span></div><div class="co-scale-key"><span><i class="co-key-match"></i>相同文字</span><span><i class="co-key-total"></i>其余原文</span></div></div><div class="co-filters" id="co-filters" ${filterOpen?'':'hidden'}><input type="search" data-co-query aria-label="查找加载项" placeholder="查找名称、文件或插件" value="${e(filter.query)}"><select data-co-filter="kind" aria-label="内容类型"><option value="all">全部内容类型</option>${Object.entries(kinds).map(([id,name])=>`<option value="${id}" ${filter.kind===id?'selected':''}>${name}</option>`).join('')}</select><select data-co-filter="phase" aria-label="加载位置"><option value="all">全部加载位置</option>${Object.entries(phases).map(([id,name])=>`<option value="${id}" ${filter.phase===id?'selected':''}>涉及${name}</option>`).join('')}</select></div><div class="co-pairs"></div>
-      <details class="co-distribution" ${scopeOpen?'open':''}><summary><span>本次比对范围</span><small>${n(data.summary.items)} 项文本 · ${compact(data.summary.characters)} 字符</small></summary><div class="co-distribution-rows">${groups.map(g=>`<button data-co-kind="${g.kind}" aria-pressed="${filter.kind===g.kind}"><span>${g.label}<small>${g.count} 项</small></span><span class="co-bar-track"><i style="width:${g.characters/max*100}%"><b style="width:${g.matched/(g.characters||1)*100}%"></b></i></span><span class="co-bar-value">${compact(g.characters)}<small>${g.matched?compact(g.matched)+' 相同':'—'}</small></span></button>`).join('')}</div></details>
-      <p class="co-snapshot">当前配置与本地正文 · ${e(data.workspace?.name||'当前项目')} · ${new Date(data.capturedAt).toLocaleString('zh-CN',{hour12:false})}</p></section>`;
+    container.innerHTML=renderOverlapPage(data,{scopeOpen,filterOpen,filter});
     renderPairs();
   }
-  container.addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.co==='retry'){render(preset);return;}if(!data)return;
+  container.addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.co&&button.dataset.co!=='clear-filters')container.querySelectorAll('.co-actions-menu[open]').forEach(menu=>menu.open=false);if(button.dataset.co==='retry'){render(preset);return;}if(!data)return;
     if(button.dataset.coPair)pairOpen(button.dataset.coPair);
     if(button.dataset.co==='method')method();if(button.dataset.co==='choose')choose();if(button.dataset.co==='retry')render(preset);if(button.dataset.co==='diagnose')prepare();
-    if(button.dataset.co==='filters'){filterOpen=!filterOpen;container.querySelector('.co-filters').hidden=!filterOpen;button.setAttribute('aria-expanded',String(filterOpen));}
-    if(button.dataset.coKind){filter.kind=filter.kind===button.dataset.coKind?'all':button.dataset.coKind;filterOpen=true;paint();}
+    if(button.dataset.co==='clear-filters'){filter={kind:'all',phase:'all',query:''};filterOpen=false;paint();}
+    if(button.dataset.coKind){filter.kind=filter.kind===button.dataset.coKind?'all':button.dataset.coKind;filterOpen=false;paint();}
   });
-  container.addEventListener('change',event=>{if(event.target.dataset.coFilter){filter[event.target.dataset.coFilter]=event.target.value;container.querySelectorAll('[data-co-kind]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.coKind===filter.kind)));renderPairs();}});
+  container.addEventListener('change',event=>{if(event.target.dataset.coFilter){filter[event.target.dataset.coFilter]=event.target.value;container.querySelectorAll('[data-co-kind]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.coKind===filter.kind)));const active=filter.kind!=='all'||filter.phase!=='all';container.querySelector('.co-filter-menu>summary').firstChild.textContent=active?'筛选 · 已应用':'筛选';renderPairs();}});
   container.addEventListener('input',event=>{if(event.target.hasAttribute('data-co-query')){filter.query=event.target.value;renderPairs();}});
-  container.addEventListener('toggle',event=>{if(event.target.classList.contains('co-distribution'))scopeOpen=event.target.open;},true);
+  document.addEventListener('pointerdown',event=>{for(const menu of container.querySelectorAll('.co-filter-menu[open],.co-actions-menu[open]'))if(!menu.contains(event.target))menu.open=false;});
+  container.addEventListener('keydown',event=>{if(event.key==='Escape'){const menu=event.target.closest('.co-filter-menu[open],.co-actions-menu[open]');if(menu){menu.open=false;menu.querySelector('summary').focus({preventScroll:true});event.preventDefault();}}});
+  container.addEventListener('toggle',event=>{if(event.target.classList.contains('co-distribution'))scopeOpen=event.target.open;if(event.target.classList.contains('co-filter-menu'))filterOpen=event.target.open;},true);
   async function render(nextPreset){
     if(preset!==nextPreset)filter={kind:'all',phase:'all',query:''};preset=nextPreset;controller?.abort();controller=new AbortController();const own=++revision;
     container.innerHTML='<p class="co-empty">正在读取当前加载项…</p>';

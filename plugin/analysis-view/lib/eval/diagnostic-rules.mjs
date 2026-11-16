@@ -21,7 +21,9 @@ export function diagnosticSignals(group) {
   const add=(direction,rule,label,summary,factors)=>signals.push({direction,rule,version:'v1',label,summary,factors,
     state:'lead',evidence:{code:group.code,pattern:group.pattern??null,records:rows.length,turns:group.turns,
       refs:rows.slice(0,4).map(r=>({session:r.source?.session??r.session,seq:r.seq,result:r.result}))}});
-  if(group.kind==='wait'||['control','lookup'].includes(group.focus))return signals;
+  // An unexplained exit is a recorded fact, not evidence that recovery is
+  // needed. Keep it available for review without assigning a cause or action.
+  if(group.kind==='wait'||['control','lookup','external'].includes(group.focus))return signals;
   const repeated=group.turns>1;
   const repair=['arguments','contract','implementation','validation','access'];
   if(repair.includes(group.focus))add('repair','D-R1',group.focus==='validation'?'核对产物或检查器':'核对输入与实现',
@@ -33,10 +35,10 @@ export function diagnosticSignals(group) {
     add('capability','D-C1','核对能力供给','已有命令、工具、服务或上下文不可用的线索；查清缺少的是能力还是使用条件。',
       ['任务需要完成的具体动作','已安装、已加载、可发现、可调用与权限分别核对','检查本地与远端边界，优先使用已有能力']);
   }
-  if(['guard','recovery','cancellation','outcome','input','external'].includes(group.focus))add('recover',
-    group.focus==='external'?'D-O2':'D-O1',group.focus==='guard'?'核对保护条件':group.focus==='outcome'?'查明实际结果':group.focus==='external'?'核对退出含义':'核对后续状态',
+  if(['guard','recovery','cancellation','outcome','input'].includes(group.focus))add('recover',
+    'D-O1',group.focus==='guard'?'核对保护条件':group.focus==='outcome'?'查明实际结果':'核对后续状态',
     group.focus==='guard'?'保护条件未被接受；结合先前读取、文件版本与后续调用调查。':'先核对原操作已产生的效果、停止来源和后续结果，再判断是否需要继续。',
-    [group.focus==='external'?'外层与子程序状态、探测未命中及主动停止':'是否已有副作用、仍在运行或得到后续结果','用户是否希望继续、当前任务是否已完成','按具体效果选择恢复或观察，保留原权限边界']);
+    ['是否已有副作用、仍在运行或得到后续结果','用户是否希望继续、当前任务是否已完成','按具体效果选择恢复或观察，保留原权限边界']);
   if(group.focus==='recovery'&&repeated)add('repair','D-R2','重复的环境反馈','相同服务或运行环境反馈跨尝试出现，可调查持续的配置或实现因素。',
     ['比较各次触发条件及环境版本','核对已有恢复是否有效','找同环境的成功对照']);
   const evidence=[...new Set(rows.map(r=>r.pattern||r.evidence||'').filter(Boolean))];
