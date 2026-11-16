@@ -11,14 +11,14 @@
 
 export const INCIDENT_FIELDS = Object.freeze([
   Object.freeze({ name: "type", type: "string", means: "incident 种类:retry-loop / error / noop" }),
-  Object.freeze({ name: "severity", type: "number", means: "确定性算出的严重度,不是评分" }),
+  Object.freeze({ name: "severity", type: "number", means: "兼容字段：程序信号排序权重，不代表任务严重度" }),
   Object.freeze({ name: "title", type: "string", means: "给人看的一行标题" }),
   Object.freeze({ name: "detail", type: "string", means: "计数与对象" }),
-  Object.freeze({ name: "cause", type: "string", means: "机械层成因" }),
-  Object.freeze({ name: "runtimeKnew", type: "string", means: "运行期当时知道什么" }),
-  Object.freeze({ name: "modelKnew", type: "string", means: "模型当时收到了什么" }),
-  Object.freeze({ name: "harness", type: "string", means: "harness 有没有针对性反应" }),
-  Object.freeze({ name: "impact", type: "string", means: "这件事的后果" }),
+  Object.freeze({ name: "cause", type: "string", means: "检测依据，不等于根因" }),
+  Object.freeze({ name: "runtimeKnew", type: "string", means: "运行记录支持的观察" }),
+  Object.freeze({ name: "modelKnew", type: "string", means: "有证据的模型可见性，或未判定" }),
+  Object.freeze({ name: "harness", type: "string", means: "已记录的处理或拦截，缺失不表示没有处理" }),
+  Object.freeze({ name: "impact", type: "string", means: "有证据的影响或待核对项，不由检测信号代判任务结果" }),
   Object.freeze({ name: "seqs", type: "number[]", means: "证据:事件 seq(事实形态,不是 chip)" }),
 ]);
 
@@ -38,8 +38,9 @@ export const ROLES = Object.freeze(["source", "consumer", "consumer+source", "wi
  */
 export const PARTICIPANTS = Object.freeze([
   Object.freeze({ file: "plugin/analysis-view/lib/incident-shape.js", role: "source", shape: "wire", via: "declaration" }),
-  Object.freeze({ file: "analyzers/incidents.mjs", role: "source", shape: "wire", via: "incident()" }),
-  Object.freeze({ file: "plugin/analysis-view/lib/index.js", role: "source", shape: "wire", via: "incident()" }),
+  Object.freeze({ file: "plugin/analysis-view/lib/incident-facts.js", role: "source", shape: "wire", via: "incident()" }),
+  Object.freeze({ file: "analyzers/incidents.mjs", role: "consumer", shape: "wire", via: "computeIncidents() delegates to shared observations" }),
+  Object.freeze({ file: "plugin/analysis-view/lib/index.js", role: "consumer", shape: "wire", via: "computeIncidents() delegates to shared observations" }),
   Object.freeze({ file: "plugin/analysis-view/lib/client.js", role: "consumer+source", shape: "wire+chips", via: "toChips() + 自有兜底 producer(literal,受法则盯着)" }),
   Object.freeze({ file: "analyzers/shape-law.mjs", role: "consumer", shape: "wire", via: "read-only(法则本身)" }),
   Object.freeze({ file: "experiments/reports/digest-current-session.facts.json", role: "witness", shape: "wire", via: "read-only(冻结产物,不是一方)" }),

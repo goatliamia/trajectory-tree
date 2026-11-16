@@ -25,6 +25,7 @@
     "lib/cache-efficiency.js",
     "lib/eval-metrics.js",
     "lib/eval-evidence.js",
+    "lib/incident-facts.js",
     "lib/incident-shape.js",
     "lib/trace-build.js",
     "lib/trace-cache.js",

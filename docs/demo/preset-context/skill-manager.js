@@ -60,7 +60,7 @@ export function renderSkills(preset,data,ui,{onMapModel}={}){
   const window=skillWindow(preset,period,new Set(current.map(s=>s.name))),selected=selectSkillEvents(window,ui),counts=new Map();for(const event of selected)counts.set(event.name,(counts.get(event.name)??0)+1);
   const chartFiltered=ui.skillRange||ui.skillKind&&ui.skillKind!=='all';
   const rows=current.filter(s=>(!chartFiltered||counts.has(s.name))&&(!ui.skillActivity||ui.skillActivity==='all'||ui.skillActivity==='read'&&counts.has(s.name)||ui.skillActivity==='unread'&&!counts.has(s.name))&&(!ui.skillChanged||skillModifiedAfterRead(s))&&(!ui.skillUnused||s.usage.unusedCandidate)&&(!search||[s.name,s.description,s.sourceLabel].join(' ').toLowerCase().includes(search))).sort((a,b)=>ui.skillSort==='size'?b.bodyTokens-a.bodyTokens:ui.skillSort==='updated'?b.modifiedAt-a.modifiedAt:ui.skillSort==='last'?(b.usage.lastLoadedAt??0)-(a.usage.lastLoadedAt??0):(counts.get(b.name)??0)-(counts.get(a.name)??0)||a.name.localeCompare(b.name));
-  const pairs=analysis?.pairs??[],repetitions=analysis?.repetitions,repeatCount=repetitions?.checks.filter(row=>row.matches.length).length??0;
+  const pairs=analysis?.pairs??[];
   return `<div class="skills-heading"><div><h2>Skill 管理</h2><p>使用记录、内容大小与维护情况。</p></div><span>${preset.skills.length} 项当前 Skill</span></div><div class="skill-overview-strip"><span><b>${preset.skills.length}</b> 项当前 Skill</span><span>${preset.scopeAllWorkspaces?'正文按来源去重':'正文合计'} <b>≈ ${n(preset.statistics.skillBodies)}</b> tokens</span><span>${preset.statistics.usage.sessions} 个同预设会话</span></div>
   <div class="skill-controls"><select id="skill-origin" aria-label="Skill 来源">${[['all','全部来源'],['official','DSH 官方'],['personal','我的内容'],['plugin','我的插件']].map(([v,label])=>`<option value="${v}" ${v===origin?'selected':''}>${label}</option>`).join('')}</select></div>
   ${current.length?renderSkillLandscape(preset,current,counts,ui,chartPanel(preset,window,{...ui,skillChartWidth:globalThis.document?.getElementById('skill-management-panel')?.clientWidth||820}),data.demoExamples,onMapModel):`<div class="empty-state"><strong>${preset.skills.length?'所选来源没有 Skill':'这个预设未配置 Skill 目录'}</strong></div>`}
@@ -81,7 +81,7 @@ export function globalSkillPreset(data,preset,skill){
 export function renderSkillDetail(preset,skill,ui,documentBody,data){
   const global=globalSkillPreset(data,preset,skill),summary=global.skills.find(s=>s.name===skill.name)??skill;
   const variants=skill.variants??[],bodySkill=variants[ui.skillVariant??0]??skill;
-  const window=skillWindow(global,ui.skillPeriod??7,new Set([skill.name])),pairs=preset.skillManagement.pairs.filter(p=>p.left===skill.name||p.right===skill.name),check=preset.skillManagement.repetitions.checks.find(row=>row.name===skill.name);
+  const window=skillWindow(global,ui.skillPeriod??7,new Set([skill.name]));
   return `<div class="skill-detail-title">${badge(skill)}<h2>${e(skill.name)}</h2><p>${e(bodySkill.description)}</p></div>
   <div class="skill-global-summary"><strong>${summary.usage?.count??0}</strong><span>次读取</span><span class="skill-global-scope">全部预设</span></div>
   ${variants.length>1?`<label class="skill-variant-picker">来源文件<select data-skill-variant="${e(skill.name)}">${variants.map((v,i)=>`<option value="${i}" ${i===(ui.skillVariant??0)?'selected':''}>${e(v.workspaceNames.join('、'))} · ${e(v.path)}</option>`).join('')}</select></label>`:''}

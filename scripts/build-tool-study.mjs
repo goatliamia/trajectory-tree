@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { resolve, dirname, join } from 'node:path';
+import { resolve, join } from 'node:path';
 import { loadSession } from '../analyzers/load-session.mjs';
 import { buildTracePayload } from '../plugin/analysis-view/lib/trace-build.js';
 import { projectOperations } from '../docs/demo/tool-study/model.mjs';

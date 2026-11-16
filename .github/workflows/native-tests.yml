@@ -56,6 +56,9 @@ jobs:
           plugin/analysis-view/current-context-test.mjs
           analyzers/diagnosis-workspace-test.mjs
           analyzers/diagnostic-rules-test.mjs
+          analyzers/incident-observations-test.mjs
+          analyzers/shape-law.mjs
+          test/complexity/code-status-test.mjs
           analyzers/eval-zoom-test.mjs
           analyzers/skill-window-test.mjs
           analyzers/workspace-presets-test.mjs

@@ -3,7 +3,6 @@ import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
-import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { loadSession } from '../analyzers/load-session.mjs';
 import { evidenceCut, readCompositionEvidence, buildInjectionIndex } from '../analyzers/context-evidence.mjs';

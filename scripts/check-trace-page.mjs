@@ -2,7 +2,7 @@
 // This is the offline counterpart of /analysis-view/trace: same payload, same renderer.
 //
 //   node scripts/check-trace-page.mjs [session.jsonl.zstd]
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
 import { loadSession } from '../analyzers/load-session.mjs';

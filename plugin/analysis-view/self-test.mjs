@@ -226,7 +226,7 @@ const digest = {
     runtimeKnew: "错误码已在事件中",
     modelKnew: "收到 tool result",
     harness: "无 guard;需模型自纠",
-    impact: "该部分目标未达成",
+    impact: "错误后的处理与任务结果待核对",
     seqs: [70],
   }],
   cost: {
@@ -341,7 +341,7 @@ check("render: 花费行可点跳对话", nodes.some((node) => node.props && nod
 check("render: 命中/未命中各自带花费,合计进 KPI 行", text.includes("¥0.42") && text.includes("¥0.89") && text.includes("¥0.71") && text.includes("≈ ¥2.02") && !text.includes("价目") && classes.filter((name) => name === "av-cost-cell").length === 5, classes.filter((name) => name === "av-cost-cell"));
 check("render: 工具画成环形图并按 host 类别分组", nodes.some((node) => node.type === "svg") && classes.filter((name) => name === "av-leg").length >= 2 && text.includes("文件") && text.includes("执行"), classes.filter((name) => name === "av-leg"));
 check("render: 工具默认就是三张(类别 / 工具 / 轮次)", classes.filter((name) => name === "av-flow-card").length === 3 && nodes.filter((node) => node.type === "svg").length === 3 && text.includes("按类别") && text.includes("用在哪些轮"), classes.filter((name) => name.startsWith("av-flow")));
-check("render: incident 卡片与因果链", text.includes("调用失败") && text.includes("Runtime 知道") && text.includes("影响"));
+check("render: incident 卡片与因果链", text.includes("调用失败") && text.includes("运行记录") && text.includes("影响"));
 check("render: 证据 chip 与解读入口", classes.filter((name) => name === "av-chip").length === 1 && text.includes("生成解读"));
 check("render: 页脚带日志身份", text.includes("日志 abcdef123456"), text.slice(-160));
 
@@ -350,12 +350,12 @@ const snap = { eventNodes: [{ kind: "tool-result", seq: 12, error: { name: "Bash
 const errorTree = render(Panel, { sessionId: "session-fixture", openView() {}, useTrajectory: () => snap }, { 0: { status: "error", data: null, error: "HTTP 500", at: 0 } });
 const errorText = textOf(errorTree).join(" ");
 check("render: 失败态给提示与重试", errorText.includes("读取会话失败") && errorText.includes("重试"), errorText.slice(0, 160));
-check("render: 失败态仍列投影里的事实", errorText.includes("调用失败") && errorText.includes("来自轨迹投影"), errorText.slice(0, 240));
+check("render: 失败态保留投影事实并等待影响核对", errorText.includes("工具错误结果") && errorText.includes("轨迹投影") && errorText.includes("任务结果待核对") && !errorText.includes("目标未达成"), errorText.slice(0, 240));
 
 /* 空会话:没有事件时不假装有数据 */
 const emptyTree = render(Panel, { sessionId: "session-fixture", openView() {}, useTrajectory: () => null }, { 0: { status: "ready", data: Object.assign({}, digest, { turns: 0, toolCalls: 0, errors: 0, incidentCount: 0, incidents: [], turnStats: [], toolStats: [], eventCount: 0 }), error: null, at: Date.now() } });
 const emptyText = textOf(emptyTree).join(" ");
-check("render: 空会话不画假图表", emptyText.includes("这段会话还没有开始任何 turn") && emptyText.includes("没有发现可归因的 incident"), emptyText.slice(0, 200));
+check("render: 空会话不画假图表", emptyText.includes("这段会话还没有开始任何 turn") && emptyText.includes("当前记录未命中这些信号"), emptyText.slice(0, 200));
 
 // Exercise the locale effect and rerender with the same recorded data.
 let mutationCallback, storageCallback, disconnected = false;

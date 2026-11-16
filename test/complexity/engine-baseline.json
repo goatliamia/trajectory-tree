@@ -1,0 +1,56 @@
+{
+  "engine": "code-relations",
+  "note": "ts-metrics 对 test/complexity/fixtures 的逐单元输出，用来核对本地圈复杂度复算。",
+  "units": [
+    {
+      "file": "test/complexity/fixtures/decisions.mjs",
+      "start": 106,
+      "cyclomatic": 1
+    },
+    {
+      "file": "test/complexity/fixtures/decisions.mjs",
+      "start": 167,
+      "cyclomatic": 3
+    },
+    {
+      "file": "test/complexity/fixtures/decisions.mjs",
+      "start": 293,
+      "cyclomatic": 5
+    },
+    {
+      "file": "test/complexity/fixtures/decisions.mjs",
+      "start": 540,
+      "cyclomatic": 5
+    },
+    {
+      "file": "test/complexity/fixtures/decisions.mjs",
+      "start": 654,
+      "cyclomatic": 6
+    },
+    {
+      "file": "test/complexity/fixtures/decisions.mjs",
+      "start": 805,
+      "cyclomatic": 5
+    },
+    {
+      "file": "test/complexity/fixtures/decisions.mjs",
+      "start": 888,
+      "cyclomatic": 1
+    },
+    {
+      "file": "test/complexity/fixtures/decisions.mjs",
+      "start": 935,
+      "cyclomatic": 2
+    },
+    {
+      "file": "test/complexity/fixtures/decisions.mjs",
+      "start": 976,
+      "cyclomatic": 2
+    },
+    {
+      "file": "test/complexity/fixtures/decisions.mjs",
+      "start": 1032,
+      "cyclomatic": 3
+    }
+  ]
+}

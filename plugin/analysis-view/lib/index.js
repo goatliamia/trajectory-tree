@@ -8,7 +8,8 @@ import { gzip, gunzip } from "node:zlib";
 import { promisify } from "node:util";
 import { summarizeCacheEfficiency } from "./cache-efficiency.js";
 import { priceRequests } from "./trace/models/context-cost-model.mjs";
-import { incident } from "./incident-shape.js";
+import {computeIncidents,deriveHarnessResponse,incidentInterpretationSystem} from './incident-facts.js';
+export {computeIncidents,deriveHarnessResponse} from './incident-facts.js';
 import { TraceCache, traceSource } from "./trace-cache.js";
 import { TraceStages } from "./trace-stages.js";
 import { TraceResources, abortable, abortError } from "./trace-resources.js";
@@ -66,116 +67,6 @@ export function renderTracePage(payload, assets = readTraceAssets()) {
   payload = { ...payload, traceCapabilities: hostCapabilities(payload) };
   const template = payload.traceLoad ? assets.template.replace('<body class="geist-review', '<body class="geist-review trace-pending') : assets.template;
   return renderTraceDocument(payload, assets, { template, boot: assets.boot, extension: assets.extension });
-}
-
-/**
- * Deterministic incident detection over raw session events (mirror of analyzers/incidents.mjs).
- * @param events - SessionEvent[] from ctx.sessionQuery.readSession().
- * @returns structured facts + incidents (each with evidence seqs).
- */
-export function computeIncidents(events) {
-  let turns = 0, currentTurn = 0, toolCalls = 0, errors = 0;
-  const turnTools = new Map();
-  const turnAssistant = new Set();
-  const nameSeq = [];
-  const errFirst = [];
-
-  for (const e of events || []) {
-    if (!e || typeof e.seq !== "number") continue;
-    if (e.type === "turn/start") { turns++; currentTurn++; continue; }
-    if (e.type === "assistant/message" && currentTurn) turnAssistant.add(currentTurn);
-    if (e.type === "tool/call") {
-      toolCalls++;
-      const d = e.data || {};
-      const args = typeof d.arguments === "string" ? d.arguments : JSON.stringify(d.arguments);
-      nameSeq.push({ name: d.name || "(tool)", args, seq: e.seq, turn: currentTurn });
-      turnTools.set(currentTurn, (turnTools.get(currentTurn) || 0) + 1);
-    } else if (e.type === "tool/result") {
-      const d = e.data || {};
-      const content = d.message && d.message.content;
-      const err = d.error || (d.message && d.message.isError) || (Array.isArray(content) && content[0] && content[0].isError);
-      if (err) {
-        errors++;
-        const er = d.error; const kind = er ? (er.name && er.code ? er.name + ":" + er.code : (er.name || er.code || "error")) : "error";
-        if (errFirst.length < 12) errFirst.push({ kind, seq: e.seq, turn: currentTurn });
-      }
-    }
-  }
-
-  let emptyTurns = 0;
-  for (let t = 1; t <= turns; t++) if (!(turnTools.get(t) > 0) && !turnAssistant.has(t)) emptyTurns++;
-
-  const incidents = [];
-
-  // retry-loop v1: same tool + same arguments, consecutive
-  let i = 0;
-  while (i < nameSeq.length) {
-    let j = i;
-    while (j < nameSeq.length && nameSeq[j].name === nameSeq[i].name && nameSeq[j].args === nameSeq[i].args) j++;
-    if (j - i >= 2) {
-      const run = nameSeq.slice(i, j);
-      const hasErr = run.some((x) => errFirst.some((f) => f.seq >= x.seq && f.seq <= x.seq + 3));
-      incidents.push(incident({
-        type: "retry-loop",
-        severity: (j - i) + (hasErr ? 2 : 0),
-        title: "重复调用循环",
-        detail: "连续 " + (j - i) + ' 次对 "' + run[0].name + '" 的重复调用(同参)',
-        cause: run[0].name + " 同签名工具连续重复调用" + (hasErr ? "; 且 seq 区间含失败结果" : ""),
-        runtimeKnew: hasErr ? "上一次调用失败,重复状态已累积" : "重复调用状态已累积",
-        modelKnew: "仅收到各次 tool result,无重复/失败聚合状态",
-        harness: "未检测到主动打断",
-        impact: (j - i) + " 次冗余调用",
-        seqs: run.map((x) => x.seq)
-      }));
-    }
-    i = j;
-  }
-
-  if (errors > 0) {
-    const kinds = {};
-    for (const f of errFirst) kinds[f.kind] = (kinds[f.kind] || 0) + 1;
-    incidents.push(incident({
-      type: "error",
-      severity: errors,
-      title: "调用失败",
-      detail: errors + " 个工具调用返回错误(" + Object.keys(kinds).join(", ") + ")",
-      cause: "工具调用返回了错误结果",
-      runtimeKnew: "错误码/失败状态已在事件中",
-      modelKnew: "收到 tool result(可能已含错误)",
-      harness: deriveHarnessResponse(kinds),
-      impact: "该部分目标未达成",
-      seqs: errFirst.map((f) => f.seq)
-    }));
-  }
-
-  if (emptyTurns > 0) {
-    incidents.push(incident({
-      type: "noop",
-      severity: 1,
-      title: "空转 turn",
-      detail: emptyTurns + " 个 turn 既无工具调用、也无助手产出",
-      cause: "该 turn 未产生任何动作或产出",
-      runtimeKnew: "-",
-      modelKnew: "-",
-      harness: "-",
-      impact: "该 turn 未推进",
-      seqs: []
-    }));
-  }
-
-  incidents.sort((a, b) => b.severity - a.severity);
-  return { turns, toolCalls, errors, emptyTurns, incidentCount: incidents.length, incidents };
-}
-
-/** Derive the harness response from the observed error codes (evidence, not a template). */
-export function deriveHarnessResponse(kinds) {
-  const keys = Object.keys(kinds || {});
-  const guards = keys.filter((k) => /NOT_OBSERVED|BLOCKED|DENIED|GUARD/.test(k));
-  const unknownTool = keys.filter((k) => /UNKNOWN_TOOL/.test(k));
-  if (guards.length > 0 && unknownTool.length === 0) return "guard 已拦截(" + guards.join(", ") + ")";
-  if (guards.length > 0) return "部分 guard 已拦截(" + guards.join(", ") + ");其余需模型自纠";
-  if (unknownTool.length > 0) return "无 guard;需模型自纠";
-  return "未检测到针对性处理";
 }
 
 /**
@@ -608,12 +499,12 @@ export function logIdentity(sessionId, events) {
 
 /** Bounded evidence block handed to the model: facts + incident lines + cost + verbatim excerpts. */
 export function buildEvidence(sessionId, events, facts, log, cost) {
-  const lines = ["session: " + sessionId];
+  const lines = ["session: " + sessionId, "basis: recorded signals only; task impact and disposition require separate evidence"];
   if (log) lines.push("log: " + log.id + " (events=" + log.events + ", seq " + log.minSeq + "–" + log.maxSeq + ")");
   lines.push("facts: turns=" + facts.turns + " toolCalls=" + facts.toolCalls + " errors=" + facts.errors + " emptyTurns=" + facts.emptyTurns);
   if (cost !== undefined) lines.push(costEvidenceLine(cost));
   for (const inc of facts.incidents) {
-    lines.push("- incident[" + inc.type + "] " + inc.detail + " | cause: " + inc.cause + " | harness: " + inc.harness + " | impact: " + inc.impact + " | seqs: " + (inc.seqs || []).join(","));
+    lines.push("- incident[" + inc.type + "] " + inc.detail + " | detection_basis: " + inc.cause + " | recorded_handling: " + inc.harness + " | impact_to_verify: " + inc.impact + " | seqs: " + (inc.seqs || []).join(","));
   }
   const bySeq = new Map();
   for (const e of events || []) if (e && typeof e.seq === "number") bySeq.set(e.seq, e);
@@ -627,13 +518,13 @@ export function buildEvidence(sessionId, events, facts, log, cost) {
 }
 
 /** Ask the configured model to interpret the incidents; every claim must cite (session, seq). */
-async function interpret(ctx, sessionId, events, facts, log, cost) {
+export async function interpret(ctx, sessionId, events, facts, log, cost) {
   const llm = ctx.get("llm");
   if (llm === undefined || typeof llm.stream !== "function") return { error: "llm service unavailable" };
   const defaultModel = ctx.get("agentDefaultModel");
   const selection = defaultModel && typeof defaultModel.currentSelection === "function" ? defaultModel.currentSelection() : void 0;
   if (!selection || !selection.provider || !selection.model) return { error: "no default model selection" };
-  const system = "你是轨迹分析助手。只依据给定的确定性 incident 事实与逐字证据片段作答;每条事实性陈述必须引用 (session, seq@" + (log ? log.id : "log") + "),不得编造 seq。输出中文,四段(发生了什么 / 原因 / Harness 是否响应 / 影响)合计不超过 200 字,写完即停,不要复述证据。";
+  const system = incidentInterpretationSystem(log);
   const messages = [{
     id: "analysis-view-interpret",
     role: "user",

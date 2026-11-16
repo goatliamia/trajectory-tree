@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve } from 'node:path';
 const [key, tool, ...rest] = process.argv.slice(2);
 const config = JSON.parse(readFileSync(resolve('.dsh/diagnostic-experiment-v3/host.json')));
 const fileAt = rest.indexOf('--args-file');

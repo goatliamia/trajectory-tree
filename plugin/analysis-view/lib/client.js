@@ -727,11 +727,11 @@ window.__ModuleLoader__.load({
 
     function Reasons(props) {
       const rows = [
-        ["Cause", props.cause],
-        [cmUi("Runtime 知道", "Runtime knew"), props.runtimeKnew],
-        [cmUi("Model 收到", "Model received"), props.modelKnew],
-        [cmUi("Harness 反应", "Harness response"), props.harness],
-        [cmUi("影响", "Impact"), props.impact],
+        [cmUi("检测依据", "Detection basis"), props.cause],
+        [cmUi("运行记录", "Runtime observation"), props.runtimeKnew],
+        [cmUi("模型可见性", "Model visibility"), props.modelKnew],
+        [cmUi("处理记录", "Handling observation"), props.harness],
+        [cmUi("影响核对", "Impact to verify"), props.impact],
       ];
       return h("div", { className: "av-why" }, rows.map(([key, value], position) => h("div", { key: String(position) }, [
         h("span", { key: "k", className: "av-why-key" }, key),
@@ -746,9 +746,9 @@ window.__ModuleLoader__.load({
         return h("div", { className: "av-section" }, [
           h("div", { key: "h", className: "av-section-head" }, [
             h("h3", { key: "t", className: "av-section-title" }, "Incident"),
-            h("span", { key: "n", className: "av-hint" }, cmUi("检查过:同参重复调用、调用失败、空转 turn", "Checked: repeated calls with identical arguments, failed calls, idle turns")),
+            h("span", { key: "n", className: "av-hint" }, cmUi("检查过:连续同参调用、工具错误结果、轮次缺少调用或消息记录", "Checked: repeated argument records, tool error results, and turns without calls or messages")),
           ]),
-          h("div", { key: "e", className: "av-empty" }, cmUi("没有发现可归因的 incident", "No attributable incidents found")),
+          h("div", { key: "e", className: "av-empty" }, cmUi("当前记录未命中这些信号", "These signals were not observed in the current records")),
         ]);
       }
       const shown = incidents.slice(0, 20);
@@ -758,7 +758,7 @@ window.__ModuleLoader__.load({
           h("span", { key: "bar", className: "av-bar" + (tone ? " " + tone : "") }),
           h("div", { key: "h", className: "av-incident-head" }, [
             h("span", { key: "t", className: "av-incident-title" }, incident.title),
-            h("span", { key: "b", className: "av-badge" }, cmUi("严重度 ", "Severity ") + incident.severity),
+            h("span", { key: "b", className: "av-badge", title: cmUi("仅用于信号排序，实际影响需核对", "Used only to sort signals; verify actual impact") }, cmUi("信号权重 ", "Signal weight ") + incident.severity),
           ]),
           h("div", { key: "d", className: "av-detail" }, incident.detail),
           h(Reasons, { key: "why", cause: incident.cause, runtimeKnew: incident.runtimeKnew, modelKnew: incident.modelKnew, harness: incident.harness, impact: incident.impact }),
@@ -783,7 +783,7 @@ window.__ModuleLoader__.load({
       return h("div", { className: "av-section" }, [
         h("div", { key: "h", className: "av-section-head" }, [
           h("h3", { key: "t", className: "av-section-title" }, "Incident"),
-          h("span", { key: "n", className: "av-hint" }, incidents.length + cmUi(" 条 · 按严重度排序 · seq 可点", " records · sorted by severity · click seq to open")),
+          h("span", { key: "n", className: "av-hint" }, incidents.length + cmUi(" 条线索 · 按信号权重排序 · seq 可点", " signals · sorted by signal weight · click seq to open")),
         ]),
         h("div", { key: "c", className: "av-incident-list" }, cards),
         incidents.length > shown.length ? h("div", { key: "more", className: "av-hint", style: { marginTop: 6 } }, cmUi("还有 ", " plus ") + (incidents.length - shown.length) + cmUi(" 条", " records")) : null,
@@ -1034,13 +1034,13 @@ window.__ModuleLoader__.load({
         ? [{
           type: "error",
           severity: localErrors.length,
-          title: cmUi("调用失败", "Call failed"),
-          detail: localErrors.length + cmUi(" 个工具调用返回错误(host 分析不可用,计数来自轨迹投影)", " tool calls returned errors (host analysis unavailable; count from trace projection)"),
-          cause: cmUi("工具调用返回了错误结果", "The tool call returned an error result"),
-          runtimeKnew: cmUi("错误码/失败状态已在事件中", "Error code / failure status is in the event"),
-          modelKnew: cmUi("收到 tool result(可能已含错误)", "Received tool result (may include an error)"),
-          harness: cmUi("未检测到针对性处理(需 host 判定)", "No targeted handling detected (requires host determination)"),
-          impact: cmUi("该部分目标未达成", "This part of the goal was not achieved"),
+          title: cmUi("工具错误结果", "Tool error result"),
+          detail: localErrors.length + cmUi(" 条投影工具结果带错误标记(host 分析不可用)", " projected tool results have error markers (host analysis unavailable)"),
+          cause: cmUi("投影结果含错误标记", "Projected result contains an error marker"),
+          runtimeKnew: cmUi("轨迹投影保留了这些记录", "The trace projection retains these records"),
+          modelKnew: cmUi("模型可见范围未由这些事件确认", "These events do not establish model visibility"),
+          harness: cmUi("已有处理需继续核对", "Existing handling needs further verification"),
+          impact: cmUi("错误后的处理与任务结果待核对", "Handling after the error and task outcome need verification"),
           seqs: localErrors,
         }]
         : [];

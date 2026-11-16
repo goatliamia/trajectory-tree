@@ -40,8 +40,8 @@ const noop = [ev('turn/start', 0, { turn: 1 }), ev('turn/start', 1, { turn: 2 })
 check('空 turn 定义', computeIncidents(noop).emptyTurns === 1, computeIncidents(noop));
 
 // 5) harness response derived from error codes (evidence, not template)
-check('harness: guard 拦截', deriveHarnessResponse({ 'FsError:FS_NOT_OBSERVED': 4 }) === 'guard 已拦截(FsError:FS_NOT_OBSERVED)', deriveHarnessResponse({ 'FsError:FS_NOT_OBSERVED': 4 }));
-check('harness: 无 guard 需自纠', deriveHarnessResponse({ 'ToolNotFoundError:UNKNOWN_TOOL': 2 }) === '无 guard;需模型自纠', deriveHarnessResponse({ 'ToolNotFoundError:UNKNOWN_TOOL': 2 }));
+check('harness: 只陈述记录中的拦截标记', deriveHarnessResponse({ 'FsError:FS_NOT_OBSERVED': 4 }) === '结果含拦截标记(FsError:FS_NOT_OBSERVED)；后续处理待核对', deriveHarnessResponse({ 'FsError:FS_NOT_OBSERVED': 4 }));
+check('harness: 未知工具不推出没有 guard', deriveHarnessResponse({ 'ToolNotFoundError:UNKNOWN_TOOL': 2 }) === '结果含未知工具标记；后续处理待核对', deriveHarnessResponse({ 'ToolNotFoundError:UNKNOWN_TOOL': 2 }));
 
 // 6) work path: per-turn calls/errors/usage + per-tool aggregation
 const work = computeWorkPath([

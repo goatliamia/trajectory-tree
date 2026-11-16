@@ -226,6 +226,24 @@ export function lawClaim(participants, detected) {
   return errors;
 }
 
+/** V2 preserves V1 detection counts and recorded evidence, not V1 impact claims.
+ * Frozen V1 bytes stay untouched. Direct V2 semantic tests cover the new policy.
+ */
+export function lawObservationPreservation(cases,compute,frozen,label){
+  const errors=[];
+  for(const [name,events] of Object.entries(cases)){
+    if(typeof frozen[name]!=='string'){errors.push(label+'/'+name+': missing frozen input response');continue;}
+    const before=JSON.parse(frozen[name]),after=compute(events);
+    for(const key of ['turns','toolCalls','errors','emptyTurns','incidentCount'])if(before[key]!==after[key])errors.push(label+'/'+name+': changed '+key);
+    const available=[...after.incidents];
+    for(const old of before.incidents){
+      const at=available.findIndex(current=>current.type===old.type&&(old.seqs??[]).every(seq=>current.seqs.includes(seq)));
+      if(at<0)errors.push(label+'/'+name+': lost '+old.type+' evidence');else available.splice(at,1);
+    }
+  }
+  return errors;
+}
+
 /** 差分:与冻结基准逐字节相同(键顺序也在字节里)。 */
 export function lawDifferential(cases, compute, frozen, label) {
   const errors = [];
@@ -395,10 +413,10 @@ function main() {
       offlineFrozen[name] = outputs.offline;
       hostFrozen[name] = outputs.host;
     }
-    note(true, 'lawDifferential: 合成流 ' + Object.keys(STREAMS).length + ' 条 × 2 个实现(与冻结基准逐字节)', []);
-    const synOffline = lawDifferential(STREAMS, (e) => offlineIncidents.run(e), offlineFrozen, 'offline');
-    const synHost = lawDifferential(STREAMS, (e) => computeIncidents(e), hostFrozen, 'host');
-    note(synOffline.length === 0 && synHost.length === 0, 'lawDifferential: 合成流逐字节相同', [...synOffline, ...synHost]);
+    note(true, 'lawDifferential: 合成流 ' + Object.keys(STREAMS).length + ' 条 × 2 个实现(V1 冻结输入，V2 观察口径)', []);
+    const synOffline = lawObservationPreservation(STREAMS, (e) => offlineIncidents.run(e), offlineFrozen, 'offline');
+    const synHost = lawObservationPreservation(STREAMS, (e) => computeIncidents(e), hostFrozen, 'host');
+    note(synOffline.length === 0 && synHost.length === 0, 'lawDifferential: 合成流保留检测计数与原始证据', [...synOffline, ...synHost]);
 
     const realFixture = existsSync(FIXTURE_REAL) ? JSON.parse(readFileSync(FIXTURE_REAL, 'utf8')) : null;
     const realOffline = {};
@@ -412,11 +430,11 @@ function main() {
     const realCount = Object.keys(realStreams).length;
     if (realCount > 0) {
       const realErrors = [
-        ...lawDifferential(realStreams, (e) => offlineIncidents.run(e), realOffline, 'real/offline'),
-        ...lawDifferential(realStreams, (e) => computeIncidents(e), realHost, 'real/host'),
+        ...lawObservationPreservation(realStreams, (e) => offlineIncidents.run(e), realOffline, 'real/offline'),
+        ...lawObservationPreservation(realStreams, (e) => computeIncidents(e), realHost, 'real/host'),
       ];
       const incidentsTotal = Object.values(realOffline).reduce((sum, text) => sum + JSON.parse(text).incidents.length, 0);
-      note(realErrors.length === 0, 'lawDifferential: 本地真实会话缩减流 ' + realCount + ' 条(共 ' + incidentsTotal + ' 条 incident)逐字节相同', realErrors);
+      note(realErrors.length === 0, 'lawDifferential: 本地真实会话缩减流 ' + realCount + ' 条(共 ' + incidentsTotal + ' 条 incident)保留检测计数与原始证据', realErrors);
     } else {
       console.log('SKIP 差分:本地没有 ' + relative(REPO, FIXTURE_REAL).split('\\').join('/') + '(用 --freeze --real 冻结一份;它不进仓库)');
     }
@@ -509,10 +527,10 @@ function mutateCases() {
       run: () => lawConstructor(INCIDENT_FIELDS, (fields) => incident({ ...sampleFor(INCIDENT_FIELDS), ...fields })),
     },
     {
-      name: 'noop 分支把 seqs 从空数组改成字符串',
+      name: 'noop 分支把 seqs 数组改成字符串',
       run: () => lawDifferential({ s: STREAMS.noop }, (events) => {
         const facts = offlineIncidents.run(events);
-        facts.incidents = facts.incidents.map((item) => ({ ...item, seqs: item.seqs.length > 0 ? item.seqs : '' }));
+        facts.incidents = facts.incidents.map((item) => item.type==='noop'?{...item,seqs:String(item.seqs)}:item);
         return facts;
       }, { s: JSON.stringify(offlineIncidents.run(STREAMS.noop)) }, 'mutant'),
     },
@@ -525,7 +543,9 @@ function mutateCases() {
       }, { s: JSON.stringify(offlineIncidents.run(STREAMS['retry-loop'])) }, 'mutant'),
     },
     { name: '认领表里漏掉客户端那个参与者', run: () => lawClaim(PARTICIPANTS.filter((entry) => !entry.file.endsWith('client.js')), detectCarriers(REPO)) },
-    { name: '客户端字面量改了键名', run: () => lawDrift(clientEntry, () => clientSource.replace('modelKnew:', 'modelKnewX:'), INCIDENT_KEYS) },
+    { name: '客户端字面量改了键名', run: () => lawDrift(clientEntry, () => clientSource.replace('modelKnew: cmUi(', 'modelKnewX: cmUi('), INCIDENT_KEYS) },
+    { name: 'V2 迁移丢失原错误计数', run: () => lawObservationPreservation({s:STREAMS.mixed}, events=>({...offlineIncidents.run(events),errors:0}),{s:JSON.stringify(offlineIncidents.run(STREAMS.mixed))},'mutant') },
+    { name: 'V2 迁移丢失原证据序号', run: () => lawObservationPreservation({s:STREAMS.mixed}, events=>{const facts=offlineIncidents.run(events);facts.incidents=facts.incidents.map(item=>({...item,seqs:[]}));return facts;},{s:JSON.stringify(offlineIncidents.run(STREAMS.mixed))},'mutant') },
     { name: '把一个 incident 的 harness 文案写空(值变了但形状没变,只有差分能抓)', run: () => lawDifferential({ s: STREAMS['mixed'] }, (events) => {
       const facts = offlineIncidents.run(events);
       facts.incidents = facts.incidents.map((item) => ({ ...item, harness: '' }));
