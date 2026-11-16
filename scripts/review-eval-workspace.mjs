@@ -14,6 +14,7 @@ import {restoreOverviewModels} from '../plugin/analysis-view/lib/eval/overview/p
 import {commandCrOptions} from '../analyzers/cr-pwsh.mjs';
 const arg=(name,fallback)=>{const at=process.argv.indexOf(name);return at<0?fallback:process.argv[at+1];};
 const root=resolve(arg('--out','.dsh/release-review/native')),home=resolve(arg('--home',join(homedir(),'.dsh')));
+const benchmarkPage=arg('--map-benchmark',null),profileUi=process.argv.includes('--profile-ui');
 const history=JSON.parse(readFileSync(resolve(arg('--history','.dsh/preset-context-demo/data.json')),'utf8'));
 const rows=new Map(history.sessions.filter(s=>existsSync(s.file)).map(s=>[s.id,s]));
 const workspaces=new Map();
@@ -64,8 +65,14 @@ if(process.argv.includes('--benchmark-config')){
     const url=new URL(req.url,'http://localhost');
     if(url.searchParams.get('reviewToken')===secret){res.writeHead(302,{'set-cookie':`trajectory-review=${secret}; Path=/; HttpOnly; SameSite=Strict`,'location':'/analysis-view/overview'}).end();return;}
     if(!req.headers.cookie?.split('; ').includes('trajectory-review='+secret)){res.writeHead(401).end();return;}
+    if(profileUi){const start=performance.now();res.once('finish',()=>{if(url.pathname.endsWith('/data.json')||url.pathname.endsWith('/overview'))console.log(JSON.stringify({request:url.pathname,milliseconds:Math.round(performance.now()-start),revision:service.workspace.progress.revision}));});}
     try{
-      if(url.pathname==='/analysis-view/overview'){res.writeHead(200,{'content-type':'text/html; charset=utf-8'}).end(service.workspace.page());return;}
+      if(url.pathname==='/review/map-benchmark'&&benchmarkPage){res.writeHead(200,{'content-type':'text/html; charset=utf-8'}).end(readFileSync(resolve(benchmarkPage)));return;}
+      if(url.pathname==='/analysis-view/overview'){
+        let html=service.workspace.page();
+        if(profileUi)html=html.replace('<head>',`<head><script>addEventListener('DOMContentLoaded',()=>{let first=false;const note=document.createElement('output');note.id='review-performance';note.style.cssText='display:block;padding:8px;font:11px monospace;color:#777';document.querySelector('main').append(note);const check=()=>{if(first||!document.querySelector('#overview-panel .zoom-map-canvas,#skill-management-panel .zoom-map-canvas'))return;first=true;requestAnimationFrame(()=>requestAnimationFrame(()=>{const requests=performance.getEntriesByType('resource').filter(r=>new URL(r.name).pathname.endsWith('/data.json'));note.textContent='首屏内容 '+Math.round(performance.now())+' ms · data 请求 '+requests.length+' 次 · '+requests.map(r=>Math.round(r.duration)+' ms').join(' / ');}));};const observer=new MutationObserver(check);observer.observe(document.querySelector('main'),{childList:true,subtree:true});check();});</script>`);
+        res.writeHead(200,{'content-type':'text/html; charset=utf-8'}).end(html);return;
+      }
       // Review server never changes the user's capability configuration.
       if(url.pathname.includes('/api/management/')&&req.method!=='GET'){res.writeHead(403).end();return;}
       if(url.pathname.startsWith(WORKSPACE_PATH+'/')){await service.workspace.handle(req,res,url,{signal:service.workspace.controller.signal,origin:'http://'+req.headers.host});return;}

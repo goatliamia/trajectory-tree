@@ -47,7 +47,7 @@
     },
     {
       "path": "lib/dsh-current-preset.mjs",
-      "sha256": "aeb2a57cb40352c3e4cf8315421810dbe0929f0fd87def39587fe4cc7dd3b1e9"
+      "sha256": "bb6af0ddaf9e34e24748ee26d175433ce098cc50a2994ae82ed7e8481e573848"
     },
     {
       "path": "lib/dsh-skill-catalog.mjs",
@@ -87,7 +87,7 @@
     },
     {
       "path": "scripts/preset-source-inventory.mjs",
-      "sha256": "a9c18ed5d955ce6623447ca025f8254c8a88eb5447b10e9ebc84a1105001c28b"
+      "sha256": "54d46d13c832fe442b2d0d1ba7ce3ca00e75582c4e828fffbb7b560736e49057"
     },
     {
       "path": "scripts/read-dsh-bundles.mjs",

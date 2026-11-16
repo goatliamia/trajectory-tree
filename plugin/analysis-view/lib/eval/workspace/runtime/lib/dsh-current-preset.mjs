@@ -3,6 +3,7 @@ import { join, resolve, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+import {serialize} from 'node:v8';
 import { scanContributions } from '../scripts/preset-source-inventory.mjs';
 import { configuredEnablement, configuredPresets, flattenConfiguredRows, configuredContribution } from '../analyzers/preset-current.mjs';
 import { contentHash } from '../analyzers/preset-context.mjs';
@@ -10,6 +11,24 @@ import { summarizeCurrentPreset } from '../analyzers/preset-statistics.mjs';
 import { readDshBundles, sourceForModule } from '../scripts/read-dsh-bundles.mjs';
 import { buildSkillManagement } from '../analyzers/preset-skill-management.mjs';
 import { readConfiguredSkills } from './dsh-skill-catalog.mjs';
+
+// Source registrations depend on source bytes, configuration and module identity.
+// Keep their bounded, plain-data results across configuration checks, never ASTs.
+const contributionMemo=new Map();let contributionMemoBytes=0;
+function contributionRows(text,module,parse,config){
+  let key;try{key=contentHash(Buffer.concat([Buffer.from(text),serialize([module.file,module.package,module.version,config])]));}catch{}
+  const cached=key&&contributionMemo.get(key);
+  if(cached){contributionMemo.delete(key);contributionMemo.set(key,cached);return structuredClone(cached.rows);}
+  const rows=scanContributions(text,module,parse,{config}).rows;
+  if(key){
+    const bytes=Buffer.byteLength(JSON.stringify(rows));
+    if(bytes<=4*1024*1024){
+      contributionMemo.set(key,{bytes,rows:structuredClone(rows)});contributionMemoBytes+=bytes;
+      while(contributionMemo.size>128||contributionMemoBytes>4*1024*1024){const [old,value]=contributionMemo.entries().next().value;contributionMemo.delete(old);contributionMemoBytes-=value.bytes;}
+    }
+  }
+  return rows;
+}
 
 export async function collectCurrentPreset({cwd=process.cwd(),history=null,...options}={}) {
   return (await createPresetCollector(options))(cwd,history);
@@ -51,7 +70,7 @@ function resolveModule(specifier){
 function registrations(row){
   const module=resolveModule(row.name);if(!module)return [];
   const key=module.file+':'+contentHash(row.config??{});
-  if(!registryCache.has(key)){const text=readFileSync(module.file,'utf8');registryCache.set(key,scanContributions(text,module,parse,{config:row.config??{}}));}
+  if(!registryCache.has(key)){const text=readFileSync(module.file,'utf8');registryCache.set(key,{rows:contributionRows(text,module,parse,row.config??{})});}
   return registryCache.get(key).rows.filter(item=>configuredContribution(item,row)).map(item=>({...item,entry:row.id,scope:row.scope,status:row.status,provenance:sourceForModule(row.name,bundleInventory,row.presetEntryId)}));
 }
 const estimate=text=>meter.estimateContent([{type:'text',text}]);
@@ -63,7 +82,14 @@ for(const declaration of declarations.sort((a,b)=>(a.config.order??0)-(b.config.
   const config=declaration.config,ownRows=flattenConfiguredRows(config.plugins??[],'preset',env).filter(row=>row.status!=='disabled').map(row=>({...row,presetEntryId:declaration.id})),rows=[...hostRows,...ownRows];
   const ownPackages=new Set(ownRows.map(row=>row.name));
   const effective=rows.filter(row=>row.scope==='preset'||!ownPackages.has(row.name));
-  const collected=effective.flatMap(registrations),persona=ownRows.find(row=>row.name==='@deepseek-ai/dsh-persona')?.config??{};
+  const collected=[];
+  for(const row of effective){
+    // Background verification must let the native Web server flush cached pages
+    // and answer other requests between individual installed-source scans.
+    await new Promise(resolve=>setImmediate(resolve));
+    collected.push(...registrations(row));
+  }
+  const persona=ownRows.find(row=>row.name==='@deepseek-ai/dsh-persona')?.config??{};
   const toolMap=new Map();
   for(const item of collected.filter(row=>row.kind==='tool')){
     const prior=toolMap.get(item.name);if(prior?.scope==='preset'&&item.scope==='host')continue;

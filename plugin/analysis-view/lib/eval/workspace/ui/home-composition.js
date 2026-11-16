@@ -1,4 +1,5 @@
 import {tileLayout} from './treemap.js';
+import {createZoomTreemap,zoomMapOverlay,zoomMapIndex} from './zoom-treemap.js';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const compact=value=>value==null?'—':value>=1000?(value/1000).toFixed(1)+'k':Math.round(value).toLocaleString('zh-CN');
@@ -59,28 +60,47 @@ function focusContent(item,total){
 }
 export function composition(p,scope=null){
   const allGroups=compositionGroups(p),groups=scope?allGroups.filter(g=>g.id===scope):allGroups,total=allGroups.reduce((n,g)=>n+g.tokens,0),shown=groups.reduce((n,g)=>n+g.tokens,0),leaves=groups.flatMap(g=>g.leaves),largest=[...leaves].sort((a,b)=>b.tokens-a.tokens)[0];
-  const width=1000,height=420,layout=compositionLayout(groups,width,height),small=leaves.filter(l=>l.tokens/total<.01).length;
   return `<section class="home-composition"><header class="home-section-heading"><div><h2>静态内容分布</h2><p class="home-map-description">每块是一项工具、指令或提示 · 面积表示 tokens${p.configurationScope==='global'?' · 预设全局':''}</p></div><span>${leaves.length} 项已计量 · ≈ ${compact(shown)} tokens</span></header>
-    <div class="home-map-legend" role="group" aria-label="放大来源分区">${scope?'<button data-action="composition-origin" data-origin=""><strong>全部来源</strong><span>↶</span></button>':''}${allGroups.map(g=>`<button data-action="composition-origin" data-origin="${g.id}" aria-pressed="${scope===g.id}" title="${scope===g.id?'恢复全部来源':'放大'+g.name}" style="--group:var(--origin-${g.id},var(--tt-muted))"><i></i><strong>${g.name}</strong><span>${percent(g.tokens,total)}</span></button>`).join('')}<small>点击来源放大</small></div>
-    ${largest?`<div class="home-map-layout"><div class="home-map-plot" role="group" aria-label="按具体内容及来源分区的矩形树图">${layout.map(g=>`<div class="home-map-origin" style="left:${g.x/width*100}%;top:${g.y/height*100}%;width:${g.w/width*100}%;height:${g.h/height*100}%;--group:var(--origin-${g.id},var(--tt-muted))" aria-label="${g.name}">${g.cells.map(c=>`<button class="home-composition-tile" ${itemAction(c)} data-composition-key="${c.key}" data-composition-item="${escape(JSON.stringify(c))}" style="left:${c.x/g.w*100}%;top:${c.y/g.h*100}%;width:${c.w/g.w*100}%;height:${c.h/g.h*100}%" aria-label="${escape(c.name)}，${escape(c.type)}，${compact(c.tokens)} tokens，${g.name}" title="${escape(c.name)} · ${compact(c.tokens)} tokens"><span class="home-tile-content"><small class="home-tile-type">${escape(c.type)}</small><strong class="home-tile-name">${escape(c.name)}</strong><span class="home-tile-amount">${compact(c.tokens)}<small> tokens</small></span></span></button>`).join('')}</div>`).join('')}</div><aside class="home-map-focus" style="--group:var(--origin-${largest.origin},var(--tt-muted))" data-composition-total="${total}" data-default-item="${escape(JSON.stringify(largest))}">${focusContent(largest,total)}</aside></div><p class="home-map-hint">${small?'小块也保留独立来源，指向或聚焦可查看名称与体积。':'指向或聚焦查看内容，点击打开详情。'}</p>`:'<p class="home-map-empty">当前没有可计量的静态内容。</p>'}
+    <div class="home-map-legend" role="group" aria-label="放大来源分区">${scope?'<button data-action="composition-origin" data-origin=""><strong>全部来源</strong><span>↶</span></button>':''}${allGroups.map(g=>`<button data-action="composition-origin" data-origin="${g.id}" aria-pressed="${scope===g.id}" title="聚焦${g.name}" style="--group:var(--origin-${g.id},var(--tt-muted))"><i></i><strong>${g.name}</strong><span>${percent(g.tokens,total)}</span></button>`).join('')}<small>点击来源聚焦</small></div>
+    ${largest?`<div class="home-map-layout"><div class="home-map-plot zoom-treemap" role="group" aria-label="按具体内容及来源分区的矩形树图"><canvas class="zoom-map-canvas" tabindex="0" aria-label="上下文分布，滚轮缩放，拖动平移，双击进入 / 返回，回车查看当前内容"></canvas>${zoomMapOverlay()}${zoomMapIndex(leaves,c=>`${itemAction(c)} data-composition-key="${c.key}" aria-label="${escape(c.name)}，${escape(c.type)}，${compact(c.tokens)} tokens，${c.originName}"`,'home-composition-tile')}</div><aside class="home-map-focus" style="--group:var(--origin-${largest.origin},var(--tt-muted))" data-composition-total="${total}" data-default-item="${escape(JSON.stringify(largest))}">${focusContent(largest,total)}</aside></div><p class="home-map-hint">单击查看详情 · 双击进入 / 返回 · 滚轮缩放 · 拖动平移 · Escape 回全图</p>`:'<p class="home-map-empty">当前没有可计量的静态内容。</p>'}
     <div class="home-composition-pending">${groups.flatMap(g=>g.categories.filter(c=>c.pending||c.tokens===0).map(c=>`<button data-action="category" data-kind="${c.id}" data-origin="${g.id}"><i style="background:var(--origin-${g.id},var(--tt-muted))"></i>${g.short} · ${c.label}<span>${c.pending?c.pending+' 项待组装':'0 tokens'}</span><b aria-hidden="true">↗</b></button>`)).join('')}</div></section>`;
 }
-
-export function installCompositionHover(root,getPreset){
-  root.addEventListener('click',event=>{
-    const button=event.target.closest('[data-action="composition-origin"]');if(!button)return;
-    const origin=button.dataset.origin,scope=button.getAttribute('aria-pressed')==='true'?null:origin||null;
-    button.closest('.home-composition').outerHTML=composition(getPreset(),scope);
-    if(document.body.dataset.input==='keyboard')([...root.querySelectorAll('[data-action="composition-origin"]')].find(b=>b.dataset.origin===origin)??root.querySelector('[data-action="composition-origin"]'))?.focus({preventScroll:true});
-  });
-  function show(target){
-    const section=target?.closest('.home-composition'),panel=section?.querySelector('.home-map-focus');if(!panel)return;
-    const tile=target.closest('[data-composition-item]'),item=JSON.parse(tile?.dataset.compositionItem??panel.dataset.defaultItem);
-    if(panel.dataset.currentKey===item.key)return;
+export function compositionBody(preset,item){
+  const parent=preset[item.kind]?.[item.index],row=item.kind==='skills'?(parent?.variants?.[item.variantIndex]??parent):parent;
+  if(!row)return '';
+  if(item.kind==='skills')return [row.name,row.description,row.whenToUse].filter(Boolean).join('\n');
+  if(item.kind==='tools')return JSON.stringify({name:row.name,description:row.description,parameters:row.staticParameters},null,2);
+  return row.body??row.staticText??row.fragments?.join('\n\n')??'';
+}
+export function compositionModel(preset){
+  const groups=compositionGroups(preset);
+  return {layout(width=1000,height=420){return {width,height,groups:compositionLayout(groups,width,height).map(group=>({...group,cells:group.cells.map(item=>({...item,id:item.key,
+    fill:`color-mix(in srgb,var(--origin-${item.origin},var(--tt-muted)) 23%,var(--tt-surface))`,stroke:`var(--origin-${item.origin},var(--tt-muted))`,
+    secondary:compact(item.tokens)+' tokens · '+item.type,searchText:[item.name,item.type,item.context,item.originName,item.path].join(' ')}))}))};}};
+}
+export function installCompositionHover(root,getPreset,{open,onFrame}={}){
+  let view=null,section=null,presetId=null,selection=null,activeOrigin=null;const saved=new Map();
+  function unmount(){if(view){saved.set(presetId,{...view.getState(),origin:activeOrigin});view.destroy();view=null;}section=null;}
+  function show(item){
+    const panel=section?.querySelector('.home-map-focus');if(!panel||!item||panel.dataset.currentKey===item.key)return;
     panel.dataset.currentKey=item.key;panel.style.setProperty('--group',`var(--origin-${item.origin},var(--tt-muted))`);panel.innerHTML=focusContent(item,Number(panel.dataset.compositionTotal));
-    section.querySelectorAll('[data-composition-key]').forEach(node=>node.classList.toggle('is-linked',node.dataset.compositionKey===item.key));
   }
-  for(const event of ['pointerover','focusin'])root.addEventListener(event,event=>{if(event.target.closest('[data-composition-item]'))show(event.target);});
-  root.addEventListener('pointerout',event=>{if(!event.target.closest('.home-map-plot'))return;const next=event.relatedTarget instanceof Element?event.relatedTarget:null;if(next?.closest('.home-map-layout')===event.target.closest('.home-map-layout'))return;show(event.target.closest('.home-composition'));});
-  root.addEventListener('focusout',event=>{if(!event.target.closest('[data-composition-item]'))return;const next=event.relatedTarget instanceof Element?event.relatedTarget:null;if(!next?.closest('.home-map-layout'))show(event.target.closest('.home-composition'));});
+  function legend(origin){activeOrigin=origin;section?.querySelectorAll('[data-action="composition-origin"]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.origin===origin)));}
+  root.addEventListener('click',event=>{
+    const button=event.target.closest('[data-action="composition-origin"]');if(!button||!view)return;
+    const origin=button.dataset.origin;
+    if(!origin||button.getAttribute('aria-pressed')==='true'){view.fitAll();legend(null);}else{
+      const item=compositionGroups(getPreset()).find(group=>group.id===origin)?.leaves.slice().sort((a,b)=>b.tokens-a.tokens)[0];
+      if(item){selection=item;view.select(item.key);show(item);}view.focusGroup(origin);legend(origin);
+    }
+  });
+  return {unmount,mount(){
+    unmount();section=root.querySelector('.home-composition');const host=section?.querySelector('.zoom-treemap');if(!host)return;
+    const preset=getPreset(),model=compositionModel(preset),items=compositionGroups(preset).flatMap(g=>g.leaves);presetId=preset.id;
+    selection=items.find(item=>item.key===saved.get(presetId)?.selection)??[...items].sort((a,b)=>b.tokens-a.tokens)[0];
+    view=createZoomTreemap(host,{model,selected:selection?.key,viewState:saved.get(presetId),getBody:item=>compositionBody(preset,item),
+      onSelect:item=>{selection=item;show(item);view.select(item.id);},onHover:item=>show(item??selection),onOpen:item=>open?.(item),onView:info=>{if(info.zoom<=1.01)legend(null);},onFrame});
+    legend(saved.get(presetId)?.signature===view.getState().signature?saved.get(presetId).origin:null);
+    if(selection){view.select(selection.key);show(selection);}
+  }};
 }

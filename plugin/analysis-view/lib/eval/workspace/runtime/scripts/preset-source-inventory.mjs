@@ -4,12 +4,14 @@ import { createRequire } from 'node:module';
 import { staticReader, STATIC_UNKNOWN } from '../analyzers/static-declaration.mjs';
 
 function visit(node, fn, parent = null) {
-  if (!node || typeof node !== 'object') return;
-  if (node.type) fn(node, parent);
-  for (const [key, value] of Object.entries(node)) {
-    if (key === 'loc' || key === 'start' || key === 'end') continue;
-    if (Array.isArray(value)) value.forEach(child => visit(child, fn, node));
-    else if (value && typeof value === 'object') visit(value, fn, node);
+  if (!node || typeof node.type !== 'string') return;
+  fn(node, parent);
+  // Acorn child nodes carry a type. Skip metadata without allocating an entries
+  // array for every node on each of the source analysis passes.
+  for (const key in node) {
+    const value=node[key];
+    if (Array.isArray(value)) { for(const child of value)if(child&&typeof child.type==='string')visit(child,fn,node); }
+    else if (value&&typeof value==='object'&&typeof value.type==='string') visit(value,fn,node);
   }
 }
 const property = (object, key) => object?.type === 'ObjectExpression' ? object.properties.find(p => p.type === 'Property' && (p.key.name ?? p.key.value) === key)?.value : undefined;
@@ -19,10 +21,12 @@ function literalStrings(node) { const values=[]; visit(node, n => { const value=
 // Read source syntax only. Do not activate plugins or evaluate their providers.
 export function scanContributions(code, metadata, parse, options = {}) {
   let ast; try { ast = parse(code, { ecmaVersion:'latest', sourceType:'module', locations:true }); } catch { return { rows: [], parsed:false }; }
-  const constants = new Map();
-  visit(ast,node=>{if(node.type==='VariableDeclarator'&&node.id.type==='Identifier') {if(constants.has(node.id.name))constants.set(node.id.name,null);else constants.set(node.id.name,node.init);}});
+  const constants = new Map(),parents=new WeakMap();
+  visit(ast,(node,parent)=>{
+    if(parent)parents.set(node,parent);
+    if(node.type==='VariableDeclarator'&&node.id.type==='Identifier') {if(constants.has(node.id.name))constants.set(node.id.name,null);else constants.set(node.id.name,node.init);}
+  });
   const resolve = node => node?.type === 'Identifier' ? constants.get(node.name) : node;
-  const parents=new WeakMap();visit(ast,(node,parent)=>{if(parent)parents.set(node,parent);});
   const readStatic=staticReader(ast,parents,visit,options);
   const modelFacing=node=>{for(let i=0;i<5&&node;i++,node=parents.get(node)){
     if(node.type==='ObjectExpression'&&['user','system','developer'].includes(string(property(node,'role'))))return true;

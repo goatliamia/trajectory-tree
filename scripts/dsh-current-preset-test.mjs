@@ -40,4 +40,10 @@ test('all-workspace history uses cwd-free configuration and native global Skill 
   assert.ok(scoped.skills.some(row=>row.name==='project-only'));
   assert.deepEqual(common.tools.map(row=>row.name),scoped.tools.map(row=>row.name));
   assert.equal(common.statistics.instructions.files,1);assert.ok(common.statistics.total<scoped.statistics.total);
+  common.tools[0].staticParameters.changedByConsumer=true;
+  const repeated=await collectCurrentWorkspaces({...options,workspaces});
+  assert.equal(repeated.presets[0].tools[0].staticParameters.changedByConsumer,undefined,'memoized declarations cannot be mutated through a returned snapshot');
+  await writeFile(join(bundle,'index.js'),"throw Error('configuration collection must not activate plugins');\nexport function apply(ctx){ctx.tools.register({name:'scope_tool',description:'Updated fixture text.',parameters:{}});}");
+  const updated=await collectCurrentWorkspaces({...options,workspaces});
+  assert.equal(updated.presets[0].tools[0].description,'Updated fixture text.','changed source bytes invalidate the registration memo');
 });
