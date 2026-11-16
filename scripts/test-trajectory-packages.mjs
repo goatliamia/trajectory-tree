@@ -151,6 +151,10 @@ try{
  assert.equal(JSON.parse(readFileSync(join(dshView,'locale/zh.json'),'utf8')).meta.title,'轨迹树');
  assert.equal(JSON.parse(readFileSync(join(dshView,'locale/en.json'),'utf8')).meta.title,'Trajectory Tree');
  assert.match(readFileSync(join(dshView,'lib/trace/fonts/LICENSE.txt'),'utf8'), /SIL OPEN FONT LICENSE Version 1\.1/);
+ const {buildDigest}=await import(pathToFileURL(join(dshView,'lib/index.js')).href);
+ const packagedFacts=buildDigest('package-observations',[{type:'turn/start',seq:0},{type:'tool/call',seq:1,data:{name:'read',callId:'c',arguments:'{}'}},{type:'tool/result',seq:2,data:{callId:'c',error:{code:'FAIL'}}}]);
+ assert.equal(packagedFacts.errors,1);
+ assert.equal(packagedFacts.incidents[0].impact,'错误后的处理与任务结果待核对','the archive loads the shared observation policy without a task-failure verdict');
  for(const asset of ['panel.js','panel.css','model.js','categories.mjs','zoom-treemap.js','treemap.js','ui-locale.js','i18n.mjs'])assert.ok(existsSync(join(dshView,'lib/current-context',asset)),asset+' is present in the sidebar package');
  assert.match(readFileSync(join(dshView,'lib/current-context/panel.css'),'utf8'),/font-weight:100 900/);
  for(const asset of ['ui-locale.js','i18n.mjs'])assert.ok(existsSync(join(dshView,'lib/eval/workspace/ui',asset)));

@@ -20,6 +20,7 @@ Trajectory Tree 把 DSH、Pi、Codex 和 Claude Code 的会话记录组织成执
 | 注入来源研究 | 核对插件绑定入口、条件触发、实际消息与归属边界；包含 rc3 真实插件的隔离探针 | [机制与验证](injection-provenance-research.md) · [可复现探针](../scripts/probe-injection-hooks.mjs) |
 | 加载项管理 | 右侧抽屉汇总 Skill 使用情况，按预设独立停用与恢复；工具、插件明确作用范围与缓存影响 | [交互与原生路径](capability-management.md) · [可撤回覆盖](capability-management.md#可撤回覆盖与原生清理) · [策略组件](../plugin/analysis-view/lib/skill-policy.js) |
 | 报告 | 从 Eval 同切点指标组织结论、交叉分布、证据流程图与构成图，装配为独立 HTML | [Eval 数据与组件](../report/AUTHORING.md#使用-eval-指标) · [流程图](../report/flow.mjs) · [编写流程](report-authoring-workflow.md) · [渲染入口](../scripts/trajectory-report.mjs) |
+| 代码状态 | 当前模块、依赖、复杂度与本轮代码复核 | [代码状态](code-status.md) · [扫描与处理](code-scan-review.md) · [生成脚本](../scripts/code-status.mjs) |
 | 测试与分发 | 检查关系、记录覆盖、浏览器交互及真实归档包入口 | [关系与回归](relation-ci.md) · [验收语料](../experiments/README.md#任务验收-eval) · [包验收](../scripts/test-trajectory-packages.mjs) |
 
 [代码语义地图](code-map.md)记录入口、数据流和 CR 观察到的源码依赖。维护目标见[路线图](ROADMAP.md)，早期草案与实验结果见[历史归档](archive/README.md)。
@@ -33,5 +34,6 @@ Trajectory Tree 把 DSH、Pi、Codex 和 Claude Code 的会话记录组织成执
 | `plugin/analysis-view/lib/eval/workspace/` | [Eval 同步脚本](../scripts/sync-eval-workspace.mjs)从页面源码及采集/分析模块生成安装资源 |
 | `plugin/analysis-view/lib/current-context/` | [共享资源脚本](../scripts/sync-view-assets.mjs)从 `view/current-context/` 与共用缩放、语言资源生成 |
 | 各宿主的诊断 skill | [Skill 同步脚本](../scripts/sync-host-skills.mjs)从 `skill/` 分发正文、资源和宿主元数据 |
+| `docs/code-status.md` | [状态脚本](../scripts/code-status.mjs)按来源哈希与静态依赖闭包显式生成 |
 | `dist/trajectory-tree-*` | [宿主打包脚本](../scripts/package-trajectory.mjs)按入口依赖和资源清单生成 |
 | `.dsh/` 与 `report/out/` | 本地数据、检查和导出产物 |

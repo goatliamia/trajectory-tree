@@ -17,9 +17,12 @@ inventory=json.loads(Path(args.inventory).read_text(encoding='utf-8'))
 files={row['path']:row for row in inventory}
 settings=json.loads(Path(args.project).read_text(encoding='utf-8'))['compilerOptions']
 compiler=Path(args.typescript).resolve();engine=implementation_digest()
+collector=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+compiler_identity={'version':None,'sha256':hashlib.sha256(compiler.read_bytes()).hexdigest()}
 started=time.perf_counter()
 print('CR: resolving the complete static module inventory',file=sys.stderr,flush=True)
 modules=module_responses(root,project=Path(args.project),compiler=compiler)
+compiler_identity.update(modules['compiler'])
 (out/'modules.json').write_text(json.dumps(modules,ensure_ascii=False),encoding='utf-8')
 edges={file:set() for file in files}
 for row in modules['requests']:
@@ -49,7 +52,7 @@ while remaining:
 goals=['ts_file_value_dependencies','ts_unread_bindings','ts_unread_imports','ts_unread_initializer_calls','ts_unread_rest_exclusions']
 results=[]
 for index,(context,owners) in enumerate(batches,1):
-    key=hashlib.sha256(json.dumps({'files':[(f,files[f]['sha256']) for f in context],'owners':owners,'settings':settings,'engine':engine,'compiler':modules['compiler'],'goals':goals},sort_keys=True).encode()).hexdigest()
+    key=hashlib.sha256(json.dumps({'files':[(f,files[f]['sha256']) for f in context],'owners':owners,'settings':settings,'engine':engine,'collector':collector,'compiler':compiler_identity,'goals':goals},sort_keys=True).encode()).hexdigest()
     saved=out/('batch-'+key+'.json')
     if saved.exists() and not args.refresh:
         results.append(json.loads(saved.read_text(encoding='utf-8')))

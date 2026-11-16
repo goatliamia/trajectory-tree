@@ -198,3 +198,17 @@ D-K1 / D-K3 的显示不等待长期规则已经写好，也不要求先证明�
 - [共用反馈识别](../plugin/trajectory-tools/lib/tool-attribution.js)、[观察投影与分组](../plugin/analysis-view/lib/eval/findings.mjs)、[pwsh 静态补证](../plugin/analysis-view/lib/eval/pwsh-evidence.mjs)。
 - [当前上下文与能力保持](static-context-profile.md)、[来源与注入机制](injection-provenance-research.md)、[过程与验收研究](runtime-analysis-research.md)。
 - [诊断方法入口](diagnostics.md)、[专项方法索引](diagnostic-prompts.md)、[Demo 当前接入状态](demo/preset-context/README.md)。
+
+## 12. 旧摘要接口的观察边界
+
+`digest / interpret` 与离线 incidents 分析共用 `incident-facts.js`。保留兼容字段名，但 `cause` 表示检测依据，`modelKnew` 表示有证据的模型可见性或未判定，`harness` 表示处理记录，`impact` 表示已证实影响或待核对项。
+
+| 检测到的记录 | 可以陈述 | 需要继续核对 |
+| --- | --- | --- |
+| 连续同工具、同参数文本 | 调用次数、工具、调用 seq | 是否必要轮询，是否产生额外开销 |
+| 工具结果带错误标记 | 错误结果和明确关联的调用 | 后续处理、替代路径、实际任务结果 |
+| 本次范围内无工具调用或助手消息 | 轮次计数、起点 seq、记录缺失事实 | 仍在运行、中止、采集边界与实际推进 |
+
+不能由这些信号直接写出冗余调用、目标未达成或未推进。错误标记也不能证明 Harness 没有处理或模型已接收结果。`severity` 是兼容的排序权重，不表示任务影响。解读允许无需进一步处置；客户端读取失败时的投影兜底遵守同一边界。
+
+迁移保留 V1 冻结产物，核对检测计数、类型与原证据；对新口径另有必要轮询、换路径完成、中止/未闭合轮次及相邻无关错误的反例回归。见[本轮代码复核](code-scan-review.md)。

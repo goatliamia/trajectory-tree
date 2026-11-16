@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { summarizeCacheEfficiency } from "./cache-efficiency.js";
 import { priceRequests } from "./trace/models/context-cost-model.mjs";
 import {computeIncidents,deriveHarnessResponse,incidentInterpretationSystem} from './incident-facts.js';
-export {computeIncidents,deriveHarnessResponse} from './incident-facts.js';
+export {computeIncidents,deriveHarnessResponse};
 import { TraceCache, traceSource } from "./trace-cache.js";
 import { TraceStages } from "./trace-stages.js";
 import { TraceResources, abortable, abortError } from "./trace-resources.js";

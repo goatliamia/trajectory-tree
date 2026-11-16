@@ -209,7 +209,7 @@ node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl
 
 ## 文档
 
-- [功能索引](docs/INDEX.md) · [代码语义地图](docs/code-map.md) · [历史归档](docs/archive/README.md)
+- [功能索引](docs/INDEX.md) · [代码语义地图](docs/code-map.md) · [代码状态](docs/code-status.md) · [历史归档](docs/archive/README.md)
 - [宿主接入与命令](docs/host-entrypoints.md)
 - [工具配置、查询与正文续读](plugin/portable-tools/README.md)
 - [分析方法](skill/trace-analysis/SKILL.md) · [上下文与配置剖面](skill/context-profile/SKILL.md)
