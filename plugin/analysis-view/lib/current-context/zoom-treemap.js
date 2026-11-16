@@ -260,7 +260,7 @@ export function createZoomTreemap(host,{model,selected,onSelect=()=>{},onOpen=()
   themeObserver.observe(document.documentElement,{attributes:true,attributeFilter:['data-dsh-theme','style','class']});
   themeObserver.observe(document.body,{attributes:true,attributeFilter:['data-layout','style','class']});
   listen(reducedMotion,'change',requestDraw);
-  const fontsReady=()=>{if(!destroyed){bodyCache.clear();requestDraw();}};
+  const fontsReady=()=>{if(!destroyed){paletteDirty=true;bodyCache.clear();requestDraw();}};
   listen(document.fonts,'loadingdone',fontsReady);document.fonts.ready.then(fontsReady);resize();
   return {
     select(id){selection=id;canvas.setAttribute('aria-label',__ttUi('矩形分布图，已选 ')+(byId.get(id)?.name||__ttUi('内容'))+__ttUi('。单击查看详情，双击进入或返回，滚轮缩放，拖动平移；回车查看详情，Escape 查看全图，斜杠查找。'));requestDraw();},
