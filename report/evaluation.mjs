@@ -5,8 +5,12 @@ import { errorsForTurn } from '../plugin/analysis-view/lib/eval/overview/shared.
 import { evalCallInterval } from '../plugin/analysis-view/lib/eval/data.mjs';
 import { callDurationMs } from '../plugin/trajectory-tools/lib/tool-intervals.js';
 import { failureCategories, failureCategoryIndex, failureCondition, failureLabels, summarizeFailureAttributions } from '../plugin/trajectory-tools/lib/tool-attribution.js';
+import { projectFindingCalls, summarizeFindings } from '../plugin/analysis-view/lib/eval/findings.mjs';
+import { diagnosticLayer } from '../plugin/analysis-view/lib/eval/diagnostic-rules.mjs';
+import { codeExecutionData } from '../plugin/analysis-view/lib/eval/code-data.mjs';
+import { toolControls } from '../lib/tool-control.mjs';
 
-export const EVALUATION_TABLES = ['summary', 'turns', 'tools', 'calls', 'errors', 'error-types', 'requests', 'models', 'window-bands'];
+export const EVALUATION_TABLES = ['summary', 'turns', 'tools', 'calls', 'errors', 'error-types', 'findings', 'code-execution', 'requests', 'models', 'window-bands'];
 export const EVALUATION_VERSION = 2;
 const valid = value => Number.isFinite(value) && value >= 0;
 const median = values => {
@@ -48,6 +52,12 @@ const columns = {
   outputRecords: ['输出样本', 'count', 'observed'],
   modelMs: ['模型处理', 'ms', 'observed'], modelSamples: ['模型计时样本', 'count', 'observed'],
   ttftMs: ['首字等待', 'ms', 'observed'], decodeMs: ['生成耗时', 'ms', 'observed'],
+  layer: ['发生层', 'text', 'derived'], controlState: ['控制状态', 'text', 'observed'],
+  priorReadSeq: ['更早读取序号', 'identifier', 'observed'], focus: ['关注分类', 'text', 'derived'],
+  rule: ['规则标识', 'text', 'derived'], repair: ['修复实现线索', 'count', 'derived'],
+  recover: ['恢复观察线索', 'count', 'derived'], capability: ['补齐能力线索', 'count', 'derived'],
+  knowledge: ['保留方法线索', 'count', 'derived'], executor: ['执行器', 'text', 'observed'],
+  phase: ['失败阶段', 'text', 'derived'], exitCode: ['退出码', 'count', 'observed'],
 };
 const outcomeFields = ['calls', 'returned', 'errors', 'unknown', 'known', 'errorRate', 'outcomeCoverage'];
 const timingFields = ['durationSumMs', 'durationP50Ms', 'durationP95Ms', 'timingPairedCalls', 'timingMissingCalls', 'timingCoverage', 'longCalls', 'longDurationMs', 'longDurationShare'];
@@ -122,13 +132,49 @@ export function evaluationReportTables(session, dashboard, overview, models, sou
     for (const call of calls.filter(call => call.status === 'error')) {
       const result = indexed.get(call.resultSeq ?? call.seq);
       const code = failureCondition(call.attribution, call.error?.code);
+      const controls = toolControls(call);
       errors.push({ id: 'error:' + call.seq, turn: turn.number, name: call.nativeName || call.name,
         seq: call.seq, resultSeq: call.resultSeq, code, causeCode: call.attribution?.code ?? code, category: failureCategories[failureCategoryIndex(code)][0],
         cause: call.attribution?.label ?? failureLabels[code]?.[0] ?? code,
+        layer: diagnosticLayer(call.attribution), controlState: controls[0]?.state ?? null,
         certainty: call.attribution?.certainty ?? 'unknown', matched: Number(result?.returned != null),
         recoveryMs: result?.recovery ?? null, evidence: evidence([call.seq, call.resultSeq, result?.returned]) });
     }
   }
+  const findingEntries = projectFindingCalls(session, { host: source.host }).map(row => ({ ...row, source: { host: source.host, session: source.session, cut: readCut } }));
+  const findingSummary = summarizeFindings(findingEntries);
+  const findingRows = findingSummary.groups.map((group, index) => ({
+    id: 'finding:' + index,
+    name: group.kind === 'wait' ? (group.tool || '工具') + ' · ≥30s' : (group.label || group.code || group.tool || '未细分反馈'),
+    code: group.code,
+    tool: group.tool || null,
+    layer: group.layer ?? null,
+    focus: group.focus ?? null,
+    certainty: group.certainty ?? 'unknown',
+    errors: group.count,
+    turns: group.turns,
+    matched: group.paired,
+    repair: Number(group.directions.includes('repair')),
+    recover: Number(group.directions.includes('recover')),
+    capability: Number(group.directions.includes('capability')),
+    knowledge: Number(group.directions.includes('knowledge')),
+    rule: group.signals?.[0]?.rule ?? null,
+    evidence: evidence(group.entries.flatMap(entry => [entry.seq, entry.result, entry.returned, entry.priorRead?.seq])),
+  }));
+  const executionRows = codeExecutionData(session, { host: source.host }).rows.map(row => ({
+    id: 'exec:' + row.seq,
+    turn: row.turn,
+    step: row.step,
+    name: row.name,
+    executor: row.executor,
+    phase: row.phase,
+    code: row.code,
+    seq: row.seq,
+    resultSeq: row.resultSeq,
+    exitCode: row.attribution?.exitCode ?? row.syntax?.exitCode ?? null,
+    matched: Number(row.returned != null),
+    evidence: evidence([row.root?.seq, row.seq, row.resultSeq, row.returned]),
+  }));
   const errorTypes = new Map();
   for (const error of errors) {
     const key = error.causeCode + '/' + error.certainty;
@@ -202,8 +248,10 @@ export function evaluationReportTables(session, dashboard, overview, models, sou
     turns: table('turns', rounds, ['name', 'turn', ...scopeFields]),
     calls: table('calls', callRows, ['turn', 'step', 'name', 'seq', 'resultSeq', 'status', 'start', 'end', 'durationMs', 'nativeDurationMs']),
     tools: table('tools', tools, ['name', ...outcomeFields, ...timingFields, ...attributionFields, 'matched', 'matchedShare']),
-    errors: table('errors', errors, ['turn', 'name', 'seq', 'resultSeq', 'code', 'causeCode', 'category', 'cause', 'certainty', 'matched', 'recoveryMs']),
+    errors: table('errors', errors, ['turn', 'name', 'seq', 'resultSeq', 'code', 'causeCode', 'category', 'cause', 'layer', 'controlState', 'certainty', 'matched', 'recoveryMs']),
     'error-types': table('error-types', [...errorTypes.values()], ['name', 'code', 'category', 'certainty', 'errors', 'matched']),
+    findings: table('findings', findingRows, ['name', 'code', 'layer', 'focus', 'certainty', 'errors', 'turns', 'matched', 'repair', 'recover', 'capability', 'knowledge', 'rule']),
+    'code-execution': table('code-execution', executionRows, ['turn', 'step', 'name', 'executor', 'phase', 'code', 'seq', 'resultSeq', 'exitCode', 'matched']),
     requests: table('requests', requests, ['turn', 'step', 'seq', 'nativeLine', 'model', 'inputTokens', 'outputTokens', 'windowTokens', 'occupancy', 'ttftMs', 'modelMs', 'calls', 'known', 'errors', 'errorRate']),
     models: table('models', modelRows, ['name', ...requestFields]),
     'window-bands': table('window-bands', bands, ['name', ...requestFields]),

@@ -43,7 +43,7 @@ const elements=new Map(),checkbox={},captionLabel={childNodes:[{nodeType:3,textC
 elements.set('graph-caption',{querySelector:()=>({parentElement:captionLabel})});elements.set('canvas',{dataset:{}});
 let created=0,refreshes=0;
 const context=vm.createContext({ui:text=>ui(text,'en'),$:id=>elements.get(id),geistArrangeCaption(){},studySyncSources(){},studyBindStock(){},
-  studyMeaning:{delta:'Context delta',total:'Total trend'},studyShowTotal:false,view:'overview',document:{createElement(){created++;return {style:{},querySelector:()=>checkbox};}},
+  reviewContextRequests:[{}],studyMeaning:{delta:'Context delta',total:'Total trend'},studyShowTotal:false,view:'overview',document:{createElement(){created++;return {style:{},querySelector:()=>checkbox};}},
   studyRefresh(){refreshes++;},reviewReturnOverview(){context.view='overview';}});
 vm.runInContext(shared.slice(arrangeStart,arrangeEnd),context);
 context.geistArrangeCaption();context.geistArrangeCaption();

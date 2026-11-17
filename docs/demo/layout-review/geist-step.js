@@ -23,7 +23,13 @@
       return direction > 0 ? (insight.following ? ui('下一步 · ') + insight.following.text : ui('下一步')) : ui('上一步');
     };
     const arrow = '<svg class="geist-arrow" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M5.5 10.5 10.5 5.5M6.5 5.5h4v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    const disclosure = geistRecordDisclosure;
+    const rawReply = step.reply?.text || '';
+    const canExpandReply = rawReply.length > (insight.reply || '').length;
+    const replyId = 'geist-reply-' + t.number + '-' + step.number;
+    const expandReplyLabel = globalThis.__trajectoryLocale === 'en' ? 'Expand original' : '展开原文';
+    const reply = rawReply || insight.reply ? '<section class="geist-step-response"><div class="geist-reply-heading"><span>' + ui('回复') + '</span>' +
+      (canExpandReply ? '<button type="button" class="geist-text-action geist-reply-toggle" aria-expanded="false" aria-controls="' + replyId + '">' + geistRecordChevron + '<span>' + expandReplyLabel + '</span></button>' : '') +
+      '</div><div class="geist-step-reply" id="' + replyId + '">' + esc(insight.reply || rawReply) + '</div></section>' : '';
     const operation = fact => {
       const call = step.calls.find(c => c.seq === fact.seq);
       if (!call) return '';
@@ -40,9 +46,7 @@
       '<p class="geist-step-context"><span>' + esc(insight.input.label) + '</span><span class="geist-step-context-text" title="' + esc(insight.input.text) + '">' + esc(insight.input.text) + '</span></p>' +
       '<div class="geist-operations">' +
         insight.calls.map(operation).join('') +
-        (insight.reply ? '<p class="geist-step-reply">' + esc(insight.reply) + '</p>' : '') +
-        (step.reply && step.reply.text && step.reply.text.length > (insight.reply || '').length
-          ? disclosure(ui('回复原文'), '<pre class="geist-result-text">' + esc(step.reply.text) + '</pre>') : '') +
+        reply +
         (!insight.calls.length && !insight.reply ? ui('<p class="review-quiet">没有记录到本步的文字回复或工具操作。</p>') : '') +
       '</div>' +
       (insight.links.length ? '<p class="geist-step-next"><span>' + ui('后续记录') + '</span>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + arrow + '</button>').join('') + '</p>' : '');
@@ -50,13 +54,23 @@
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
     // 展开时给原文稳定的阅读高度,内容在面板内滚动,不跟随长输出无限增高。
     const panelDetails = () => [...panel.querySelectorAll('details.geist-tool-record, details.geist-result')];
+    const replyToggle = panel.querySelector('.geist-reply-toggle');
+    if (replyToggle) replyToggle.onclick = () => {
+      const expanded = replyToggle.getAttribute('aria-expanded') !== 'true';
+      if (expanded) panel.style.height = panel.getBoundingClientRect().height + 'px';
+      replyToggle.setAttribute('aria-expanded', String(expanded));
+      replyToggle.querySelector('span:last-child').textContent = expanded ? ui('收起') : expandReplyLabel;
+      panel.querySelector('.geist-step-response').classList.toggle('is-expanded', expanded);
+      $(replyId).textContent = expanded ? rawReply : insight.reply || rawReply;
+      if (!expanded && !panelDetails().some(row => row.open)) panel.style.height = '';
+    };
     panelDetails().forEach(details => {
       details.querySelector('summary').addEventListener('click', () => {
         if (details.open) return;
         panel.style.height = Math.max(panel.getBoundingClientRect().height, Math.min(window.innerHeight * .44, 360)) + 'px';
       });
       details.addEventListener('toggle', () => {
-        if (!details.open && !panelDetails().some(row => row.open)) panel.style.height = '';
+        if (!details.open && replyToggle?.getAttribute('aria-expanded') !== 'true' && !panelDetails().some(row => row.open)) panel.style.height = '';
       });
     });
     panel.querySelectorAll('[data-inspector-nav]').forEach(el => el.onclick = () => {

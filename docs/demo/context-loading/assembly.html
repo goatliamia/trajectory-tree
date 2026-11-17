@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+  <title>Eval · 请求结构</title>
+  <link rel="stylesheet" href="assembly.css"><script src="data.js" defer></script><script src="assembly.js" defer></script>
+</head>
+<body>
+  <header class="app-header"><div class="wordmark"><span class="brand-mark">TT</span><strong>Trajectory Tree</strong><span class="header-divider">/</span><span>Eval</span></div><div class="header-actions"><span class="demo-label">结构演示</span><button id="theme" type="button" aria-label="切换为深色">深色</button></div></header>
+  <main>
+    <header class="page-heading"><div><p class="kicker">CONTEXT / ASSEMBLY</p><h1>请求结构</h1></div><div class="preset-meta"><span class="mono">STANDARD</span><span>工作区范围</span><span class="sample-mark">示例数据</span></div></header>
+    <section class="assembly" aria-label="上下文装填研究">
+      <header class="assembly-header"><div><span class="mono">REQUEST 001</span><span id="request-state">首次装填</span></div><p><span id="item-count" class="mono">15</span> 项内容<span class="meta-divider">/</span><span id="layer-count" class="mono">6</span> 个内容层</p><div class="total-readout"><strong id="total" class="mono">6,680</strong><span>tokens</span></div></header>
+      <div class="drawing-workspace" id="drawing-workspace">
+        <aside class="source-panel" aria-label="内容来源">
+          <header class="panel-label"><h2>内容来源</h2><span class="mono">03</span></header><div id="source-list" class="source-list"></div>
+          <div class="later-loading"><header class="panel-label"><h2>后续装填</h2><span>演示</span></header><label class="load-option"><input id="load-body" type="checkbox"><span><strong>读取 Skill 正文</strong><small>trace-analysis <b class="mono">+2,840</b></small></span></label><label class="load-option"><input id="load-instruction" type="checkbox"><span><strong>发现目录指令</strong><small>src/AGENTS.md <b class="mono">+420</b></small></span></label><p class="pending-note"><i></i>未触发的内容保持未计量</p></div>
+        </aside>
+        <div class="drawing-content">
+          <section class="request-section" aria-labelledby="map-heading"><header class="section-heading"><h2 id="map-heading">本次请求</h2><span>长度按 tokens</span><span class="drawing-number mono">FIG. A</span></header><div class="map-scroll" role="region" aria-label="按 tokens 绘制的请求内容，窄屏可横向滑动"><div class="map-inner"><div class="ruler" id="ruler" aria-hidden="true"></div><div id="segment-refs" class="segment-refs"></div><div class="request-map" id="request-map" role="group" aria-label="请求中的内容片段"></div><div id="cut-marker" class="cut-marker"><i></i><span class="mono">6,680</span></div></div></div><div class="map-caption"><span><i class="solid-key"></i>已装填</span><span><i class="hatch-key"></i>待装填</span><span class="scale-note">显示范围 0–10k tokens</span></div><div id="layer-key" class="layer-key" aria-label="内容层"></div></section>
+          <section class="detail-section" aria-labelledby="detail-heading"><header class="section-heading"><span id="detail-index" class="detail-index mono">02</span><h2 id="detail-heading">能力接口</h2><span id="detail-count">5 项</span><span class="drawing-number">局部放大 · 独立比例</span></header><div class="detail-scroll" role="region" aria-label="选中内容层的内部构成"><div id="detail-pieces" class="detail-pieces"></div></div><div id="item-detail" class="item-detail" aria-live="polite"></div></section>
+        </div>
+        <svg id="source-wire" class="source-wire" aria-hidden="true" hidden><path fill="none"/><circle r="2.5"/></svg>
+      </div>
+      <div class="transport"><button id="play" class="play-button" type="button"><span class="play-icon" aria-hidden="true">▶</span><span id="play-label">回放装填</span></button><div class="step-controls"><button id="previous" type="button" aria-label="上一个装填阶段">←</button><button id="next" type="button" aria-label="下一个装填阶段">→</button></div><label for="stage" class="sr-only">装填阶段</label><input id="stage" type="range" min="0" max="6" value="6" step="1"><span id="step-count" class="mono">06 / 06</span><span id="stage-label" aria-live="polite">用户输入已加入</span></div>
+    </section>
+    <footer><p><span class="mono">NOTE</span> 装填顺序与计量为设计示例。显示范围不代表模型窗口；Skill 目录与正文分别计量。</p><a href="flow.html">流程图草案 ↗</a></footer>
+  </main>
+</body>
+</html>

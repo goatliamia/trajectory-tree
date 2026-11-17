@@ -1,8 +1,8 @@
 # Digest: session-e0636aa9-e8d7-4879-9309-7b5ff232037d
 
-- 生成:2026-09-08T15:30:59.338Z;文件:C:\Users\14100\.dsh\sessions\--D-projects-sql~0020event--\session-e0636aa9-e8d7-4879-9309-7b5ff232037d\session.jsonl.zstd
+- 生成:2026-09-08T15:30:59.338Z;文件:C:\Users\example\.dsh\sessions\--workspace-repo--\session-e0636aa9-e8d7-4879-9309-7b5ff232037d\session.jsonl.zstd
 - 事件(可解析落盘):6955;seq 0–468389
-- 复跑:`node analyzers/run-digest.mjs "C:\Users\14100\.dsh\sessions\--D-projects-sql~0020event--\session-e0636aa9-e8d7-4879-9309-7b5ff232037d\session.jsonl.zstd"`
+- 复跑:`node analyzers/run-digest.mjs "C:\Users\example\.dsh\sessions\--workspace-repo--\session-e0636aa9-e8d7-4879-9309-7b5ff232037d\session.jsonl.zstd"`
 - 局限:jsonl 打包/截断会漏事件;live 会话最准走 ctx.sessionQuery(分析器同源可复用)。
 
 | analyzer v | facts |

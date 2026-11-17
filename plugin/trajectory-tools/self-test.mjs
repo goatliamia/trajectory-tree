@@ -109,7 +109,7 @@ const EVENTS = [
   // 超长事件:查询词只在第 800 字符之后
   { seq: 14, type: "user/message", time: 1014, data: { content: [{ type: "text", text: "x".repeat(800) + " needle-at-the-end " + "y".repeat(200) }] } },
   // issue #1:日志里是转义过的双反斜杠路径,模型习惯用单反斜杠查
-  { seq: 15, type: "user/message", time: 1015, data: { content: [{ type: "text", text: "open C:\\\\Users\\\\14100\\\\.dsh\\\\settings.yaml now" }] } },
+  { seq: 15, type: "user/message", time: 1015, data: { content: [{ type: "text", text: "open C:\\\\Users\\\\example\\\\.dsh\\\\settings.yaml now" }] } },
 ];
 
 const CURRENT_EVENTS = [
@@ -400,7 +400,7 @@ check("eventText: tool/result carries error name+code", eventText(EVENTS[4]).inc
 eq("fold: case + whitespace insensitive", fold("Retry\n   Now"), "retry now");
 
 // issue #1:归一化(转义反斜杠 + 中英文引号)
-eq("norm: folds a backslash run", norm("C:\\\\Users\\\\14100"), "c:\\users\\14100");
+eq("norm: folds a backslash run", norm("C:\\\\Users\\\\example"), "c:\\users\\example");
 eq("norm: unifies smart quotes", norm("\u201Cx\u201D \u2018y\u2019"), '"x" \'y\'');
 eq("norm: keeps ordinary text", norm("Retry\n   Now"), "retry now");
 
@@ -417,9 +417,9 @@ const longNeedle = "q".repeat(500);
 const longNeedleClip = clipAround("head " + longNeedle + " tail", longNeedle, 400);
 check("clipAround: a needle longer than the budget is never truncated", longNeedleClip.text.includes(longNeedle), "len=" + longNeedleClip.text.length);
 // issue #1:原文是双反斜杠、查询是单反斜杠,片段必须命中且仍是原文
-const escapedClip = clipAround("path is C:\\\\Users\\\\14100\\\\.dsh", "C:\\Users\\14100", 400, true);
-check("clipAround: normalized match finds the escaped path verbatim", escapedClip.matchAt >= 0 && escapedClip.text.includes("C:\\\\Users\\\\14100"), JSON.stringify(escapedClip));
-eq("clipAround: normalization can be disabled", clipAround("path is C:\\\\Users\\\\14100", "C:\\Users\\14100", 400, false).matchAt, -1);
+const escapedClip = clipAround("path is C:\\\\Users\\\\example\\\\.dsh", "C:\\Users\\example", 400, true);
+check("clipAround: normalized match finds the escaped path verbatim", escapedClip.matchAt >= 0 && escapedClip.text.includes("C:\\\\Users\\\\example"), JSON.stringify(escapedClip));
+eq("clipAround: normalization can be disabled", clipAround("path is C:\\\\Users\\\\example", "C:\\Users\\example", 400, false).matchAt, -1);
 
 // issue #2:关系链有界渲染
 const bounded = boundSeqs([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
@@ -482,11 +482,11 @@ check("events: 长事件片段含命中词", longHit.items[0].text.includes("nee
 check("events: matchAt 指向命中词", longHit.items[0].text.slice(longHit.items[0].matchAt, longHit.items[0].matchAt + 17) === "needle-at-the-end");
 
 // issue #1:转义路径 + normalize 开关
-const escaped = await search({ view: "events", session: LIVE_ID, query: "C:\\Users\\14100\\.dsh" });
+const escaped = await search({ view: "events", session: LIVE_ID, query: "C:\\Users\\example\\.dsh" });
 eq("events: 单反斜杠查到转义路径", escaped.items.map((item) => item.seq), [15]);
 check("events: 默认归一化不再回显 true", escaped.normalized === undefined, escaped.normalized);
-check("events: 转义命中仍是原文", escaped.items[0].text.includes("C:\\\\Users\\\\14100"), escaped.items[0].text.slice(0, 60));
-eq("events: normalize=false 回到严格匹配", (await search({ view: "events", session: LIVE_ID, query: "C:\\Users\\14100\\.dsh", filter: { normalize: false } })).hitCount, 0);
+check("events: 转义命中仍是原文", escaped.items[0].text.includes("C:\\\\Users\\\\example"), escaped.items[0].text.slice(0, 60));
+eq("events: normalize=false 回到严格匹配", (await search({ view: "events", session: LIVE_ID, query: "C:\\Users\\example\\.dsh", filter: { normalize: false } })).hitCount, 0);
 
 // 注入样板 + 自回显
 const facade = await search({ view: "events", session: LIVE_ID, query: "facade" });

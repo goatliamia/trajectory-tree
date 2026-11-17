@@ -11,6 +11,8 @@ const root=fileURLToPath(new URL('../',import.meta.url)),work=mkdtempSync(join(t
 const release=dir?resolve(dir):join(root,'.dsh/releases');
 const version=JSON.parse(readFileSync(join(root,'plugin/codex/plugin.json'),'utf8')).version;
 const markdownFiles=path=>readdirSync(path,{withFileTypes:true}).flatMap(e=>e.isDirectory()?markdownFiles(join(path,e.name)):e.name.endsWith('.md')?[join(path,e.name)]:[]);
+const textFiles=path=>readdirSync(path,{withFileTypes:true}).flatMap(e=>e.name==='node_modules'?[]:e.isDirectory()?textFiles(join(path,e.name)):/\.(?:m?js|json|md|css|html|yml|yaml|txt)$/i.test(e.name)?[join(path,e.name)]:[]);
+const PERSONAL_PATH_RE=/(?:1410[01]|sql(?:~0020|\s+)event|[CD]:[\\/]+projects\b|[CD]:[\\/]+Users[\\/]+(?!example\b)[A-Za-z0-9_.-]+)/i;
 function unpack(name,version){
  const archive=join(release,name+'-'+version+'.tgz');
  const entries=execFileSync('tar',['-tzf',archive],{encoding:'utf8',windowsHide:true}).trim().split(/\r?\n/);
@@ -20,11 +22,18 @@ function unpack(name,version){
  execFileSync('tar',['-xzf',archive,'-C',directory],{windowsHide:true});
  const installed=join(directory,'package');
  assert.equal(JSON.parse(readFileSync(join(installed,'package.json'),'utf8')).version,version);
+ for(const file of textFiles(installed)){
+  assert.doesNotMatch(readFileSync(file,'utf8'),PERSONAL_PATH_RE,name+' must not contain personal paths: '+file);
+ }
  return installed;
 }
-function checkLinks(skillRoot){
+function checkLinks(skillRoot,{portable=false}={}){
  assert.ok(!existsSync(join(skillRoot,'trace-analysis/references/overview.md')),'Comprehensive diagnosis lives in the skill body');
- for(const file of markdownFiles(skillRoot))for(const match of readFileSync(file,'utf8').matchAll(/\]\(([^)#]+)(?:#[^)]*)?\)/g))if(!/^https?:/.test(match[1]))assert.ok(existsSync(resolve(file,'..',match[1])),'Packaged skill link: '+file+' -> '+match[1]);
+ for(const file of markdownFiles(skillRoot)){
+  const text=readFileSync(file,'utf8');
+  if(portable)assert.doesNotMatch(text,/\b(?:DSH|PTC)\b|预设|<!--\s*\/?host:/i,'Portable skill must not leak DSH terms: '+file);
+  for(const match of text.matchAll(/\]\(([^)#]+)(?:#[^)]*)?\)/g))if(!/^https?:/.test(match[1]))assert.ok(existsSync(resolve(file,'..',match[1])),'Packaged skill link: '+file+' -> '+match[1]);
+ }
 }
 try{
  const sample=createPiSample({revision:'package-test'}),native=join(work,'session.jsonl');
@@ -55,7 +64,7 @@ try{
   assert.ok(existsSync(join(installed,'node_modules/typebox/package.json')));
   assert.ok(!existsSync(join(installed,'plugin/trajectory-tools/lib/inspect-methods.js')),'No stale tool-owned methods in a clean package');
   const skillRoot=host!=='pi'?join(installed,'skills'):join(installed,'plugin/portable-tools/skills');
-  checkLinks(skillRoot);
+  checkLinks(skillRoot,{portable:true});
   const run=(script,args)=>JSON.parse(execFileSync(process.execPath,[join(installed,'scripts',script),...args],{encoding:'utf8',cwd:directory,windowsHide:true}));
   const source=sources[host];
   const schema=run('trajectory-query.mjs',['--tool','schema']);assert.equal(schema.tools.length,4);

@@ -20,13 +20,19 @@
 
 把会话主线展开成工具和行动的枝条。从任意一轮查看参数、返回、文件变化、子代理关系和上下文增量，沿关联记录还原任务怎样推进。
 
+- **单步计量与报错代码帧**：写入/替换自动计算增删行数（`measure`），报错调用直接定位原脚本或源码行列并内嵌前后代码摘录（`codeFrames`）。
+- **审批与策略控制标记**：在主干与调用详情统一标识审批拒绝、文件先读/版本保护（`FS_NOT_OBSERVED` / `FS_STALE_VERSION`）、工作树隔离边界（`HOST_WORKTREE_GUARD`）、执行超时与同参重试（`controls`）。
+- **当前上下文侧栏（DSH）**：右侧栏按七类构成连续缩放查看当前保留内容，压缩后以实际保留面为准，正文按需分段懒读。
+
 ![执行路径：轮次主干、工具分支、文件变化与上下文增量](docs/media/trajectory-overview.jpg)
 
-## Eval
+## Eval 与配置管理
 
-Eval 从日常任务的记录中提取指标，与轨迹树共用数据和切点，不需要另外跑 benchmark。单会话对照轮次耗时、输出量、工具延迟和错误分布；项目总览进一步汇集任务进展、模型行为和跨会话信号。
+Eval 从日常任务的记录中提取指标，与轨迹树共用数据和切点，不需要另外跑 benchmark。单会话对照轮次耗时、输出量、工具延迟和错误分布；项目总览进一步汇集预设配置、Skill 使用、任务进展、模型行为和跨会话信号。
 
-按项目、时间和模型筛选，再按窗口占用、输入量或工具交叉查看请求与执行指标。点选区间可以查看组成样本。DSH 总览先展示已读到的会话，随后逐步补齐，筛选和诊断选区会保留。
+- **连续缩放矩阵（Zoomable Treemap）**：直观对比当前预设下系统提示、项目指令、工具定义、Skill 目录与正文的体积占比与实际读取频次，支持鼠标锚点缩放、双击聚焦与原位详情抽屉。
+- **加载项管理与上下文重合（Context Overlap）**：按预设独立停用或恢复 Skill（提供可撤回覆盖与缓存影响说明）；跨系统提示、`AGENTS.md`、工具说明与 Skill 自动做 64 字符 winnowing 精确重合检测，并排展示共同原句、覆盖比例与 `L1 ↔ L2` 行号对照。
+- **窗口占用与统一处置矩阵**：按 `5%` 窗口占用刻度拖选或点选区间，将反馈频次、窗口分布、调用耗时与请求等待直接编码进四类处置方向，筛选与选区跨刷新保留。
 
 ![项目总览：任务推进、目标、交付与模型对照](docs/media/global-eval.jpg)
 
@@ -41,22 +47,30 @@ Eval 从日常任务的记录中提取指标，与轨迹树共用数据和切点
 
 ## 从失败信号追到具体执行
 
-「代码执行」把 PowerShell、子程序与 PTC 的代码、宿主结果和反馈放在一起。按执行器和失败信号筛选，查看脚本位置、错误证据、父子调用和后续返回。能稳定识别的原因由程序归因，需结合任务与环境的问题继续交给 Agent 调查。
+「代码执行」把 PowerShell、Bash、子程序与 PTC 的代码、宿主结果和反馈放在一起。按执行器和失败信号筛选，查看脚本位置、错误证据、父子调用和后续返回。支持 PowerShell AST 与 Bash `noexec` 静态语法定位，区分宿主策略拦截、外层执行器错误与内层子程序异常。
 
 ![代码执行分析：失败信号、调用记录、原始代码与反馈](docs/media/code-execution.jpg)
 
 | 案例 | 可以查看的证据 |
 | --- | --- |
-| PowerShell 语法或参数出错 | 原始脚本、解析位置、外层退出码与具体反馈 |
-| 修改被读取保护拦截 | 目标文件、后续读取、同参修改返回及验证记录 |
-| PTC 中的一次子调用失败 | 外层程序、内层工具和各自的运行结果 |
+| PowerShell / Bash 语法或参数出错 | 原始脚本、静态/运行时解析位置、外层退出码与具体反馈 |
+| 修改被文件保护或工作树边界拦截 | 控制信号（`controls`）、目标文件、后续补读、同参修改返回及验证记录 |
+| PTC 中的一次子调用失败 | 外层程序、内层工具和各自的运行结果与报错代码帧 |
 | 高窗口占用时错误增多 | 相同模型、工具和占用区间的样本与报错分布 |
 
-## 点选诊断
+## 点选诊断与明确出口
 
-在 DSH 轨迹树上长按选中对象，按住后拖动可圈选，也可单选上下文增量柱。Eval 从图表详情发起诊断，也可以查 DSH 工具声明的来源与调用。选好问题后，页面生成带会话、选区和取证入口的草稿，编辑确认后再发送。
+在轨迹树上长按选中对象，按住后拖动可圈选，也可单选上下文增量柱。Eval 从统一处置矩阵、代码执行或上下文重合视图发起诊断。选好问题后，页面生成带会话、选区、重合摘录（含行号与占比）及取证入口的草稿，编辑确认后再发送。
 
-总览和单会话 Eval 还提供「诊断与处理线索」：程序按记录归组，并给出修复环境与实现、恢复观察、补齐能力、保留方法四种调查方向。它们可以组合，具体判断由 Agent 沿已有取证流程完成。同参返回只表示后续结果，不直接代表任务完成。
+诊断方法（`trace-analysis` 与 `context-profile`）去除空泛套话，直接将程序线索与取证结果收口到五类可执行出口：
+
+| 诊断出口 | 判定条件与落地动作 |
+| --- | --- |
+| **无需处置** | 如 `FS_NOT_OBSERVED` 已在同轮补读并同参修改成功，或探测命令预期未命中且主任务已通过验收 |
+| **修环境或实现** | 定位具体代码、脚本语法、参数契约、路径或配置缺陷，修改后在原执行链重跑验证 |
+| **恢复观察与重跑** | 超时、用户中止、结果未落盘或版本冲突，先核对工作区与后台状态再安全续跑 |
+| **能力启停与调整** | 先说明工具职责、主要场景与低频兜底用途并与用户确认需求，仅通过配置执行启停；**绝不修改宿主官方内置工具的源码、参数 Schema 或内置描述** |
+| **提炼知识与去重下沉** | 跨任务常驻约束写入 `AGENTS.md` / `CLAUDE.md`；特定流程与长说明下沉到按需 `SKILL.md` / `references/`，消除重复加载 |
 
 ![从程序信号选择调查方向，再进入 Agent 取证](docs/media/diagnosis-signals.jpg)
 
@@ -69,7 +83,7 @@ Eval 从日常任务的记录中提取指标，与轨迹树共用数据和切点
 
 ## 调查之后，交付报告
 
-报告把调查结论、同切点的 Eval 指标和原文证据组织到一起。可以用流程图串起行动、反馈与验收，用环形图展示构成，再用分布、趋势和表格比较不同维度。图表可点选查看记录和统计口径，生成的 HTML 可离线保存。
+报告采用 **Vercel Geist** 开放画布与 `1px` 极细分隔线版式，把调查结论、同切点的 11 张 Eval 数据表（含 `findings` 处置矩阵组与 `code-execution` 表）和原文证据装配为单文件离线 HTML。全宽结论导语配合双列紧凑图表（环形构成、水平条形对比）、全宽证据流程图（`flow`）与明细表，悬停或点选元素即可按需浮现读数与取证查询。
 
 ![诊断报告：已核对的结论与证据流程图](docs/media/diagnostic-report.jpg)
 
@@ -101,7 +115,7 @@ Pi、Codex 和 Claude Code 的轨迹生成入口也接受 `--eval`、`--overview
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.7.tgz ./dsh-analysis-view-0.10.147.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.8.tgz ./dsh-analysis-view-0.11.0.tgz
 ```
 
 重启 `dsh web`，在会话里打开「评估」或用 `/trajectory` 打开轨迹树。选好诊断问题后，点「填入对话」把草稿追加到当前输入框。插件面向 DSH 0.2.2 系列，逐包核对见[兼容与语言说明](docs/host-compatibility.md#dsh-version)。
@@ -187,7 +201,7 @@ node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl
 
 | 工具 | 用途 |
 | --- | --- |
-| `trajectory_inspect` | 查看过程、耗时、用量、反复尝试、工具文件和上下文统计 |
+| `trajectory_inspect` | 查看过程、耗时、用量、反复尝试、工具文件（逐次调用含 `measure` 计量、`codeFrames` 报错位置与 `controls` 控制状态）和上下文统计 |
 | `trajectory_search` | 定位会话、字面记录与统计范围 |
 | `trajectory_read` | 查看原文、关联动作与反馈，分段追读完整参数和结果 |
 | `trajectory_graph` | 查看记录关系与会话谱系 |
@@ -221,6 +235,8 @@ node scripts/trajectory-view.mjs --host claude --file /absolute/transcript.jsonl
 ```sh
 node scripts/sync-host-skills.mjs --check
 node scripts/sync-view-assets.mjs --check
+node --test test/hygiene-test.mjs test/complexity/code-status-test.mjs
+node report/smoke-test.mjs
 npm test --prefix plugin/trajectory-tools
 npm test --prefix plugin/portable-tools
 node plugin/analysis-view/presentation-test.mjs

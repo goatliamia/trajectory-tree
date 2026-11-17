@@ -9,4 +9,4 @@ description: 生成并打开当前或指定 Codex 会话的轨迹树、Eval、�
 
 The interface automatically follows the browser language. Add `--lang en` or `--lang zh-CN` only when a language is explicitly requested; `--lang auto` restores automatic selection. Preserve the language of the source conversation.
 
-轨迹图长按或聚焦对象后按 Shift+Enter 可选取诊断，填写问题后复制草稿。沿草稿查询取证时保留会话、cut 和 logId；用户自己的问题优先于预设关注点。
+轨迹图长按或聚焦对象后按 Shift+Enter 可选取诊断，填写问题后复制草稿。沿草稿查询取证时保留会话、cut 和 logId；用户自己的问题优先于默认关注点。

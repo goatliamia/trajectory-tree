@@ -38,6 +38,7 @@ export function projectFindingCalls(session, { host = 'dsh', attributions, turns
         ...(shell ? { command: shell.command } : {}),
         reportedMessage: call.result?.text?.slice(0, 600) ?? '', target: call.target ?? null,
         measure:call.measure??null,codeFrames:attribution?.codeFrames??call.codeFrames??[],
+        ...(call.controls?.length ? { controls: call.controls } : {}),
         ...(attribution?.code === 'FS_NOT_OBSERVED' ? { priorRead: reads.get(call.target)?.findLast(read=>read.result<(start??call.seq)) ?? null } : {}),
         returned: returned.get(call.seq) ?? null, root: call.rootSeq ?? null, durationMs });
     }
@@ -50,7 +51,7 @@ export function projectFindingCalls(session, { host = 'dsh', attributions, turns
 export function summarizeFindings(entries) {
   const policies = {
     control: ['APPROVAL_REJECTED','APPROVAL_CANCELLED','ASK_CANCELLED'],
-    guard: ['FS_NOT_OBSERVED','FS_STALE_VERSION'],
+    guard: ['FS_NOT_OBSERVED','FS_STALE_VERSION','HOST_WORKTREE_GUARD'],
     arguments: ['COMMAND_SYNTAX','CODE_SYNTAX','COMMAND_ARGUMENT','COMMAND_PATTERN','FS_EDIT_NOT_FOUND',
       'INVALID_IMAGE_BASE64','INVALID_IMAGE','IMAGE_TYPE_MISMATCH','INVALID_FILE_BASE64','INVALID_ATTACHMENT_REF',
       'INVALID_ARGS','SEARCH_INVALID_PATTERN','FS_AMBIGUOUS_EDIT'],

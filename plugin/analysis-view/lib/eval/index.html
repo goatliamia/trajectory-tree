@@ -6,7 +6,7 @@
   <title>运行评估 · 轨迹树</title>
   <!-- eval:styles -->
 </head>
-<body data-view="classic">
+<body data-view="overview" data-theme="white">
   <header class="app-header">
     <div class="header-inner">
       <!-- eval:details -->
@@ -14,20 +14,6 @@
         <span>轨迹树</span><i class="brand-divider" aria-hidden="true"></i><span class="brand-context">Eval</span>
       </div>
       <div class="scope-control"><label for="scope">统计范围</label><select id="scope"></select></div>
-      <div class="scope-control appearance-control"><label for="view-switch">外观</label>
-        <select id="view-switch">
-          <optgroup label="轮次总览">
-            <option value="white" data-layout="overview" selected>白底</option>
-            <option value="blueprint" data-layout="overview">深蓝图</option>
-            <option value="sage" data-layout="overview">灰绿</option>
-          </optgroup>
-          <optgroup label="之前的布局">
-            <option value="classic">原版</option>
-            <option value="monitor">工具监控</option>
-            <option value="evidence">证据工作台</option>
-          </optgroup>
-        </select>
-      </div>
     </div>
   </header>
 
@@ -43,11 +29,6 @@
     </header>
 
     <aside class="workspace-rail" aria-label="会话概况与导航">
-      <nav id="section-nav" class="section-nav" aria-label="证据工作台导航" hidden>
-        <a href="#tool-errors"><code>01</code>报错记录</a>
-        <a href="#turn-usage"><code>02</code>轮次样本</a>
-        <a href="#tool-comparison"><code>03</code>工具调用</a>
-      </nav>
       <section class="run-context" aria-label="运行概况">
         <div id="summary"></div>
         <div id="outcome-chart" class="outcome-strip"></div>
@@ -122,25 +103,21 @@
     </section>
 
     <section id="eval-basis" class="basis" aria-labelledby="eval-basis-title">
-      <h2 id="eval-basis-title">其他运行指标与统计口径</h2>
+      <h2 id="eval-basis-title">运行细节</h2>
+      <div class="supporting-grid">
       <section class="supporting-metrics" aria-labelledby="file-title">
         <h3 id="file-title">文件与交付</h3>
         <div id="files"></div>
       </section>
       <section class="supporting-metrics" aria-labelledby="timing-title">
-        <h3 id="timing-title">时间口径</h3>
+        <h3 id="timing-title">时间观测 <small>记录覆盖</small></h3>
         <div id="time-basis"></div>
       </section>
-      <div id="more-metrics"></div>
-      <ul class="basis-notes">
-        <li>各轮耗时、各步耗时按各自的实录起止求和。模型处理使用 DSH 的步骤统计，含首字延迟和解码。</li>
-        <li>输出 token 按每轮模型响应上报的 <code>outputTokens</code> 相加，包含中间响应。交叉图以整段会话为参照，仅绘制有轮次起止且已记录的模型响应均上报输出量的轮次。</li>
-        <li>工具累计耗时按调用发起到结果逐次相加，含观测到的调度和等待，重叠调用分别计时。步内工具覆盖把调用区间裁到所属步骤，重叠部分计一次。</li>
-        <li>耗时分布的档位含左边界。首档低于 20 ms，末档含 30 s 及以上。</li>
-        <li>结果覆盖率以全部调用为分母。报错占比以已记录结果的调用为分母。</li>
-        <li>报错优先按实录中的错误码分类，其余沿用轨迹归类。同参返回指同一轮内同工具、同完整参数的后续非报错返回。</li>
-        <li>文件前读和读回按有配对写入记录的文件计算，搜索命中单独计数。</li>
-      </ul>
+      <section class="supporting-metrics" aria-labelledby="calls-context-title">
+        <h3 id="calls-context-title">调用与上下文</h3>
+        <div id="more-metrics"></div>
+      </section>
+      </div>
     </section>
   </main>
 

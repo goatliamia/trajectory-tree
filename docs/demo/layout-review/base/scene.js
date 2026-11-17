@@ -28,7 +28,7 @@
     if($('tl-readout'))$('tl-readout').textContent=text;
   }
   function tlRoundReadout(t){
-    tlReadout(ui`第 ${t.number} 轮 · 执行 ${dur(endOf(t)-t.start)} · ${t.steps.length} 步 · ${t.calls} 次调用${t.errors?' · '+t.errors+ui(' 次工具报错'):''}`,()=>openOverviewRound(t.number,'duration'));
+    tlReadout(ui`第 ${t.number} 轮 · ${traceSpanOnly ? ui('记录跨度') : ui('执行')} ${dur(endOf(t)-t.start)} · ${t.steps.length} 步 · ${t.calls} 次调用${t.errors?' · '+t.errors+ui(' 次工具报错'):''}`,()=>openOverviewRound(t.number,'duration'));
   }
   function tlStepReadout(t,s){
     tlReadout(ui`第 ${t.number} 轮 / 第 ${s.number} 步 · ${preciseTime(recordDuration(s))} · ${s.calls.length} 次工具调用${s.errors?' · '+s.errors+ui(' 次报错'):''}`,()=>tlOpenStep(t,s));

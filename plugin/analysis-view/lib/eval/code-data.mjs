@@ -1,4 +1,4 @@
-import { isProgramTool, isShellTool, powerShellScript, commandPowerShellEdition } from '../trace/shared/tool-attribution.mjs';
+import { isProgramTool, isShellTool, commandScript, commandPowerShellEdition } from '../trace/shared/tool-attribution.mjs';
 
 const clip = (text, size) => {
   text = String(text ?? '');
@@ -29,10 +29,10 @@ export function codeExecutionData(session, { host = 'dsh', attributions, argumen
     let args = argumentsBySeq?.get(call.seq) ?? argumentsOf(call);
     if (typeof args === 'string') { try { args = JSON.parse(args); } catch { args = null; } }
     const command = args?.command ?? args?.cmd;
-    const source = commandScripts?.[call.id] ?? powerShellScript(command, name, args?.shell);
+    const source = commandScripts?.[call.id] ?? commandScript(command, name, args?.shell);
     const edition = call.powerShellEdition || source?.edition || commandPowerShellEdition(command);
     const program = isProgramTool(call.name);
-    const executor = program ? 'PTC' : edition || /^pwsh$|^powershell$/i.test(name) ? 'PowerShell' : 'Shell';
+    const executor = program ? 'PTC' : source?.language === 'bash' ? 'Bash' : edition || /^pwsh$|^powershell$/i.test(name) ? 'PowerShell' : 'Shell';
     return { ...location, name, args, command, source, edition, program, executor };
   });
   const counts = new Map();
@@ -56,7 +56,7 @@ export function codeExecutionData(session, { host = 'dsh', attributions, argumen
     return { seq: call.seq, startSeq: host === 'dsh' && call.inner ? call.startSeq : call.startSeq ?? call.seq,
       resultSeq: call.resultSeq, turn, step, name, executor, edition: edition ?? null,
       phase, code, nativeCode: call.error?.code ?? null, attribution, fingerprint,
-      measure:call.measure??null,codeFrames:attribution?.codeFrames??call.codeFrames??[],
+      measure:call.measure??null,codeFrames:attribution?.codeFrames??call.codeFrames??[],syntax:attribution?.syntax??null,
       source: typeof script === 'string' ? { ...clip(script, 2800), exact } : null,
       output: typeof recordedOutput === 'string' ? clip(recordedOutput, 2200)
         : call.result ? { text: call.result.text.slice(0, 2200), omitted: (call.result.omitted ?? 0) + Math.max(0, call.result.text.length - 2200) } : null,

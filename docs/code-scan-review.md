@@ -31,6 +31,15 @@ CR 先解析完整静态模块清单，再按消费者的所选静态 import/exp
 
 [Skill 页面](demo/preset-context/skill-manager.js)移除了三个结果不再被消费的遍历：列表重复段计数，以及详情中的旧文本对、重复段查询。显示内容仍由既有图表、当前正文和上下文重合入口提供。
 
+2026-11-17 增量复核：将工作区尚未暂存的非忽略源码（`lib/tool-control.mjs`、`bash-observer.mjs`、`tool-control.js`、`trace-symbols.js` 等）一并纳入 `selectSources`（共 403 个文件、688 对依赖），并清理本轮新增与改动文件中的 4 处未读绑定：
+
+| 文件 | 绑定 | 处理 |
+| --- | --- | --- |
+| [便携分析入口](../plugin/portable-tools/analysis.mjs) | `session`、`turnIds` | 移除 `inspectData` 解构中未消费的两个字段 |
+| [路径子代理布局](demo/layout-review/geist-actors.js) | `tight`、`compact` | 移除 `geistActionGeometry` 改为自适应图区高度后遗留的闲置阈值变量 |
+| [路径工具枝条](demo/layout-review/geist-tools.js) | `sign` | 移除 `geistResultBranchBody` 抽离后未再使用的方向符号变量 |
+| [上下文重合视图](demo/preset-context/context-overlap-view.js) | `data` | 移除 `renderScope` 未消费的首个参数并同步调用端 |
+
 未读绑定中的占位参数、捕获参数、rest 字段剔除和具有初始化调用的声明，分别检查其语义。未读名字本身不是删除初始化、改变回调签名或移除浏览器拼装全局的依据。
 
 ## 旧摘要与解读接口的口径

@@ -19,10 +19,10 @@ export function reviewFactors(group,id) {
   const signal=group.signals?.find(signal=>signal.direction===id);
   if(signal)return signal.factors;
   const factors = {
-    repair: ['原始参数、实际执行器与失败阶段', '相关配置、依赖、接口契约及版本', '原执行链中的后续处理与验证结果'],
-    recover: ['用户选择、中断来源与原操作的实际效果', '已有后续是否完成任务、是否还需要继续', '恢复条件、重复执行的影响与验证方式'],
-    capability: ['任务需要完成的具体动作与验收条件', '当时已安装、已加载、可发现、可调用的能力与权限', '已有说明是否可用：AGENTS.md、工具定义、Skill 与注入内容'],
-    knowledge: ['当时已经收到的说明及是否过期、冲突或难以使用', '实际奏效的处理步骤、成功对照与验证结果', '适用条件、失效条件，以及应更新的原说明或方法位置'],
+    repair: ['原始参数、实际执行器与失败阶段', '相关配置、依赖、接口契约及版本（不动宿主官方工具语义）', '原执行链中的后续处理与复跑验证命令'],
+    recover: ['用户选择、中断来源与原操作的实际效果', '已有后续是否完成任务、是否还需要继续', '符合保护契约或工作区边界的下一步安全调用'],
+    capability: ['任务需要完成的具体动作与验收条件', '当时已安装、已加载、可发现、可调用的能力与权限', '阐述工具职责与低频兜底用途，明确用户需求后给出预设级关闭或启用意见（严禁修改官方工具语义）'],
+    knowledge: ['当时已经收到的说明及是否过期、冲突或难以使用', '实际奏效的处理步骤、成功对照与验证结果', '落盘位置路由：短事实改写/合并进 AGENTS.md，多步专项流程沉淀到按需 Skill'],
   };
   return factors[id] ?? ['任务要求与实际结果', '原始反馈、执行条件及后续处理', '当时已有的能力和上下文供给'];
 }
@@ -67,12 +67,11 @@ export function buildDiagnosisDraft({group,direction='overall',question='',prese
   const measured=value=>value==null?'未记录':String(Math.round(value*10)/10)+(selection?.unit??'');
   const powershell=entries.some(r=>r.powerShell),execution=powershell||entries.some(r=>/^run_?code$/i.test(r.tool));
   const lines=[`请诊断 ${preset} 预设下的「${group.label||group.tool||'所选会话范围'}」。`,
-    `关注方向：${label}。这是用户选择的核对方向，最终处置按证据判断。`,
-    '先结合后续结果判断复盘价值；预期反馈、低成本自纠正且无遗留影响，可以说明无需进一步处置。',
+    `关注方向：${label}。`,
+    '若属正常探测、同轮已低成本自愈或遵从用户取消/拒绝，说明依据后直接结案；需调整时落到具体出口（宿主官方工具只评估预设级启停，严禁修改官方工具语义）。',
     ...(question.trim()?[`用户补充：${question.trim()}`]:[]),
     ...(selection?[`所选 ${selection.records} 条记录；${selection.metric==='window'?'窗口有效读数':(selection.subject==='model'?'请求':'调用')+'指标有效样本'} ${selection.samples} 条；观察 ${selection.metricLabel}。`,
-      `${selection.windowBasis??'窗口'}范围：${selection.range?selection.range.from+'–'+selection.range.to+'%':'全部已记录范围，缺失读数单列'}；模型：${selection.modelLabel}；工具：${selection.tool==='all'?'全部工具':selection.tool}。`,
-      `窗口与表现的对照属于相关观察；结合${selection.subject==='model'?'相同模型':'相同工具、相同模型'}及样本覆盖核对原因。`]:[]),
+      `${selection.windowBasis??'窗口'}范围：${selection.range?selection.range.from+'–'+selection.range.to+'%':'全部已记录范围，缺失读数单列'}；模型：${selection.modelLabel}；工具：${selection.tool==='all'?'全部工具':selection.tool}。`]:[]),
     ...(selection?.comparisonBasis?[`对照范围：${selection.comparisonBasis}。`,...(selection.comparisonRows??[]).map(row=>`对照读数：${[row.tool,row.modelLabel].filter(Boolean).join(' · ')}；选区 ${measured(row.selected.value)}，n=${row.selected.n}；对照 ${measured(row.baseline.value)}，n=${row.baseline.n}。`)]:[]),
     '使用 trace-analysis 分析此选区；处置方法见该 Skill 的 references/disposition.md。',
     ...(execution?['相关专项方法：references/code-execution.md。']:[]),
@@ -107,6 +106,6 @@ export function buildDiagnosisDraft({group,direction='overall',question='',prese
     lines.push(`trajectory_inspect(${JSON.stringify({session:source.session,cut:source.cut,view:'overview',turns,groupBy:'turn',limit:12,samples:false,format:'data'})})`);
   }
   if(!entries.length&&sources.length)lines.push(`完整选区共 ${sources.length} 个会话；以上为开始查询的位置，按问题扩展取证。`);
-  lines.push('引用关键记录，分别说明已确认事实、待补证据、建议及验证方式。是否补能力或保留方法，要结合已有供给、任务结果与复用条件。');
+  lines.push('引用关键记录给出结论、具体出口（无需处置 / 修代码或配置 / 恢复调用 / 阐述职责后建议预设级启停工具 / 更新 AGENTS.md 或 Skill 具体位置）及原执行链验证方式。');
   return lines.join('\n');
 }

@@ -25,6 +25,7 @@ export function composeReport(blocks,template='article'){
    const first=s.blocks.findIndex(b=>b.figure);
    if(first>0)content='<div class="diagnostic-pair-body"><div class="diagnostic-copy">'+s.blocks.slice(0,first).map(b=>b.html).join('\n')+'</div><div class="diagnostic-evidence">'+s.blocks.slice(first).map(b=>b.html).join('\n')+'</div></div>';
   }
+  if(s.role==='actions')content=content.replace(/(<\/strong>)\s*[：:]\s*/g,'$1');
   if(s.role==='sources')return'<section class="diagnostic-section diagnostic-sources">'+header+'<details><summary>'+label('查看数据口径与证据位置')+'</summary><div>'+content+'</div></details></section>';
   return'<section class="diagnostic-section diagnostic-'+s.role+'">'+header+content+'</section>';
  }).join('\n');

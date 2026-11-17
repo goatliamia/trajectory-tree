@@ -54,13 +54,15 @@
     vp.scrollLeft = Math.max(0, (next.mapTime(extent.start) + next.mapTime(extent.end)) / 2 - vp.clientWidth / 2);
     renderOverview({ plotOnly: true }); reviewSyncNavigation();
   }
+  function geistActionActorReserve(t) {
+    return geistActorLayers.agents && geistActors.branches.some(branch => branch.turn === t.number) ? 160 : 0;
+  }
   function geistActionGeometry(t) {
     const branches = geistActorLayers.agents && geistActors.branches.some(b => b.turn === t.number && b.results?.length);
     // 行动路径的高度跟着对话区走:短面板里先保住步标签、主图和步骤详情。
     const available = $('canvas')?.clientHeight || window.innerHeight;
-    const tight = available < 620, compact = available < 760;
     // 高度跟实际图区走,不再写死:写死会在图区下方留出一整块空白。
-    const viewportHeight = Math.max(240, Math.round(($('graph-scroll')?.clientHeight || available * 0.55) - 6));
+    const viewportHeight = Math.max(240, Math.round(($('graph-scroll')?.clientHeight || available * 0.55) - geistActionActorReserve(t) - 6));
     const height = Math.min(620, viewportHeight);
     return { height, base: Math.round(height - (branches ? 110 : 96)) };
   }
@@ -110,8 +112,12 @@
       const end = extent.hasEnd ? frame.map({ ...branch, step: undefined, time: extent.end }) : x;
       return { branch, x, end, showResults: agentShowsResults(branch, end - x, view === 'path') };
     });
+    const columns = view === 'overview' ? reviewContextObstacles(overviewProjection.layout) : reviewActionFileFrame.contextObstacles || [];
+    const upperLane = -Math.max(30, ...columns.filter(p => p.top < 0).map(p => -p.top)) - 18;
     return layoutAgentForks(items, { left: 20, right: frame.width - 20, measure: reviewMeasure,
-      ...(view === 'path' ? { slots: [-112, -146, -78], obstacles: (typeof reviewBranchesNow === 'object' && Array.isArray(reviewBranchesNow) ? reviewBranchesNow : []) } : {}),
+      obstacles: [...columns, ...(view === 'path' && Array.isArray(reviewBranchesNow) ? reviewBranchesNow : []),
+        { left: 12, right: frame.width - 12, top: 62 - frame.base, bottom: 116 - frame.base }],
+      slots: view === 'path' ? [reviewActionFileFrame.actorBand] : [upperLane, -60, 60, -96, 96],
       labelOf: members => members.length > 1 ? members.length + ui(' 个子代理') : geistActorLabel(members[0].branch.name, Math.min(160, frame.width - 120)),
     });
   }
@@ -120,7 +126,7 @@
     const forks = geistPlanAgentForks();
     const reserved = forks.map(p => ({ left: p.left - 3, right: p.right + 3, top: p.top, bottom: p.bottom }));
     return geistForkResultsBase(items, base, left, right, visible, { ...options, reserved,
-      reservedKey: forks.map(p => [p.x, p.end, p.dy, p.open, p.label].join('/')).join('|'),
+      reservedKey: (options.reservedKey || '') + ':' + forks.map(p => [p.x, p.end, p.dy, p.open, p.label].join('/')).join('|'),
     });
   };
   function geistRenderActors() {
@@ -137,8 +143,8 @@
       const single = plan.members.length === 1, branch = plan.members[0].branch, extent = agentExtent(branch);
       const a = plan.x, end = plan.end, y = frame.base + plan.dy, sign = Math.sign(plan.dy);
       const ramp = Math.min(10, Math.max(3, (end - a) / 2));
-      let path = 'M' + a + ' ' + frame.base + 'V' + (y - sign * ramp) + 'q0 ' + (sign * ramp) + ' ' + ramp + ' ' + (sign * ramp) + 'H' + (end - (single && branch.returnTime != null ? ramp : 0));
-      if (single && branch.returnTime != null) path += 'q' + ramp + ' 0 ' + ramp + ' ' + (-sign * ramp) + 'V' + frame.base;
+      let path = 'M' + plan.anchorX + ' ' + frame.base + 'H' + a + 'V' + (y - sign * ramp) + 'q0 ' + (sign * ramp) + ' ' + ramp + ' ' + (sign * ramp) + 'H' + (end - (single && branch.returnTime != null ? ramp : 0));
+      if (single && branch.returnTime != null) path += 'q' + ramp + ' 0 ' + ramp + ' ' + (-sign * ramp) + 'V' + frame.base + 'H' + plan.anchorEnd;
       const label = plan.label;
       const route = '<path d="' + path + '" class="actor-agent-stem"/><path d="' + path + '" class="actor-agent-hit"/>';
       const labelY = plan.open && sign < 0 ? y + 18 : y - 13;

@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import { attributeToolFailure, isShellTool, isProgramTool, powerShellScript } from './trace/shared/tool-attribution.mjs';
 import { feedbackArgs, inputToolMeasure, settleToolMeasure, recordedDiagnostics } from './trace/shared/tool-feedback.mjs';
+import { failureControls, applyApprovalControls } from './trace/shared/tool-control.mjs';
 
 // The demo uses execution history, not the current compacted message surface.
 // A replacement result belongs to an old call: counting it again fabricates duration.
@@ -45,6 +46,7 @@ function attachFailure(call, data, output, command) {
     exitCode: data.meta?.exitCode ?? data.message?.details?.exitCode,
     stderr: data.meta?.stderr ?? data.message?.details?.stderr,
     interrupted: data.meta?.interrupted ?? data.message?.details?.interrupted, command });
+  call.controls = failureControls(call, { host: 'dsh', error: data.error });
 }
 
 function attachToolFeedback(call,raw,output){
@@ -170,6 +172,7 @@ export function projectSession(rows, source = {}) {
     turn.errors = turn.steps.reduce((n, s) => n + s.errors, 0);
     turn.title = turn.prompts[0]?.text || (turn.reason?.kind === 'aborted' ? '本轮被停止' : '继续执行');
   }
+  diagnostics.approvals = applyApprovalControls(turns.flatMap(turn => turn.steps.flatMap(step => step.calls)), events);
   const title = events.filter(e => e.type === 'session/title').at(-1)?.data?.title || header.id;
   const communications = events.filter(e => !isReplacement(e) && e.type === 'user/message' && ['agent-message', 'team-message', 'subagent-settled'].includes(e.data?.source?.kind)).map(e => ({
     seq: e.seq, time: e.time, kind: e.data.source.kind, childId: e.data.source.senderSessionId || e.data.source.senderId || null,

@@ -172,8 +172,7 @@ export class EvalWorkspaceService {
     return html.replace('<head>','<head><base href="'+WORKSPACE_PATH+'/">')
       .replace(/((?:href|src)=")\/(?!\/)/g,'$1'+WORKSPACE_PATH+'/')
       .replace('<body data-layout="desk">','<body data-layout="desk" class="native-eval">')
-      .replace('<script type="module"',`<script>window.__trajectoryWorkspace=${safeJson({base:WORKSPACE_PATH,native:true})};</script><script type="module"`)
-      .replace('本机配置预览','预设与配置').replace('>sql event<','>工作区<');
+      .replace('<script type="module"',`<script>window.__trajectoryWorkspace=${safeJson({base:WORKSPACE_PATH,native:true})};</script><script type="module"`);
   }
   async handle(req,res,url,{signal,origin}){
     const path=url.pathname.slice(WORKSPACE_PATH.length)||'/';

@@ -1,6 +1,7 @@
 # deps / build
 node_modules/
 dist/
+report/out/
 *.tsbuildinfo
 
 # logs & runtime artifacts
@@ -29,6 +30,8 @@ dsh-spill-*/
 Thumbs.db
 .idea/
 .vscode/
+.claude/
+.agents/worktrees/
 *.suo
 
 # secrets

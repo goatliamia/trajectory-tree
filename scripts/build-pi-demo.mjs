@@ -12,7 +12,7 @@ let input;
 if (option('--session')) {
   input = await readPiSession(option('--session'), { leafId: option('--leaf'), captureFile: option('--capture'), synthetic: args.includes('--synthetic') });
 } else {
-  const sourceRoot = option('--source') || 'D:/projects/new loop/pi', revision = option('--revision') || PI_SOURCE_REVISION;
+  const sourceRoot = option('--source') || process.env.TRAJECTORY_PI_TEST_REPO || '../pi', revision = option('--revision') || PI_SOURCE_REVISION;
   const git = (...command) => execFileSync('git', ['-C', sourceRoot, ...command], { encoding: 'utf8', windowsHide: true });
   const readSource = path => git('show', revision + ':' + path);
   const paths = ['packages/agent/src/types.ts', 'packages/agent/src/agent-loop.ts', 'packages/ai/src/types.ts', 'packages/coding-agent/src/core/session-manager.ts', 'packages/coding-agent/src/core/agent-session.ts', 'packages/coding-agent/src/core/system-prompt.ts', 'packages/coding-agent/src/core/skills.ts', 'packages/coding-agent/src/core/tools/read.ts', 'packages/coding-agent/src/core/tools/edit.ts', 'packages/coding-agent/src/core/tools/write.ts', 'packages/coding-agent/README.md'];

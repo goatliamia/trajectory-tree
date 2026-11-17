@@ -23,7 +23,8 @@
     const frames = call.codeFrames?.length ? call.codeFrames : call.attribution?.codeFrames || [];
     const tone = call.status === 'error' || fact.tone === 'bad' ? 'bad' : fact.tone === 'unknown' ? 'unknown' : 'normal';
     const meta = [];
-    const elapsed = call.start != null && call.end != null ? dur(Math.max(0, call.end - call.start)) : '';
+    const measuredDuration = recordDuration(call);
+    const elapsed = measuredDuration == null ? '' : dur(measuredDuration);
     if (call.seq != null) meta.push('#' + call.seq + (call.resultSeq != null ? ' → #' + call.resultSeq : ''));
     if (call.inner || call.rootSeq != null) meta.push(ui('PTC 内部工具') + (call.rootSeq != null ? ' · #' + call.rootSeq : ''));
     const detail = fact.detail ? '<p class="geist-tool-record-detail">' + esc(fact.detail) + '</p>' : '';
@@ -31,6 +32,7 @@
       (value.omitted ? '<span class="geist-result-note">' + ui('节选 · 另有 ') + value.omitted + ui(' 个字符未载入') + '</span>' : '') + '</section>' : '';
     const error = call.error?.code || call.error?.name;
     const attribution = globalThis.__trajectoryFailureText?.(call.attribution);
+    const controlChips = reviewControlChips(call), controlEvidence = reviewControlEvidence(call);
     const raw = '<div class="geist-tool-source-grid">' + rawBlock(ui('调用参数'), call.args, true) + rawBlock(ui('返回原文'), call.result) + '</div>';
     const outcome = frames.length ? globalThis.__trajectoryDiagnosticSummary?.(frames) : '<span class="geist-tool-record-outcome">' + esc(fact.outcome) + '</span>';
     return '<details class="geist-tool-record" data-tone="' + tone + '" data-call-seq="' + call.seq + '">' +
@@ -39,8 +41,10 @@
       '<span class="geist-tool-record-title" title="' + esc(call.target || title) + '">' + esc(title) + '</span>' +
       '<span class="geist-tool-record-amount">' + (globalThis.__trajectoryToolMeasure?.(measure) || '') + '</span>' +
       '<span class="geist-tool-record-elapsed">' + esc(elapsed) + '</span></span>' +
+      (controlChips ? '<span class="geist-tool-record-controls">' + controlChips + '</span>' : '') +
       (outcome ? '<span class="geist-tool-record-preview">' + outcome + '</span>' : '') + '</summary>' +
       '<div class="geist-tool-record-content"><div class="geist-tool-record-meta"><span>' + esc(meta.join(' · ')) + '</span>' + (options.actions || '') + '</div>' + detail +
+      controlEvidence +
       (frames.length ? globalThis.__trajectoryDiagnosticFrames(frames) : '') +
       (error ? '<p class="geist-tool-record-error">' + esc(error) + '</p>' : '') +
       (attribution ? '<p class="review-quiet">' + esc(attribution) + '</p>' : '') + raw + '</div></details>';

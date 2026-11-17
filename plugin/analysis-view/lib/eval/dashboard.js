@@ -14,13 +14,6 @@
   let usageSlot = 0;
   const defaultSort = globalThis.__trajectoryEvalToolSort;
   const state = { turn: null, sort: ['calls', 'errors'].includes(defaultSort) ? defaultSort : 'time', allTools: false, tool: null };
-  const standardOrder = ['tool-comparison', 'tool-errors', 'turn-usage', 'eval-findings'];
-  const views = {
-    classic: { title: t('运行评估', 'Session evaluation'), sections: standardOrder },
-    overview: { title: t('轮次总览', 'Turn overview'), sections: ['turn-usage', 'tool-comparison', 'tool-errors', 'eval-findings'] },
-    monitor: { title: t('工具监控', 'Tool monitor'), sections: standardOrder },
-    evidence: { title: t('证据工作台', 'Evidence workspace'), sections: ['tool-errors', 'turn-usage', 'tool-comparison', 'eval-findings'] },
-  };
   const toolLimit = 5;
   const number = new Intl.NumberFormat(locale);
   const decimal = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
@@ -571,32 +564,48 @@
       { kind: 'rounds', turns: [...usagePair] }, 'latency');
   }
 
+  function coverageMetric(label, measured, total, { value, unit = '', note = '' } = {}) {
+    const known = Number.isFinite(measured) && Number.isFinite(total);
+    const portion = known && total > 0 ? Math.max(0, Math.min(100, measured / total * 100)) : 0;
+    const samples = known ? `${fmt(measured)} / ${fmt(total)}${unit ? ' ' + unit : ''}` : t('未记录', 'Unrecorded');
+    const reading = value ?? (known && total > 0 ? pct(measured / total) : '—');
+    return `<div class="coverage-metric" title="${html(note)}"><div class="coverage-label"><span>${html(label)}</span><strong class="mono">${reading}</strong></div>
+      <div class="coverage-track${known && total > 0 ? '' : ' is-unmeasured'}" aria-hidden="true"><i style="width:${portion}%"></i></div>
+      <small>${samples}</small></div>`;
+  }
+
   function renderSupporting({ context, files, task, outcomes, checks, timing }) {
-    $('files').innerHTML = facts([
-      [t('关联文件', 'Related files'), fmt(files.count)], [t('写入前有读取', 'Read before writing'), ratio(files.before, files.paired)],
-      [t('写入后有读回', 'Read after writing'), ratio(files.after, files.paired)],
-      [t('工作区观测', 'Workspace observations'), fmt(task.changes)], [t('交付登记', 'Recorded deliveries'), fmt(task.deliveries)],
-      [t('登记文件次数', 'Delivered file entries'), fmt(task.files)],
-    ]) + `<div class="task-records">${task.evidence.slice(-4).map(row =>
+    const fileFacts = [[t('关联文件', 'Related files'), files.count], [t('工作区观测', 'Workspace observations'), task.changes],
+      [t('交付登记', 'Recorded deliveries'), task.deliveries], [t('登记文件次数', 'Delivered file entries'), task.files]];
+    $('files').innerHTML = (Number.isFinite(files.paired)
+      ? coverageMetric(t('写入前有读取', 'Read before writing'), files.before, files.paired, { unit: t('文件', 'files'),
+        note: t('分母为有配对写入记录的文件；只计首次写入发起前已返回的读取。', 'Files with paired write records; reads must return before the first write starts.') }) +
+        coverageMetric(t('写入后有读回', 'Read after writing'), files.after, files.paired, { unit: t('文件', 'files'),
+          note: t('分母为有配对写入记录的文件；只计末次写入返回后发起并返回的读取。', 'Files with paired write records; reads must start and return after the last write returns.') })
+      : `<p class="metric-unavailable">${t('本宿主未记录文件读写配对', 'Paired file reads and writes are unrecorded')}</p>`) +
+      facts(fileFacts.filter(([, value]) => Number.isFinite(value)).map(([label, value]) => [label, fmt(value)])) +
+      `<div class="task-records">${task.evidence.slice(-4).map(row =>
       `<span>${row.type === 'deliverables/presented' ? t('交付', 'Delivery') : t('工作区', 'Workspace')} ${record(row.seq)}</span>`).join('')}</div>`;
 
     const { steps, model, toolSteps, calls } = timing;
-    $('time-basis').innerHTML = facts([
-      [t('各步耗时合计', 'Total step duration'), `${clockDuration(steps.ms)}<small>${ratio(steps.measured, steps.total)} ${t('步有起止记录', 'steps timed')}</small>`],
-      [t('模型处理', 'Model processing'), clockDuration(model?.total.value) + (model?.total.samples
-        ? `<small>DSH ${ratio(model.total.samples, model.steps)} ${t('步 · 首字', 'steps · first token')} ${clockDuration(model.firstToken.value)} · ${t('解码', 'decoding')} ${clockDuration(model.decode.value)}</small>` : '')],
-      [t('步内工具覆盖', 'Tool coverage within steps'), `${clockDuration(toolSteps.coveredMs)}<small>${ratio(toolSteps.measured, toolSteps.total)} ${t('步可计算', 'steps measurable')}</small>`],
-      [t('工具累计耗时', 'Cumulative tool duration'), `${clockDuration(calls.cumulativeMs)}<small>${ratio(calls.pairedCalls, calls.calls)} ${t('次有起止记录', 'calls timed')}</small>`],
-    ]);
+    $('time-basis').innerHTML =
+      coverageMetric(t('各步耗时合计', 'Total step duration'), steps.measured, steps.total, { value: clockDuration(steps.ms), unit: t('步', 'steps'),
+        note: t('各步实录起止求和；条长表示有起止记录的步骤占比。', 'Sum of recorded step durations; the bar shows timing coverage.') }) +
+      coverageMetric(t('步内工具覆盖', 'Tool coverage within steps'), toolSteps.measured, toolSteps.total, { value: clockDuration(toolSteps.coveredMs), unit: t('步', 'steps'),
+        note: t('工具区间裁到所属步骤，重叠部分只计一次；条长表示可计算步骤占比。', 'Tool intervals clipped to each step, counting overlaps once; the bar shows measurable steps.') }) +
+      coverageMetric(t('工具累计耗时', 'Cumulative tool duration'), calls.pairedCalls, calls.calls, { value: clockDuration(calls.cumulativeMs), unit: t('调用', 'calls'),
+        note: t('逐次相加调用至结果的耗时，并行调用分别计时；条长表示有配对时间的调用占比。', 'Sum of call-to-result durations, including overlapping calls; the bar shows paired timing coverage.') }) +
+      (model?.total.samples ? coverageMetric(t('模型处理', 'Model processing'), model.total.samples, model.steps, {
+        value: clockDuration(model.total.value), unit: t('步', 'steps'), note: t('DSH 原生步骤统计，含首字延迟和解码。', 'Native DSH step statistics, including first-token latency and decoding.') }) : '');
 
-    $('more-metrics').innerHTML = facts([
-      [t('工具结果覆盖率', 'Tool result coverage'), pct(outcomes.outcomeCoverage)],
-      [t('同轮同参候选组', 'Same-turn repeat groups'), fmt(checks.repeatGroups)], [t('候选组内调用', 'Calls in repeat groups'), fmt(checks.repeatCalls)],
-      [t('可核对参数定义的直接调用', 'Direct calls with checkable argument schemas'), ratio(checks.schema?.checkable, checks.directCalls)],
-      [t('参数定义未匹配', 'Argument schema mismatches'), fmt(checks.schema?.nonconforming)],
-      [t('参数 JSON 无效', 'Invalid argument JSON'), fmt(checks.json?.invalid)], [t('Skill 正文加载', 'Skill body loads'), fmt(context.skillLoads)],
-      [t('有记录的子会话', 'Recorded child sessions'), fmt(context.children)],
-    ]);
+    const extra = [[t('同轮同参候选组', 'Same-turn repeat groups'), checks.repeatGroups], [t('候选组内调用', 'Calls in repeat groups'), checks.repeatCalls],
+      [t('参数定义未匹配', 'Argument schema mismatches'), checks.schema?.nonconforming], [t('参数 JSON 无效', 'Invalid argument JSON'), checks.json?.invalid],
+      [t('Skill 正文加载', 'Skill body loads'), context.skillLoads], [t('有记录的子会话', 'Recorded child sessions'), context.children]];
+    $('more-metrics').innerHTML =
+      coverageMetric(t('工具结果覆盖率', 'Tool result coverage'), outcomes.known, outcomes.calls, { unit: t('调用', 'calls'),
+        note: t('已记录非报错返回和报错结果的调用 / 全部调用。', 'Calls with a recorded non-error or error result / all calls.') }) +
+      (Number.isFinite(checks.directCalls) ? coverageMetric(t('可核对参数定义', 'Checkable argument schemas'), checks.schema?.checkable, checks.directCalls, { unit: t('直接调用', 'direct calls') }) : '') +
+      facts(extra.filter(([, value]) => Number.isFinite(value)).map(([label, value]) => [label, fmt(value)]));
   }
 
   function updateToolSelection(tool) {
@@ -624,24 +633,11 @@
     findingsBoard?.refresh();
   }
 
-  function selectView() {
-    const option = $('view-switch').selectedOptions[0];
-    const name = option.dataset.layout ?? option.value;
-    const view = views[name];
-    if (option.dataset.layout) document.body.dataset.theme = option.value;
-    else delete document.body.dataset.theme;
-    const white = option.value === 'white';
-    $('view-title').textContent = white ? data.title : view.title;
-    $('workspace-context').textContent = white ? view.title : data.title;
-    const examples = $('usage-examples');
-    if (white) $('usage-evidence').before(examples);
-    else $('usage-inspector').append(examples);
-    if (document.body.dataset.view === name) return false;
-
-    document.body.dataset.view = name;
-    $('section-nav').hidden = name !== 'evidence';
-    for (const section of view.sections) $('eval-basis').before($(section));
-    return true;
+  function initializeLayout() {
+    $('view-title').textContent = data.title;
+    $('workspace-context').textContent = t('轮次总览', 'Turn overview');
+    $('usage-evidence').before($('usage-examples'));
+    for (const section of ['turn-usage', 'tool-comparison', 'tool-errors', 'eval-findings']) $('eval-basis').before($(section));
   }
 
   const defaultUsageTurn = renderUsagePlot();
@@ -654,9 +650,6 @@
   $('source-cut').textContent = '#' + data.cut;
   scopeSelect.innerHTML = `<option value="">${t('整段会话', 'Full session')}</option>` +
     data.turns.map(row => `<option value="${row.number}">${turnLabel(row.number)}</option>`).join('');
-  $('view-switch').addEventListener('change', () => {
-    if (selectView()) window.scrollTo({ top: 0 });
-  });
   scopeSelect.addEventListener('change', () => selectTurn(scopeSelect.value ? Number(scopeSelect.value) : null));
   $('tool-sort').addEventListener('click', event => {
     const button = event.target.closest('button[data-sort]');
@@ -737,6 +730,6 @@
     title.focus({ preventScroll: true });
   });
 
-  selectView();
+  initializeLayout();
   selectTurn(null, true);
 })();

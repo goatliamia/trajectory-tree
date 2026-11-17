@@ -21,6 +21,7 @@ const assets={
  'scope-index.mjs':readFileSync(new URL('lib/scope-index.mjs',root),'utf8'),
  'tool-colors.mjs':readFileSync(new URL('lib/tool-colors.mjs',root),'utf8'),
  'tool-behavior.mjs':readFileSync(new URL('lib/tool-behavior.mjs',root),'utf8'),
+ 'tool-control.mjs':readFileSync(new URL('lib/tool-control.mjs',root),'utf8'),
  'tool-feedback.mjs':readFileSync(new URL('lib/tool-feedback.mjs',root),'utf8'),
 };
 let changed=false;

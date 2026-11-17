@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+  <title>Eval · 上下文组装</title>
+  <link rel="stylesheet" href="constellation.css"><script src="data.js" defer></script><script src="constellation.js" defer></script>
+</head>
+<body>
+  <header class="app-header"><div><strong>Trajectory Tree</strong><span>/</span><span>Eval</span></div><button id="theme" type="button" aria-label="切换为深色">深色</button></header>
+  <main>
+    <header class="page-heading"><div><h1>上下文组装</h1><p>来源汇入，一次请求逐渐形成。</p></div><div class="page-meta"><span class="mono">STANDARD</span><span>工作区范围</span><span class="sample-label">示例数据</span></div></header>
+    <section class="composition" aria-label="来源与请求的组装关系">
+      <div id="scene" class="scene">
+        <svg id="wiring" class="wiring" aria-hidden="true"></svg>
+        <div id="providers"></div><div id="units"></div>
+        <button id="request" class="request" type="button" aria-label="查看当前请求的内容"><span class="request-caption">本次请求</span><svg id="request-paper" class="request-paper" aria-hidden="true"></svg><span class="request-amount"><strong id="total" class="mono">6,680</strong><small>tokens</small></span><span id="request-note" class="request-note">15 项内容 · 等待模型响应</span></button>
+      </div>
+      <div class="selection-readout"><div id="selection-copy" aria-live="polite">点选来源，查看它装入了什么。</div><div class="selection-actions"><button id="inspect" type="button" hidden>查看内容 ↗</button><button id="read-body" type="button" hidden>演示读取正文 +</button></div></div>
+      <div class="transport"><button id="play" type="button" class="play"><span id="play-symbol" aria-hidden="true">▶</span><span id="play-label">回放组装</span></button><div class="step-controls"><button id="previous" type="button" aria-label="上一个装填阶段">←</button><span id="position" class="mono">06 / 06</span><button id="next" type="button" aria-label="下一个装填阶段">→</button></div><div id="stages" class="stage-marks" role="group" aria-label="选择装填阶段"></div><span id="stage-label" aria-live="polite">用户输入已加入</span><button id="reset" type="button" hidden>回到首次请求</button></div>
+    </section>
+    <footer><span>连线表示来源与汇入关系；点选后查看内容与来源。</span><span>示例数据与讲解顺序 · Skill 目录、正文分别计量</span></footer>
+  </main>
+  <dialog id="details"><header class="drawer-heading"><div><span id="detail-kind" class="mono">SOURCE</span><h2 id="detail-title">内容来源</h2></div><button id="close-details" type="button" aria-label="关闭内容详情">×</button></header><p id="detail-description"></p><div id="detail-summary"></div><div id="detail-items"></div><div id="item-text"></div><button id="drawer-read-body" type="button" hidden>演示读取 trace-analysis 正文 ↗</button><p class="drawer-note">这里展示设计示例。实际请求的成员与顺序需由宿主记录确认。</p></dialog>
+</body>
+</html>

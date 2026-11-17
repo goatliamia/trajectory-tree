@@ -703,7 +703,10 @@ body.geist-review{font:14px/1.5 var(--sans);color:var(--ink);background:var(--su
 .geist-step-context{display:flex;align-items:baseline;gap:8px;margin:0;font:12px/20px var(--sans);color:var(--muted);overflow:hidden}
 .geist-review .geist-step-context>span{flex:none;color:var(--ink)}
 .geist-review .geist-step-context .geist-step-context-text{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--muted)}
-.geist-step-reply{margin:0;font:13px/22px var(--sans);color:var(--ink);overflow-wrap:anywhere}
+.geist-step-reply{margin:0;font:13px/22px var(--sans);color:var(--ink);overflow-wrap:anywhere;white-space:pre-wrap}
+.geist-step-response{min-width:0}.geist-reply-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:7px;font:11px/20px var(--sans);color:var(--muted)}
+.geist-step-response .geist-reply-toggle{display:inline-flex;align-items:center;gap:4px;padding:2px 0;color:var(--muted);font:11px/20px var(--sans)}.geist-step-response .geist-reply-toggle:hover{color:var(--review-action)}
+.geist-step-response.is-expanded>.geist-reply-heading{position:sticky;top:0;z-index:1;background:var(--surface)}
 .geist-arrow{display:inline-block;margin-left:3px;vertical-align:-2px}
 .geist-operation p .geist-text-action{margin-left:6px;white-space:nowrap}
 .geist-operation-actions{display:flex;align-items:center;flex-wrap:wrap;gap:2px 18px;margin-top:2px}
@@ -989,17 +992,32 @@ body { display: flex; flex-direction: column; align-items: stretch; }
 .geist-review .geist-context-occupied > span[data-muted="true"] { opacity: .12; }
 .geist-review [data-current-source][aria-pressed="false"] { opacity: .45; }
 
-/* 行动路径的步状态:环=最严重结局,徽标=数量。 */
-.review-action-ring { fill: none; stroke-width: 2; }
-.review-action-ring.error { stroke: #c0503f; }
-.review-action-ring.timeout { stroke: #d08a2e; }
-.review-action-ring.blocked { stroke: #8a8f98; }
-.review-action-badge circle { fill: var(--surface); stroke-width: 1.2; }
-.review-action-badge text { font-size: 9px; font-weight: 600; }
-.review-action-badge.error circle { stroke: #c0503f; } .review-action-badge.error text { fill: #c0503f; }
-.review-action-badge.timeout circle { stroke: #d08a2e; } .review-action-badge.timeout text { fill: #b0761f; }
-.review-action-badge.blocked circle { stroke: #8a8f98; } .review-action-badge.blocked text { fill: #6f757d; }
-.review-action-badge.retry circle { stroke: #6a7f9a; } .review-action-badge.retry text { fill: #4d6076; }
+/* One aligned marker; policy uses the same shield in the graph and legend. */
+.review-tool-marker{pointer-events:none;color:var(--muted)}
+.trace-symbol-mark,.trace-family-symbol{fill:none;stroke:currentColor;stroke-width:1.35;stroke-linecap:round;stroke-linejoin:round;color:var(--muted)}
+.trace-symbol-mark .trace-symbol-shield{fill:var(--surface)}
+.trace-symbol-mark .trace-symbol-dot{fill:currentColor;stroke:none}
+.trace-symbol-mark[data-trace-symbol=error]{color:var(--branch-bad,#c0503f)}
+.trace-symbol-mark[data-trace-symbol=timeout]{color:var(--chart-tools,#a77c37)}
+.trace-symbol-mark[data-trace-symbol=returned],.trace-symbol-mark[data-marker-state=approved]{color:var(--chart-user,#43836b)}
+.trace-symbol-mark[data-marker-state=blocked],.trace-symbol-mark[data-marker-state=denied]{color:var(--chart-tools,#a77c37)}
+.trace-symbol-mark[data-marker-state=pending],.trace-symbol-mark[data-trace-symbol=retry],.trace-symbol-mark[data-trace-symbol=selected]{color:var(--accent)}
+.trace-symbol-coverage{stroke:var(--chart-tool);stroke-width:3}
+.review-tool-marker[data-marker-state=blocked],.review-tool-marker[data-marker-state=denied]{color:var(--chart-tools,#a77c37)}
+.review-tool-marker[data-marker-state=approved]{color:var(--chart-user,#43836b)}
+.review-tool-marker[data-marker-state=pending],.review-tool-marker[data-marker-state=retry]{color:var(--accent)}
+.review-tool-marker[data-marker-state=error]{color:var(--branch-bad,#c0503f)}
+.review-tool-marker[data-marker-state=timeout]{color:var(--chart-tools)}
+.geist-tool-record-controls{display:flex;flex-wrap:wrap;gap:5px;margin:5px 0 4px 24px}
+.geist-tool-control{display:inline-flex;padding:1px 6px;border:1px solid var(--line);border-radius:4px;font-size:10px;line-height:18px;color:var(--muted)}
+.geist-tool-control[data-control-state=blocked],.geist-tool-control[data-control-state=denied]{color:var(--chart-tools)}
+.geist-tool-control[data-control-state=approved]{color:var(--chart-user)}
+.geist-control-evidence{padding:8px 0;border-top:1px solid var(--line);font-size:11px;line-height:1.6}
+.geist-control-evidence strong{font-weight:500}.geist-control-evidence small{display:block;color:var(--muted);overflow-wrap:anywhere}
+.geist-control-evidence p{margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted)}
+.geist-review .graph-caption .geist-symbols.trace-symbols{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0;padding:8px 0;flex-basis:100%;font-size:11px;line-height:18px}
+.trace-symbol-item{display:inline-flex;align-items:center;gap:5px;color:var(--muted);white-space:nowrap}
+.trace-symbol-item svg{display:block;width:16px;height:16px;flex:0 0 16px;overflow:visible}
 
 /* 抽屉底部动作区:统一间距,避免按钮挤在一起。 */
 .geist-review .drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

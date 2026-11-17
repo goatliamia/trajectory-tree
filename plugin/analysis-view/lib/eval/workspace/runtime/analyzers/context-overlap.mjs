@@ -16,6 +16,7 @@ export function contextTextItems(preset) {
       origin:row.provenance?.origin||'unknown',phase:kind==='skills'?'on-demand':kind==='injections'?'dynamic':'startup',
       evidence:row.template||row.staticComplete===false||kind==='injections'?'static-fragment':'current-file',
       sourceLine:row.line||null,version:row.version||null,modifiedAt:row.modifiedAt||null,
+      tokens:field==='body'?(row.tokens??row.bodyTokens??row.measuredTokens??null):field==='description'&&kind==='catalog'?(row.catalogTokens??null):(row.measuredTokens??null),
       skillName:isSkill({kind})?row.name:null,reads:row.usage?.count??row.usage?.events?.length??null,
       ...(row.workspaceIds?{workspaceIds:row.workspaceIds,workspaceNames:row.workspaceNames}:{}),
       text,contentHash:hash(text),...extra});

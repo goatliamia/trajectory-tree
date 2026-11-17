@@ -30,8 +30,8 @@ export function renderEvalPage(data, { integrated = false, script = '', diagnosi
       const url = native ? geistFontPath + file : geistFontUrl(file);
       return '@font-face{font-family:' + family + ';src:url(' + url + ") format('woff2');font-weight:100 900;font-display:swap}";
     }),
-    ...['style.css', 'views.css', 'themes.css', 'code-execution.css', 'findings.css'].map(evalAsset),toolColorCss(),toolFeedbackCss(),
-    integrated ? '.brand,.appearance-control{display:none}.header-inner{justify-content:flex-end}.eval-native-details{margin-inline-end:auto}' : '',
+    ...['style.css', 'themes.css', 'code-execution.css', 'findings.css'].map(evalAsset),toolColorCss(),toolFeedbackCss(),
+    integrated ? '.brand{display:none}.header-inner{justify-content:flex-end}.eval-native-details{margin-inline-end:auto}' : '',
     '.eval-diagnosis-action + .eval-diagnosis-action{margin-inline-start:12px}',
   ].join('\n');
   const editor = diagnosis ? editorMarkup() : '';

@@ -1,0 +1,59 @@
+name: Code status
+
+on:
+  schedule:
+    - cron: '17 1 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: code-status
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Rescan modules, dependencies and complexity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      # 依赖读数来自私有引擎；复杂度由仓库内的语法树复算完成，并用固定基线核对口径。
+      - name: Check out the pinned analysis engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: goatliamia/code-relations
+          ref: 23fa1ec0ef9b730ad32c1a55f24a62f713d8750f
+          path: engine
+          ssh-key: ${{ secrets.RELATIONS_ENGINE_READ_KEY }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install the pinned compiler
+        working-directory: engine
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Regenerate the status snapshot
+        env:
+          PYTHONUTF8: '1'
+        run: node scripts/code-status.mjs --engine engine --refresh
+      - name: Show the snapshot on the run summary
+        run: cat docs/code-status.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Commit the refreshed snapshot
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/code-status.md
+          if git diff --cached --quiet; then
+            echo "快照没有变化"
+          else
+            git commit -m 'docs: refresh code status snapshot [skip ci]'
+            git push
+          fi

@@ -85,7 +85,7 @@
 | `latency` | 官方时长与 `recordedToolTiming` 分列，支持按轮或按步 |
 | `cost` | `requests[]`（每请求的 input/cacheRead/output）、汇总与 `coverage` |
 | `repeats` | 同参数候选：`key`、`count`、`seqs` |
-| `io` | 工具或文件维度：`returnedCharacters`、`count`、`errors` |
+| `io` | 工具或文件聚合：`returnedCharacters`、`count`、`errors`；不带 `groupBy` 的逐次调用另含 `measure`（增删/读取行数或字符数）、`codeFrames`（报错行列与代码摘录）和 `controls`（审批、拒绝、文件保护与边界控制状态） |
 | `context` | 上下文构成的变化：`change`、`components` |
 
 #### DSH 实录步内工具时长

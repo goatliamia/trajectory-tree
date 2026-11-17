@@ -2,7 +2,7 @@
   let reviewContextRequests = [...new Map([...(reviewContextData.historyRequests || []), ...(reviewContextData.requests || [])].map(row => [row.seq, row])).values()].sort((a, b) => a.seq - b.seq);
   function reviewIndexContextSteps(rows) {
     const byStep = new Map();
-    rows.forEach((row, index) => { const key = row.turn + ':' + row.step; if (!byStep.has(key)) byStep.set(key, index); });
+    rows.forEach((row, index) => { for (const step of row.contextSteps || [row.step]) { const key = row.turn + ':' + step; if (!byStep.has(key)) byStep.set(key, index); } });
     return byStep;
   }
   let reviewContextStepIndex = reviewIndexContextSteps(reviewContextRequests);
@@ -108,7 +108,7 @@
       const start = Math.max(left, group.start), end = Math.min(right, group.end), cx = (start + end) / 2;
       const label = first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮` + ui(' · 展开');
       const ongoing = group.rows.some(l => l.turn.end === null);
-      const duration = (first === last ? '' : ui('共 ')) + (ongoing ? '≥' : '') + reviewDuration(group.duration);
+      const duration = (traceSpanOnly ? ui('跨度 ') : first === last ? '' : ui('共 ')) + (ongoing ? '≥' : '') + reviewDuration(group.duration);
       // 宽度不够时退到短标签,再不够就只留时长;都放不下就整条不画,避免只剩一个空框。
       const span = end - start - 8;
       const shortLabel = first === last ? ui('第 ') + first + ui(' 轮') : first + '–' + last;
@@ -123,7 +123,7 @@
         ? brText(cx, 42, label, 'review-turn-duration') + brText(cx, 57, duration, 'review-turn-duration review-duration-value')
         : brText(cx, 49, single, 'review-turn-duration' + (single === duration ? ' review-duration-value' : ''));
       html += brGroup('data-review-duration-range="' + first + ':' + last + '" class="review-duration-hit"', body,
-        label + ' · ' + duration + ui('。点击查看每一轮耗时，没有按时长筛选。'));
+        label + ' · ' + duration + (traceSpanOnly ? ui('。点击查看每轮记录跨度；包含记录之间的等待。') : ui('。点击查看每一轮耗时，没有按时长筛选。')));
     }
     const last = layout.at(-1);
     if (last && visible(last.end)) html += '<path d="M' + last.end + ' 96V' + (mainHeight - 38) + '" class="review-turn-divider"/>';
@@ -138,6 +138,23 @@
     if (row.isBaseline) return ui('首轮已有 ') + reviewTokens(row.total) + ui(' · 看开始时的构成');
     return ui('第 ') + row.turn + ui(' 轮 · ') + (row.net >= 0 ? ui('净增 ') : ui('净减 ')) + reviewTokens(Math.abs(row.net));
   }
+  function reviewContextColumns(layout) {
+    if (!overviewLayers.has('context') || !reviewContextRows.length) return [];
+    return layout.map(l => {
+      const row = reviewContextMap.get(l.turn.number), amounts = contextBarAmounts(row);
+      return { l, row, amounts, x: (l.x + l.end) / 2,
+        width: Math.max(.8, Math.min(38, (l.end - l.x) * .65)),
+        positive: contextDisplaySide(amounts.increase, reviewContextScale),
+        negative: contextDisplaySide(amounts.decrease, reviewContextScale) };
+    });
+  }
+  function reviewContextObstacles(layout) {
+    return reviewContextColumns(layout).filter(column => column.row).flatMap(({ x, width, positive, negative }) => {
+      const bounds = side => Math.max(width / 2, side.overflow ? 7 : 0) + 2;
+      return [positive.height > 0 && { left: x - bounds(positive), right: x + bounds(positive), top: -positive.height - 5, bottom: 0, routeStem: true },
+        negative.height > 0 && { left: x - bounds(negative), right: x + bounds(negative), top: 0, bottom: negative.height + 5, routeStem: true }].filter(Boolean);
+    });
+  }
   function reviewContextLayer(layout, base, left, right, visible) {
     if (!overviewLayers.has('context')) return '';
     if (!reviewContextRows.length) return '';
@@ -149,12 +166,8 @@
     html += brText(left - 7, zero + 3, '0', 'review-context-axis', 'end');
     html += brText(left - 7, bottom + 3, '−' + reviewTokens(scale.limit), 'review-context-axis', 'end');
     const overflowLabels = [];
-    for (const l of layout) {
+    for (const { l, row, x, width, amounts, positive, negative } of reviewContextColumns(layout)) {
       if (!visible(l.x, l.end)) continue;
-      const row = reviewContextMap.get(l.turn.number);
-      const x = (l.x + l.end) / 2, width = Math.max(.8, Math.min(38, (l.end - l.x) * .65));
-      const amounts = contextBarAmounts(row);
-      const positive = contextDisplaySide(amounts.increase, scale), negative = contextDisplaySide(amounts.decrease, scale);
       const upper = Math.max(15, positive.height), lower = Math.max(15, negative.height);
       let body = '<rect class="br-hit" x="' + l.x + '" y="' + (zero - upper) + '" width="' + Math.max(1, l.end - l.x) + '" height="' + (upper + lower) + '"/>';
       if (!row) {
@@ -209,7 +222,7 @@
       html += '<path d="M' + x + ' 96V' + (mainHeight - 38) + '" class="review-compaction-divider"/>';
       html += brGroup('class="review-compaction-marker" data-context-compaction="' + events.map(e => e.seq).join(',') + '"',
         '<rect x="' + (x - 12) + '" y="68" width="24" height="24" rx="5" class="review-compaction-hit"/>' +
-        '<g transform="translate(' + (x - 8) + ' 71)" class="review-compact-fold"><path d="M2.5 5.5 6 8l-3.5 2.5"/><path d="M13.5 5.5 10 8l3.5 2.5"/></g>' +
+        traceSymbolMark('compact', x, 79) +
         (events.length > 1 ? brText(x + 15, 83, String(events.length), 'review-compaction-count') : ''), caption);
     }
     return html;

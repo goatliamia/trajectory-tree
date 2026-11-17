@@ -3,11 +3,11 @@
   "exists": [
     {
       "id": "E1",
-      "question": "那次真实会话里,在一段 助手消息 中,紧接着下面这段上下文之后出现的那个长标识/令牌是什么?(不要猜,查历史原文后原样引用) 上下文:「\\n{\"command\": \"$f = 'C:\\\\Users\\\\14100\\\\.dsh\\\\profiles\\\\node_modules\\\\@…」"
+      "question": "那次真实会话里,在一段 助手消息 中,紧接着下面这段上下文之后出现的那个长标识/令牌是什么?(不要猜,查历史原文后原样引用) 上下文:「\\n{\"command\": \"$f = 'C:\\\\Users\\\\example\\\\.dsh\\\\profiles\\\\node_modules\\\\@…」"
     },
     {
       "id": "E2",
-      "question": "那次真实会话里,在一段 工具输出 中,紧接着下面这段上下文之后出现的那个长标识/令牌是什么?(不要猜,查历史原文后原样引用) 上下文:「\\ndsh C:\\Users\\14100\\AppData\\Roaming\\npm\\dsh \\ndsh.cmd…」"
+      "question": "那次真实会话里,在一段 工具输出 中,紧接着下面这段上下文之后出现的那个长标识/令牌是什么?(不要猜,查历史原文后原样引用) 上下文:「\\ndsh C:\\Users\\example\\AppData\\Roaming\\npm\\dsh \\ndsh.cmd…」"
     },
     {
       "id": "E3",
@@ -15,7 +15,7 @@
     },
     {
       "id": "E4",
-      "question": "那次真实会话里,在一段 工具输出 中,紧接着下面这段上下文之后出现的那个长标识/令牌是什么?(不要猜,查历史原文后原样引用) 上下文:「<path>C:\\Users\\14100\\AppData\\Roaming\\npm\\node_modules\\@…」"
+      "question": "那次真实会话里,在一段 工具输出 中,紧接着下面这段上下文之后出现的那个长标识/令牌是什么?(不要猜,查历史原文后原样引用) 上下文:「<path>C:\\Users\\example\\AppData\\Roaming\\npm\\node_modules\\@…」"
     },
     {
       "id": "E5",
@@ -23,7 +23,7 @@
     },
     {
       "id": "E6",
-      "question": "那次真实会话里,在一段 工具输出 中,紧接着下面这段上下文之后出现的那个长标识/令牌是什么?(不要猜,查历史原文后原样引用) 上下文:「ers\\14100\\.dsh\\settings.yaml</path>\\n<type>file</type>\\n<content>\\n1:…」"
+      "question": "那次真实会话里,在一段 工具输出 中,紧接着下面这段上下文之后出现的那个长标识/令牌是什么?(不要猜,查历史原文后原样引用) 上下文:「ers\\example\\.dsh\\settings.yaml</path>\\n<type>file</type>\\n<content>\\n1:…」"
     }
   ],
   "absent": [

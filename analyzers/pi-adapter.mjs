@@ -3,6 +3,7 @@ import { posix, win32 } from 'node:path';
 import { commandReadEvidence } from './codex-adapter.mjs';
 import { attributeToolFailure, powerShellScript, isProgramTool, isShellTool } from '../plugin/trajectory-tools/lib/tool-attribution.js';
 import { inputToolMeasure, settleToolMeasure, recordedDiagnostics } from '../lib/tool-feedback.mjs';
+import { failureControls } from '../lib/tool-control.mjs';
 import {canonicalToolName,toolVisualFamily} from '../lib/tool-behavior.mjs';
 
 const categories = ['system', 'tools', 'user', 'inject', 'skill', 'assistant', 'tool'];
@@ -136,10 +137,14 @@ export function adaptPiSession(input) {
         call.codeFrames = recordedDiagnostics({ name: native.name, output: feedbackOutput, source: script, program });
       }
       step.calls.push(call); step.end = Math.max(step.end, end ?? responseEnd); step.errors += state === 'error' ? 1 : 0;
-      if (state === 'error') call.attribution = attributeToolFailure({ status: state, tool: native.name,
-        output: text(result.content), error: result.details?.error, exitCode: result.details?.exitCode,
-        stderr: result.details?.stderr, interrupted: result.details?.interrupted,
-        command: native.arguments.command ?? native.arguments.cmd });
+      if (state === 'error') {
+        call.attribution = attributeToolFailure({ status: state, tool: native.name,
+          output: text(result.content), error: result.details?.error, exitCode: result.details?.exitCode,
+          stderr: result.details?.stderr, interrupted: result.details?.interrupted,
+          command: native.arguments.command ?? native.arguments.cmd });
+        const controls = failureControls(call, { host: 'pi', error: result.details?.error, output: text(result.content) });
+        if (controls.length) call.controls = controls;
+      }
       const shell = isShellTool(native.name), shellReads = shell ? commandReadEvidence(native.arguments.command || '') : [];
       call.semanticFamily = toolVisualFamily(call);
       const shellSearch = shell && call.semanticFamily==='search';

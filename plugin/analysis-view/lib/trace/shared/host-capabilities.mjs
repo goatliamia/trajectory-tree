@@ -5,7 +5,7 @@ export function hostCapabilities(payload) {
   return {
     liveRefresh: host === 'dsh',
     requestTiming: host === 'dsh' ? 'official-stats' : 'unavailable',
-    contextComposition: host === 'dsh' ? 'request-estimate' : context.current ? 'visible-text-estimate' : 'unavailable',
+    contextComposition: host === 'dsh' ? 'request-estimate' : context.current ? context.source?.kind === 'claude-recorded-api-requests' ? 'recorded-request-estimate' : 'visible-text-estimate' : 'unavailable',
     childHistory: host === 'dsh' ? 'on-demand' : 'unavailable',
     ...payload.traceCapabilities,
     // These actions use the DSH bridge, even when another host is embedded.

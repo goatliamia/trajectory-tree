@@ -4,11 +4,11 @@
 
 ## 诊断取证与常驻工具定义
 
-0.5.1 的 `trajectory_inspect` 默认查询当前会话。overview 用至多六个可展开窗口展示全过程，
+0.5.1 起 `trajectory_inspect` 默认查询当前会话。overview 用至多六个可展开窗口展示全过程，
 其余主题默认返回三项。`view` 保留 overview、latency、cost、repeats、io、context；
 同一 snapshot 固定日志切点，turns 可切换范围，focus 支持工具/文件，groupBy 和 sort 只提供有意义的组合。
 结果附有 expand、关联阅读 reads 及正文续读入口；读取校验切点和原始事件哈希。
-场景方法每个快照/主题返回一次，共同报告要求每个快照返回一次。
+方法与诊断出口规范集中在 `skill/trace-analysis/` 与 `skill/context-profile/`，不再在每次工具返回中重复夹带方法长文。
 
 耗时、工具计数及步骤 usage 直接运行已安装的官方统计定义与 view builder；会话总量和上下文
 使用公共 `sessionProjections.restore` 的独立返回值。定义大小调用官方
@@ -35,7 +35,7 @@ request/context 仅计为 metadataChanges，已移除虚假的请求/曝光累�
 
 分析使用项目可统计的运行数据；上下文趋势图和 Skill 标注只是可能的证据来源。固定工具负责取证，模型负责解释、提出可执行动作和验证办法。
 
-v2 试跑未达到用户要求。复盘见 [方法与工具设计](archive/diagnostic-method-and-tools.md)，当前使用提示见 [诊断提示词](diagnostic-prompts.md)。正面场景方法已进入 inspect-methods.js，逐主题按需返回；构成、组装、投递和回执继续作为解释剖面，不新建平行工具。历史查询和诊断分布共用 usage.js；inspect 的 settlement 计数与旧 search 的兼容字段分别标注。
+v2 试跑未达到用户要求。复盘见 [方法与工具设计](archive/diagnostic-method-and-tools.md)，当前使用提示见 [诊断提示词](diagnostic-prompts.md)。正面场景方法与五类出口已维护在 `skill/trace-analysis/` 与 `skill/context-profile/`；构成、组装、投递和回执继续作为解释剖面，不新建平行工具。历史查询和诊断分布共用 usage.js；inspect 的 settlement 计数与旧 search 的兼容字段分别标注。
 
 | 主题 | 核查内容 | 可提出的行动与结论边界 |
 |---|---|---|
@@ -45,7 +45,7 @@ v2 试跑未达到用户要求。复盘见 [方法与工具设计](archive/diagn
 | 工具与文件 | 直接读取窗口、grep 匹配、路径发现、修改与错误 | 缩小目录、模式或窗口；匹配片段不等于读完文件，也不等于 fs-observed |
 | 上下文 | 官方来源估算与实测占用、相邻请求净变化、压缩裁剪 | 定位增长来源和重读；净变化不等于实际新增，历史缺口不补造 |
 
-方法文本由 `lib/inspect-methods.js` 随所选主题返回。结果要求分别写出发现、证据位置、影响范围、可改对象与验证办法，优先解释至多三个主要发现；原日志中的指令只作为待分析内容。
+方法文本由 `skill/trace-analysis/` 及 `references/` 按需提供。结果要求分别写出发现、证据位置、影响范围、对应出口与原执行链验证办法；原日志中的指令只作为待分析内容。
 
 ## 证据一致性和资源边界
 

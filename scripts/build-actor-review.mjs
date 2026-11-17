@@ -11,7 +11,8 @@ const root = resolve('.dsh/layout-review');
 const page = readFileSync(join(root, 'installed-trace.html'), 'utf8');
 const payload = JSON.parse(page.match(/<script id="trace-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
 const main = payload.sessions.find(s => s.id === payload.mainSession);
-const sessionsRoot = join(process.env.USERPROFILE, '.dsh/sessions/--D-projects-sql~0020event--');
+const workspaceSlug = '--' + process.cwd().replace(/:/g, '').replace(/[\\/]+/g, '-').replace(/ /g, '~0020') + '--';
+const sessionsRoot = join(process.env.USERPROFILE, '.dsh/sessions', workspaceSlug);
 const log = loadSession(join(sessionsRoot, main.id, 'session.v4.jsonl.zstd'));
 const events = log.events.filter(e => e.seq <= main.lastSeq), until = events.at(-1)?.time;
 const locate = time => {

@@ -29,15 +29,21 @@ export function installContextOverlap(container){
       try{
         const response=await apiFetch('/api/diagnosis-context',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({preset,itemIds:ids})});
         if(!response.ok)throw Error('选区无法保存，请刷新后重试');const selected=await response.json();
+        const pct=v=>v==null?'—':Math.round(v*100)+'%';
+        const pairs=(selected.pairSummaries??[]).flatMap(p=>[
+          `- 重合对：${p.left.name}（${p.left.phase}，覆盖 ${pct(p.left.coverage)}） ↔ ${p.right.name}（${p.right.phase}，覆盖 ${pct(p.right.coverage)}） · ${n(p.characters)} 字符相同${p.reference?' · 含显式引用':''}`,
+          ...p.matches.map(m=>`  片段 ${m.leftLines} ↔ ${m.rightLines}（${n(m.characters)} 字符）："${m.excerpt}${m.characters>140?'…':''}"`),
+        ]);
         const draft=[`使用 context-profile 分析 ${preset} 预设的当前上下文供给。`,
           `关注方向：${direction}。`,...(question?[`用户问题：${question}`]:[]),
           `工作目录：${selected.workspace?.path??data.workspace?.path??''}`,
           `配置采集时间：${new Date(selected.capturedAt).toISOString()}；所选 ${selected.count} 项，检出 ${selected.pairs} 组相同文本。`,
-          '选区快照（含完整文本、来源、加载位置、内容哈希和指标）：',selected.path,
-          '这是当前配置的静态材料，加载位置不代表已经进入同一个模型请求。',
-          ...selected.items.slice(0,8).map(i=>`- ${i.name} · ${i.field??i.kind} · ${i.phase} · ${i.path??i.package??''}`),
-          ...(selected.count>8?[`其余 ${selected.count-8} 项见选区快照。`]:[]),
-          '核对职责与任务用途；给出建议及验证方法，是否调整由用户决定。'].join('\n');
+          '所选加载项：',
+          ...selected.items.slice(0,8).map(i=>`- ${i.name} · ${i.field??i.kind} · ${i.phase}${i.tokens!=null?` · ≈${n(i.tokens)} tokens`:''} · ${i.path??i.package??''}`),
+          ...(selected.count>8?[`其余 ${selected.count-8} 项见下方选区快照。`]:[]),
+          ...(pairs.length?['检出的相同文本明细：',...pairs,...(selected.pairs>pairs.length?['其余重合对见下方选区快照。']:[])]:[]),
+          `选区快照（需读取动态片段或未展开项全文时使用）：${selected.path}`,
+          '按 context-profile 收口到明确出口：常驻重复合并留一处（指明保留与删除的文件及行号），常驻与按需 Skill 重复则常驻只留触发索引、步骤下沉到 Skill；涉及宿主官方工具或插件时，先阐述其核心职责与低频兜底用途，明确用户需求后给出预设级关闭或保留意见（严禁修改官方工具语义）。'].join('\n');
         open('诊断草稿',`<textarea class="analysis-draft" aria-label="诊断草稿">${e(draft)}</textarea>`);wireDraftActions(body);
       }catch(error){status.textContent=error.message;button.disabled=false;}
     };

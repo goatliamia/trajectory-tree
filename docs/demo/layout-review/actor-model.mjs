@@ -1,4 +1,5 @@
 import { ui } from "../../../lib/i18n.mjs";
+import { branchStemCandidates } from './branch-layout.mjs';
 export function actorRecords(data) {
   const session = data.sessions.find(s => s.id === data.mainSession), context = data.context || {};
   const locate = event => {
@@ -80,17 +81,29 @@ export function layoutAgentForks(items, { left, right, measure, labelOf, expande
     const placed = []; let failed = -1;
     for (const [index, members] of groups.entries()) {
       const single = members.length === 1, item = members[0], open = single && (item.showResults ?? item.branch.id === expanded);
-      const x = item.x, end = single ? Math.max(x + 18, item.end) : x + 22;
+      const anchorX = item.x, anchorEnd = single ? Math.max(anchorX + 18, item.end) : anchorX + 22;
       const label = labelOf(members), width = Math.min(right - left, measure(label) + 20);
-      const cx = Math.max(left + width / 2, Math.min(right - width / 2, (x + end) / 2));
-      const rect = { left: Math.min(x, cx - width / 2), right: Math.max(end, cx + width / 2) };
-      const slot = slots.map(dy => ({ ...rect, x, end, cx, dy, label, members, open,
-        top: dy - (compact ? 16 : open && dy < 0 ? 112 : 30), bottom: dy + (compact ? 4 : open ? (dy > 0 ? 108 : 35) : 10) }))
-        .find(p => placed.every(q => !hit(p, q)) && obstacles.every(o => !hit(p, o)));
+      let slot;
+      const candidates = groups.length === 1 ? [...slots, Math.max(0, ...obstacles.map(p => p.bottom)) + 42] : slots;
+      for (const [slotIndex, dy] of candidates.entries()) {
+        const maxShift = slotIndex >= slots.length ? Infinity : 48;
+        const x = branchStemCandidates(anchorX, dy, obstacles, left, right, maxShift)[0];
+        if (x == null) continue;
+        const end = single && item.branch.returnTime != null
+          ? branchStemCandidates(anchorEnd, dy, obstacles, left, right, maxShift).find(value => value > x + 3)
+          : Math.max(x + 18, anchorEnd);
+        if (end == null) continue;
+        const cx = Math.max(left + width / 2, Math.min(right - width / 2, (x + end) / 2));
+        const p = { left: Math.min(x, cx - width / 2), right: Math.max(end, cx + width / 2),
+          anchorX, anchorEnd, x, end, cx, dy, label, members, open,
+          top: dy - (compact ? 16 : open && dy < 0 ? 112 : 30), bottom: dy + (compact ? 4 : open ? (dy > 0 ? 108 : 35) : 10) };
+        if (placed.every(q => !hit(p, q)) && obstacles.every(o => !hit(p, o))) { slot = p; break; }
+      }
       if (!slot) { failed = index; break; }
       placed.push(slot);
     }
     if (failed < 0) return placed;
+    if (groups.length < 2) throw new Error('Cannot place agent fork');
     const i = Math.max(0, failed - 1);
     groups.splice(i, 2, [...groups[i], ...groups[i + 1]]);
   }

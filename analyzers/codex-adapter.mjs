@@ -3,6 +3,7 @@ import { win32, posix } from 'node:path';
 import { omitCodexImages, omitImageLabels } from './codex-images.mjs';
 import { attributeToolFailure, commandPowerShellEdition, powerShellScript } from '../plugin/trajectory-tools/lib/tool-attribution.js';
 import {inputToolMeasure,settleToolMeasure,recordedDiagnostics} from '../lib/tool-feedback.mjs';
+import { failureControls } from '../lib/tool-control.mjs';
 import {codexContextAnchors,compositionAtOrdinal} from './codex-context-anchors.mjs';
 import {commandIntent} from '../lib/tool-behavior.mjs';
 
@@ -264,6 +265,8 @@ export function adaptCodexThread(snapshot, options = {}) {
       if (state === 'error') {
         call.attribution = attributeToolFailure({ status: state, tool: nativeName, output: result,
           error: item.error, exitCode: item.exitCode, command: item.command });
+        const controls = failureControls(call, { host: 'codex', error: item.error, output: result });
+        if (controls.length) call.controls = controls;
         const edition = item.type === 'commandExecution' ? commandPowerShellEdition(item.command) : null;
         if (edition) call.powerShellEdition = edition;
       }

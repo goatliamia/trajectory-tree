@@ -11,7 +11,7 @@
 - [处置与知识保留](../skill/trace-analysis/references/disposition.md)：各类分析共用的修复、恢复、补能力与保留知识的方法；同一问题可组合处置方向。
 - [代码执行诊断](../skill/trace-analysis/references/code-execution.md)：从 PowerShell、命令与 PTC 的实际执行链核对失败、处理和结果；Eval 的代码执行区可直接装填相同方法。
 - [报告写作](../report/WRITING.md)与[组件绑定](../report/AUTHORING.md)：主要调查完成后交付结论、依据和处理结果；流程图表达已经核实的分支、依赖与汇合。
-- [静态剖面与能力保持](static-context-profile.md)：解释构成、作用、使用与保留价值，核对工具变更的受影响场景。
+- [静态剖面与能力保持](../skill/context-profile/SKILL.md)：解释构成、作用、使用与保留价值，核对工具启停的受影响场景（历史案例见[静态剖面早期研究](archive/static-context-profile.md)）。
 - [取证实现](trajectory-tools-design.md)：官方统计、切点、缓存与读取校验。
 
 包内 `dsh-trajectory-tools/prompts` 导出入口、方法、共同规则与版本。`lib/skill.js` 是查询 skill 的维护来源；`scripts/sync-diagnostic-prompts.mjs` 生成文档和 skill 镜像，`--check` 检查漂移。
@@ -26,7 +26,7 @@
 
 ## 历史与实验
 
-[三会话再试](archive/diagnostic-experiment-v3-results.md)、[首轮试跑](archive/diagnostic-pilot-results.md)保留真实试验范围与开销，不作为后续文字修订已重跑的证明。[方法复盘](archive/diagnostic-method-and-tools.md)、[上下文适配](archive/context-evidence-interface.md)和[机制研究](injection-provenance-research.md)保留设计依据。
+[三会话再试](archive/diagnostic-experiment-v3-results.md)、[首轮试跑](archive/diagnostic-pilot-results.md)保留真实试验范围与开销，不作为后续文字修订已重跑的证明。[方法复盘](archive/diagnostic-method-and-tools.md)、[上下文适配](archive/context-evidence-interface.md)和[机制研究](archive/injection-provenance-research.md)保留设计依据。
 
 `diagnostic-prompts-draft.md`、`diagnostic-analysis-v2.md`、`diagnostic-analysis-v3.md` 是历史草稿/实验材料。当前使用版以包内导出和生成文档为准。
 

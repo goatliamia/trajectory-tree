@@ -18,13 +18,19 @@
 
 Unfold the session into branches of tools and actions. Open any turn to inspect arguments, results, file changes, subagent relations and context deltas, then follow the linked records to see how the task progressed.
 
+- **Per-call measures and error code frames**: Writes and edits compute added/removed line counts (`measure`), while failed calls pinpoint source lines and columns with surrounding code excerpts (`codeFrames`).
+- **Approval and policy control markers**: The main trunk and step details surface approval rejections, read/version guards (`FS_NOT_OBSERVED` / `FS_STALE_VERSION`), worktree isolation boundaries (`HOST_WORKTREE_GUARD`), timeouts and same-input retries (`controls`).
+- **Current context sidebar (DSH)**: A right-hand sidebar displays currently retained context across seven categories as a continuous zoomable treemap, respecting post-compaction surfaces and loading full text on demand.
+
 ![Execution path with turns, tool branches, file changes and context deltas](docs/media/trajectory-overview-en.jpg)
 
-## Eval
+## Eval and configuration management
 
-Eval extracts metrics from everyday tasks using the same trace data and cut as the tree. No separate benchmark is required. Session Eval compares turn timing, output, tool latency and errors; the project overview adds progress, model behavior and signals across sessions.
+Eval extracts metrics from everyday tasks using the same trace data and cut as the tree. No separate benchmark is required. Session Eval compares turn timing, output, tool latency and errors; the project overview brings together preset configuration, Skill usage, task progress, model behavior and signals across sessions.
 
-Filter by project, date and model, then compare requests and execution by window occupancy, input size or tool. Select a band to inspect its samples. DSH shows loaded sessions immediately and fills in the remaining data while preserving filters and diagnosis selections.
+- **Zoomable treemap**: Compare the size and read frequency of system prompts, project instructions, tool definitions, Skill catalog entries and loaded bodies with pointer-anchored zoom, double-click focus and in-place detail drawers.
+- **Capability management and context overlap**: Enable or disable Skills per preset with reversible overrides and cache-impact previews; automatically detect exact 64-character winnowing overlaps across system prompts, `AGENTS.md`, tool descriptions and Skills with shared quotes, coverage ratios and `L1 ↔ L2` line comparisons.
+- **Window occupancy and unified disposition matrix**: Drag or click `5%` window occupancy bins to encode feedback counts, window distributions, call latency and request wait times directly across the four disposition directions.
 
 ![Project overview with task progress, goals, deliverables and model comparisons](docs/media/global-eval-en.jpg)
 
@@ -39,22 +45,30 @@ Filter by project, date and model, then compare requests and execution by window
 
 ## Follow a failure signal to its execution
 
-**Code execution** brings PowerShell, child-program and PTC code together with host outcomes and feedback. Filter by executor or signal to inspect script positions, evidence, parent/child calls and later returns. The program attributes recognizable signals; the agent investigates the task and environment behind them.
+**Code execution** brings PowerShell, Bash, child-program and PTC code together with host outcomes and feedback. Filter by executor or signal to inspect script positions, evidence, parent/child calls and later returns, backed by PowerShell AST and Bash `noexec` static syntax checks.
 
 ![Code execution analysis with signals, calls, original code and feedback](docs/media/code-execution-en.jpg)
 
 | Case | Evidence to inspect |
 | --- | --- |
-| PowerShell syntax or argument error | Original script, parser location, outer exit code and specific feedback |
-| Edit blocked by a read guard | Target file, later read, same-input edit return and verification |
-| A failed PTC child call | Outer program, inner tool and their respective outcomes |
+| PowerShell / Bash syntax or argument error | Original script, static/runtime parser location, outer exit code and specific feedback |
+| Edit blocked by a file guard or worktree boundary | Control signal (`controls`), target file, later read, same-input edit return and verification |
+| A failed PTC child call | Outer program, inner tool and their respective outcomes and code frames |
 | More errors at high window occupancy | Samples and error distributions for the same model, tool and occupancy band |
 
-## Diagnose a selection
+## Diagnose a selection with explicit exits
 
-In the DSH tree, hold to select an item or hold and drag to select a region. Context change bars are selectable too. In Eval, start from the chart details, including DSH tool sources and calls. Pick a question to get an editable draft with the session, selection and evidence queries. Review it before sending.
+In the tree, hold to select an item or hold and drag to select a region. Context change bars are selectable too. In Eval, start from the unified disposition matrix, code execution or context overlap view. Pick a question to get an editable draft with the session, selection, overlap excerpts (with line ranges and coverage) and evidence queries.
 
-Overview and session Eval also offer **Diagnosis signals**. Program-generated groups suggest directions to investigate: implementation or environment, recovery, capabilities, and reusable methods. Directions can be combined; the agent follows the existing evidence workflow to reach a diagnosis. A same-input return records a later outcome without claiming task completion.
+The diagnosis skills (`trace-analysis` and `context-profile`) converge directly on five actionable exits:
+
+| Diagnostic exit | Condition and action |
+| --- | --- |
+| **No action needed** | E.g., `FS_NOT_OBSERVED` was resolved in the same turn by reading the file and succeeding with identical parameters, or a probe command returned an expected miss |
+| **Repair implementation or environment** | Pinpoint the code, script syntax, parameter contract, path or config defect and re-verify on the original execution chain |
+| **Recover observation and re-run** | Check workspace and background process state after a timeout, user stop, unpersisted result or stale file version before resuming |
+| **Enable or disable capabilities** | Explain the tool's responsibilities, primary use cases and low-frequency fallback uses, align with user needs, and toggle via configuration only — **never modify the source code, schema or built-in description of official host tools** |
+| **Retain knowledge and deduplicate** | Route persistent cross-task rules to `AGENTS.md` / `CLAUDE.md`, and sink task-specific workflows or long reference guides into on-demand `SKILL.md` / `references/` |
 
 ![Choose an investigation direction from recorded signals](docs/media/diagnosis-signals-en.jpg)
 
@@ -67,7 +81,7 @@ Overview and session Eval also offer **Diagnosis signals**. Program-generated gr
 
 ## Deliver the investigation as a report
 
-Reports combine conclusions, Eval metrics from the same cut and original evidence. Connect actions, feedback and verification with flowcharts; show composition with rings; compare distributions, trends and tables. Select chart elements to inspect records and measurement details. The resulting HTML works offline.
+Reports follow a **Vercel Geist** open-canvas and `1px` hairline layout, compiling reviewed conclusions, 11 synchronized Eval tables from the same cut (including `findings` disposition groups and `code-execution`), and original evidence into a standalone offline HTML file. Full-width lead conclusions pair with 2-column compact charts, full-width evidence-bound flowcharts (`flow`), and on-demand evidence readout bars.
 
 ![Diagnostic report with reviewed conclusions and an evidence-bound flow](docs/media/diagnostic-report-en.jpg)
 
@@ -99,7 +113,7 @@ The trajectory generation entry in Pi, Codex and Claude Code also accepts `--eva
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.7.tgz ./dsh-analysis-view-0.10.147.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.8.tgz ./dsh-analysis-view-0.11.0.tgz
 ```
 
 Restart `dsh web`, then open **Eval** or use `/trajectory` for the current session's path. Choose a diagnostic question and select **Fill conversation** to append the draft to the composer. The plugins target the DSH 0.2.2 line; see the [host compatibility notes](docs/host-compatibility.md#dsh-version).
@@ -185,7 +199,7 @@ The trajectory tree, Eval and diagnostic drafts follow the host or browser langu
 
 | Tool | Purpose |
 | --- | --- |
-| `trajectory_inspect` | Inspect the process, latency, usage, repeated attempts, tools/files and context |
+| `trajectory_inspect` | Inspect the process, latency, usage, repeated attempts, tools/files (including per-call `measure`, `codeFrames` and `controls`) and context |
 | `trajectory_search` | Locate sessions, literal records and statistical scopes |
 | `trajectory_read` | Read originals, connected actions and feedback; continue through full arguments and results |
 | `trajectory_graph` | Inspect record relations and session lineage |
@@ -219,6 +233,8 @@ Queries are read-only. Each host exposes its recorded evidence; missing content 
 ```sh
 node scripts/sync-host-skills.mjs --check
 node scripts/sync-view-assets.mjs --check
+node --test test/hygiene-test.mjs test/complexity/code-status-test.mjs
+node report/smoke-test.mjs
 npm test --prefix plugin/trajectory-tools
 npm test --prefix plugin/portable-tools
 node plugin/analysis-view/presentation-test.mjs

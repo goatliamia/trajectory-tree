@@ -1,0 +1,237 @@
+<!-- Editable source of circuit.html. Event references are from the frozen DSH first-request study. -->
+<div id="context-circuit-assembly">
+  <style>
+    #context-circuit-assembly{--cc-paper:#fcfcfa;--cc-ink:#39413f;--cc-secondary:#78827e;--cc-line:#becdc4;--cc-fine:#d8e2da;--cc-accent:#7e9d9c;--cc-accent-ink:#527b7a;--cc-surface:#f6f8f4;--cc-texture-strength:.8;font-family:Inter,"Segoe UI","Microsoft YaHei UI",sans-serif;color:var(--cc-ink);background:transparent;container-type:inline-size}
+    #context-circuit-assembly *{box-sizing:border-box}
+    #context-circuit-assembly .cc-product{background:var(--cc-paper);overflow:hidden;position:relative;min-width:0}
+    #context-circuit-assembly .cc-topline{display:flex;justify-content:space-between;align-items:center;padding:19px 24px 17px;border-bottom:1px solid #e9ede7;font-size:11px;color:var(--cc-secondary);gap:20px}
+    #context-circuit-assembly .cc-brand{display:flex;gap:13px;align-items:center;white-space:nowrap}
+    #context-circuit-assembly .cc-brand strong{font-weight:500;color:var(--cc-ink);font-size:12px}
+    #context-circuit-assembly .cc-topline .cc-cut{font:10px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.03em;white-space:nowrap}
+    #context-circuit-assembly .cc-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:27px 29px 0}
+    #context-circuit-assembly h2{font-size:23px;line-height:1.4;font-weight:500;letter-spacing:-.045em;margin:0}
+    #context-circuit-assembly .cc-subtitle{color:var(--cc-secondary);font-size:11px;margin:7px 0 0;line-height:1.6}
+    #context-circuit-assembly .cc-viewlabel{font:10px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--cc-secondary);padding-bottom:3px;white-space:nowrap}
+    #context-circuit-assembly .cc-scene{position:relative;width:100%;height:610px;margin-top:5px}
+    #context-circuit-assembly .cc-drawing{display:block;width:100%;height:100%;overflow:visible}
+    #context-circuit-assembly .cc-labels{position:absolute;inset:0;pointer-events:none}
+    #context-circuit-assembly .cc-source{position:absolute;pointer-events:auto;display:flex;align-items:baseline;gap:9px;text-align:left;background:none;border:0;padding:4px 6px 4px 0;cursor:pointer;color:var(--cc-ink);white-space:nowrap;font-family:inherit;line-height:1.3;border-radius:0}
+    #context-circuit-assembly .cc-source .cc-name{font-size:12px;font-weight:500}
+    #context-circuit-assembly .cc-source .cc-seq{font:10px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--cc-secondary)}
+    #context-circuit-assembly .cc-source[aria-pressed=true] .cc-name{color:var(--cc-accent-ink)}
+    #context-circuit-assembly .cc-source[aria-pressed=true]:before{content:"";position:absolute;width:4px;height:4px;left:-10px;top:11px;background:var(--cc-accent-ink)}
+    #context-circuit-assembly .cc-source:hover .cc-name{color:var(--cc-accent-ink)}
+    #context-circuit-assembly .cc-small-label{position:absolute;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--cc-secondary);line-height:1.5;pointer-events:none;white-space:nowrap}
+    #context-circuit-assembly .cc-request-label{position:absolute;font-size:12px;color:var(--cc-ink);pointer-events:none;line-height:1.5}
+    #context-circuit-assembly .cc-request-label span{display:block;margin-top:5px;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--cc-secondary)}
+    #context-circuit-assembly .cc-readout{margin:0 28px;padding:17px 0 15px;border-top:1px solid #e2e7e1;display:grid;grid-template-columns:91px 1fr;gap:12px;align-items:baseline;min-height:61px}
+    #context-circuit-assembly .cc-readout strong{font-size:12px;font-weight:500;line-height:1.65}
+    #context-circuit-assembly .cc-readout p{margin:0;font-size:11px;color:var(--cc-secondary);line-height:1.8}
+    #context-circuit-assembly .cc-foot{padding:0 28px 20px;display:flex;justify-content:space-between;gap:18px;color:var(--cc-secondary);font-size:10px;line-height:1.7}
+    #context-circuit-assembly .cc-route{fill:none;stroke:var(--cc-line);stroke-width:.8;vector-effect:non-scaling-stroke}
+    #context-circuit-assembly .cc-route-minor{fill:none;stroke:var(--cc-fine);stroke-width:.65;vector-effect:non-scaling-stroke}
+    #context-circuit-assembly .cc-edge{fill:none;stroke:#aebbb3;stroke-width:.8;vector-effect:non-scaling-stroke}
+    #context-circuit-assembly .cc-etch{fill:none;stroke:var(--cc-line);stroke-width:.65;vector-effect:non-scaling-stroke;opacity:var(--cc-texture-strength)}
+    #context-circuit-assembly .cc-via{fill:var(--cc-paper);stroke:#b6c4bc;stroke-width:.8;vector-effect:non-scaling-stroke}
+    #context-circuit-assembly .cc-pad{fill:#dbe5dc}
+    #context-circuit-assembly .cc-group.is-selected .cc-route{stroke:var(--cc-accent-ink);stroke-width:1}
+    #context-circuit-assembly .cc-group.is-selected .cc-route-minor{stroke:#b0c7c2}
+    #context-circuit-assembly .cc-group.is-selected .cc-etch{stroke:var(--cc-accent);opacity:1}
+    #context-circuit-assembly .cc-group.is-selected .cc-via{stroke:var(--cc-accent-ink)}
+    #context-circuit-assembly .cc-group.is-selected .cc-pad{fill:#a8c3b8}
+    #context-circuit-assembly .cc-drawing text{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;fill:var(--cc-secondary);font-size:10px}
+    #context-circuit-assembly .cc-drawing .cc-slot-index{font-size:10px;fill:#82908a}
+    #context-circuit-assembly .cc-micro{font-size:8px!important;letter-spacing:.05em}
+    #context-circuit-assembly .cc-hatch{opacity:.62}
+    #context-circuit-assembly.no-etch .cc-etch,#context-circuit-assembly.no-etch .cc-hatch{visibility:hidden}
+    @container(max-width:570px){
+      #context-circuit-assembly .cc-topline{padding:15px 17px;font-size:10px;gap:8px}
+      #context-circuit-assembly .cc-topline .cc-cut{font-size:9px}
+      #context-circuit-assembly .cc-brand{gap:8px}
+      #context-circuit-assembly .cc-brand strong{font-size:11px}
+      #context-circuit-assembly .cc-heading{padding:23px 18px 0;align-items:flex-start;gap:9px}
+      #context-circuit-assembly h2{font-size:21px}
+      #context-circuit-assembly .cc-subtitle{font-size:11px;max-width:220px}
+      #context-circuit-assembly .cc-viewlabel{display:none}
+      #context-circuit-assembly .cc-source{min-height:38px;white-space:normal;gap:7px;max-width:calc(100% - 165px);align-items:center}
+      #context-circuit-assembly .cc-source .cc-name{font-size:12px}
+      #context-circuit-assembly .cc-source .cc-seq{font-size:10px}
+      #context-circuit-assembly .cc-source[aria-pressed=true]:before{top:17px}
+      #context-circuit-assembly .cc-small-label{font-size:10px;white-space:normal}
+      #context-circuit-assembly .cc-readout{margin:0 18px;grid-template-columns:1fr;gap:3px;padding-top:14px}
+      #context-circuit-assembly .cc-readout p{font-size:11px}
+      #context-circuit-assembly .cc-foot{padding:0 18px 17px;display:block;font-size:10px}
+      #context-circuit-assembly .cc-foot>span{display:block}
+    }
+  </style>
+  <section class="cc-product" aria-label="浅色电路纹理的上下文装配设计">
+    <header class="cc-topline"><div class="cc-brand"><strong>Trajectory Tree</strong><span>/</span><span>Eval</span></div><span class="cc-cut">T01 · S01</span></header>
+    <div class="cc-heading"><div><h2>上下文装配</h2><p class="cc-subtitle">来源在此接合，形成一次请求。</p></div><div class="cc-viewlabel">FIRST REQUEST / DSH</div></div>
+    <div class="cc-scene">
+      <svg class="cc-drawing" role="img" aria-label="七段消息依原始事件顺序接入请求，第四段工作区指令的走线被选中。工具声明在独立接口汇入。"></svg>
+      <div class="cc-labels"></div>
+    </div>
+    <div class="cc-readout" aria-live="polite"><strong>工作区指令</strong><p>seq 18 写入 messages[3] · role=user · ~/.dsh/AGENTS.md</p></div>
+    <footer class="cc-foot"><span>接点保留原始事件 · 消息按 0 → 6 排列</span><span>7 段消息 · 49 项工具声明</span></footer>
+  </section>
+  <script>
+    (() => {
+      const root = document.getElementById('context-circuit-assembly');
+      const scene = root.querySelector('.cc-scene');
+      const svg = root.querySelector('.cc-drawing');
+      const labels = root.querySelector('.cc-labels');
+      const readout = root.querySelector('.cc-readout');
+      const sources = [
+        {key:'system',name:'系统提示',seq:15,tag:'system',description:'seq 15 整体写入 messages[0] · role=system · 内部各节的装配时刻未记录。'},
+        {key:'approval',name:'审批策略',seq:16,tag:'user-approval',description:'seq 7 入队 → seq 12 取出 → seq 16 写入 messages[1] · role=user。'},
+        {key:'user',name:'用户消息',seq:17,tag:'user',description:'seq 10 入队 → seq 13 取出 → seq 17 写入 messages[2] · role=user。'},
+        {key:'instructions',name:'工作区指令',seq:18,tag:'agent-instructions',description:'seq 18 写入 messages[3] · role=user · ~/.dsh/AGENTS.md'},
+        {key:'runtime',name:'运行环境',seq:19,tag:'runtime-context',description:'seq 19 写入 messages[4] · 工作目录、沙箱、审批策略、宿主位置与 Web 地址。'},
+        {key:'skills',name:'Skill 目录',seq:20,tag:'skill-catalog',description:'seq 20 写入 messages[5] · 15 项 Skill 目录，记录的是名称与描述。'},
+        {key:'time',name:'时间上下文',seq:21,tag:'time-context',description:'seq 21 写入 messages[6] · 采样时间与时区信息。'},
+        {key:'tools',name:'工具声明',seq:22,tag:'tools',description:'seq 22 记录 request/header.tools · 49 项声明，保留为独立请求字段。'}
+      ];
+      const saved = window.openai?.widgetState;
+      let selected = sources.some(s => s.key === saved?.privateContent?.selected) ? saved.privateContent.selected : 'instructions';
+      const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const path = (d,cls='cc-route') => '<path class="'+cls+'" d="'+d+'"/>';
+      const via = (x,y,r=2) => '<circle class="cc-via" cx="'+x+'" cy="'+y+'" r="'+r+'"/>';
+      const line = (x1,y1,x2,y2,cls='cc-etch') => '<line class="'+cls+'" x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'"/>';
+      function motif(key,x,y,width=132){
+        let out='',w=width;
+        if(key==='system'){
+          for(let j=0;j<8;j++){
+            const yy=y+j*4.6,short=(j%3)*9;
+            out+=path('M '+x+' '+yy+' h '+(w-43-short)+' l 9 -5 h '+(19+short),'cc-etch');
+          }
+          out+=via(x+4,y+32,1.6)+line(x+4,y+32,x+25,y+32);
+        }else if(key==='approval'){
+          for(let j=0;j<4;j++)out+=path('M '+x+' '+(y+8+j*4)+' h '+(20+j*7)+' l 10 -10 h '+(w-55-j*7),'cc-etch');
+          out+=via(x+18,y+24)+via(x+w-15,y-2,1.6)+line(x+18,y+24,x+18,y+8,'cc-route-minor');
+        }else if(key==='user'){
+          for(let j=0;j<5;j++)out+=path('M '+x+' '+(y+j*5)+' h '+(w-33-j%2*17)+' l 8 8 h '+(14+j%2*17),'cc-etch');
+          out+=via(x+7,y+20,1.6);
+        }else if(key==='instructions'){
+          out+=path('M '+x+' '+(y+28)+' h 21 v -26 h '+(w-35),'cc-route');
+          for(let j=0;j<6;j++)out+=path('M '+(x+28+j*6)+' '+(y+28)+' v -'+(8+j*3)+' l 5 -5 h '+(w-66-j*6),'cc-etch');
+          out+=via(x+21,y+28)+via(x+68,y+8,1.8);
+        }else if(key==='runtime'){
+          for(let j=0;j<5;j++){
+            out+=via(x+10+j*8,y+j*5,1.7);
+            out+=path('M '+(x+12+j*8)+' '+(y+j*5)+' h '+(w-37-j*8)+' l 7 7 h 11','cc-etch');
+          }
+        }else if(key==='skills'){
+          for(let j=0;j<15;j++){
+            const px=x+j*6.4,py=y+(j%3)*5;
+            out+=via(px,py,1.25)+path('M '+px+' '+(py+2)+' v '+(23-(j%3)*5)+' h '+(w-j*6.4),'cc-etch');
+          }
+        }else if(key==='time'){
+          out+=via(x+17,y+14,10)+path('M '+(x+17)+' '+(y+4)+' v 11 l 7 4','cc-etch');
+          for(let j=0;j<4;j++)out+=path('M '+(x+38)+' '+(y+6+j*5)+' h '+(w-57-j*9)+' l 6 6 h '+(13+j*9),'cc-etch');
+        }
+        const gates={system:[w-15,-5,32],approval:[w-25,-2,18],user:[w-11,8,28],instructions:[w-33,0,28],runtime:[w-7,7,27],skills:[w,18,25],time:[w,12,27]};
+        const gate=gates[key];
+        if(gate)out+=line(x+gate[0],y+gate[1],x+gate[0],y+gate[2],'cc-route-minor')+line(x+gate[0],y+18,x+w,y+18,'cc-route-minor');
+        return out;
+      }
+      function ribbon(sx,sy,tx,ty,order){
+        let out='';
+        const middle=sx+(tx-sx)*(.43+order*.012),sign=ty>=sy?1:-1;
+        for(let j=-2;j<=2;j++){
+          const offset=j*2.4,bend=middle+j*2.4;
+          if(Math.abs(ty-sy)<15){out+=path('M '+sx+' '+(sy+offset)+' L '+tx+' '+(ty+offset),j===0?'cc-route':'cc-route-minor');continue;}
+          out+=path('M '+sx+' '+(sy+offset)+' H '+(bend-7)+' l 7 '+(sign*7)+' V '+(ty+offset-sign*7)+' l 7 '+(sign*7)+' H '+tx,j===0?'cc-route':'cc-route-minor');
+        }
+        return out;
+      }
+      function innerBand(key,w,y){
+        let out=motif(key,22,y+6,w-37);
+        out+=line(0,y+24,22,y+24,'cc-route-minor');
+        out+=line(3,y+7,12,y+7,'cc-route')+line(3,y+37,12,y+37,'cc-route');
+        out+='<path class="cc-hatch" fill="url(#cc-hatch-pattern)" d="M 0 '+(y+4)+' H 10 V '+(y+41)+' H 0 Z"/>';
+        return out;
+      }
+      function toolsComb(x,y,w){
+        let out='';
+        for(let j=0;j<49;j++){
+          const xx=x+j*(w/48),rise=12+(j%7)*2.1;
+          out+=path('M '+xx+' '+y+' v -'+rise+' l 4 -4 v -'+(j%3*2),'cc-etch');
+          out+='<rect class="cc-pad" x="'+(xx-.7)+'" y="'+(y+2)+'" width="1.4" height="5"/>';
+        }
+        out+=path('M '+(x-7)+' '+(y+17)+' v 4 h '+(w+16)+' v -4','cc-edge');
+        return out;
+      }
+      function button(s,x,y){return '<button type="button" class="cc-source" data-source="'+s.key+'" aria-pressed="'+(selected===s.key)+'" aria-label="查看'+s.name+'的装入位置" style="left:'+x+'px;top:'+y+'px"><span class="cc-name">'+esc(s.name)+'</span><span class="cc-seq">#'+s.seq+'</span></button>';}
+      function render(){
+        const W=Math.max(280,scene.clientWidth),mobile=W<570;
+        let drawing='<defs><pattern id="cc-hatch-pattern" patternUnits="userSpaceOnUse" width="4" height="4"><path d="M -1 1 L 1 -1 M 0 4 L 4 0 M 3 5 L 5 3" fill="none" stroke="#ccd8cf" stroke-width=".65"/></pattern></defs>',html='';
+        if(!mobile){
+          const tx=W*.58,ty=142,pw=W*.33,ph=348;
+          const p=(x,y)=>({x:tx+x-.23*y,y:ty+.16*x+.78*y});
+          const frame='M 0 0 H '+(pw-18)+' L '+pw+' 18 V '+(ph-13)+' L '+(pw-13)+' '+ph+' H 10 L 0 '+(ph-10)+' Z';
+          drawing+='<g transform="matrix(1 .16 -.23 .78 '+tx+' '+ty+')"><path d="'+frame+'" fill="#fafcf8" stroke="#ccd7ce" stroke-width=".8" vector-effect="non-scaling-stroke"/>';
+          drawing+=path('M 9 -5 H '+(pw-20)+' L '+(pw+5)+' 20 V '+(ph-19),'cc-route-minor');
+          drawing+=path('M -5 13 V '+(ph-8)+' L 6 '+(ph+4)+' H '+(pw-22),'cc-route-minor');
+          for(let i=0;i<7;i++){
+            const yy=i*49.2;
+            drawing+='<g class="cc-group'+(selected===sources[i].key?' is-selected':'')+'" data-group="'+sources[i].key+'">'+innerBand(sources[i].key,pw,yy)+'</g>';
+          }
+          drawing+='</g>';
+          for(let i=0;i<7;i++){
+            const s=sources[i],sx=i%2?W*.185:W*.047,sy=71+i*69.1,mw=W*.173;
+            const end={x:sx+mw,y:sy+18},port=p(0,i*49.2+24);
+            drawing+='<g class="cc-group'+(selected===s.key?' is-selected':'')+'" data-group="'+s.key+'">'+motif(s.key,sx,sy,mw)+ribbon(end.x,end.y,port.x,port.y,i)+via(port.x,port.y,2.6)+line(port.x+2,port.y,port.x+11,port.y,'cc-route')+'</g>';
+            drawing+='<text class="cc-slot-index" x="'+(port.x+16)+'" y="'+(port.y-9)+'">'+i+'</text>';
+            html+=button(s,sx,sy-28);
+            if(i===1)html+='<span class="cc-small-label" style="left:'+(sx+5)+'px;top:'+(sy+33)+'px">7 → 12 → 16</span>';
+            if(i===2)html+='<span class="cc-small-label" style="left:'+(sx+5)+'px;top:'+(sy+34)+'px">10 → 13 → 17</span>';
+          }
+          const tl=p(8,-32);
+          html+='<span class="cc-request-label" style="left:'+(tl.x+5)+'px;top:'+(tl.y-39)+'px">首次请求<span>messages[0…6]</span></span>';
+          const toolX=W*.665,toolY=548,toolW=W*.21;
+          drawing+='<g class="cc-group'+(selected==='tools'?' is-selected':'')+'" data-group="tools">'+toolsComb(toolX,toolY,toolW)+path('M '+(toolX-19)+' '+(toolY-8)+' h -23 v -43 l -7 -7 h -22','cc-route')+via(toolX-71,toolY-58,2)+'</g>';
+          html+=button(sources[7],toolX,toolY-73);
+          html+='<span class="cc-small-label" style="left:'+toolX+'px;top:'+(toolY+32)+'px">tools[] · 49 项声明</span>';
+          scene.style.height='610px';
+        }else{
+          const rows=7,step=81,spine=135,top=68;
+          drawing+=path('M '+spine+' '+(top-18)+' v '+(step*6+36),'cc-route-minor');
+          html+='<span class="cc-small-label" style="left:23px;top:12px">messages[0…6]</span>';
+          for(let i=0;i<rows;i++){
+            const s=sources[i],y=top+i*step,x=23+(i%2?10:0),mw=78-(i%2?10:0);
+            drawing+='<g class="cc-group'+(selected===s.key?' is-selected':'')+'" data-group="'+s.key+'">'+motif(s.key,x,y,mw)+ribbon(x+mw,y+18,spine,y+18,i)+via(spine,y+18,2.6)+line(spine+4,y+18,spine+13,y+18,'cc-route')+'</g>';
+            drawing+='<text class="cc-slot-index" x="'+(spine-3)+'" y="'+(y-3)+'">'+i+'</text>';
+            html+=button(s,160,y-3);
+            const note=i===1?'7 → 12 → 16':i===2?'10 → 13 → 17':s.tag;
+            html+='<span class="cc-small-label" style="left:160px;top:'+(y+35)+'px;max-width:'+(W-176)+'px">'+esc(note)+'</span>';
+          }
+          const toolY=top+rows*step+20;
+          drawing+='<g class="cc-group'+(selected==='tools'?' is-selected':'')+'" data-group="tools">'+toolsComb(25,toolY+16,106)+'</g>';
+          html+=button(sources[7],160,toolY-20);
+          html+='<span class="cc-small-label" style="left:160px;top:'+(toolY+18)+'px;max-width:'+(W-176)+'px">tools[] · 49 项<br>独立请求字段</span>';
+          scene.style.height=(toolY+91)+'px';
+        }
+        svg.setAttribute('viewBox','0 0 '+W+' '+parseFloat(scene.style.height));
+        svg.innerHTML=drawing;labels.innerHTML=html;
+        updateSelection();
+      }
+      function updateSelection(){
+        const s=sources.find(s=>s.key===selected);
+        root.querySelectorAll('[data-group]').forEach(el=>el.classList.toggle('is-selected',el.dataset.group===selected));
+        root.querySelectorAll('[data-source]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.source===selected)));
+        readout.querySelector('strong').textContent=s.name;readout.querySelector('p').textContent=s.description;
+        svg.setAttribute('aria-label','七段消息按真实写入顺序接入请求，工具声明保持独立；当前选中'+s.name+'。');
+      }
+      labels.addEventListener('click',e=>{
+        const button=e.target.closest('[data-source]');if(!button)return;
+        selected=button.dataset.source;updateSelection();
+        window.openai?.setWidgetState?.({modelContent:{selectedSource:selected},privateContent:{selected}})?.catch(()=>{});
+      });
+      window.addEventListener('openai:set_globals',e=>{
+        const next=e.detail?.globals?.widgetState?.privateContent?.selected;
+        if(sources.some(s=>s.key===next)){selected=next;updateSelection();}
+      });
+      const observer=new ResizeObserver(()=>render());observer.observe(scene);render();
+    })();
+  </script>
+</div>

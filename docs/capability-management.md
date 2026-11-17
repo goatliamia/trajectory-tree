@@ -44,7 +44,7 @@ Skill 抽屉以 Skill 为主体，汇总全部预设的现有使用记录；按 
 
 - [math-to-engineering 的插件生命周期记录](../../math-to-engineering/notes/plugin-lifecycle.md)。
 - [独立 reversibility-standalone 证明与方案](../../math-to-engineering/proof/reversibility-standalone/README.md)及[对应边界](../../math-to-engineering/proof/reversibility-standalone/CORRESPONDENCE.md)。
-- 本次使用 CR checkout `C:/Users/14100/Documents/ChatGPT/cr/worktrees/python-rust-code-mapping` 的 `code_relations.change_goals.compare` 比较同一观察目标的前后结果，保留覆盖状态。
+- 本次使用 CR checkout `../code-relations` 的 `code_relations.change_goals.compare` 比较同一观察目标的前后结果，保留覆盖状态。
 
 2026-11-13 以已安装的 rc.2 Cordis 运行三个隔离夹具，观察者独立读取工具桩表的名称与身份，以及专用夹具目录的文件内容摘要。没有加载用户插件，没有改真实 profile：
 

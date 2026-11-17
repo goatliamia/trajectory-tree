@@ -223,6 +223,7 @@ try {
   const selected = anchored.records.filter(r => r.kind === 'call').slice(0, 2).map(r => r.seq);
   const first = await executeTool(evidence, 'trajectory_inspect', { cut, logId: anchored.logId, view: 'io', seqs: [...selected, 5000], limit: 1 });
   assert.deepEqual(first.scope.callSelection, { requested: 3, matched: 2, unmatched: [5000] });
+  assert.ok(first.rows[0].measure, 'portable io seq inspection retains tool measure');
   assert.equal(first.summary.turns, 1, 'diagnosis does not include the turn that sent the prompt');
   const second = await executeTool(stateless, 'trajectory_inspect', { cursor: first.cursor });
   assert.deepEqual([...first.rows, ...second.rows].map(r => r.seq), selected);

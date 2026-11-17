@@ -41,6 +41,7 @@
 | assembly | 用片段身份与逻辑顺序重放保留、追加和历史变化 |
 | table | 同行核对样本、报错占比、耗时分位数和归因 |
 | trend | 沿实际轮次对照同口径指标，空值保持断点 |
+| flow | 把读过原文、已核实的行动、反馈、分支、恢复和验收连成因果流程链 |
 
 这里说明区别，完整字段约束由契约维护，避免在 skill、工具说明与组件文档重复抄写。来源数值不够画结构时，准备入口返回当前可用的数据和组件能力，不让模型自己补出拼装结构。
 
@@ -62,7 +63,7 @@
 
 ## 当前可用与后续工作
 
-- 已有：`prepareReportData` 接受命名查询、九类 Eval 表、原文或结构切点；支持多轮范围重算，返回字段目录。数据可直接引用已核对的 reportSource，同一计划复用冻结数据。
+- 已有：`prepareReportData` 接受命名查询、十一类 Eval 表（含 `findings` 处置矩阵组与 `code-execution` 代码执行记录）、原文或结构切点；支持多轮范围重算，返回字段目录。数据可直接引用已核对的 reportSource，同一计划复用冻结数据。
 - 已有：`trajectory-report.mjs` 的 query / components / prepare / render。错误定位到 Markdown 块和行号，渲染返回实际图表清单并保存输入散列。快照过期返回恢复建议，续读前仍需核对来源。
 - 验证入口：[报告契约与取数](../report/test.mjs)、[Eval 口径与绑定](../report/eval-test.mjs)、[浏览器交互](../test/browser/smoke-test.mjs)和[独立安装包](../scripts/test-trajectory-packages.mjs)。
 - 待补：DSH 原生报告按钮和完整原文打开桥。当前独立报告支持摘录阅读与复制取证查询。

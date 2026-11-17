@@ -7,7 +7,7 @@ export function diagnosticLayer(a) {
   if(['INVALID_ARGS','INVALID_TOOL_OUTPUT','UNSUPPORTED_SCHEMA'].includes(code))return 'tool-contract';
   if(/^(?:HOST_|TOOL_CONTEXT_|TOOL_ACTIVATION_|APPROVAL_UNAVAILABLE|UNKNOWN_TOOL)/.test(code)||code==='browser-unavailable')return 'host-environment';
   if(/^JOB_/.test(code))return 'background-job';
-  if(code==='COMMAND_SYNTAX'&&a?.program==='PowerShell')return 'shell-parse';
+  if(code==='COMMAND_SYNTAX'&&['PowerShell','Bash'].includes(a?.program))return 'shell-parse';
   if(code==='COMMAND_ARGUMENT'||code==='COMMAND_NOT_FOUND')return 'command-binding';
   if(/^FS_/.test(code))return 'filesystem';
   if(/^COMMAND_|^CODE_/.test(code))return 'program';
@@ -24,6 +24,11 @@ export function diagnosticSignals(group) {
   // An unexplained exit is a recorded fact, not evidence that recovery is
   // needed. Keep it available for review without assigning a cause or action.
   if(group.kind==='wait'||['control','lookup','external'].includes(group.focus))return signals;
+  if(group.code==='HOST_WORKTREE_GUARD'){
+    add('recover','D-O1','核对工作区边界','宿主拦截了跨工作区的文件操作；核对会话工作区、目标路径及后续工具结果。',
+      ['会话所在工作区与调用的目标路径','是否已有对应工作区内的后续返回','保留隔离边界，不将拒绝当作文件已修改']);
+    return signals;
+  }
   const repeated=group.turns>1;
   const repair=['arguments','contract','implementation','validation','access'];
   if(repair.includes(group.focus))add('repair','D-R1',group.focus==='validation'?'核对产物或检查器':'核对输入与实现',

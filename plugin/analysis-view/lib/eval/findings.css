@@ -5,3 +5,14 @@
 @media(max-width:1100px){.df-layout{grid-template-columns:minmax(0,1fr) 290px;gap:18px}.df-table{min-width:530px}.df-table th:first-child{width:43%}.df-detail-body,.df-detail-head{padding-inline:17px}}
 @media(max-width:900px){.df-layout{grid-template-columns:1fr}.df-detail{position:static}.df-detail-body{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}.df-directions{grid-column:2;grid-row:1/4}.df-facts,.df-observation,.df-records-heading,.df-records{grid-column:1}.df-actions{grid-column:1/-1}.df-basis{display:none}}
 @media(max-width:580px){.df-heading h2{font-size:21px}.df-heading>div>p:last-child{font-size:11px;line-height:1.8}.df-stats{gap:12px 20px}.df-stats>span{font-size:9px;gap:6px}.df-stats strong{font-size:18px}.df-toolbar{align-items:start;flex-direction:column;gap:12px}.df-table{min-width:570px}.df-cards{grid-template-columns:1fr}.df-detail-body{display:block}.df-unknown{align-items:start;flex-direction:column;gap:7px}.df-root{margin-block:20px}.df-hint-list button span{font-size:11px}.df-records{max-height:170px}}
+.df-main-footer{display:flex;flex-direction:column;gap:8px;margin-top:12px;flex:none}.df-main-footer .df-more{align-self:start;padding:4px 0}.df-main-footer .df-unknown{margin:0}.df-detail>.df-actions{margin:0;padding:14px 22px;border-top:1px solid var(--df-line)}
+@media(max-width:1100px){.df-detail>.df-actions{padding-inline:17px}}
+@media(min-width:901px){
+  .df-layout{height:clamp(480px,68vh,650px);align-items:stretch}
+  .df-main{display:flex;flex-direction:column;min-height:0}.df-list{flex:1;min-height:0}
+  .df-table-scroll{height:100%;max-height:none}.df-cards{height:100%;overflow:auto;overscroll-behavior:contain;align-content:start}
+  .df-detail{position:static;height:100%;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .df-detail-head,.df-detail>.df-actions{flex:none}.df-detail-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+  .df-records{max-height:none;overflow:visible}.df-main-footer .df-unknown{padding:12px 16px;min-height:52px}
+  .df-layout.is-empty{height:auto;grid-template-columns:1fr}
+}

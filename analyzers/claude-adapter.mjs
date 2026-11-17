@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import { win32, posix } from 'node:path';
 import { isShellTool } from '../plugin/trajectory-tools/lib/tool-attribution.js';
+import { failureControls } from '../lib/tool-control.mjs';
 
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const messageKey = row => row.message?.id || row.uuid || 'line:' + row.__trajectoryLine;
@@ -146,6 +147,11 @@ export function finalizeClaudeDataset(data, native, projected = projectClaudeTra
         call.signature = input ? hash([call.nativeName, canonical(input)]) : null;
         if (!input) call.args = null;
         if (call.error) call.error.code = 'CLAUDE_TOOL_ERROR';
+        if (call.status === 'error') {
+          const resultText = (result?.entry.message.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n');
+          const controls = failureControls(call, { host: 'claude', output: resultText });
+          if (controls.length) call.controls = controls;
+        }
         call.semanticKind = ({read:'read',write:'write',search:'query',web:'query',command:'run',process:'run'})[call.semanticFamily] || 'other';
         const fact = data.payload.context.callFacts?.[call.seq];
         if (fact && typeof path === 'string' && path && ['Read', 'Write', 'Edit'].includes(call.nativeName)) {

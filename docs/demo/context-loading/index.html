@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Eval · 上下文装填研究</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="data.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <header class="app-bar">
+      <div class="brand"><svg width="23" height="26" viewBox="0 0 23 26" fill="none" aria-hidden="true"><path d="M4 3v19M4 15l14-8M4 22l14-8" stroke="currentColor" stroke-width="1.4"/><circle cx="4" cy="3" r="2" fill="currentColor"/><circle cx="18" cy="7" r="2" fill="currentColor"/><circle cx="18" cy="14" r="2" fill="currentColor"/></svg><span>Trajectory Tree</span><i>/</i><span class="muted">Eval</span></div>
+      <div class="app-meta"><span class="study-label">DESIGN STUDY <b>01—03</b></span><button id="theme" class="quiet" type="button" aria-label="切换为深色主题">深色</button></div>
+    </header>
+    <main>
+      <header class="page-heading">
+        <div><div class="eyebrow">CONTEXT ASSEMBLY</div><h1>一次请求，是怎样装起来的。</h1><p>从来源到装填，展开你的首次上下文。</p></div>
+        <span class="sample-label"><i></i>结构演示 · 示例数据</span>
+      </header>
+      <div class="design-navigation">
+        <div class="design-tabs" role="tablist" aria-label="装填设计方案">
+          <button id="tab-sequence" role="tab" aria-controls="design-panel" aria-selected="true" data-design="sequence" type="button"><span>01</span>装填序列</button>
+          <button id="tab-flow" role="tab" aria-controls="design-panel" aria-selected="false" data-design="flow" type="button"><span>02</span>来源汇流</button>
+          <button id="tab-layers" role="tab" aria-controls="design-panel" aria-selected="false" data-design="layers" type="button"><span>03</span>分层装配</button>
+        </div>
+        <p id="design-purpose">看清每一步增加了什么。</p>
+      </div>
+      <section id="design-panel" role="tabpanel" aria-labelledby="tab-sequence">
+        <div class="assembly-heading">
+          <div class="preset-label"><span class="preset-dot"></span><strong>Standard</strong><span>首次请求</span></div>
+          <div class="play-controls"><span id="stage-counter" class="mono">06 / 06</span><button id="previous" type="button" class="quiet step-button" aria-label="上一个装填阶段">←</button><button id="next" type="button" class="quiet step-button" aria-label="下一个装填阶段">→</button><button id="play" type="button" class="primary">回放装填 <span aria-hidden="true">↗</span></button></div>
+        </div>
+        <div class="readout"><div class="readout-main"><strong id="loaded-tokens" class="mono">6,680</strong><span>tokens 已装填</span></div><div class="readout-secondary"><span><b id="loaded-items" class="mono">15</b> 项内容</span><span><b id="loaded-phases" class="mono">6</b> 个来源层</span><span class="body-note">Skill 正文按需读取</span></div></div>
+        <div class="workspace">
+          <div class="visual-column"><div id="diagram" class="diagram"></div><div class="window-line"><span>演示窗口 <b class="mono">128k</b></span><div class="window-track" role="progressbar" aria-label="演示窗口占用" aria-valuemin="0" aria-valuemax="128000" aria-valuenow="6680"><i id="window-used"></i></div><strong id="window-percent" class="mono">5.2%</strong></div></div>
+          <aside id="inspector" class="inspector" aria-label="所选内容详情"></aside>
+        </div>
+        <div class="timeline">
+          <div class="timeline-heading"><label for="stage-range">装填阶段</label><span id="stage-name" aria-live="polite">06 · 用户输入已加入</span><span class="concept-label">示意顺序</span></div>
+          <input id="stage-range" type="range" min="0" max="6" step="1" value="6" aria-label="选择装填阶段">
+          <div id="phase-buttons" class="phase-buttons"></div>
+        </div>
+      </section>
+      <footer class="study-footer"><div><span class="footnote-mark">↳</span><p>同一组内容，三种观察方式。点击来源或内容查看装填位置与计量。</p></div><p>装填顺序与 tokens 为设计示例，非真实请求回放。目录不含 Skill 正文；未触发内容不计为零。</p></footer>
+    </main>
+    <dialog id="pending-dialog"><div class="dialog-heading"><h2>等待条件触发</h2><button id="close-dialog" class="quiet" type="button" aria-label="关闭待触发内容">✕</button></div><p>这些提供者已配置。正文取决于当前动作，尚无本次请求的计量证据。</p><div class="pending-row"><strong>更深目录的项目指令</strong><span>访问对应目录后发现</span><b>未计量</b></div><div class="pending-row"><strong>工具反馈补充</strong><span>出现相应结果时生成</span><b>未计量</b></div><p class="muted">实际接入时，按宿主记录确认是否进入请求。</p></dialog>
+  </div>
+</body>
+</html>

@@ -11,7 +11,8 @@ import { buildTracePayload } from '../plugin/analysis-view/lib/trace-build.js';
 import { traceActors, traceContext } from '../plugin/analysis-view/lib/trace-context.js';
 
 const home = process.env.USERPROFILE;
-const sessions = resolve(home, '.dsh/sessions/--D-projects-sql~0020event--');
+const workspaceSlug = '--' + process.cwd().replace(/:/g, '').replace(/[\\/]+/g, '-').replace(/ /g, '~0020') + '--';
+const sessions = resolve(home, '.dsh/sessions', workspaceSlug);
 // Default to the session written most recently in this workspace.
 const latest = readdirSync(sessions)
   .filter(name => name.startsWith('session-'))

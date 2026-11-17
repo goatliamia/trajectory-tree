@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
+  <title>Eval · 上下文装配工作台</title>
+  <link rel="stylesheet" href="matrix.css">
+  <script src="matrix-data.js" defer></script>
+  <script src="matrix-layout.js" defer></script>
+  <script src="matrix-assembly.js" defer></script>
+  <script src="matrix.js" defer></script>
+</head>
+<body>
+  <header class="app-bar"><div class="brand"><strong>Trajectory Tree</strong><span>/</span><span>Eval</span></div><div class="request-meta"><span class="live-dot" aria-hidden="true"></span><span>首次请求</span><span id="snapshot-date" class="mono"></span><button type="button" id="evidence">记录依据 ↗</button></div></header>
+  <main>
+    <header class="page-heading"><div><p class="eyebrow">REQUEST CONTEXT</p><h1>上下文装配</h1><p class="page-description">抓住模块的折边，拖回对应接口，拼合这一次请求。</p></div><div class="request-amount"><span>请求内容估算</span><strong id="total"></strong><small id="request-count"></small></div></header>
+    <section class="assembly-sequence" aria-label="真实装入顺序" hidden><div class="sequence-title"><span>装入顺序</span><small>原始事件</small></div><div id="sequence" class="sequence-items"></div></section>
+    <section class="workspace" aria-label="上下文构成与内容查看">
+      <div class="map-workspace">
+        <div class="map-toolbar"><nav id="breadcrumbs" aria-label="矩形树图层级"></nav><div class="map-query"><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="查找工具、片段或原文" autocomplete="off" aria-label="查找当前请求内容"><kbd>/</kbd></label><span id="query-status"></span><div id="search-results" class="search-results" hidden></div></div><div class="map-actions"><button id="index-open" type="button">内容索引 <span id="index-count" class="mono"></span></button><button id="zoom-out" type="button" hidden>退出放大 ↗</button></div></div>
+        <div id="assembly-controls" class="assembly-controls"><span id="assembly-status">图中对齐 7 / 8</span><div><button type="button" data-action="scatter">拆开查看</button><button type="button" data-action="gather">拼合全部 ↗</button></div></div>
+        <div id="field-scopes" class="field-scopes" aria-label="请求字段"></div>
+        <div class="map-plot" id="map-plot"><svg id="assembly-wires" class="assembly-wires" aria-hidden="true"></svg><div id="map" class="map" aria-label="可拖动拼合的上下文矩阵模块"></div><svg id="plot-pins" class="plot-pins" aria-hidden="true"></svg><div id="map-empty" hidden>没有匹配内容</div></div>
+        <div class="map-footer"><span id="map-encoding"><i class="legend-area" aria-hidden="true"></i>面积 ≈ tokens<span class="legend-divider">·</span>纹理区分内容形态</span><span id="scope-amount"></span></div>
+        <p class="map-hint" id="map-hint">拖动折边标题，松手吸附到对应轮廓 · 点选内容查看原文 · 拖动只改变图中布局</p>
+      </div>
+      <aside id="inspector" class="inspector" aria-label="已选内容详情"></aside>
+    </section>
+    <footer class="page-footer"><span>真实冻结会话 · seq <span id="source-cut"></span> · 模型回复之前</span><span>固定密度估算，不是供应商实报用量。</span></footer>
+  </main>
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+  <dialog id="reader"><header class="dialog-header"><div><p class="eyebrow" id="reader-kind"></p><h2 id="reader-title"></h2><p id="reader-meta"></p></div><button id="reader-close" type="button" aria-label="关闭原文">×</button></header><pre id="reader-body"></pre></dialog>
+  <dialog id="content-index"><header class="dialog-header"><div><p class="eyebrow">CONTENT INDEX</p><h2>请求中的全部片段</h2></div><button id="index-close" type="button" aria-label="关闭内容索引">×</button></header><label class="index-search"><input type="search" id="index-search" placeholder="按名称或原文检索" aria-label="搜索内容索引"></label><div id="index-list" class="index-list"></div></dialog>
+  <dialog id="source-dialog"><header class="dialog-header"><div><p class="eyebrow">EVIDENCE</p><h2>记录与计量边界</h2></div><button id="source-close" type="button" aria-label="关闭记录依据">×</button></header><div id="source-body" class="source-body"></div></dialog>
+</body>
+</html>

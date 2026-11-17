@@ -23,6 +23,15 @@ export function aggregateInScreen(items, maxSpan = 30) {
   return groups;
 }
 
+export function branchStemCandidates(anchorX, dy, obstacles, left, right, maxShift = 48) {
+  const blockers = obstacles.filter(box => box.routeStem && (dy > 0
+    ? box.bottom > 0 && box.top < dy + 4 : box.top < 0 && box.bottom > dy - 4));
+  return [...new Set([anchorX, ...blockers.flatMap(box => [box.left - 6, box.right + 6])])]
+    .filter(x => (x === anchorX || x >= left + 8 && x <= right - 8 && Math.abs(x - anchorX) <= maxShift) &&
+      blockers.every(box => x <= box.left - 4 || x >= box.right + 4))
+    .sort((a, b) => Math.abs(a - anchorX) - Math.abs(b - anchorX));
+}
+
 export function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48, 77, -94, 122], gap = 10, aggregateSpan = 30, obstacles = [], labelSide = 'right' }) {
   let groups = aggregateInScreen(items, aggregateSpan);
   const intersects = (a, b) => a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + 5 && a.bottom + 5 > b.top;
@@ -31,17 +40,35 @@ export function layoutBranches(items, { left, right, measure, labelOf, slots = [
     const placed = [];
     let failed = -1;
     for (let i = 0; i < groups.length; i++) {
-      const members = groups[i], x = members[Math.floor((members.length - 1) / 2)].x;
+      const members = groups[i], anchorX = members[Math.floor((members.length - 1) / 2)].x;
       const side = (typeof labelSide === 'function' ? labelSide(members) : labelSide) === 'left' ? -1 : 1;
       const label = labelOf(members), width = measure(label) + 6;
-      const cx = Math.max(left + width / 2, Math.min(right - width / 2, side > 0 ? x + 20 : x - 24 - width / 2));
-      const occupiedLeft = side > 0 ? Math.min(cx - width / 2, x + 9) : Math.min(cx - width / 2, x - 44);
-      const occupiedRight = side > 0 ? Math.max(cx + width / 2, x + 44) : Math.max(cx + width / 2, x - 9);
-      const candidate = slots.map(dy => ({
-        x, cx, dy, label, members, side,
-        left: occupiedLeft, right: occupiedRight,
-        top: dy > 0 ? dy - 9 : dy - 28, bottom: dy > 0 ? dy + 25 : dy + 9,
-      })).find(p => placed.every(q => !intersects(p, q) && !stemHits(p.x, p.dy, q) && !stemHits(q.x, q.dy, p)) && obstacles.every(q => !intersects(p, q)));
+      const candidates = [];
+      // Keep the event's attachment on the time axis. If its column occupies
+      // that stem, leave along the trunk and rise beside the column instead.
+      for (const dy of slots) {
+        let candidate;
+        const blockers = obstacles.filter(box => box.routeStem && (dy > 0
+          ? box.bottom > 0 && box.top < dy + 4 : box.top < 0 && box.bottom > dy - 4));
+        for (const x of branchStemCandidates(anchorX, dy, obstacles, left, right)) {
+          const centers = [side > 0 ? x + 20 : x - 24 - width / 2];
+          if (blockers.length) centers.push(x + side * (24 + width / 2));
+          for (const center of centers) {
+            const cx = Math.max(left + width / 2, Math.min(right - width / 2, center));
+            const p = { x, anchorX, cx, dy, label, members, side,
+              left: side > 0 ? Math.min(cx - width / 2, x + 9) : Math.min(cx - width / 2, x - 44),
+              right: side > 0 ? Math.max(cx + width / 2, x + 44) : Math.max(cx + width / 2, x - 9),
+              top: dy > 0 ? dy - 9 : dy - 28, bottom: dy > 0 ? dy + 25 : dy + 9 };
+            if (placed.every(q => !intersects(p, q) && !stemHits(p.x, p.dy, q) && !stemHits(q.x, q.dy, p)) &&
+                obstacles.every(q => !intersects(p, q))) { candidate = p; break; }
+          }
+          if (candidate) break;
+        }
+        if (candidate) candidates.push(candidate);
+      }
+      const score = p => placed.filter(q => Math.sign(q.dy) === Math.sign(p.dy)).length * 34 +
+        Math.abs(p.dy) * .18 + Math.abs(p.x - anchorX) * .35;
+      const candidate = candidates.sort((a, b) => score(a) - score(b))[0];
       if (!candidate) { failed = i; break; }
       placed.push(candidate);
     }

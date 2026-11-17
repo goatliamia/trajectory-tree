@@ -52,6 +52,16 @@
       ${row.returned!=null?`<p class="ce-followup">${t('同轮同参后续非报错返回','Later same-argument non-error return in this turn')} ${ref(row.returned)}</p>`:`<p class="ce-followup">${t('此处未配到同轮同参返回，修改参数或跨轮解决可由诊断继续核对。','No same-argument return is paired here. Diagnosis can check changed arguments and later turns.')}</p>`}
       ${globalThis.__trajectoryDiagnosticFrames?.(row.codeFrames??[])??''}
       <div class="ce-code-grid"><section><h4>${source?.exact?t('原始脚本','Original script'):t('记录的命令','Recorded command')}</h4>${source?`<pre><code>${esc(source.text)}</code></pre>${source.omitted?`<p class="ce-clipped">${t(`另有 ${fmt(source.omitted)} 字符，沿原始调用续读。`,`${fmt(source.omitted)} more characters are available from the original call.`)}</p>`:''}`:`<p class="ce-empty">${t('从原始调用读取代码和参数。','Read code and arguments from the original call.')}</p>`}</section><section><h4>${t('执行反馈','Execution feedback')}</h4><pre><code>${esc(row.output?.text || t('无文字返回','No text output'))}</code></pre>${row.output?.omitted?`<p class="ce-clipped">${t(`另有 ${fmt(row.output.omitted)} 字符，沿返回记录续读。`,`${fmt(row.output.omitted)} more characters are available from the result record.`)}</p>`:''}</section></div>`;
+    if (row.syntax?.language === 'bash') {
+      const report = document.createElement('section'); report.className = 'ce-parser-report';
+      const syntax = row.syntax, diagnostics = syntax.diagnostics ?? [];
+      report.innerHTML = `<h4>CR · Bash ${esc(syntax.runtime ?? '')} · <code>-n</code></h4><p>${esc(
+        syntax.state === 'recovered' ? t('当前语法核对发现错误，历史退出原因仍需结合原始返回。', 'The current syntax check found errors; verify the historical exit cause against its recorded output.')
+          : syntax.state === 'warning' ? t('当前语法核对有警告。', 'The current syntax check returned warnings.')
+            : t('当前语法核对未发现错误。', 'The current syntax check found no errors.'))}</p>` +
+        diagnostics.map(item => `<p class="ce-parser-diagnostic">${item.line ? 'L' + item.line + ' · ' : ''}${esc(item.message)}</p>`).join('');
+      $('ce-detail').querySelector('.ce-code-grid').before(report);
+    }
     $('ce-ask-call').disabled = !window.__diagnosisDemoAsk;
     $('ce-ask-call').onclick = event => ask([row],event.currentTarget);
     const diagnosisScope = window.__trajectoryDiagnosisOptions?.source?.();

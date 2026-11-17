@@ -11,9 +11,10 @@
     const context = overviewLayers.has('context');
     // 页面的实际高度是对话区给的:先跟着可用高度走,不为了满高而把底部挤出视口。
     const height = Math.round(Math.max(240, box > 120 ? box : available));
-    const pixels = context ? Math.max(36, Math.min(actorReserve ? 84 : 108, (height - 236) / 2)) : 108;
+    const upperRoom = overviewLayers.has('failures') ? Math.min(56, Math.max(0, (height - 300) / 2)) : 0;
+    const pixels = context ? Math.max(36, Math.min(actorReserve ? 84 : 108, (height - 236 - upperRoom) / 2)) : 108;
     reviewContextScale.pixels = pixels;
-    return { height, base: context ? 124 + pixels : 208 };
+    return { height, base: context ? 124 + pixels + upperRoom : 208 };
   }
   let geistLayoutObserver, geistLayoutFrame = 0, geistLayoutMeasure = '';
   function geistBindLayout() {
@@ -25,7 +26,7 @@
           const viewport=$('graph-scroll'),geometry=geistActionGeometry(turn()),height=Number($('graph').getAttribute('height'));
           // Opening step details changes the flex viewport after the first paint.
           // Refit once to its settled box so the second label row stays visible.
-          if(Math.abs(height-geometry.height)>1||Math.abs((reviewActionFileFrame?.viewportWidth??0)-Math.max(300,viewport.clientWidth))>1){
+          if(Math.abs(height-geometry.height-geistActionActorReserve(turn()))>1||Math.abs((reviewActionFileFrame?.viewportWidth??0)-Math.max(300,viewport.clientWidth))>1){
             const left=viewport.scrollLeft;renderPath();viewport.scrollLeft=left;viewport.scrollTop=0;
           }
           return;

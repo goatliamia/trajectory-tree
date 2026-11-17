@@ -32,17 +32,17 @@
   }
   function reviewOpenDurations(first = null, last = null) {
     const subset = session.turns.filter(t => first === null || t.number >= first && t.number <= last);
-    const title = first === null ? ui('每轮耗时') : first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮`;
+    const title = first === null ? (traceSpanOnly ? ui('每轮记录跨度') : ui('每轮耗时')) : first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮`;
     const html = ui('<form id="review-round-search" class="review-round-search"><label for="review-round-number">定位轮次</label><input id="review-round-number" type="number" min="1" inputmode="numeric" placeholder="例如 59"><button class="action-button" type="submit">定位</button></form>') +
       ui('<p class="review-quiet">每一轮都列在这里，不按时长筛选。点轮号定位原图，点“行动”直接看逐步操作。</p>') +
       (first !== null ? ui('<button class="back-link" id="review-all-rounds">查看全部 ') + session.turns.length + ui(' 轮</button>') : '') +
       '<div class="review-round-grid" id="review-round-grid"></div>';
-    openDrawer(title, ui('从本轮开始到结束 · 含轮内等待，不含轮间等待'), html);
+    openDrawer(title, traceSpanOnly ? ui('从用户输入到末条记录 · 包含记录之间的等待，结束边界未记录') : ui('从本轮开始到结束 · 含轮内等待，不含轮间等待'), html);
     const draw = () => {
       const query = $('review-round-number').value.trim();
       const rounds = query ? session.turns.filter(t => String(t.number) === query) : subset;
       $('review-round-grid').innerHTML = rounds.length ? rounds.map(t => '<div class="review-round-card">' +
-        '<button data-review-focus-turn="' + t.number + '" title="' + esc(shorten(t.title || '', 100)) + '"><strong>' + ui`第 ${t.number} 轮` + '</strong><b>' + (t.end === null ? '≥' : '') + reviewDuration(endOf(t) - t.start) + '</b></button>' +
+        '<button data-review-focus-turn="' + t.number + '" title="' + esc(shorten(t.title || '', 100)) + '"><strong>' + ui`第 ${t.number} 轮` + '</strong><b>' + (traceSpanOnly ? ui('跨度 ') : '') + (t.end === null ? '≥' : '') + reviewDuration(endOf(t) - t.start) + '</b></button>' +
         '<div><button data-review-round-context="' + t.number + ui('">上下文</button><button data-review-round-path="') + t.number + ui('">行动 ↗</button></div></div>')).join('') : ui('<p class="review-quiet">没有这个轮号。</p>');
       $('review-round-grid').querySelectorAll('[data-review-focus-turn]').forEach(el => el.onclick = () => reviewFocusTurn(Number(el.dataset.reviewFocusTurn)));
       $('review-round-grid').querySelectorAll('[data-review-round-context]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.reviewRoundContext)));
@@ -63,7 +63,7 @@
     tlFocusRange(t, t.start, endOf(t));
     tlSelectionOutline(t);
     reviewSyncNavigation();
-    tlReadout(ui('第 ') + number + ui(' 轮 · 总耗时 ') + reviewDuration(endOf(t) - t.start) + ui('。继续放大进入逐步行动，或点上方“行动路径”。'));
+    tlReadout(ui('第 ') + number + (traceSpanOnly ? ui(' 轮 · 记录跨度 ') : ui(' 轮 · 总耗时 ')) + reviewDuration(endOf(t) - t.start) + ui('。继续放大进入逐步行动，或点上方“行动路径”。'));
   }
   const reviewSetOverviewScaleBase = setOverviewScale;
   setOverviewScale = function(nextScale, viewportX) {
@@ -104,7 +104,11 @@
   function reviewStepContext(t, step) {
     const index = reviewContextStepIndex.get(t.number + ':' + step.number);
     if (index === undefined) return null;
-    const current = reviewContextRequests[index], prior = reviewContextRequests[index - 1];
+    const current = reviewContextRequests[index];
+    // Split assistant records belong to one dispatched request. Show the same
+    // composition on each record, but draw its change only on the first one.
+    const continuation = current.semanticUnit === 'claude-recorded-request-visible-text' && current.contextSteps?.indexOf(step.number) > 0;
+    const prior = continuation ? current : reviewContextRequests[index - 1];
     const total = CONTEXT_CATEGORIES.reduce((sum, c) => sum + (current[c.key] || 0), 0);
     const parts = Object.fromEntries(CONTEXT_CATEGORIES.map(c => [c.key, (current[c.key] || 0) - (prior?.[c.key] || 0)]));
     const amount = Object.values(parts).reduce((sum, value) => sum + value, 0);

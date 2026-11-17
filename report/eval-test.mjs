@@ -47,6 +47,8 @@ test('Eval report scope, tool timings and attribution match the dashboard', () =
     assert.equal(row.longDurationMs, tool.timing.longMs);
   }
   for (const key of ['confirmed', 'candidate', 'unclassified', 'noOutput']) assert.equal(scope[key], dashboard.whole.attributionCoverage[key]);
+  assert.ok(Array.isArray(tables.findings.rows) && tables.findings.rows.length > 0, 'Eval report exposes synchronized findings signal groups');
+  assert.ok(Array.isArray(tables['code-execution'].rows), 'Eval report exposes synchronized code-execution table');
   const selected = evaluationSession(session, { from: 2, to: 2 });
   const single = buildEvalData(selected, portableRuntime(data.payload), { host: 'pi' });
   const expected = dashboard.turns.find(row => row.number === 2).metrics;

@@ -78,10 +78,11 @@ function resolveTypeScript(options) {
 }
 
 export function selectSources(repo) {
-  return git(repo, ['ls-files']).split(/\r?\n/).filter(Boolean)
+  return [...new Set(git(repo, ['ls-files', '--cached', '--others', '--exclude-standard']).split(/\r?\n/).filter(Boolean))]
     .filter((path) => SOURCE_DIRS.some((dir) => path.startsWith(`${dir}/`)))
     .filter((path) => SOURCE_EXT.test(path))
     .filter((path) => !EXCLUDED.some((pattern) => pattern.test(path)))
+    .filter((path) => existsSync(join(repo, path)))
     .sort();
 }
 

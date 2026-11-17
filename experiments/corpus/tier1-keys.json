@@ -11,7 +11,7 @@
       "id": "E2",
       "seq": 6576,
       "type": "tool/result",
-      "expectedToken": "C:\\Users\\14100\\AppData\\Roaming\\npm\\dsh.cmd"
+      "expectedToken": "C:\\Users\\example\\AppData\\Roaming\\npm\\dsh.cmd"
     },
     {
       "id": "E3",
@@ -29,7 +29,7 @@
       "id": "E5",
       "seq": 8008,
       "type": "assistant/message",
-      "expectedToken": "C:\\\\Users\\\\14100\\\\.dsh\\\\settings.yaml"
+      "expectedToken": "C:\\\\Users\\\\example\\\\.dsh\\\\settings.yaml"
     },
     {
       "id": "E6",

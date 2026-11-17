@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+  <title>Eval · 上下文装填流程</title>
+  <link rel="stylesheet" href="flow.css"><script src="data.js" defer></script><script src="flow-layouts.js" defer></script><script src="flow.js" defer></script>
+</head>
+<body>
+  <header class="app-header"><div><strong>Trajectory Tree</strong><span>/</span><span>Eval</span></div><button id="theme" type="button">深色</button></header>
+  <main>
+    <header class="page-title"><div><h1>上下文装填</h1><p>从预设提供的内容，看到一次请求如何形成。</p></div><span class="sample-note">结构演示 · 示例数据</span></header>
+    <nav class="scenarios" aria-label="装填场景"><button type="button" data-mode="initial" aria-pressed="true">首次装填</button><button type="button" data-mode="skill" aria-pressed="false">Skill 按需展开</button><button type="button" data-mode="conditional" aria-pressed="false">条件补充</button></nav>
+    <section class="flow-section" aria-labelledby="flow-title">
+      <header class="figure-heading"><div><h2 id="flow-title">接口与规则分别装填，汇合为首次请求</h2><p id="flow-subtitle">Standard · 示例工作目录</p></div><div class="current-total"><strong id="total">6,680</strong><span>tokens</span></div></header>
+      <div id="condition-option" hidden><label><input type="checkbox" id="condition-toggle" checked>访问带有额外指令的子目录</label></div>
+      <div id="flow-scroll" class="flow-scroll" role="region" aria-label="上下文装填流程图"><div id="flow-canvas"></div></div>
+      <div class="flow-legend"><span><i class="line-key"></i>组装依赖</span><span><i class="node-key"></i>当前装填位置</span><span class="tap-hint">点选节点查看组成</span></div>
+      <div class="transport"><div><button id="play" class="play" type="button">回放装填</button><button id="previous" type="button" aria-label="上一个装填阶段">←</button><button id="next" type="button" aria-label="下一个装填阶段">→</button><span id="position" class="mono">06 / 06</span></div><p id="stage-label" aria-live="polite">用户输入已加入</p></div>
+      <label class="sr-only" for="stage">装填阶段</label><input id="stage" type="range" min="0" max="6" value="6" step="1"><div id="stage-ticks" class="stage-ticks"></div>
+      <section id="detail" class="detail" hidden aria-label="所选内容" aria-live="polite"></section>
+    </section>
+    <footer><p id="scope-note">连线表示内容的组装依赖，阶段顺序为讲解示意。Skill 目录与按需正文分开计量。</p><a href="index.html">上一轮草案 ↗</a></footer>
+  </main>
+</body></html>

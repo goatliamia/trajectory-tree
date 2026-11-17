@@ -3,7 +3,7 @@
 `trace-main.real.html` 内嵌真实日志节选，已被 Git 忽略，可独立打开。源码不携带私有会话数据。
 
 ```powershell
-node scripts/build-trace-main-demo.mjs --source 'C:\Users\14100\.dsh\sessions\--D-projects-sql~0020event--\session-bf0df066-f783-40ec-a761-5c81474631c8\session.v4.jsonl.zstd'
+node scripts/build-trace-main-demo.mjs --source '<path-to-session.v4.jsonl.zstd>'
 ```
 
 ## 当前图形规则

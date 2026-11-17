@@ -46,6 +46,9 @@
     return kinds.map(kind => names[kind]).join(' · ') + (errors ? (kinds.length ? ' · ' : '') + errors + (recovered === errors ? ui(' 处已恢复') : ui(' 处受阻')) : '');
   }
   function geistOutcomeGlyph(result, x, y) {
+    const controls = reviewResultControlCalls(result);
+    if (summarizeControls(controls)) return reviewToolMarker(controls, x, y, { compact: true });
+    if (result.kind === 'pending') return traceSymbolMark('pending', x, y);
     if (result.kind === 'incident') {
       return brCap(x, y, result.incident.condition);
     }
@@ -68,8 +71,9 @@
     const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;
     // 只有报错类枝条朝左;普通结果枝条仍朝右,标签位置由布局按 side 给出。
     const dir = p.side < 0 ? -1 : 1;
-    const twig = 'M' + p.x + ' ' + (base + sign * 2) + 'V' + (y - sign * 10) + 'Q' + p.x + ' ' + y + ' ' + (p.x + dir * 10) + ' ' + y + 'H' + (p.x + dir * 14);
     const endpoint = toolResultEndpoint(p.members);
+    const policyEnd = !!summarizeControls(reviewResultControlCalls(endpoint));
+    const twig = 'M' + p.anchorX + ' ' + base + 'H' + p.x + 'V' + (y - sign * 10) + 'Q' + p.x + ' ' + y + ' ' + (p.x + dir * 10) + ' ' + y + 'H' + (p.x + dir * (policyEnd ? 15 : 14));
     const glyph = '<g class="geist-branch-tip" data-endpoint-kind="' + endpoint.kind + '" aria-hidden="true">' + geistOutcomeGlyph(endpoint, p.x + dir * 20, y) + '</g>';
     const body = '<rect class="br-hit" x="' + (p.left - 4) + '" y="' + (base + p.top - 3) + '" width="' + (p.right - p.left + 8) + '" height="' + (p.bottom - p.top + 6) + '"/>' +
       '<path d="' + twig + '" class="br-connector"/>' + glyph + brText(p.cx, p.dy > 0 ? y + 21 : y - 14, p.label, 'br-label');
@@ -92,29 +96,19 @@
       const obstacles = [...reserved, ...(options.obstacles || []),
         { left: left - 8, right: right + 8, top: lanes[0], bottom: lanes[1] },
         { left: left - 8, right: right + 8, top: limit + 18 - base, bottom: limit + 74 - base }];
-      try { packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles, labelSide: geistErrorBranchSide }); }
-      catch (error) {
-        if (!options.obstacles?.length) throw error;
-        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
-      }
-      if (view === 'path' && options.obstacles?.length && packed.some(p => new Set(p.members.map(m => m.result.step)).size > 1)) {
-        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
-      }
-      // 行距一次性拉伸/压缩:不重新打包,只把 dy 映射到 [trunk, 底部保留区] 之间。
-      const positive = packed.map(p => p.dy).filter(dy => dy > 0);
-      const maxPositive = positive.length ? Math.max(...positive) : 0;
-      const contentBottom = packed.reduce((m, p) => Math.max(m, base + p.dy + 25), base + 42);
-      if (view === 'overview' && maxPositive > 0 && Number.isFinite(limit)) {
-        const target = limit - base;
-        const k = Math.max(0.62, Math.min(1.7, (target - 25) / Math.max(60, maxPositive)));
-        if (Number.isFinite(k) && Math.abs(k - 1) > 0.04) packed = packed.map(p => ({ ...p, dy: Math.round(p.dy * (p.dy > 0 ? k : Math.min(1.3, k))) }));
-      }
+      // Choose the final row positions before collision checks. Moving only dy
+      // afterwards leaves the label bounds and pillar avoidance out of date.
+      const k = Math.max(.62, Math.min(1.7, (limit - base - 25) / 122));
+      const upperPillars = (options.obstacles || []).filter(p => p.routeStem && p.top < 0);
+      const upperLane = upperPillars.length ? -Math.max(...upperPillars.map(p => -p.top)) - 18 : -48;
+      const slots = options.slots || [...[32, -48, 77, -94, 122].map(dy => Math.round(dy * (dy > 0 ? k : Math.min(1.3, k)))), upperLane];
+      packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, slots, obstacles, labelSide: geistErrorBranchSide });
       if (geistOutcomeLayoutCache.size > 20) geistOutcomeLayoutCache.clear();
       geistOutcomeLayoutCache.set(key, packed);
     }    geistOutcomeBranches = packed;
     let html = '', bottom = base + 42;
     packed.forEach((p, index) => {
-      const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;
+      const y = base + p.dy;
       bottom = Math.max(bottom, y + 25);
       if (!visible(p.left, p.right)) return;
       const body = geistResultBranchBody(p, base);
@@ -125,7 +119,9 @@
   reviewBranches = function(mapTime, base, visible, left, right, width) {
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
     const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
+    const obstacles = reviewContextObstacles(overviewProjection?.layout || []);
+    const result = geistDrawResultBranches(items, base, 20, width - 20, visible, {
+      obstacles, reservedKey: obstacles.map(p => [p.left, p.right, p.top, p.bottom].join(',')).join(';') });
     reviewBranchesNow = geistOutcomeBranches;
     return result;
   };
@@ -368,14 +364,4 @@
     const caption = $('graph-caption'), layers = caption.querySelector('.br-layers');
     const existing = layers?.querySelector('[data-br-layer="failures"],[data-action-layer="failures"]');
     if (existing) existing.parentElement.lastChild.textContent = ui('工具结果');
-    const key = caption.querySelector('.br-key');
-    key?.querySelectorAll('.br-key-item').forEach(item => {
-      if (item.querySelector('.br-check') || [ui('结果还不清楚'), ui('结果未确认')].some(label => item.textContent.includes(label))) item.remove();
-    });
-    if (key && !key.querySelector('.geist-result-key')) {
-      key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + geistReportIcon + ui('</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">') + STEP_ICON.write + ui('</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">') + geistReportIcon + ui('</svg>检查输出</span>'));
-    }
-    if (key && overviewLayers.has('duration') && view !== 'path' && !key.querySelector('.geist-tool-time-key')) {
-      key.insertAdjacentHTML('beforeend', ui('<span class="geist-tool-time-key" title="官方记录中工具从调用到返回的时间区间；点击本步工具时间查看覆盖与累计口径"><i></i>') + (view === 'path' ? ui('步内工具时段') : ui('工具执行区间')) + '</span>');
-    }
   };

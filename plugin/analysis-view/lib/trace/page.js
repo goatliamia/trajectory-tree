@@ -9,11 +9,13 @@ window.__geistBoot = () => {
   const dayFormat = new Intl.DateTimeFormat(window.__trajectoryLocale || 'zh-CN',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric'});
   const clock = t => typeof t === 'number' && Number.isFinite(t) ? clockFormat.format(t) : ui('未记录');
   const day = t => typeof t === 'number' && Number.isFinite(t) ? dayFormat.format(t) : ui('未记录');
-  const recordDuration = row => Number.isFinite(row.durationMs) && row.durationMs >= 0 ? row.durationMs : row.endObserved === false || row.timingSource === 'ordinal-only' ? null : Number.isFinite(row.start) && Number.isFinite(row.end) && row.end >= row.start ? row.end - row.start : null;
+  const recordDuration = row => Number.isFinite(row.durationMs) && row.durationMs >= 0 ? row.durationMs : row.endObserved === false || ['ordinal-only', 'unrecorded-start'].includes(row.timingSource) ? null : Number.isFinite(row.start) && Number.isFinite(row.end) && row.end >= row.start ? row.end - row.start : null;
+  const timelineAxisLabel = (active, total) => total ? (traceSpanOnly ? ui('轮内记录跨度合计 ') : ui('总耗时 ')) + reviewDuration(active) : (traceSpanOnly ? ui('累计记录跨度') : ui('累计执行时间'));
   const dur = ms => { if (ms == null) return ui('未记录'); if (ms < 1000) return (ms < 100 ? '<0.1' : (ms / 1000).toFixed(1)) + ui(' 秒'); const s = ms / 1000; if (s < 60) return s.toFixed(s < 10 ? 1 : 0) + ui(' 秒'); const m = Math.floor(s / 60), r = Math.round(s % 60); return r === 60 ? ui`${m+1} 分` : ui`${m} 分${r ? ui` ${r} 秒` : ''}`; };
   const elapsed = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
   const shorten = (s,n) => String(s).replace(/\s+/g,' ').slice(0,n) + (String(s).replace(/\s+/g,' ').length > n ? '…' : '');
   let session = data.sessions.find(s => s.id === data.mainSession);
+  const traceSpanOnly = session.timingSource === 'recorded-activity-span';
   let turnIndex = Math.max(0,session.turns.findIndex(t => t.number === 6));
   let view = 'overview', zoom = null, groups = [], activeGroup = null, returnState = null;
   const turn = () => session.turns[turnIndex];
@@ -50,7 +52,7 @@ window.__geistBoot = () => {
     $('rail-footer').innerHTML = session.parentSession ? ui('<button class="back-link" id="parent-link">← 返回主会话</button>') : `${day(session.turns[0].start)} ${clock(session.turns[0].start).slice(0,5)} — ${day(endOf(session.turns.at(-1)))} ${clock(endOf(session.turns.at(-1))).slice(0,5)}`;
     if ($('parent-link')) $('parent-link').onclick = returnParent;
     const max = Math.max(...session.turns.map(t=>endOf(t)-t.start));
-    $('turn-list').innerHTML = session.turns.map((t,i) => ui`<button class="turn" data-turn="${i}" aria-current="${i===turnIndex}" aria-label="第${t.number}轮，${esc(shorten(t.title,70))}，${dur(endOf(t)-t.start)}${t.errors?ui`，${t.errors}次工具报错`:''}"><span class="turn-no">${String(t.number).padStart(2,'0')}</span><span class="turn-title">${esc(t.title)}</span><span class="turn-meta"><span class="mono">${clock(t.start).slice(0,5)}</span><i class="turn-bar" style="width:${Math.max(6,(endOf(t)-t.start)/max*65)}px"></i><span>${dur(endOf(t)-t.start)}</span>${t.errors?`<i class="error-dot"></i><span class="error-small">${t.errors}</span>`:''}</span></button>`).join('');
+    $('turn-list').innerHTML = session.turns.map((t,i) => ui`<button class="turn" data-turn="${i}" aria-current="${i===turnIndex}" aria-label="第${t.number}轮，${esc(shorten(t.title,70))}，${traceSpanOnly ? ui('跨度 ') : ''}${dur(endOf(t)-t.start)}${t.errors?ui`，${t.errors}次工具报错`:''}"><span class="turn-no">${String(t.number).padStart(2,'0')}</span><span class="turn-title">${esc(t.title)}</span><span class="turn-meta"><span class="mono">${clock(t.start).slice(0,5)}</span><i class="turn-bar" style="width:${Math.max(6,(endOf(t)-t.start)/max*65)}px"></i><span>${traceSpanOnly ? ui('跨度 ') : ''}${dur(endOf(t)-t.start)}</span>${t.errors?`<i class="error-dot"></i><span class="error-small">${t.errors}</span>`:''}</span></button>`).join('');
     $('turn-list').querySelectorAll('[data-turn]').forEach(b => b.onclick = () => view==='overview'?focusOverview(Number(b.dataset.turn)):selectTurn(Number(b.dataset.turn)));
     $('count-label').textContent = `${String(turn().number).padStart(2,'0')} / ${session.turns.length}`;
     $('previous').disabled = turnIndex === 0; $('next').disabled = turnIndex === session.turns.length-1;
@@ -277,12 +279,15 @@ window.__geistBoot = () => {
     if (!count) { $('graph').innerHTML = ''; return; }
     selectedStep = Math.max(0, Math.min(selectedStep, count - 1));
     const selected = steps[selectedStep], showContext = overviewLayers.has('context'), showTime = overviewLayers.has('duration');
+    const contextObstacles = [];
     const geometry = typeof geistActionGeometry === 'function' ? geistActionGeometry(t) : { height: 360, base: 208 };
-    const viewportWidth = Math.max(300, viewport.clientWidth), viewportLeft = viewport.scrollLeft, gutter = 54, { height, base: rawBase } = geometry;
+    const actorReserve = typeof geistActionActorReserve === 'function' ? geistActionActorReserve(t) : 0;
+    const mainHeight = geometry.height, height = mainHeight + actorReserve, rawBase = geometry.base;
+    const viewportWidth = Math.max(300, viewport.clientWidth), viewportLeft = viewport.scrollLeft, gutter = 54;
     // 文件行画在基线下方 78px,再留标签高度;基线太靠下时这一行会被画布裁掉,
     // 所以按"文件行 + 底部刻度"反推一个安全基线,而不是固定 height-96。
     const fileRow = overviewLayers.has('files') ? 46 : 0;
-    let base = Math.min(rawBase, height - 20 - fileRow - 78);
+    let base = Math.min(rawBase, mainHeight - 20 - fileRow - 78);
     const gap = Math.max(128, Math.min(176, (viewportWidth - gutter * 2) / count));
     const width = Math.max(viewportWidth, gutter * 2 + gap * count);
     const start = (width - gap * count) / 2, x = index => start + (index + .5) * gap;
@@ -316,7 +321,7 @@ window.__geistBoot = () => {
       // 步号与耗时并成一行,顶部少一行给图。
       part += brText(pos, 48, ui`第 ${step.number} 步` + (showTime ? ' · ' + preciseTime(recordDuration(step)) : ''), 'review-turn-duration');
       // 耗时条:用官方每步的构成画占比,取代原来的等宽区间引导线。
-      {
+      if (showTime && recordDuration(step) != null) {
         const stats = typeof geistStatsByStep !== 'undefined' ? geistStatsByStep.get(t.number + ':' + step.number) : null;
         const total = Math.max(1, step.end - step.start);
         const toolRaw = stats && Number.isFinite(stats.toolWall) ? stats.toolWall
@@ -339,6 +344,8 @@ window.__geistBoot = () => {
         const values = CONTEXT_CATEGORIES.map(c => ({ ...c, value: info.parts[c.key] }));
         const plus = values.reduce((n, c) => n + Math.max(0, c.value), 0), minus = values.reduce((n, c) => n + Math.max(0, -c.value), 0);
         const sides = { up: contextDisplaySide(plus, upSide), down: contextDisplaySide(minus, downSide) };
+        if (plus) contextObstacles.push({ left: pos - 22, right: pos + 22, top: -sides.up.height - 5, bottom: 0, routeStem: true });
+        if (minus) contextObstacles.push({ left: pos - 22, right: pos + 22, top: 0, bottom: sides.down.height + 5, routeStem: true });
         let up = base, down = base;
         for (const c of values) {
           if (!c.value) continue;
@@ -363,44 +370,24 @@ window.__geistBoot = () => {
       } else if (showContext) part += brText(pos, base - 30, ui('上下文未记录'), 'br-note');
       if (active) part += '<circle cx="' + pos + '" cy="' + base + '" r="18" class="review-action-halo"/>';
       part += '<circle cx="' + pos + '" cy="' + base + '" r="13" class="review-action-node"/>';
-      // 步状态:环表示最严重的结局,徽标给数量。超时/拦截只看得到在支线里,
-      // 原子化之后要在这里补回来,否则评测信息在路径视图里消失。
-      const codes = step.calls.map(c => c.error?.code).filter(Boolean);
-      const timeouts = codes.filter(code => /TIMEOUT/i.test(code)).length;
-      const blocked = codes.filter(code => /^FS_|OBSERVED/i.test(code)).length;
-      const errors = step.calls.filter(c => c.status === 'error').length;
-      const retries = (step.retries || []).length;
-      const worst = errors ? 'error' : timeouts ? 'timeout' : blocked ? 'blocked' : '';
-      if (worst) part += '<circle cx="' + pos + '" cy="' + base + '" r="15.5" class="review-action-ring ' + worst + '"/>';
-    // 目标事件画成状态环外侧的一圈:创建/完成/阻塞各有颜色,读取不画。
+      // One shared corner slot for control, error and retry states. The selected
+      // node keeps its normal focus halo; no additional status rings are drawn.
+      const controls = summarizeControls(step.calls);
+      part += reviewToolMarker(step.calls, pos + TRACE_MARKER_DOCK.x, base + TRACE_MARKER_DOCK.y, { retries: (step.retries || []).length });
+    // 目标图标留在节点中心，与右上的状态角标分开；读取目标不画。
     const goalMark = ((((typeof data !== 'undefined' && data && data.context) ? data.context : {}).goal || {}).markers || []).find(m => m.operation && m.operation !== 'read' && m.time >= step.start && m.time <= (step.end || Infinity));
     if (goalMark) {
       // DSH 的 goal-outline 图标(16×16):两段开口圆弧 + 一支射向靶心的箭头。
       const goalClass = 'review-goal-icon ' + goalMark.operation;
-      const gx = pos - 9, gy2 = base - 9;
-      part += '<g class="' + goalClass + '" transform="translate(' + gx + ' ' + gy2 + ui(') scale(1.125)"><title>目标') + (goalMark.operation === 'create' ? ui('创建') : goalMark.operation === 'complete' ? ui('完成') : ui('中止')) + '</title>'
-        + '<path d="M14.5001 8C14.5 9.28552 14.1188 10.5422 13.4045 11.611C12.6903 12.6799 11.6752 13.5129 10.4875 14.0049C9.29982 14.4968 7.99295 14.6255 6.73212 14.3747C5.4713 14.124 4.31314 13.505 3.4041 12.596C2.49514 11.687 1.87614 10.5288 1.62537 9.26798C1.37459 8.00716 1.50331 6.70028 1.99525 5.51261C2.48719 4.32494 3.32025 3.30981 4.3891 2.59557C5.45795 1.88134 6.71458 1.50008 8.0001 1.5"/>'
-        + '<path d="M11.5 8C11.5001 8.69227 11.2948 9.36901 10.9102 9.94463C10.5257 10.5202 9.97901 10.9689 9.33944 11.2338C8.69986 11.4987 7.99609 11.5681 7.31712 11.433C6.63816 11.2979 6.01449 10.9645 5.52501 10.475C5.03548 9.98552 4.70209 9.36185 4.56702 8.68289C4.43195 8.00392 4.50127 7.30015 4.76619 6.66057C5.03112 6.021 5.47976 5.47436 6.05538 5.08978C6.631 4.70519 7.30774 4.49995 8.00001 4.5"/>'
-        + '<path d="M8.00024 7.99976L11.2 4.80005"/>'
-        + '<path d="M12.4719 5.62245C12.4246 5.66972 12.3569 5.69025 12.2913 5.67715L10.7814 5.37555C10.7022 5.35972 10.6402 5.29781 10.6244 5.2186L10.3228 3.70866C10.3097 3.6431 10.3302 3.57533 10.3775 3.52806L12.1826 1.723C12.2863 1.61929 12.4627 1.65879 12.5122 1.79684L12.9271 2.95225C12.9472 3.00847 12.9915 3.05272 13.0477 3.07291L14.2031 3.48774C14.3412 3.5373 14.3807 3.71368 14.277 3.81739L12.4719 5.62245Z"/></g>';
+      part += '<g class="' + goalClass + '" transform="translate(' + pos + ' ' + base + ui(') scale(1.125)"><title>目标') + (goalMark.operation === 'create' ? ui('创建') : goalMark.operation === 'complete' ? ui('完成') : ui('中止')) + '</title>' + traceSymbolGlyph('goal') + '</g>';
     }
-      const badges = [];
-      if (errors) badges.push(['error', '×', ui('报错 ') + errors + ui(' 次')]);
-      if (timeouts) badges.push(['timeout', '◷', ui('超时 ') + timeouts + ui(' 次')]);
-      if (blocked) badges.push(['blocked', '⊣', ui('拦截 ') + blocked + ui(' 次')]);
-      if (retries) badges.push(['retry', '↻', ui('重试 ') + retries + ui(' 次')]);
-      badges.slice(0, 2).forEach(([kind, glyph, label], i) => {
-        const bx = pos + 17 + i * 17, by = base - 17;
-        part += '<g class="review-action-badge ' + kind + '" transform="translate(' + bx + ' ' + by + ')"><title>' + label + '</title>' +
-          '<circle r="7.5"/><text text-anchor="middle" y="3.2">' + glyph + '</text></g>';
-      });
       const icon = stepIcon(step);
       const toolNames = [...new Set(step.calls.map(call => call.name))];
       part += '<g transform="translate(' + pos + ' ' + base + ')" class="review-action-icon"' + (toolNames.length === 1 ? ' style="stroke:' + globalThis.__trajectoryToolColor(toolNames[0]) + '"' : '') + '>' + icon + '</g>';
       part += reviewToolStepLabel(step, pos, base + 34);
 
       html += brGroup('class="action-step review-action-step' + (active ? ' is-selected' : '') + '" data-step="' + index + '" aria-pressed="' + active + '"', part,
-        ui('第 ') + step.number + ui(' 步 · ') + reviewActionStepLabel(step) + ' · ' + preciseTime(recordDuration(step)) + (info ? ui('；上下文净变化 ') + reviewSigned(info.amount) : ''));
+        ui('第 ') + step.number + ui(' 步 · ') + reviewActionStepLabel(step) + ' · ' + preciseTime(recordDuration(step)) + (info ? ui('；上下文净变化 ') + reviewSigned(info.amount) : '') + (controls ? ' · ' + controlSummaryTitle(controls, globalThis.__trajectoryLocale) : ''));
     });
     const fullTitle = ui('第 ') + t.number + ui(' 轮 · ') + String(t.prompts?.[0]?.text || t.title || '').replace(/\s+/g, ' ');
     const titleWidth = Math.max(60, viewportWidth - gutter * 2 - 210);
@@ -420,8 +407,8 @@ window.__geistBoot = () => {
       brText(viewportWidth - gutter, 18, count + ui(' 步') + (showTime ? ' · ' + reviewDuration(endOf(t) - t.start) : '') + (failures ? ' · ' + failures + ui(' 步受阻') : '') + goalText, 'br-note', 'end') +
       brText(gutter, height - 12, showContext ? ui('每步上下文变化 · 显示至 ±') + reviewTokens(scale.limit) : ui('步骤从左到右排列'), 'br-axis', 'start') +
       brText(viewportWidth - gutter, height - 12, ui('间距表示顺序 · 耗时见上方'), 'br-axis', 'end') + '</g>';
-    reviewActionFileFrame = { t, x, base, fileBase: gridBottom, gutter, height, viewportWidth, viewportLeft };
-    html += '<g id="review-files-layer">' + reviewActionFiles(t, x, gridBottom, viewport.scrollLeft + gutter, viewport.scrollLeft + viewportWidth - gutter) + '</g>';
+    reviewActionFileFrame = { t, x, base, fileBase: gridBottom + actorReserve, actorBand: Math.max(92, gridBottom - base + 42), gutter, height, viewportWidth, viewportLeft, contextObstacles };
+    html += '<g id="review-files-layer">' + reviewActionFiles(t, x, gridBottom + actorReserve, viewport.scrollLeft + gutter, viewport.scrollLeft + viewportWidth - gutter) + '</g>';
     const graph = $('graph');
     graph.setAttribute('viewBox', '0 0 ' + width + ' ' + height); graph.setAttribute('height', height);
     graph.style.width = width + 'px'; graph.innerHTML = html;
@@ -518,13 +505,7 @@ window.__geistBoot = () => {
     selectStep(index); $('graph').querySelector('[data-step="' + index + '"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }
   function reviewRenderActionCaption() {
-    $('graph-caption').innerHTML = ui('<div class="br-key"><span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" class="review-action-node"/></svg>操作步骤</span>') +
-      '<span class="br-key-item"><svg viewBox="0 0 12 12">' + brCap(6, 6) + ui('</svg>报错</span>') +
-      ui('<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.2" fill="none" stroke="#c0503f" stroke-width="1.6"/></svg>步状态环（红报错 / 橙超时 / 灰拦截）</span>') +
-      ui('<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="#fff" stroke="#6a7f9a"/><text x="6" y="8.6" text-anchor="middle" font-size="7" fill="#4d6076">↻</text></svg>徽标数量</span>') +
-      ui('<span class="br-key-item"><svg viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span>') +
-      ui('<span class="br-key-item"><svg viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span>') +
-      '</div>' +
+    $('graph-caption').innerHTML = '<div class="br-key"></div>' +
       ui('<div class="review-action-guidance">点图标看这一步 · 双击看原始记录 · 缩小返回总览</div>') +
       '<div class="review-overlay-key" aria-hidden="' + !overviewLayers.has('context') + ui('"><span class="review-overlay-caption" data-context-caption>上下文 <b>↑增 ↓减</b></span>') +
       CONTEXT_CATEGORIES.map(c => '<button class="review-overlay-source" data-action-source="' + c.key + '"><i style="background:' + c.color + '"></i>' + c.label + '</button>').join('') + '</div>';
@@ -699,7 +680,7 @@ window.__geistBoot = () => {
     if($('tl-readout'))$('tl-readout').textContent=text;
   }
   function tlRoundReadout(t){
-    tlReadout(ui`第 ${t.number} 轮 · 执行 ${dur(endOf(t)-t.start)} · ${t.steps.length} 步 · ${t.calls} 次调用${t.errors?' · '+t.errors+ui(' 次工具报错'):''}`,()=>openOverviewRound(t.number,'duration'));
+    tlReadout(ui`第 ${t.number} 轮 · ${traceSpanOnly ? ui('记录跨度') : ui('执行')} ${dur(endOf(t)-t.start)} · ${t.steps.length} 步 · ${t.calls} 次调用${t.errors?' · '+t.errors+ui(' 次工具报错'):''}`,()=>openOverviewRound(t.number,'duration'));
   }
   function tlStepReadout(t,s){
     tlReadout(ui`第 ${t.number} 轮 / 第 ${s.number} 步 · ${preciseTime(recordDuration(s))} · ${s.calls.length} 次工具调用${s.errors?' · '+s.errors+ui(' 次报错'):''}`,()=>tlOpenStep(t,s));
@@ -786,6 +767,103 @@ window.__geistBoot = () => {
   }
 
 
+// Approval/policy evidence is independent of the recorded tool outcome.
+// A successful call, escalation request or session mode is never an approval.
+const noControls = Object.freeze([]);
+const controlCodes = {
+  APPROVAL_REJECTED: ['denied', 'approval'],
+  APPROVAL_CANCELLED: ['cancelled', 'approval'],
+  APPROVAL_UNAVAILABLE: ['unavailable', 'approval'],
+  HOST_WORKTREE_GUARD: ['blocked', 'policy', 'worktree-isolation'],
+  FS_NOT_OBSERVED: ['blocked', 'policy', 'file-observation'],
+  FS_STALE_VERSION: ['blocked', 'policy', 'file-version'],
+};
+const controlPriority = ['blocked', 'denied', 'cancelled', 'unavailable', 'pending', 'unknown', 'approved'];
+
+function failureControls(call, { host, error = call.error, output = '' } = {}) {
+  if (call.status !== 'error') return noControls;
+  const attribution = call.attribution;
+  const nativeCode = typeof error?.code === 'string' ? error.code : null;
+  const attributedCode = attribution?.certainty === 'confirmed' &&
+    (attribution.basis === 'native-code' || attribution.basis === 'claude-tool-result') ? attribution.code : null;
+  const code = controlCodes[nativeCode] ? nativeCode : controlCodes[attributedCode] ? attributedCode : null;
+  if (code) {
+    const [state, kind, reason] = controlCodes[code];
+    return [{ state, kind, ...(reason ? { reason } : {}), code, host,
+      source: code === nativeCode ? 'native-code' : attribution.basis,
+      seq: call.resultSeq ?? call.seq, evidence: String(attribution?.evidence || error?.message || code).slice(0, 1024) }];
+  }
+  if (host !== 'claude') return noControls;
+  const text = String(output).trim();
+  const body = text.replace(/^<tool_use_error>/, '').replace(/<\/tool_use_error>$/, '');
+  const worktree = body.startsWith('This session is isolated in the worktree ') &&
+    /Refusing to run it|Edit the worktree copy of this file instead of the shared-checkout path/.test(body);
+  const hook = text.startsWith('PreToolUse:' + call.nativeName + ' hook error: This session is running in an isolated git worktree at ');
+  return worktree || hook ? [{ state: 'blocked', kind: 'policy', reason: 'worktree-isolation', host,
+    source: 'claude-tool-result', pattern: 'claude:worktree-boundary', seq: call.resultSeq ?? call.seq, evidence: text.slice(0, 1024) }] : noControls;
+}
+
+// DSH's durable audit protocol joins asked/decided by request ID, then joins the
+// exact callId. Missing or ambiguous identities are counted, never time-matched.
+function applyApprovalControls(calls, events) {
+  const byCall = new Map(), asks = new Map(), decisions = new Map();
+  for (const call of calls) {
+    if (!byCall.has(call.id)) byCall.set(call.id, []);
+    byCall.get(call.id).push(call);
+  }
+  let mode;
+  for (const event of events) {
+    if (event.surfaceOp) continue;
+    const value = event.data || {};
+    if (event.type === 'approval/policy') mode = ['ask', 'allow', 'deny'].includes(value.policy) ? value.policy : undefined;
+    if (event.type === 'approval/asked' && value.id && !asks.has(value.id)) asks.set(value.id, { event, mode });
+    if (event.type === 'approval/decided' && value.id && !decisions.has(value.id)) decisions.set(value.id, event);
+  }
+  let linked = 0;
+  for (const [id, { event: asked, mode }] of asks) {
+    const candidates = byCall.get(asked.data.callId) || [];
+    if (candidates.length !== 1 || candidates[0].name !== asked.data.toolName) continue;
+    const call = candidates[0], decided = decisions.get(id);
+    if (decided && decided.seq < asked.seq) continue;
+    const outcome = decided?.data.outcome;
+    const state = decided ? ({ 'allowed-once': 'approved', rejected: 'denied', cancelled: 'cancelled', unavailable: 'unavailable' })[outcome] || 'unknown' : 'pending';
+    const signal = { state, kind: 'approval', host: 'dsh', source: decided ? 'approval/decided' : 'approval/asked',
+      requestId: id, ...(mode ? { mode } : {}), ...(outcome ? { outcome } : {}),
+      seq: decided?.seq ?? asked.seq, askedSeq: asked.seq, time: decided?.time ?? asked.time,
+      evidence: String(asked.data.reason || '').slice(0, 1024) };
+    call.controls = [...toolControls(call).filter(item => !(item.kind === 'approval' && !item.requestId && item.state === state)), signal];
+    linked++;
+  }
+  return { requests: asks.size, linked, unlinked: asks.size - linked };
+}
+
+function toolControls(call) {
+  return Array.isArray(call.controls) ? call.controls : failureControls(call);
+}
+function summarizeControls(calls) {
+  const groups = new Map();
+  for (const call of calls) for (const signal of toolControls(call)) {
+    const key = [signal.state, signal.kind, signal.reason, signal.mode].join(':');
+    if (!groups.has(key)) groups.set(key, { ...signal, count: 0 });
+    groups.get(key).count++;
+  }
+  const items = [...groups.values()].sort((a, b) => controlPriority.indexOf(a.state) - controlPriority.indexOf(b.state));
+  return items.length ? { primary: items[0], items } : null;
+}
+function controlTitle(signal, locale) {
+  const en = locale === 'en', index = en ? 1 : 0;
+  const labels = { approved: ['已批准', 'Approved'], denied: ['未批准', 'Not approved'],
+    blocked: ['策略拦截', 'Policy blocked'], cancelled: ['审批取消', 'Approval cancelled'],
+    unavailable: ['审批不可用', 'Approval unavailable'], pending: ['等待审批', 'Awaiting approval'], unknown: ['审批结果未知', 'Approval outcome unknown'] };
+  const reasons = { 'worktree-isolation': ['工作区隔离', 'Worktree isolation'], 'file-observation': ['文件观测保护', 'File observation guard'], 'file-version': ['文件版本保护', 'File version guard'] };
+  const label = (labels[signal.state] || labels.unknown)[index];
+  const reason = reasons[signal.reason]?.[index] || (['allow', 'deny'].includes(signal.mode) ? (en ? 'Automatic policy' : '自动审批策略') : '');
+  return label + (reason ? ' · ' + reason : '');
+}
+function controlSummaryTitle(summary, locale) {
+  return summary.items.map(item => controlTitle(item, locale) + (item.count > 1 ? ' ×' + item.count : '')).join('；');
+}
+
 // The original twig geometry stays fixed: anchor → vertical stem → rounded tip.
 // Labels reserve the tip, text, and stem, including stems of deeper branches.
 function aggregateInScreen(items, maxSpan = 30) {
@@ -811,6 +889,15 @@ function aggregateInScreen(items, maxSpan = 30) {
   return groups;
 }
 
+function branchStemCandidates(anchorX, dy, obstacles, left, right, maxShift = 48) {
+  const blockers = obstacles.filter(box => box.routeStem && (dy > 0
+    ? box.bottom > 0 && box.top < dy + 4 : box.top < 0 && box.bottom > dy - 4));
+  return [...new Set([anchorX, ...blockers.flatMap(box => [box.left - 6, box.right + 6])])]
+    .filter(x => (x === anchorX || x >= left + 8 && x <= right - 8 && Math.abs(x - anchorX) <= maxShift) &&
+      blockers.every(box => x <= box.left - 4 || x >= box.right + 4))
+    .sort((a, b) => Math.abs(a - anchorX) - Math.abs(b - anchorX));
+}
+
 function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48, 77, -94, 122], gap = 10, aggregateSpan = 30, obstacles = [], labelSide = 'right' }) {
   let groups = aggregateInScreen(items, aggregateSpan);
   const intersects = (a, b) => a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + 5 && a.bottom + 5 > b.top;
@@ -819,17 +906,35 @@ function layoutBranches(items, { left, right, measure, labelOf, slots = [32, -48
     const placed = [];
     let failed = -1;
     for (let i = 0; i < groups.length; i++) {
-      const members = groups[i], x = members[Math.floor((members.length - 1) / 2)].x;
+      const members = groups[i], anchorX = members[Math.floor((members.length - 1) / 2)].x;
       const side = (typeof labelSide === 'function' ? labelSide(members) : labelSide) === 'left' ? -1 : 1;
       const label = labelOf(members), width = measure(label) + 6;
-      const cx = Math.max(left + width / 2, Math.min(right - width / 2, side > 0 ? x + 20 : x - 24 - width / 2));
-      const occupiedLeft = side > 0 ? Math.min(cx - width / 2, x + 9) : Math.min(cx - width / 2, x - 44);
-      const occupiedRight = side > 0 ? Math.max(cx + width / 2, x + 44) : Math.max(cx + width / 2, x - 9);
-      const candidate = slots.map(dy => ({
-        x, cx, dy, label, members, side,
-        left: occupiedLeft, right: occupiedRight,
-        top: dy > 0 ? dy - 9 : dy - 28, bottom: dy > 0 ? dy + 25 : dy + 9,
-      })).find(p => placed.every(q => !intersects(p, q) && !stemHits(p.x, p.dy, q) && !stemHits(q.x, q.dy, p)) && obstacles.every(q => !intersects(p, q)));
+      const candidates = [];
+      // Keep the event's attachment on the time axis. If its column occupies
+      // that stem, leave along the trunk and rise beside the column instead.
+      for (const dy of slots) {
+        let candidate;
+        const blockers = obstacles.filter(box => box.routeStem && (dy > 0
+          ? box.bottom > 0 && box.top < dy + 4 : box.top < 0 && box.bottom > dy - 4));
+        for (const x of branchStemCandidates(anchorX, dy, obstacles, left, right)) {
+          const centers = [side > 0 ? x + 20 : x - 24 - width / 2];
+          if (blockers.length) centers.push(x + side * (24 + width / 2));
+          for (const center of centers) {
+            const cx = Math.max(left + width / 2, Math.min(right - width / 2, center));
+            const p = { x, anchorX, cx, dy, label, members, side,
+              left: side > 0 ? Math.min(cx - width / 2, x + 9) : Math.min(cx - width / 2, x - 44),
+              right: side > 0 ? Math.max(cx + width / 2, x + 44) : Math.max(cx + width / 2, x - 9),
+              top: dy > 0 ? dy - 9 : dy - 28, bottom: dy > 0 ? dy + 25 : dy + 9 };
+            if (placed.every(q => !intersects(p, q) && !stemHits(p.x, p.dy, q) && !stemHits(q.x, q.dy, p)) &&
+                obstacles.every(q => !intersects(p, q))) { candidate = p; break; }
+          }
+          if (candidate) break;
+        }
+        if (candidate) candidates.push(candidate);
+      }
+      const score = p => placed.filter(q => Math.sign(q.dy) === Math.sign(p.dy)).length * 34 +
+        Math.abs(p.dy) * .18 + Math.abs(p.x - anchorX) * .35;
+      const candidate = candidates.sort((a, b) => score(a) - score(b))[0];
       if (!candidate) { failed = i; break; }
       placed.push(candidate);
     }
@@ -1492,6 +1597,87 @@ function fileChangeHistory(operations, path) {
   return { ...file, rounds: [...rounds.values()], changeRounds: [...rounds.values()].filter(r => r.operations.some(op => op.kind === 'change')) };
 }
 
+  // Rendering vocabulary only. Host adapters and the shared state models own
+  // recognition; the graph and legend consume the same geometry here.
+  const TRACE_MARKER_DOCK = { x: 14, y: -14 };
+  const TRACE_SYMBOL_GLYPHS = {
+    policy: '<path class="trace-symbol-shield" d="M0-5.5 4.5-3.7V-.3C4.5 2.6 2.7 4.5 0 5.8-2.7 4.5-4.5 2.6-4.5-.3v-3.4Z"/>',
+    error: '<path d="m-3.5-3.5 7 7m0-7-7 7"/>',
+    timeout: '<circle r="4.8"/><path d="M0-2.8V0l2 1.5"/>',
+    retry: '<path d="M3.8-1a4 4 0 1 0-.8 4M4-4v3H1"/>',
+    returned: '<path d="m-4 .1 2.5 2.6 5.8-6"/>',
+    pending: '<circle cx="-3.3" r=".7" class="trace-symbol-dot"/><circle r=".7" class="trace-symbol-dot"/><circle cx="3.3" r=".7" class="trace-symbol-dot"/>',
+    stop: '<path d="M-1.7-4v8m3.4-8v8"/>',
+    gap: '<path d="m-3 3 2-6m1 6 2-6"/>',
+    compact: '<path d="m-5.5-2.5 3.5 2.5-3.5 2.5m11-5L2 0l3.5 2.5"/>',
+    capped: '<rect x="-6" y="-2.8" width="12" height="5.6" rx="2"/><circle cx="-3" r=".6" class="trace-symbol-dot"/><circle r=".6" class="trace-symbol-dot"/><circle cx="3" r=".6" class="trace-symbol-dot"/>',
+    branch: '<path d="M-6 5V0q0-4 4-4h8"/>',
+    selected: '<circle r="7" class="review-action-halo"/><circle r="4.5" class="review-action-node"/>',
+    agent: '<path d="M-6 4q4 0 5-5t7-4"/>',
+    goal: "<g transform=\"translate(-8 -8)\"><path d=\"M14.5001 8C14.5 9.28552 14.1188 10.5422 13.4045 11.611C12.6903 12.6799 11.6752 13.5129 10.4875 14.0049C9.29982 14.4968 7.99295 14.6255 6.73212 14.3747C5.4713 14.124 4.31314 13.505 3.4041 12.596C2.49514 11.687 1.87614 10.5288 1.62537 9.26798C1.37459 8.00716 1.50331 6.70028 1.99525 5.51261C2.48719 4.32494 3.32025 3.30981 4.3891 2.59557C5.45795 1.88134 6.71458 1.50008 8.0001 1.5\"/><path d=\"M11.5 8C11.5001 8.69227 11.2948 9.36901 10.9102 9.94463C10.5257 10.5202 9.97901 10.9689 9.33944 11.2338C8.69986 11.4987 7.99609 11.5681 7.31712 11.433C6.63816 11.2979 6.01449 10.9645 5.52501 10.475C5.03548 9.98552 4.70209 9.36185 4.56702 8.68289C4.43195 8.00392 4.50127 7.30015 4.76619 6.66057C5.03112 6.021 5.47976 5.47436 6.05538 5.08978C6.631 4.70519 7.30774 4.49995 8.00001 4.5\"/><path d=\"M8.00024 7.99976L11.2 4.80005\"/><path d=\"M12.4719 5.62245C12.4246 5.66972 12.3569 5.69025 12.2913 5.67715L10.7814 5.37555C10.7022 5.35972 10.6402 5.29781 10.6244 5.2186L10.3228 3.70866C10.3097 3.6431 10.3302 3.57533 10.3775 3.52806L12.1826 1.723C12.2863 1.61929 12.4627 1.65879 12.5122 1.79684L12.9271 2.95225C12.9472 3.00847 12.9915 3.05272 13.0477 3.07291L14.2031 3.48774C14.3412 3.5373 14.3807 3.71368 14.277 3.81739L12.4719 5.62245Z\"/></g>",
+    'retry-span': '<path d="M-5 0H5" class="review-retry-line"/>',
+    coverage: '<path d="M-5 0H5" class="trace-symbol-coverage"/>',
+  };
+  function traceSymbolGlyph(symbol) { return TRACE_SYMBOL_GLYPHS[symbol] || ''; }
+  function traceSymbolMark(symbol, x = 0, y = 0, state = '') {
+    return '<g class="trace-symbol-mark" data-trace-symbol="' + symbol + '" data-marker-state="' + state + '" transform="translate(' + x + ' ' + y + ')">' + traceSymbolGlyph(symbol) + '</g>';
+  }
+  function traceSymbolPreview(symbol, state = '') {
+    return '<svg viewBox="-8 -8 16 16" width="16" height="16" aria-hidden="true">' + traceSymbolMark(symbol, 0, 0, state) + '</svg>';
+  }
+  function reviewRenderSymbolLegend() {
+    const legend = $('geist-legend'); if (!legend) return;
+    const key = legend.querySelector('.br-key'), graph = $('graph'); if (!key || !graph) return;
+    const en = globalThis.__trajectoryLocale === 'en', label = (zh, english) => en ? english : zh;
+    const entries = [
+      ['policy',label('审批 / 策略','Approval / policy'),'blocked'],
+      ['error',label('工具报错','Tool error'),'error'],
+    ];
+    const conditional = [
+      ['timeout','[data-trace-symbol="timeout"]',label('执行超时','Execution timeout'),'timeout'],
+      ['retry','[data-trace-symbol="retry"]',label('步骤重试','Step retry'),'retry'],
+      ['pending','[data-trace-symbol="pending"]',label('结果待返回','Result pending')],
+      ['returned','[data-trace-symbol="returned"]',label('同参后续返回','Later same-input return')],
+      ['compact','[data-context-compaction]',label('上下文压缩','Context compaction')],
+      ['capped','.review-context-capped',label('柱高收起','Capped bar')],
+      ['gap','.br-gap',label('轮间等待折叠','Folded turn gap')],
+      ['retry-span','.review-retry',label('主线请求重试','Request retry on timeline')],
+      ['stop','[data-br-stop]',label('轮次中止','Turn stopped')],
+    ];
+    for (const [id, selector, text, state] of conditional) if (graph.querySelector(selector)) entries.push([id,text,state]);
+    const signature = [en,...entries.map(([id])=>id)].join(':');
+    if (key.dataset.symbols === signature) return;
+    key.classList.add('trace-symbols');
+    key.innerHTML = entries.map(([id,text,state]) => '<span class="trace-symbol-item" data-legend-symbol="' + id + '">' + traceSymbolPreview(id,state) + '<span>' + text + '</span></span>').join('');
+    key.dataset.symbols = signature;
+    $('review-control-key')?.remove();
+  }
+
+  function reviewToolMarker(calls, x, y, { retries = 0, compact = false } = {}) {
+    const summary = summarizeControls(calls), errors = calls.filter(call => call.status === 'error').length;
+    const timeout = calls.some(call => /TIMEOUT/.test(call.error?.code || ''));
+    const control = summary?.primary, blocked = control && control.state !== 'approved';
+    const state = blocked ? control.state : timeout ? 'timeout' : errors ? 'error' : retries ? 'retry' : control?.state;
+    if (!state) return '';
+    const en = globalThis.__trajectoryLocale === 'en';
+    const title = [summary ? controlSummaryTitle(summary, globalThis.__trajectoryLocale) : '', errors ? (en ? 'Tool errors: ' : '工具报错 ') + errors : '', retries ? (en ? 'Retries: ' : '重试 ') + retries : ''].filter(Boolean).join(' · ');
+    const symbol = control && state === control.state ? 'policy' : state;
+    return '<g class="review-tool-marker trace-symbol-mark" data-trace-symbol="' + symbol + '" data-marker-state="' + esc(state) + '"' + (control ? ' data-control-state="' + esc(control.state) + '"' : '') + ' transform="translate(' + x + ' ' + y + ')" aria-label="' + esc(title) + '"><title>' + esc(title) + '</title><g' + (compact ? ' transform="scale(.9)"' : '') + '>' + traceSymbolGlyph(symbol) + '</g></g>';
+  }
+  function reviewResultControlCalls(result) {
+    if (result.kind !== 'incident') return result.calls || [];
+    const seqs = new Set(result.incident.failureSeqs);
+    return session.turns.find(turn => turn.number === result.turn)?.steps.flatMap(step => step.calls).filter(call => seqs.has(call.seq)) || [];
+  }
+  function reviewControlChips(call) {
+    return toolControls(call).map(signal => '<span class="geist-tool-control" data-control-state="' + esc(signal.state) + '">' + esc(controlTitle(signal, globalThis.__trajectoryLocale)) + '</span>').join('');
+  }
+  function reviewControlEvidence(call) {
+    return toolControls(call).map(signal => '<div class="geist-control-evidence"><strong>' + esc(controlTitle(signal, globalThis.__trajectoryLocale)) + '</strong><small>' +
+      esc([signal.host, signal.source, signal.requestId, signal.seq != null ? '#' + signal.seq : null, signal.code].filter(Boolean).join(' · ')) + '</small>' +
+      (signal.evidence ? '<p>' + esc(signal.evidence) + '</p>' : '') + '</div>').join('');
+  }
+
   let reviewBranchesNow = [], reviewRetriesNow = [], reviewStress = false;
   let reviewOverviewBookmark = null;
   let reviewRealEpisodes = session.overview.episodes;
@@ -1531,6 +1717,7 @@ function fileChangeHistory(operations, path) {
     return String(e.turn).padStart(2, '0') + ' · ' + episodeMeaning(e).short;
   }
   function reviewBranches(mapTime, base, visible, left, right, fullWidth) {
+    const callsBySeq = new Map(session.turns.flatMap(turn => turn.steps.flatMap(step => step.calls)).map(call => [call.seq, call]));
     reviewBranchesNow = layoutBranches(session.overview.episodes.map(e => ({ id: e.id, x: mapTime(e.firstError), at: reviewActiveTime(e.turn, e.firstError), e })), {
       left: 20, right: fullWidth - 20, measure: reviewMeasure, labelOf: reviewBranchLabel,
     });
@@ -1545,11 +1732,13 @@ function fileChangeHistory(operations, path) {
       // This is the installed renderer's original twig, cap and return mark.
       const twig = 'M' + p.x + ' ' + (base + sign * 2) + ' V' + (y - sign * 10) + ' Q' + p.x + ' ' + y + ' ' + (p.x + 10) + ' ' + y + ' H' + (p.x + 14);
       part += '<path d="' + twig + '" class="review-branch-halo"/><path d="' + twig + '" class="br-connector"/>';
-      part += brCap(p.x + 18, y, condition);
+      const guardedCalls = events.flatMap(event => event.failureSeqs.map(seq => callsBySeq.get(seq)).filter(Boolean));
+      const controls = summarizeControls(guardedCalls);
+      part += controls ? reviewToolMarker(guardedCalls, p.x + 18, y, { compact: true }) : brCap(p.x + 18, y, condition);
       part += allDone ? '<path d="M' + (p.x + 25) + ' ' + y + 'h6" class="br-association"/>' + brCheck(p.x + 37, y) : brText(p.x + 33, y + 4, '?', 'br-note');
       part += brText(p.cx, p.dy > 0 ? y + 21 : y - 14, p.label, 'br-label' + (allDone ? '' : ' bad'));
       for (const m of p.members) part += '<path d="M' + m.x + ' ' + (base - 3) + 'v6" stroke="var(--branch-bad)" stroke-opacity=".35" stroke-width="1"/>';
-      html += brGroup('class="br-incident" data-review-branch="' + index + '"', part, reviewBranchSentence(events));
+      html += brGroup('class="br-incident" data-review-branch="' + index + '"', part, reviewBranchSentence(events) + (controls ? ' · ' + controlSummaryTitle(controls, globalThis.__trajectoryLocale) : ''));
     });
     return { html, bottom };
   }
@@ -1733,7 +1922,7 @@ function fileChangeHistory(operations, path) {
     $('review-path').hidden = path;
     if (path) $('review-state').textContent = ui('第 ') + turn().number + ui(' 轮 › 逐步行动 · 缩小返回');
     else $('review-state').textContent = reviewStress ? ui('160 处合成受阻 · 仅测试密集布局') : reviewFocusedTurn && overviewScale > 1 ? ui('总览 › 第 ') + reviewFocusedTurn + ui(' 轮 · 继续放大看行动') : session.turns.length + ui(' 轮 · 放大逐层查看');
-    if ($('review-rounds')) $('review-rounds').textContent = overviewLayers.has('duration') ? ui('每轮耗时') : ui('定位轮次');
+    if ($('review-rounds')) $('review-rounds').textContent = overviewLayers.has('duration') ? (traceSpanOnly ? ui('每轮记录跨度') : ui('每轮耗时')) : ui('定位轮次');
   }
   const reviewSelectTurnBase = selectTurn;
   selectTurn = function(index) {
@@ -1765,7 +1954,7 @@ function fileChangeHistory(operations, path) {
   let reviewContextRequests = [...new Map([...(reviewContextData.historyRequests || []), ...(reviewContextData.requests || [])].map(row => [row.seq, row])).values()].sort((a, b) => a.seq - b.seq);
   function reviewIndexContextSteps(rows) {
     const byStep = new Map();
-    rows.forEach((row, index) => { const key = row.turn + ':' + row.step; if (!byStep.has(key)) byStep.set(key, index); });
+    rows.forEach((row, index) => { for (const step of row.contextSteps || [row.step]) { const key = row.turn + ':' + step; if (!byStep.has(key)) byStep.set(key, index); } });
     return byStep;
   }
   let reviewContextStepIndex = reviewIndexContextSteps(reviewContextRequests);
@@ -1871,7 +2060,7 @@ function fileChangeHistory(operations, path) {
       const start = Math.max(left, group.start), end = Math.min(right, group.end), cx = (start + end) / 2;
       const label = first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮` + ui(' · 展开');
       const ongoing = group.rows.some(l => l.turn.end === null);
-      const duration = (first === last ? '' : ui('共 ')) + (ongoing ? '≥' : '') + reviewDuration(group.duration);
+      const duration = (traceSpanOnly ? ui('跨度 ') : first === last ? '' : ui('共 ')) + (ongoing ? '≥' : '') + reviewDuration(group.duration);
       // 宽度不够时退到短标签,再不够就只留时长;都放不下就整条不画,避免只剩一个空框。
       const span = end - start - 8;
       const shortLabel = first === last ? ui('第 ') + first + ui(' 轮') : first + '–' + last;
@@ -1886,7 +2075,7 @@ function fileChangeHistory(operations, path) {
         ? brText(cx, 42, label, 'review-turn-duration') + brText(cx, 57, duration, 'review-turn-duration review-duration-value')
         : brText(cx, 49, single, 'review-turn-duration' + (single === duration ? ' review-duration-value' : ''));
       html += brGroup('data-review-duration-range="' + first + ':' + last + '" class="review-duration-hit"', body,
-        label + ' · ' + duration + ui('。点击查看每一轮耗时，没有按时长筛选。'));
+        label + ' · ' + duration + (traceSpanOnly ? ui('。点击查看每轮记录跨度；包含记录之间的等待。') : ui('。点击查看每一轮耗时，没有按时长筛选。')));
     }
     const last = layout.at(-1);
     if (last && visible(last.end)) html += '<path d="M' + last.end + ' 96V' + (mainHeight - 38) + '" class="review-turn-divider"/>';
@@ -1901,6 +2090,23 @@ function fileChangeHistory(operations, path) {
     if (row.isBaseline) return ui('首轮已有 ') + reviewTokens(row.total) + ui(' · 看开始时的构成');
     return ui('第 ') + row.turn + ui(' 轮 · ') + (row.net >= 0 ? ui('净增 ') : ui('净减 ')) + reviewTokens(Math.abs(row.net));
   }
+  function reviewContextColumns(layout) {
+    if (!overviewLayers.has('context') || !reviewContextRows.length) return [];
+    return layout.map(l => {
+      const row = reviewContextMap.get(l.turn.number), amounts = contextBarAmounts(row);
+      return { l, row, amounts, x: (l.x + l.end) / 2,
+        width: Math.max(.8, Math.min(38, (l.end - l.x) * .65)),
+        positive: contextDisplaySide(amounts.increase, reviewContextScale),
+        negative: contextDisplaySide(amounts.decrease, reviewContextScale) };
+    });
+  }
+  function reviewContextObstacles(layout) {
+    return reviewContextColumns(layout).filter(column => column.row).flatMap(({ x, width, positive, negative }) => {
+      const bounds = side => Math.max(width / 2, side.overflow ? 7 : 0) + 2;
+      return [positive.height > 0 && { left: x - bounds(positive), right: x + bounds(positive), top: -positive.height - 5, bottom: 0, routeStem: true },
+        negative.height > 0 && { left: x - bounds(negative), right: x + bounds(negative), top: 0, bottom: negative.height + 5, routeStem: true }].filter(Boolean);
+    });
+  }
   function reviewContextLayer(layout, base, left, right, visible) {
     if (!overviewLayers.has('context')) return '';
     if (!reviewContextRows.length) return '';
@@ -1912,12 +2118,8 @@ function fileChangeHistory(operations, path) {
     html += brText(left - 7, zero + 3, '0', 'review-context-axis', 'end');
     html += brText(left - 7, bottom + 3, '−' + reviewTokens(scale.limit), 'review-context-axis', 'end');
     const overflowLabels = [];
-    for (const l of layout) {
+    for (const { l, row, x, width, amounts, positive, negative } of reviewContextColumns(layout)) {
       if (!visible(l.x, l.end)) continue;
-      const row = reviewContextMap.get(l.turn.number);
-      const x = (l.x + l.end) / 2, width = Math.max(.8, Math.min(38, (l.end - l.x) * .65));
-      const amounts = contextBarAmounts(row);
-      const positive = contextDisplaySide(amounts.increase, scale), negative = contextDisplaySide(amounts.decrease, scale);
       const upper = Math.max(15, positive.height), lower = Math.max(15, negative.height);
       let body = '<rect class="br-hit" x="' + l.x + '" y="' + (zero - upper) + '" width="' + Math.max(1, l.end - l.x) + '" height="' + (upper + lower) + '"/>';
       if (!row) {
@@ -1972,7 +2174,7 @@ function fileChangeHistory(operations, path) {
       html += '<path d="M' + x + ' 96V' + (mainHeight - 38) + '" class="review-compaction-divider"/>';
       html += brGroup('class="review-compaction-marker" data-context-compaction="' + events.map(e => e.seq).join(',') + '"',
         '<rect x="' + (x - 12) + '" y="68" width="24" height="24" rx="5" class="review-compaction-hit"/>' +
-        '<g transform="translate(' + (x - 8) + ' 71)" class="review-compact-fold"><path d="M2.5 5.5 6 8l-3.5 2.5"/><path d="M13.5 5.5 10 8l3.5 2.5"/></g>' +
+        traceSymbolMark('compact', x, 79) +
         (events.length > 1 ? brText(x + 15, 83, String(events.length), 'review-compaction-count') : ''), caption);
     }
     return html;
@@ -2277,17 +2479,17 @@ function fileChangeHistory(operations, path) {
   }
   function reviewOpenDurations(first = null, last = null) {
     const subset = session.turns.filter(t => first === null || t.number >= first && t.number <= last);
-    const title = first === null ? ui('每轮耗时') : first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮`;
+    const title = first === null ? (traceSpanOnly ? ui('每轮记录跨度') : ui('每轮耗时')) : first === last ? ui`第 ${first} 轮` : ui`第 ${first}–${last} 轮`;
     const html = ui('<form id="review-round-search" class="review-round-search"><label for="review-round-number">定位轮次</label><input id="review-round-number" type="number" min="1" inputmode="numeric" placeholder="例如 59"><button class="action-button" type="submit">定位</button></form>') +
       ui('<p class="review-quiet">每一轮都列在这里，不按时长筛选。点轮号定位原图，点“行动”直接看逐步操作。</p>') +
       (first !== null ? ui('<button class="back-link" id="review-all-rounds">查看全部 ') + session.turns.length + ui(' 轮</button>') : '') +
       '<div class="review-round-grid" id="review-round-grid"></div>';
-    openDrawer(title, ui('从本轮开始到结束 · 含轮内等待，不含轮间等待'), html);
+    openDrawer(title, traceSpanOnly ? ui('从用户输入到末条记录 · 包含记录之间的等待，结束边界未记录') : ui('从本轮开始到结束 · 含轮内等待，不含轮间等待'), html);
     const draw = () => {
       const query = $('review-round-number').value.trim();
       const rounds = query ? session.turns.filter(t => String(t.number) === query) : subset;
       $('review-round-grid').innerHTML = rounds.length ? rounds.map(t => '<div class="review-round-card">' +
-        '<button data-review-focus-turn="' + t.number + '" title="' + esc(shorten(t.title || '', 100)) + '"><strong>' + ui`第 ${t.number} 轮` + '</strong><b>' + (t.end === null ? '≥' : '') + reviewDuration(endOf(t) - t.start) + '</b></button>' +
+        '<button data-review-focus-turn="' + t.number + '" title="' + esc(shorten(t.title || '', 100)) + '"><strong>' + ui`第 ${t.number} 轮` + '</strong><b>' + (traceSpanOnly ? ui('跨度 ') : '') + (t.end === null ? '≥' : '') + reviewDuration(endOf(t) - t.start) + '</b></button>' +
         '<div><button data-review-round-context="' + t.number + ui('">上下文</button><button data-review-round-path="') + t.number + ui('">行动 ↗</button></div></div>')).join('') : ui('<p class="review-quiet">没有这个轮号。</p>');
       $('review-round-grid').querySelectorAll('[data-review-focus-turn]').forEach(el => el.onclick = () => reviewFocusTurn(Number(el.dataset.reviewFocusTurn)));
       $('review-round-grid').querySelectorAll('[data-review-round-context]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.reviewRoundContext)));
@@ -2308,7 +2510,7 @@ function fileChangeHistory(operations, path) {
     tlFocusRange(t, t.start, endOf(t));
     tlSelectionOutline(t);
     reviewSyncNavigation();
-    tlReadout(ui('第 ') + number + ui(' 轮 · 总耗时 ') + reviewDuration(endOf(t) - t.start) + ui('。继续放大进入逐步行动，或点上方“行动路径”。'));
+    tlReadout(ui('第 ') + number + (traceSpanOnly ? ui(' 轮 · 记录跨度 ') : ui(' 轮 · 总耗时 ')) + reviewDuration(endOf(t) - t.start) + ui('。继续放大进入逐步行动，或点上方“行动路径”。'));
   }
   const reviewSetOverviewScaleBase = setOverviewScale;
   setOverviewScale = function(nextScale, viewportX) {
@@ -2349,7 +2551,11 @@ function fileChangeHistory(operations, path) {
   function reviewStepContext(t, step) {
     const index = reviewContextStepIndex.get(t.number + ':' + step.number);
     if (index === undefined) return null;
-    const current = reviewContextRequests[index], prior = reviewContextRequests[index - 1];
+    const current = reviewContextRequests[index];
+    // Split assistant records belong to one dispatched request. Show the same
+    // composition on each record, but draw its change only on the first one.
+    const continuation = current.semanticUnit === 'claude-recorded-request-visible-text' && current.contextSteps?.indexOf(step.number) > 0;
+    const prior = continuation ? current : reviewContextRequests[index - 1];
     const total = CONTEXT_CATEGORIES.reduce((sum, c) => sum + (current[c.key] || 0), 0);
     const parts = Object.fromEntries(CONTEXT_CATEGORIES.map(c => [c.key, (current[c.key] || 0) - (prior?.[c.key] || 0)]));
     const amount = Object.values(parts).reduce((sum, value) => sum + value, 0);
@@ -2798,11 +3004,10 @@ function fileChangeHistory(operations, path) {
   const brRound=n=>session.turns.find(t=>t.number===n);
   const brGroup=(attrs,body,title)=>`<g ${attrs} data-branch-action role="button" tabindex="0"><title>${esc(title)}</title>${body}</g>`;
   const brText=(x,y,text,cls='br-label',anchor='middle')=>`<text x="${x}" y="${y}" text-anchor="${anchor}" class="${cls}">${esc(text)}</text>`;
-  const brCheck=(x,y)=>`<path d="M${x-3} ${y} l3 3 l6 -7" class="br-check"/>`;
+  const brCheck=(x,y)=>traceSymbolMark('returned',x,y);
   function brCap(x,y,condition=''){
-    if(condition==='TOOL_TIMEOUT')return `<g class="br-cap"><circle cx="${x}" cy="${y}" r="5"/><path d="M${x} ${y-3} v3 l2 2"/></g>`;
-    if(condition.startsWith('FS_'))return `<path d="M${x} ${y-6} v12 M${x-6} ${y} H${x}" class="br-cap"/>`;
-    return `<path d="M${x-3} ${y-4} l6 8 M${x+3} ${y-4} l-6 8" class="br-cap"/>`;
+    const control = toolControls({status:'error',error:{code:condition}})[0];
+    return traceSymbolMark(control ? 'policy' : /TIMEOUT$/.test(condition) ? 'timeout' : 'error', x, y, control?.state || (/TIMEOUT$/.test(condition) ? 'timeout' : 'error'));
   }
   function brEpisodeName(e){
     if(e.condition==='FS_NOT_OBSERVED'||e.condition==='FS_STALE_VERSION')return ui('修改 ×')+e.failedCount;
@@ -2845,11 +3050,11 @@ function fileChangeHistory(operations, path) {
     const detail=false,showErrors=overviewLayers.has('failures'),showTime=overviewLayers.has('duration'),showInterrupt=overviewLayers.has('interruptions');
     overviewProjection={layout,factor,baseFactor,gutter,mapTime,mainY:base,mainBottom:base+8,visibleLeft:left,visibleRight:right,viewportWidth:vw};
     if(!plotOnly){
-      $('turn-heading').innerHTML=ui`<div class="overview-heading"><div class="overview-heading-main"><strong>执行全景</strong><span>${turns.length} 轮</span></div><div class="overview-heading-meta"><span>${clock(turns[0].start).slice(0,5)} — ${clock(endOf(turns.at(-1))).slice(0,5)}</span><i></i><span>执行 ${dur(active)}</span></div></div><div class="ov-controls"><div class="ov-layer-checks">${Object.entries(focusNames).map(([id,name])=>`<label class="ov-layer-check"><input type="checkbox" data-br-layer="${id}" ${overviewLayers.has(id)?'checked':''}><span>${name}</span></label>`).join('')}</div><span class="spacer"></span><button class="ov-focus-rule" id="br-rules">图例与规则 ↗</button><div class="ov-zoom"><button id="ov-zoom-out" aria-label="缩小时间轴" ${overviewScale<=1?'disabled':''}>−</button><button id="ov-fit">${overviewScale===1?ui('全览'):overviewScale.toFixed(overviewScale<10?1:0)+'×'}</button><button id="ov-zoom-in" aria-label="放大时间轴" ${overviewScale>=1024?'disabled':''}>＋</button></div></div><div class="br-key"><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 11 C7 11 5 3 11 3 H19 C24 3 23 11 28 11" class="br-connector"/></svg>行动</span><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 12 Q6 12 9 3 H27 M1 12 Q7 12 11 8 H23" class="br-connector"/></svg>并行 / 委派</span><span class="br-key-error">⊣ 拦截　◷ 超时　× 报错</span><span class="br-key-return">↻✓ 原操作后续成功</span><span>? 后续未确认</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="1.5" y="6" width="9" height="4" class="br-glyph" opacity=".45"/></svg>上下文总趋势</span><span class="br-key-note">${detail?ui('枝条按实际时间展开'):ui('事件标记 · 点击展开')}</span></div>`;
+      $('turn-heading').innerHTML=ui`<div class="overview-heading"><div class="overview-heading-main"><strong>执行全景</strong><span>${turns.length} 轮</span></div><div class="overview-heading-meta"><span>${clock(turns[0].start).slice(0,5)} — ${clock(endOf(turns.at(-1))).slice(0,5)}</span><i></i><span>${traceSpanOnly ? ui('记录跨度') : ui('执行')} ${dur(active)}</span></div></div><div class="ov-controls"><div class="ov-layer-checks">${Object.entries(focusNames).map(([id,name])=>`<label class="ov-layer-check"><input type="checkbox" data-br-layer="${id}" ${overviewLayers.has(id)?'checked':''}><span>${name}</span></label>`).join('')}</div><span class="spacer"></span><button class="ov-focus-rule" id="br-rules">图例与规则 ↗</button><div class="ov-zoom"><button id="ov-zoom-out" aria-label="缩小时间轴" ${overviewScale<=1?'disabled':''}>−</button><button id="ov-fit">${overviewScale===1?ui('全览'):overviewScale.toFixed(overviewScale<10?1:0)+'×'}</button><button id="ov-zoom-in" aria-label="放大时间轴" ${overviewScale>=1024?'disabled':''}>＋</button></div></div><div class="br-key"><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 11 C7 11 5 3 11 3 H19 C24 3 23 11 28 11" class="br-connector"/></svg>行动</span><span><svg aria-hidden="true" viewBox="0 0 29 14"><path d="M1 12 Q6 12 9 3 H27 M1 12 Q7 12 11 8 H23" class="br-connector"/></svg>并行 / 委派</span><span class="br-key-error">⊣ 拦截　◷ 超时　× 报错</span><span class="br-key-return">↻✓ 原操作后续成功</span><span>? 后续未确认</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span><span class="br-key-item"><svg aria-hidden="true" viewBox="0 0 12 12"><rect x="1.5" y="6" width="9" height="4" class="br-glyph" opacity=".45"/></svg>上下文总趋势</span><span class="br-key-note">${detail?ui('枝条按实际时间展开'):ui('事件标记 · 点击展开')}</span></div>`;
       $('br-rules').onclick=spShowSource;
       $('turn-heading').querySelectorAll('[data-br-layer]').forEach(el=>el.onchange=()=>{el.checked?overviewLayers.add(el.dataset.brLayer):overviewLayers.delete(el.dataset.brLayer);renderOverview();});
       $('ov-zoom-in').onclick=()=>setOverviewScale(overviewScale*1.8);$('ov-zoom-out').onclick=()=>setOverviewScale(overviewScale/1.8);$('ov-fit').onclick=()=>setOverviewScale(1);
-    $('graph-caption').innerHTML=ui('<div class="tl-readout" id="tl-readout"></div><div class="br-key"><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><g class="br-cap"><path d="M3 3 L9 9 M9 3 L3 9"/></g></svg>报错</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><g class="br-cap"><circle cx="6" cy="6" r="4"/><path d="M6 3.4 V6 L7.8 7.5"/></g></svg>超时</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M2.4 6.4 L4.9 8.9 L9.7 3.1" class="br-check"/></svg>随后成功</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><text x="6" y="9" text-anchor="middle" class="br-note" font-size="10" fill="var(--branch-muted)">?</text></svg>结果还不清楚</span><button class="review-retry-summary" id="review-all-retries"><i></i><span id="review-retry-total">自动再试</span></button><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M4.4 2.5 V9.5 M7.6 2.5 V9.5" class="br-glyph"/></svg>中断</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><text x="6" y="9" text-anchor="middle" font-size="11" fill="var(--branch-ink)">✂</text></svg>压缩上下文</span><span class="br-key-item"><svg viewBox="0 0 12 12" width="13" height="13" fill="none" aria-hidden="true"><path d="M3 8.5 L4.4 3.5 M5.2 8.5 L6.6 3.5" class="br-glyph"/></svg>等待已折叠</span></div>');
+    $('graph-caption').innerHTML='<div class="tl-readout" id="tl-readout"></div><div class="br-key"></div>';
       const layerBox=document.createElement('div');
       layerBox.className='br-layers';
       layerBox.innerHTML=[['failures',ui('失败')],['duration',ui('耗时')],['interruptions',ui('停顿与再试')],['context',ui('上下文变化')],['files',ui('文件')]].map(([key,label])=>`<label class="br-layer"><input type="checkbox" data-br-layer="${key}" ${overviewLayers.has(key)?'checked':''}>${label}</label>`).join('');
@@ -2941,7 +3146,7 @@ function fileChangeHistory(operations, path) {
     for(const l of layout){if(!visible(l.x,l.end))continue;const start=Math.max(l.offset,l.offset+(left-l.x)/factor),end=Math.min(l.offset+endOf(l.turn)-l.turn.start,l.offset+(right-l.x)/factor);for(let ms=Math.ceil(start/step)*step;ms<=end;ms+=step){const x=l.x+(ms-l.offset)*factor;if(x-lastTick<55)continue;lastTick=x;axis+=`<path d="M${x} ${axisY-4} v8" class="br-rule"/>`+brText(x,axisY+20,ms<60000?preciseTime(ms):elapsed(ms),'br-axis');}}
     const visibleTurns=layout.filter(l=>l.end>=left&&l.x<=right).map(l=>l.turn.number);
     const mode=overviewScale>1?'放大查看 · 点选细节':detail?ui`第 ${visibleTurns.join('、')} 轮 · 动作展开`:ui(reviewOverviewSummary());
-    html=ui`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,ui(showTime?"总耗时 "+reviewDuration(active):"累计执行时间"),'br-note','end')}</g>`;
+    html=ui`<title>执行主干与行动枝条</title><desc>主干按真实时间排列；独立子任务从主干发出，回报按实际送达位置连接。放大后展开调用、失败截口和有证据的再次尝试。横向长度表示时间，轮间等待折叠。</desc><defs><clipPath id="br-clip"><rect x="${scroll}" y="0" width="${vw}" height="${h}"/></clipPath></defs><g clip-path="url(#br-clip)">${html}<g id="tl-selection"></g>${axis}</g><g transform="translate(${scroll},0)">${brText(gutter,18,mode,'br-note','start')}${brText(vw-gutter,18,timelineAxisLabel(active,showTime),'br-note','end')}</g>`;
     if (goalMarkers.length) html += reviewGoalBand(goalInfo, goalMarkers, mapTime, h - 70);
     $('graph').setAttribute('viewBox',`0 0 ${w} ${h}`);$('graph').setAttribute('height',h);$('graph').style.width=w+'px';$('graph').innerHTML=html;
     const bind=(selector,enter,click,dbl)=>$('graph').querySelectorAll(selector).forEach(el=>{el.onmouseenter=()=>enter?.(el);el.onclick=ev=>{ev.stopPropagation();click?.(el);};el.ondblclick=ev=>{ev.preventDefault();ev.stopPropagation();(dbl||click)?.(el);};el.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();click?.(el);}};});
@@ -3235,17 +3440,29 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const placed = []; let failed = -1;
     for (const [index, members] of groups.entries()) {
       const single = members.length === 1, item = members[0], open = single && (item.showResults ?? item.branch.id === expanded);
-      const x = item.x, end = single ? Math.max(x + 18, item.end) : x + 22;
+      const anchorX = item.x, anchorEnd = single ? Math.max(anchorX + 18, item.end) : anchorX + 22;
       const label = labelOf(members), width = Math.min(right - left, measure(label) + 20);
-      const cx = Math.max(left + width / 2, Math.min(right - width / 2, (x + end) / 2));
-      const rect = { left: Math.min(x, cx - width / 2), right: Math.max(end, cx + width / 2) };
-      const slot = slots.map(dy => ({ ...rect, x, end, cx, dy, label, members, open,
-        top: dy - (compact ? 16 : open && dy < 0 ? 112 : 30), bottom: dy + (compact ? 4 : open ? (dy > 0 ? 108 : 35) : 10) }))
-        .find(p => placed.every(q => !hit(p, q)) && obstacles.every(o => !hit(p, o)));
+      let slot;
+      const candidates = groups.length === 1 ? [...slots, Math.max(0, ...obstacles.map(p => p.bottom)) + 42] : slots;
+      for (const [slotIndex, dy] of candidates.entries()) {
+        const maxShift = slotIndex >= slots.length ? Infinity : 48;
+        const x = branchStemCandidates(anchorX, dy, obstacles, left, right, maxShift)[0];
+        if (x == null) continue;
+        const end = single && item.branch.returnTime != null
+          ? branchStemCandidates(anchorEnd, dy, obstacles, left, right, maxShift).find(value => value > x + 3)
+          : Math.max(x + 18, anchorEnd);
+        if (end == null) continue;
+        const cx = Math.max(left + width / 2, Math.min(right - width / 2, (x + end) / 2));
+        const p = { left: Math.min(x, cx - width / 2), right: Math.max(end, cx + width / 2),
+          anchorX, anchorEnd, x, end, cx, dy, label, members, open,
+          top: dy - (compact ? 16 : open && dy < 0 ? 112 : 30), bottom: dy + (compact ? 4 : open ? (dy > 0 ? 108 : 35) : 10) };
+        if (placed.every(q => !hit(p, q)) && obstacles.every(o => !hit(p, o))) { slot = p; break; }
+      }
       if (!slot) { failed = index; break; }
       placed.push(slot);
     }
     if (failed < 0) return placed;
+    if (groups.length < 2) throw new Error('Cannot place agent fork');
     const i = Math.max(0, failed - 1);
     groups.splice(i, 2, [...groups[i], ...groups[i + 1]]);
   }
@@ -3276,7 +3493,8 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const frames = call.codeFrames?.length ? call.codeFrames : call.attribution?.codeFrames || [];
     const tone = call.status === 'error' || fact.tone === 'bad' ? 'bad' : fact.tone === 'unknown' ? 'unknown' : 'normal';
     const meta = [];
-    const elapsed = call.start != null && call.end != null ? dur(Math.max(0, call.end - call.start)) : '';
+    const measuredDuration = recordDuration(call);
+    const elapsed = measuredDuration == null ? '' : dur(measuredDuration);
     if (call.seq != null) meta.push('#' + call.seq + (call.resultSeq != null ? ' → #' + call.resultSeq : ''));
     if (call.inner || call.rootSeq != null) meta.push(ui('PTC 内部工具') + (call.rootSeq != null ? ' · #' + call.rootSeq : ''));
     const detail = fact.detail ? '<p class="geist-tool-record-detail">' + esc(fact.detail) + '</p>' : '';
@@ -3284,6 +3502,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       (value.omitted ? '<span class="geist-result-note">' + ui('节选 · 另有 ') + value.omitted + ui(' 个字符未载入') + '</span>' : '') + '</section>' : '';
     const error = call.error?.code || call.error?.name;
     const attribution = globalThis.__trajectoryFailureText?.(call.attribution);
+    const controlChips = reviewControlChips(call), controlEvidence = reviewControlEvidence(call);
     const raw = '<div class="geist-tool-source-grid">' + rawBlock(ui('调用参数'), call.args, true) + rawBlock(ui('返回原文'), call.result) + '</div>';
     const outcome = frames.length ? globalThis.__trajectoryDiagnosticSummary?.(frames) : '<span class="geist-tool-record-outcome">' + esc(fact.outcome) + '</span>';
     return '<details class="geist-tool-record" data-tone="' + tone + '" data-call-seq="' + call.seq + '">' +
@@ -3292,8 +3511,10 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       '<span class="geist-tool-record-title" title="' + esc(call.target || title) + '">' + esc(title) + '</span>' +
       '<span class="geist-tool-record-amount">' + (globalThis.__trajectoryToolMeasure?.(measure) || '') + '</span>' +
       '<span class="geist-tool-record-elapsed">' + esc(elapsed) + '</span></span>' +
+      (controlChips ? '<span class="geist-tool-record-controls">' + controlChips + '</span>' : '') +
       (outcome ? '<span class="geist-tool-record-preview">' + outcome + '</span>' : '') + '</summary>' +
       '<div class="geist-tool-record-content"><div class="geist-tool-record-meta"><span>' + esc(meta.join(' · ')) + '</span>' + (options.actions || '') + '</div>' + detail +
+      controlEvidence +
       (frames.length ? globalThis.__trajectoryDiagnosticFrames(frames) : '') +
       (error ? '<p class="geist-tool-record-error">' + esc(error) + '</p>' : '') +
       (attribution ? '<p class="review-quiet">' + esc(attribution) + '</p>' : '') + raw + '</div></details>';
@@ -3326,7 +3547,13 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       return direction > 0 ? (insight.following ? ui('下一步 · ') + insight.following.text : ui('下一步')) : ui('上一步');
     };
     const arrow = '<svg class="geist-arrow" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M5.5 10.5 10.5 5.5M6.5 5.5h4v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    const disclosure = geistRecordDisclosure;
+    const rawReply = step.reply?.text || '';
+    const canExpandReply = rawReply.length > (insight.reply || '').length;
+    const replyId = 'geist-reply-' + t.number + '-' + step.number;
+    const expandReplyLabel = globalThis.__trajectoryLocale === 'en' ? 'Expand original' : '展开原文';
+    const reply = rawReply || insight.reply ? '<section class="geist-step-response"><div class="geist-reply-heading"><span>' + ui('回复') + '</span>' +
+      (canExpandReply ? '<button type="button" class="geist-text-action geist-reply-toggle" aria-expanded="false" aria-controls="' + replyId + '">' + geistRecordChevron + '<span>' + expandReplyLabel + '</span></button>' : '') +
+      '</div><div class="geist-step-reply" id="' + replyId + '">' + esc(insight.reply || rawReply) + '</div></section>' : '';
     const operation = fact => {
       const call = step.calls.find(c => c.seq === fact.seq);
       if (!call) return '';
@@ -3343,9 +3570,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       '<p class="geist-step-context"><span>' + esc(insight.input.label) + '</span><span class="geist-step-context-text" title="' + esc(insight.input.text) + '">' + esc(insight.input.text) + '</span></p>' +
       '<div class="geist-operations">' +
         insight.calls.map(operation).join('') +
-        (insight.reply ? '<p class="geist-step-reply">' + esc(insight.reply) + '</p>' : '') +
-        (step.reply && step.reply.text && step.reply.text.length > (insight.reply || '').length
-          ? disclosure(ui('回复原文'), '<pre class="geist-result-text">' + esc(step.reply.text) + '</pre>') : '') +
+        reply +
         (!insight.calls.length && !insight.reply ? ui('<p class="review-quiet">没有记录到本步的文字回复或工具操作。</p>') : '') +
       '</div>' +
       (insight.links.length ? '<p class="geist-step-next"><span>' + ui('后续记录') + '</span>' + insight.links.map(l => '<button class="geist-text-action" data-insight-step="' + l.step + '">' + esc(l.text) + arrow + '</button>').join('') + '</p>' : '');
@@ -3353,13 +3578,23 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     panel.querySelectorAll('[data-insight-step]').forEach(el => el.onclick = () => reviewJumpToStep(t, Number(el.dataset.insightStep)));
     // 展开时给原文稳定的阅读高度,内容在面板内滚动,不跟随长输出无限增高。
     const panelDetails = () => [...panel.querySelectorAll('details.geist-tool-record, details.geist-result')];
+    const replyToggle = panel.querySelector('.geist-reply-toggle');
+    if (replyToggle) replyToggle.onclick = () => {
+      const expanded = replyToggle.getAttribute('aria-expanded') !== 'true';
+      if (expanded) panel.style.height = panel.getBoundingClientRect().height + 'px';
+      replyToggle.setAttribute('aria-expanded', String(expanded));
+      replyToggle.querySelector('span:last-child').textContent = expanded ? ui('收起') : expandReplyLabel;
+      panel.querySelector('.geist-step-response').classList.toggle('is-expanded', expanded);
+      $(replyId).textContent = expanded ? rawReply : insight.reply || rawReply;
+      if (!expanded && !panelDetails().some(row => row.open)) panel.style.height = '';
+    };
     panelDetails().forEach(details => {
       details.querySelector('summary').addEventListener('click', () => {
         if (details.open) return;
         panel.style.height = Math.max(panel.getBoundingClientRect().height, Math.min(window.innerHeight * .44, 360)) + 'px';
       });
       details.addEventListener('toggle', () => {
-        if (!details.open && !panelDetails().some(row => row.open)) panel.style.height = '';
+        if (!details.open && replyToggle?.getAttribute('aria-expanded') !== 'true' && !panelDetails().some(row => row.open)) panel.style.height = '';
       });
     });
     panel.querySelectorAll('[data-inspector-nav]').forEach(el => el.onclick = () => {
@@ -3547,9 +3782,10 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const context = overviewLayers.has('context');
     // 页面的实际高度是对话区给的:先跟着可用高度走,不为了满高而把底部挤出视口。
     const height = Math.round(Math.max(240, box > 120 ? box : available));
-    const pixels = context ? Math.max(36, Math.min(actorReserve ? 84 : 108, (height - 236) / 2)) : 108;
+    const upperRoom = overviewLayers.has('failures') ? Math.min(56, Math.max(0, (height - 300) / 2)) : 0;
+    const pixels = context ? Math.max(36, Math.min(actorReserve ? 84 : 108, (height - 236 - upperRoom) / 2)) : 108;
     reviewContextScale.pixels = pixels;
-    return { height, base: context ? 124 + pixels : 208 };
+    return { height, base: context ? 124 + pixels + upperRoom : 208 };
   }
   let geistLayoutObserver, geistLayoutFrame = 0, geistLayoutMeasure = '';
   function geistBindLayout() {
@@ -3561,7 +3797,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
           const viewport=$('graph-scroll'),geometry=geistActionGeometry(turn()),height=Number($('graph').getAttribute('height'));
           // Opening step details changes the flex viewport after the first paint.
           // Refit once to its settled box so the second label row stays visible.
-          if(Math.abs(height-geometry.height)>1||Math.abs((reviewActionFileFrame?.viewportWidth??0)-Math.max(300,viewport.clientWidth))>1){
+          if(Math.abs(height-geometry.height-geistActionActorReserve(turn()))>1||Math.abs((reviewActionFileFrame?.viewportWidth??0)-Math.max(300,viewport.clientWidth))>1){
             const left=viewport.scrollLeft;renderPath();viewport.scrollLeft=left;viewport.scrollTop=0;
           }
           return;
@@ -3640,6 +3876,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     }
     caption.querySelector('.br-key')?.classList.add('geist-symbols');
     geistSyncLegend();
+    reviewRenderSymbolLegend();
   }
   const geistOverviewBase = renderOverview;
   let geistFitPass = false;
@@ -3729,6 +3966,9 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     return kinds.map(kind => names[kind]).join(' · ') + (errors ? (kinds.length ? ' · ' : '') + errors + (recovered === errors ? ui(' 处已恢复') : ui(' 处受阻')) : '');
   }
   function geistOutcomeGlyph(result, x, y) {
+    const controls = reviewResultControlCalls(result);
+    if (summarizeControls(controls)) return reviewToolMarker(controls, x, y, { compact: true });
+    if (result.kind === 'pending') return traceSymbolMark('pending', x, y);
     if (result.kind === 'incident') {
       return brCap(x, y, result.incident.condition);
     }
@@ -3751,8 +3991,9 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;
     // 只有报错类枝条朝左;普通结果枝条仍朝右,标签位置由布局按 side 给出。
     const dir = p.side < 0 ? -1 : 1;
-    const twig = 'M' + p.x + ' ' + (base + sign * 2) + 'V' + (y - sign * 10) + 'Q' + p.x + ' ' + y + ' ' + (p.x + dir * 10) + ' ' + y + 'H' + (p.x + dir * 14);
     const endpoint = toolResultEndpoint(p.members);
+    const policyEnd = !!summarizeControls(reviewResultControlCalls(endpoint));
+    const twig = 'M' + p.anchorX + ' ' + base + 'H' + p.x + 'V' + (y - sign * 10) + 'Q' + p.x + ' ' + y + ' ' + (p.x + dir * 10) + ' ' + y + 'H' + (p.x + dir * (policyEnd ? 15 : 14));
     const glyph = '<g class="geist-branch-tip" data-endpoint-kind="' + endpoint.kind + '" aria-hidden="true">' + geistOutcomeGlyph(endpoint, p.x + dir * 20, y) + '</g>';
     const body = '<rect class="br-hit" x="' + (p.left - 4) + '" y="' + (base + p.top - 3) + '" width="' + (p.right - p.left + 8) + '" height="' + (p.bottom - p.top + 6) + '"/>' +
       '<path d="' + twig + '" class="br-connector"/>' + glyph + brText(p.cx, p.dy > 0 ? y + 21 : y - 14, p.label, 'br-label');
@@ -3775,23 +4016,13 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const obstacles = [...reserved, ...(options.obstacles || []),
         { left: left - 8, right: right + 8, top: lanes[0], bottom: lanes[1] },
         { left: left - 8, right: right + 8, top: limit + 18 - base, bottom: limit + 74 - base }];
-      try { packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles, labelSide: geistErrorBranchSide }); }
-      catch (error) {
-        if (!options.obstacles?.length) throw error;
-        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
-      }
-      if (view === 'path' && options.obstacles?.length && packed.some(p => new Set(p.members.map(m => m.result.step)).size > 1)) {
-        packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, obstacles: reserved, labelSide: geistErrorBranchSide });
-      }
-      // 行距一次性拉伸/压缩:不重新打包,只把 dy 映射到 [trunk, 底部保留区] 之间。
-      const positive = packed.map(p => p.dy).filter(dy => dy > 0);
-      const maxPositive = positive.length ? Math.max(...positive) : 0;
-      const contentBottom = packed.reduce((m, p) => Math.max(m, base + p.dy + 25), base + 42);
-      if (view === 'overview' && maxPositive > 0 && Number.isFinite(limit)) {
-        const target = limit - base;
-        const k = Math.max(0.62, Math.min(1.7, (target - 25) / Math.max(60, maxPositive)));
-        if (Number.isFinite(k) && Math.abs(k - 1) > 0.04) packed = packed.map(p => ({ ...p, dy: Math.round(p.dy * (p.dy > 0 ? k : Math.min(1.3, k))) }));
-      }
+      // Choose the final row positions before collision checks. Moving only dy
+      // afterwards leaves the label bounds and pillar avoidance out of date.
+      const k = Math.max(.62, Math.min(1.7, (limit - base - 25) / 122));
+      const upperPillars = (options.obstacles || []).filter(p => p.routeStem && p.top < 0);
+      const upperLane = upperPillars.length ? -Math.max(...upperPillars.map(p => -p.top)) - 18 : -48;
+      const slots = options.slots || [...[32, -48, 77, -94, 122].map(dy => Math.round(dy * (dy > 0 ? k : Math.min(1.3, k)))), upperLane];
+      packed = layoutBranches(items, { left, right, measure: reviewMeasure, labelOf: geistOutcomeText, ...options, slots, obstacles, labelSide: geistErrorBranchSide });
       if (geistOutcomeLayoutCache.size > 20) geistOutcomeLayoutCache.clear();
       geistOutcomeLayoutCache.set(key, packed);
     }    geistOutcomeBranches = packed;
@@ -3808,7 +4039,9 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
   reviewBranches = function(mapTime, base, visible, left, right, width) {
     const records = reviewStress ? collectToolResults(session, reviewContextData.callFacts || {}, reviewFileOperations) : geistOutcomes;
     const items = records.map(result => ({ id: result.id, at: reviewActiveTime(result.turn, result.time), x: mapTime(result.time), result }));
-    const result = geistDrawResultBranches(items, base, 20, width - 20, visible);
+    const obstacles = reviewContextObstacles(overviewProjection?.layout || []);
+    const result = geistDrawResultBranches(items, base, 20, width - 20, visible, {
+      obstacles, reservedKey: obstacles.map(p => [p.left, p.right, p.top, p.bottom].join(',')).join(';') });
     reviewBranchesNow = geistOutcomeBranches;
     return result;
   };
@@ -4051,16 +4284,6 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const caption = $('graph-caption'), layers = caption.querySelector('.br-layers');
     const existing = layers?.querySelector('[data-br-layer="failures"],[data-action-layer="failures"]');
     if (existing) existing.parentElement.lastChild.textContent = ui('工具结果');
-    const key = caption.querySelector('.br-key');
-    key?.querySelectorAll('.br-key-item').forEach(item => {
-      if (item.querySelector('.br-check') || [ui('结果还不清楚'), ui('结果未确认')].some(label => item.textContent.includes(label))) item.remove();
-    });
-    if (key && !key.querySelector('.geist-result-key')) {
-      key.insertAdjacentHTML('afterbegin', '<span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph read">' + geistReportIcon + ui('</svg>取回内容</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph change">') + STEP_ICON.write + ui('</svg>写入修改</span><span class="geist-result-key"><svg viewBox="-8 -8 16 16" class="geist-result-glyph check">') + geistReportIcon + ui('</svg>检查输出</span>'));
-    }
-    if (key && overviewLayers.has('duration') && view !== 'path' && !key.querySelector('.geist-tool-time-key')) {
-      key.insertAdjacentHTML('beforeend', ui('<span class="geist-tool-time-key" title="官方记录中工具从调用到返回的时间区间；点击本步工具时间查看覆盖与累计口径"><i></i>') + (view === 'path' ? ui('步内工具时段') : ui('工具执行区间')) + '</span>');
-    }
   };
 
   let geistActors = actorRecords(data), geistSkills = skillObjects(geistActors.skills);
@@ -4119,13 +4342,16 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     vp.scrollLeft = Math.max(0, (next.mapTime(extent.start) + next.mapTime(extent.end)) / 2 - vp.clientWidth / 2);
     renderOverview({ plotOnly: true }); reviewSyncNavigation();
   }
+  function geistActionActorReserve(t) {
+    return geistActorLayers.agents && geistActors.branches.some(branch => branch.turn === t.number) ? 160 : 0;
+  }
   function geistActionGeometry(t) {
     const branches = geistActorLayers.agents && geistActors.branches.some(b => b.turn === t.number && b.results?.length);
     // 行动路径的高度跟着对话区走:短面板里先保住步标签、主图和步骤详情。
     const available = $('canvas')?.clientHeight || window.innerHeight;
     const tight = available < 620, compact = available < 760;
     // 高度跟实际图区走,不再写死:写死会在图区下方留出一整块空白。
-    const viewportHeight = Math.max(240, Math.round(($('graph-scroll')?.clientHeight || available * 0.55) - 6));
+    const viewportHeight = Math.max(240, Math.round(($('graph-scroll')?.clientHeight || available * 0.55) - geistActionActorReserve(t) - 6));
     const height = Math.min(620, viewportHeight);
     return { height, base: Math.round(height - (branches ? 110 : 96)) };
   }
@@ -4175,8 +4401,12 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const end = extent.hasEnd ? frame.map({ ...branch, step: undefined, time: extent.end }) : x;
       return { branch, x, end, showResults: agentShowsResults(branch, end - x, view === 'path') };
     });
+    const columns = view === 'overview' ? reviewContextObstacles(overviewProjection.layout) : reviewActionFileFrame.contextObstacles || [];
+    const upperLane = -Math.max(30, ...columns.filter(p => p.top < 0).map(p => -p.top)) - 18;
     return layoutAgentForks(items, { left: 20, right: frame.width - 20, measure: reviewMeasure,
-      ...(view === 'path' ? { slots: [-112, -146, -78], obstacles: (typeof reviewBranchesNow === 'object' && Array.isArray(reviewBranchesNow) ? reviewBranchesNow : []) } : {}),
+      obstacles: [...columns, ...(view === 'path' && Array.isArray(reviewBranchesNow) ? reviewBranchesNow : []),
+        { left: 12, right: frame.width - 12, top: 62 - frame.base, bottom: 116 - frame.base }],
+      slots: view === 'path' ? [reviewActionFileFrame.actorBand] : [upperLane, -60, 60, -96, 96],
       labelOf: members => members.length > 1 ? members.length + ui(' 个子代理') : geistActorLabel(members[0].branch.name, Math.min(160, frame.width - 120)),
     });
   }
@@ -4185,7 +4415,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const forks = geistPlanAgentForks();
     const reserved = forks.map(p => ({ left: p.left - 3, right: p.right + 3, top: p.top, bottom: p.bottom }));
     return geistForkResultsBase(items, base, left, right, visible, { ...options, reserved,
-      reservedKey: forks.map(p => [p.x, p.end, p.dy, p.open, p.label].join('/')).join('|'),
+      reservedKey: (options.reservedKey || '') + ':' + forks.map(p => [p.x, p.end, p.dy, p.open, p.label].join('/')).join('|'),
     });
   };
   function geistRenderActors() {
@@ -4202,8 +4432,8 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
       const single = plan.members.length === 1, branch = plan.members[0].branch, extent = agentExtent(branch);
       const a = plan.x, end = plan.end, y = frame.base + plan.dy, sign = Math.sign(plan.dy);
       const ramp = Math.min(10, Math.max(3, (end - a) / 2));
-      let path = 'M' + a + ' ' + frame.base + 'V' + (y - sign * ramp) + 'q0 ' + (sign * ramp) + ' ' + ramp + ' ' + (sign * ramp) + 'H' + (end - (single && branch.returnTime != null ? ramp : 0));
-      if (single && branch.returnTime != null) path += 'q' + ramp + ' 0 ' + ramp + ' ' + (-sign * ramp) + 'V' + frame.base;
+      let path = 'M' + plan.anchorX + ' ' + frame.base + 'H' + a + 'V' + (y - sign * ramp) + 'q0 ' + (sign * ramp) + ' ' + ramp + ' ' + (sign * ramp) + 'H' + (end - (single && branch.returnTime != null ? ramp : 0));
+      if (single && branch.returnTime != null) path += 'q' + ramp + ' 0 ' + ramp + ' ' + (-sign * ramp) + 'V' + frame.base + 'H' + plan.anchorEnd;
       const label = plan.label;
       const route = '<path d="' + path + '" class="actor-agent-stem"/><path d="' + path + '" class="actor-agent-hit"/>';
       const labelY = plan.open && sign < 0 ? y + 18 : y - 13;

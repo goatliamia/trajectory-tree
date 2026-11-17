@@ -58,6 +58,7 @@
     }
     caption.querySelector('.br-key')?.classList.add('geist-symbols');
     geistSyncLegend();
+    reviewRenderSymbolLegend();
   }
   const geistOverviewBase = renderOverview;
   let geistFitPass = false;

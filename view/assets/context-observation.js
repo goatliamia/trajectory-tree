@@ -1,5 +1,5 @@
   // Shared host study: independent overlay switches and source multi-selection.
-  const studyMeaning = ['codex','claude'].includes(data.host) ? { delta: ui('可见文本变化'), total: ui('文本趋势'), title: ui('可见文本趋势'), quantity: ui('可见文本估算') } : data.host === 'pi' ? { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文估算趋势'), quantity: ui('可见上下文估算') } : { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文总趋势'), quantity: ui('上下文构成估算') };
+  const studyMeaning = data.host === 'claude' ? { delta: ui('请求来源变化'), total: ui('请求构成趋势'), title: ui('请求构成趋势'), quantity: ui('请求文本估算') } : data.host === 'codex' ? { delta: ui('可见文本变化'), total: ui('文本趋势'), title: ui('可见文本趋势'), quantity: ui('可见文本估算') } : data.host === 'pi' ? { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文估算趋势'), quantity: ui('可见上下文估算') } : { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文总趋势'), quantity: ui('上下文构成估算') };
   const studySources = new Set(CONTEXT_CATEGORIES.map(c => c.key));
   let studyShowTotal = false;
   const studyCategories = () => CONTEXT_CATEGORIES.filter(c => studySources.has(c.key));
@@ -168,15 +168,18 @@
     const label = input.parentElement;
     const text = [...label.childNodes].find(node => node.nodeType === 3); if (text) text.textContent = studyMeaning.delta;
     const span = label.querySelector('span'); if (span) span.textContent = studyMeaning.delta;
-    label.title = ui('显示每轮或每步的上下文增减，可与总趋势同时开启');
+    const available = typeof reviewContextRequests === 'undefined' || reviewContextRequests.length > 0;
+    input.disabled = !available; input.checked = available && input.checked;
+    label.title = available ? ui('显示每轮或每步的上下文增减，可与总趋势同时开启') : ui('当前记录没有可显示的上下文组成');
     let totalToggle = $('study-total-toggle');
     if (!totalToggle) { totalToggle = document.createElement('label'); totalToggle.id = 'study-total-toggle'; totalToggle.className = 'br-layer'; }
     label.after(totalToggle);
+    if (!available) studyShowTotal = false;
     const total = studyShowTotal && view === 'overview';
     // 总趋势只在总览成立:行动路径按步排列、没有连续时间轴,叠存量带会与步布局打架。
     totalToggle.style.display = view === 'path' ? 'none' : '';
-    totalToggle.innerHTML = '<input type="checkbox" data-study-total' + (total ? ' checked' : '') + '>' + studyMeaning.total;
-    totalToggle.title = ui('把保留量叠加在原图上，与增量共用主干和时间轴，可同时开启');
+    totalToggle.innerHTML = '<input type="checkbox" data-study-total' + (total ? ' checked' : '') + (available ? '' : ' disabled') + '>' + studyMeaning.total;
+    totalToggle.title = available ? ui('把保留量叠加在原图上，与增量共用主干和时间轴，可同时开启') : ui('当前记录没有可显示的上下文组成');
     totalToggle.querySelector('input').onchange = event => { studyShowTotal = event.target.checked; if (studyShowTotal && view !== 'overview') reviewReturnOverview(); studyRefresh({ geometryChanged: true }); };
     $('canvas').dataset.contextTotal = String(total);
     studyBindStock();

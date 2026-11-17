@@ -102,6 +102,7 @@ for (const row of index.views.io) {
   assert.equal(row.callSeq, row.seq);
   assert.equal(events[row.stepSeq].type, 'step/start', 'the owning step remains separately navigable');
 }
+assert.ok(index.views.io.some(row => row.measure), 'DSH inspection retains tool measures on IO calls');
 const ioPointers = evidencePointers(inspectionPage(index, 'io', 0, 10));
 assert.ok(index.views.io.every(row => ioPointers.some(ref => ref.seq === row.callSeq)), 'read pointers include every actual IO call anchor');
 const contextItem = inspectionPage(index, 'context', 0, 1).items[0];

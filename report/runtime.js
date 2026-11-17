@@ -16,6 +16,7 @@
         if(node.dataset.flowNode===mark.dataset.flowFrom||node.dataset.flowNode===mark.dataset.flowTo)node.classList.add('is-related');
       }
       const row=byId.get(mark.dataset.row);
+      readout.dataset.state='active';
       readout.textContent=mark.dataset.readout||(row&&(row.text||describe(data,row)))||'';
       if(row){
         const relatedIds=mark.dataset.relatedRows?JSON.parse(mark.dataset.relatedRows):mark.dataset.relatedRow?[mark.dataset.relatedRow]:[];
@@ -45,13 +46,14 @@
     };
     const find=event=>{const mark=event.target.closest('[data-row],[data-readout]');return mark&&figure.contains(mark)?mark:null;};
     const preview=mark=>{const row=byId.get(mark.dataset.row);return mark.dataset.readout||(row&&(row.text||describe(data,row)))||'';};
-    figure.onpointerover=event=>{const mark=find(event);if(mark)readout.textContent=preview(mark);};
-    figure.onfocusin=event=>{const mark=find(event);if(mark)readout.textContent=preview(mark);};
+    figure.onpointerover=event=>{const mark=find(event);if(mark){readout.dataset.state='active';readout.textContent=preview(mark);}};
+    figure.onfocusin=event=>{const mark=find(event);if(mark){readout.dataset.state='active';readout.textContent=preview(mark);}};
     figure.onclick=event=>{const mark=find(event);if(mark)select(mark);};
     figure.onkeydown=event=>{if(!['Enter',' '].includes(event.key)||event.target.tagName==='BUTTON')return;const mark=find(event);if(mark){event.preventDefault();select(mark);}};
     const panel=document.createElement('details');panel.className='report-record';panel.hidden=true;
     panel.innerHTML=ui('<summary>所选记录 · 数据与来源</summary><div class="report-evidence-links"></div><pre class="report-evidence-text" hidden></pre><span role="status"></span><details><summary>取证参数与完整读数</summary><pre class="report-evidence-raw"></pre></details>');figure.append(panel);
     if(spec.type==='assembly')mountAssembly(figure.querySelector('[data-context-assembly]'),data,spec,{onSelect(selection){
+      readout.dataset.state='active';
       readout.textContent=assemblyFrameLabel(selection.frame)+ui(' · 选中 ')+selection.blocks.length+ui(' 个片段');panel.hidden=false;
       panel.querySelector('.report-evidence-raw').textContent=JSON.stringify({source:data.source,position:selection.frame.id,blocks:selection.blocks,evidence:selection.evidence.map(ref=>ref.read||{tool:'trajectory_read',args:{session:ref.session,snapshot:data.source.snapshot,seq:ref.seq,format:'linked'}})},null,2);
     }});

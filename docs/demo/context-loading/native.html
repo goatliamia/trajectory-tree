@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+  <title>Eval · 首次请求的真实装配</title>
+  <link rel="stylesheet" href="native.css">
+  <script src="native-data.js" defer></script>
+  <script src="native.js" defer></script>
+</head>
+<body>
+  <header class="app-header"><div><strong>Trajectory Tree</strong><span>/</span><span>Eval</span></div><button id="theme" type="button" aria-label="切换为深色">深色</button></header>
+  <main>
+    <header class="page-heading"><div><span class="eyebrow">CONTEXT ASSEMBLY</span><h1>首次请求，怎样装起来</h1></div><div class="session-meta"><span class="evidence-badge">真实记录</span><span id="source-date"></span><span class="mono">DSH · T01 / S01</span></div></header>
+    <section class="assembly" aria-label="按原始事件顺序装配首次请求">
+      <div class="scene-bar"><span>时间推进，内容进入请求中的原位。</span><button id="source" type="button">记录与范围 ↗</button></div>
+      <div id="scene" class="scene">
+        <div class="source-region">
+          <div class="region-label"><span>尚未写入消息历史</span><span id="pending-count" class="mono"></span></div>
+          <div id="pending" class="pending"></div>
+        </div>
+        <div class="incoming-region">
+          <span class="region-label">当前原始事件</span>
+          <button id="incoming" class="incoming" type="button"><span id="event-seq" class="event-seq mono"></span><strong id="event-title"></strong><span id="event-copy" class="event-copy"></span><span id="event-type" class="event-type mono"></span></button>
+        </div>
+        <svg id="wiring" class="wiring" aria-hidden="true"></svg>
+        <div class="request-region">
+          <div class="request-heading"><span class="mono">messages[]</span><span id="message-count">0 / 7</span></div>
+          <div id="message-bracket" class="message-bracket"><div id="messages" class="messages"></div><div id="request-empty" class="request-empty"><span>等待第一段内容</span><small>按官方逻辑历史顺序放置</small></div></div>
+          <div class="request-tail"><span class="mono">]</span><span id="request-state"></span></div>
+        </div>
+        <div id="tools-region" class="tools-region">
+          <div class="tools-heading mono">tools[]</div>
+          <button id="tools" class="tool-sheaf" type="button" aria-label="查看工具声明"><span id="tools-empty">尚无声明记录</span><span id="tools-content" hidden><strong id="tool-count"></strong><span class="tool-count-caption">项工具声明</span><span id="tool-names" class="tool-names mono"></span><span id="tools-seq" class="mono"></span></span></button>
+          <p>独立的请求字段</p>
+        </div>
+      </div>
+      <div class="event-readout"><div><span id="clock" class="mono"></span><span id="elapsed" class="mono"></span></div><p id="readout" aria-live="polite"></p></div>
+      <div class="transport"><button id="play" class="play" type="button"><span id="play-icon" aria-hidden="true">▶</span><span id="play-label">重放真实装配</span></button><button id="previous" class="arrow" type="button" aria-label="上一个原始事件">←</button><span id="position" class="position mono"></span><button id="next" class="arrow" type="button" aria-label="下一个原始事件">→</button><div class="timeline-wrap"><input id="timeline" type="range" min="0" value="0" aria-label="原始事件切点"><div class="timeline-labels"><span id="range-start" class="mono"></span><span>按事件顺序回放</span><span id="range-end" class="mono"></span></div></div><button id="end" type="button">装配完成 ↗</button></div>
+    </section>
+    <footer><span>消息位置来自官方 SurfaceManager；工具保持独立。点选片段可看原文。</span><span>动画间隔经压缩，原始时间保留在读数中。</span></footer>
+  </main>
+  <dialog id="details"><header><div><span id="detail-kind" class="eyebrow"></span><h2 id="detail-title"></h2></div><button id="close-details" type="button" aria-label="关闭详情">×</button></header><p id="detail-note"></p><div id="detail-body"></div></dialog>
+</body>
+</html>

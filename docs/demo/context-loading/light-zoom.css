@@ -1,0 +1,24 @@
+.zoom-page .page-heading{padding-bottom:17px;margin-bottom:17px;border-bottom:1px solid var(--line)}
+.zoom-page .page-heading h1{font-size:25px}.zoom-page .page-heading .eyebrow{display:none}.zoom-page .page-heading .subtitle{font-size:12px;margin-top:6px}.zoom-page .total-metric strong{font-size:25px}.zoom-page .total-metric>span{font-size:10px}
+.zoom-stage{position:relative;height:clamp(345px,calc(100vh - 365px),610px);overflow:hidden;border:1px solid #edf1f6;border-radius:4px;background:#fcfdff;isolation:isolate}
+.zoom-stage>canvas:first-child{display:block;touch-action:none;cursor:grab;outline-offset:-3px}
+.zoom-stage>canvas:first-child:focus{outline:none}.zoom-stage>canvas:first-child:focus-visible{outline:1px solid #9bb5eb;outline-offset:-2px}
+.zoom-stage.holding>canvas:first-child{cursor:grabbing}
+.zoom-controls{position:absolute;bottom:13px;left:13px;display:flex;align-items:center;border:1px solid #e4eaf3;border-radius:6px;background:#fffffff2;box-shadow:0 2px 8px #314c6a05;height:31px;overflow:hidden}
+.zoom-controls button{width:31px;height:30px;font-size:16px;color:#8c9cb1;padding:0}
+.zoom-controls button:hover{background:#f4f7fd;color:#416fc6}
+.zoom-controls output{font:10px GeistMono,monospace;color:#91a1b8;min-width:43px;text-align:center;pointer-events:none}
+.zoom-controls button:last-child{border-left:1px solid #edf1f7;margin-left:2px;font-size:15px}
+.zoom-minimap{position:absolute;right:13px;bottom:13px;width:112px;height:68px;opacity:.86;border:3px solid #fff;border-radius:3px;box-sizing:content-box;box-shadow:0 0 0 1px #e5ebf4;cursor:crosshair}
+.zoom-page .matrix-actions .search-field{width:240px}
+.zoom-page .matrix-breadcrumb{gap:9px;overflow:hidden;white-space:nowrap}
+.zoom-page .matrix-breadcrumb>strong{overflow:hidden;text-overflow:ellipsis}
+.zoom-page .matrix-breadcrumb button{font-size:11px;color:#8a99ad}
+.zoom-page .map-caption{font-size:10px;min-height:31px}
+.zoom-page .peek{min-height:79px}
+.zoom-page .peek .primary-button{background:#386be5}
+.zoom-page .eyebrow{letter-spacing:.09em}
+.zoom-page .peek-title .mono{font-size:10px}
+html[data-design=zoom] dialog[open]{animation:light-dialog-enter 150ms ease-out}
+@media(max-width:620px){.zoom-stage{height:430px}.zoom-page .matrix-actions .search-field{width:100%}.zoom-controls{left:9px;bottom:9px}.zoom-minimap{right:9px;bottom:9px;width:90px;height:55px}.zoom-page .matrix-breadcrumb{width:100%}.zoom-page .map-caption{font-size:9px}.zoom-page .map-caption>span:last-child{max-width:47%}}
+@media(prefers-reduced-motion:reduce){html[data-design=zoom] dialog[open]{animation:none}}

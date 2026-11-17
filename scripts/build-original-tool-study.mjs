@@ -13,7 +13,7 @@ const fixture = readFileSync('.dsh/perf-staged/current-trace.html','utf8');
 const payload = JSON.parse(fixture.match(/<script id="trace-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
 const id=payload.mainSession, source=join(process.env.USERPROFILE,'.dsh/sessions/--D-projects-math-to-engineering--',id,'session.v4.jsonl.zstd');
 const {events}=loadSession(source), bySeq=new Map(events.map(e=>[e.seq,e]));
-const projection=projectOperations(events,{workspace:'D:/projects/math-to-engineering'});
+const projection=projectOperations(events,{workspace:'/workspace/example'});
 const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
 const session=payload.sessions.find(s=>s.id===id),byStep=new Map();
 for(const operation of projection.calls){

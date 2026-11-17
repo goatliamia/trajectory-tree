@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {attributeToolFailure} from '../plugin/trajectory-tools/lib/tool-attribution.js';
-import {summarizeFindings} from '../plugin/analysis-view/lib/eval/findings.mjs';
+import {summarizeFindings,projectFindingCalls} from '../plugin/analysis-view/lib/eval/findings.mjs';
 import {buildDiagnosisDraft} from '../docs/demo/preset-context/diagnosis-review.js';
+import {projectSession} from '../plugin/trajectory-tools/lib/inspect-models/session.js';
 
 const feedback=(output,options={})=>attributeToolFailure({status:'error',tool:'pwsh',exitCode:1,command:'work',output,...options});
 const row=(a,seq=1,turn=1)=>({...a,seq,result:seq+1,turn,tool:'pwsh',status:'error',session:'source',cut:100,attributionBasis:a.basis});
@@ -58,4 +59,34 @@ test('availability yields a capability lead with questions rather than an instal
   assert.equal(group.needsAction,null);
   const refused=summarizeFindings([row({code:'APPROVAL_REJECTED',certainty:'confirmed'})]).groups[0];
   assert.deepEqual(refused.signals,[]);assert.equal(refused.observationOnly,true);
+});
+
+test('Claude tool-result guards and worktree isolation map to explicit controls and recovery leads',()=>{
+  const unv=attributeToolFailure({status:'error',tool:'Edit',output:'<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>'});
+  assert.equal(unv.code,'FS_NOT_OBSERVED');assert.equal(unv.basis,'claude-tool-result');
+  const stale=attributeToolFailure({status:'error',tool:'Edit',output:'<tool_use_error>File has been modified since read, either by the user or by a linter.</tool_use_error>'});
+  assert.equal(stale.code,'FS_STALE_VERSION');assert.equal(stale.basis,'claude-tool-result');
+  const hook=attributeToolFailure({status:'error',tool:'Edit',output:'PreToolUse:Edit hook error: This session is running in an isolated git worktree at /tmp/wt'});
+  assert.equal(hook.code,'HOST_WORKTREE_GUARD');assert.equal(hook.pattern,'claude:worktree-boundary');
+  const group=summarizeFindings([row(hook)]).groups[0];
+  assert.deepEqual(group.directions,['recover']);
+  assert.equal(group.signals[0].rule,'D-O1');
+
+  const dshEvents=[
+    {type:'session',id:'s1',version:4,cwd:'D:/'},
+    {seq:1,time:10,type:'turn/start',data:{turn:1}},
+    {seq:2,time:10,type:'step/start',data:{turn:1,step:1}},
+    {seq:3,time:15,type:'tool/call',data:{turn:1,step:1,callId:'c1',name:'edit',arguments:JSON.stringify({file_path:'D:/a.js',old_string:'a',new_string:'b\nc'})}},
+    {seq:4,time:18,type:'approval/asked',data:{id:'req-1',callId:'c1',toolName:'edit',reason:'Needs write approval'}},
+    {seq:5,time:20,type:'approval/decided',data:{id:'req-1',outcome:'rejected'}},
+    {seq:6,time:22,type:'tool/result',data:{turn:1,step:1,callId:'c1',error:{code:'APPROVAL_REJECTED',message:'Approval not granted'},message:{isError:true,content:[{type:'text',text:'Approval not granted'}]}}},{seq:7,time:25,type:'step/end',data:{turn:1,step:1}},
+    {seq:8,time:26,type:'turn/end',data:{turn:1,reason:{kind:'completed'}}},
+  ];
+  const session=projectSession(dshEvents,{cwd:'D:/'});
+  const call=session.turns[0].steps[0].calls[0];
+  assert.equal(call.measure?.kind,'change');
+  assert.equal(call.controls?.[0]?.state,'denied');
+  assert.equal(call.controls?.[0]?.requestId,'req-1');
+  const finding=projectFindingCalls(session)[0];
+  assert.equal(finding.controls?.[0]?.requestId,'req-1');
 });

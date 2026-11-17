@@ -6,6 +6,7 @@ import { delimiter, dirname, isAbsolute, resolve } from 'node:path';
 
 import { candidateAttribution } from './tool-attribution.mjs';
 import { diagnosticFrame } from './tool-feedback.mjs';
+import { observeBash, applyBashSyntax } from './bash-observer.mjs';
 
 const protocol = 'pwsh-syntax/1';
 export const commandBatchLimit = 12;
@@ -19,7 +20,9 @@ export function commandCrOptions(args) {
     return value;
   };
   return { root: option('--cr-root') ?? process.env.TRAJECTORY_CR_ROOT,
-    pwsh: option('--pwsh') ?? process.env.TRAJECTORY_CR_PWSH };
+    pwsh: option('--pwsh') ?? process.env.TRAJECTORY_CR_PWSH,
+    bash: option('--bash') ?? process.env.TRAJECTORY_CR_BASH,
+    python: option('--python') ?? process.env.TRAJECTORY_CR_PYTHON };
 }
 
 async function findPowerShell(configured, edition) {
@@ -182,15 +185,22 @@ export async function observeCommandEntries(selected, cr, signal) {
       entry.row.syntax.state = 'input-budget'; continue;
     }
     bytes += size;
-    const edition = cr?.pwsh ? null : entry.source.edition;
+    const bash = entry.source.language === 'bash';
+    const edition = bash ? 'Bash' : cr?.pwsh ? null : entry.source.edition;
     if (!pending.has(edition)) pending.set(edition, []);
-    pending.get(edition).push({ entry, file: { path: 'call-' + entry.row.seq + '.ps1', text: entry.source.text } });
+    pending.get(edition).push({ entry, file: { path: 'call-' + entry.row.seq + (bash ? '.sh' : '.ps1'), text: entry.source.text } });
   }
   const observations = [];
   for (const [edition, batch] of pending) {
-    const observation = await observePowerShell(batch.map(row => row.file), cr, signal, edition);
-    observations.push(observation);
-    for (const { entry, file } of batch) applySyntax(entry, observation, file);
+    const observation = edition === 'Bash' ? await observeBash(batch.map(row => row.file), cr, signal)
+      : await observePowerShell(batch.map(row => row.file), cr, signal, edition);
+    observations.push({ ...observation, language: edition === 'Bash' ? 'bash' : 'powershell' });
+    for (const { entry, file } of batch) {
+      if (edition === 'Bash') applyBashSyntax(entry, observation, file, commandEvidenceExcerpt);
+      else applySyntax(entry, observation, file);
+    }
   }
-  return observations.find(observation => observation.state === 'observed') ?? observations[0] ?? await observePowerShell([], cr, signal);
+  const primary = observations.find(observation => observation.state === 'observed') ?? observations[0] ?? await observePowerShell([], cr, signal);
+  return { ...primary, providers: observations.map(observation => ({ language: observation.language ?? 'powershell',
+    state: observation.state, runtime: observation.runtime, edition: observation.edition })) };
 }

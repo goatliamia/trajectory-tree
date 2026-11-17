@@ -29,7 +29,7 @@ export function renderOverlapPair(pair,left,right){
     </div></article>`;
 }
 
-function renderScope(data,groups,scopeOpen,kind){
+function renderScope(groups,scopeOpen,kind){
   const max=Math.max(1,...groups.map(group=>group.characters));
   return `<details class="co-distribution" ${scopeOpen?'open':''}><summary><span>比对范围</span><small>${groups.map(group=>group.label+' '+group.count).join(' · ')}</small></summary><div class="co-distribution-rows">${groups.map(group=>`<button data-co-kind="${group.kind}" aria-pressed="${kind===group.kind}"><span>${group.label}<small>${group.count} 项</small></span><span class="co-bar-track"><i style="width:${group.characters/max*100}%"><b style="width:${group.matched/(group.characters||1)*100}%"></b></i></span><span class="co-bar-value">${compact(group.characters)}<small>${group.matched?compact(group.matched)+' 相同':'—'}</small></span></button>`).join('')}</div></details>`;
 }
@@ -40,7 +40,7 @@ export function renderOverlapPage(data,{scopeOpen,filterOpen,filter}){
   const captured=new Intl.DateTimeFormat('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Shanghai'}).format(data.capturedAt);
   return `<section class="co-page">
     <header class="co-context-summary"><div><p><strong>${n(data.summary.items)}</strong> 项文本 <span>·</span> ${compact(data.summary.characters)} 字符</p><small>${e(data.workspace?.name||'当前项目')} · 当前配置与本地正文 · ${captured}</small></div><div class="co-page-actions"><button type="button" class="tt-button" data-co="diagnose">诊断加载项</button><details class="co-actions-menu"><summary aria-label="更多上下文操作">···</summary><div><button data-co="choose">选择两项对照</button><button data-co="method">计算口径</button></div></details></div></header>
-    ${renderScope(data,groups,scopeOpen,filter.kind)}
+    ${renderScope(groups,scopeOpen,filter.kind)}
     <section class="co-results" aria-labelledby="co-results-title"><header class="co-results-heading"><div><h3 id="co-results-title">文本重合 <span class="co-result-count"></span></h3><p>${n(data.summary.involved)} 项内容含相同片段</p></div><div class="co-results-tools"><input type="search" data-co-query aria-label="查找加载项" placeholder="查找名称或文件" value="${e(filter.query)}"><details class="co-filter-menu" ${filterOpen?'open':''}><summary aria-label="筛选重合内容">筛选${active?' · 已应用':''}<span aria-hidden="true">⌄</span></summary><div class="co-filters" id="co-filters"><label>内容类型<select data-co-filter="kind" aria-label="内容类型"><option value="all">全部内容类型</option>${groups.map(group=>`<option value="${group.kind}" ${filter.kind===group.kind?'selected':''}>${group.label}</option>`).join('')}</select></label><label>加载位置<select data-co-filter="phase" aria-label="加载位置"><option value="all">全部加载位置</option>${Object.entries(contextPhases).map(([id,name])=>`<option value="${id}" ${filter.phase===id?'selected':''}>${name}</option>`).join('')}</select></label><button class="text-action" data-co="clear-filters">恢复全部</button></div></details></div></header><div class="co-pairs"></div></section>
   </section>`;
 }

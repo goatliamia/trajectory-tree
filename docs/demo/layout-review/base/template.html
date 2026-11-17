@@ -108,11 +108,13 @@ body{margin:0;background:var(--bg)}
   const dayFormat = new Intl.DateTimeFormat(window.__trajectoryLocale || 'zh-CN',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric'});
   const clock = t => typeof t === 'number' && Number.isFinite(t) ? clockFormat.format(t) : ui('未记录');
   const day = t => typeof t === 'number' && Number.isFinite(t) ? dayFormat.format(t) : ui('未记录');
-  const recordDuration = row => Number.isFinite(row.durationMs) && row.durationMs >= 0 ? row.durationMs : row.endObserved === false || row.timingSource === 'ordinal-only' ? null : Number.isFinite(row.start) && Number.isFinite(row.end) && row.end >= row.start ? row.end - row.start : null;
+  const recordDuration = row => Number.isFinite(row.durationMs) && row.durationMs >= 0 ? row.durationMs : row.endObserved === false || ['ordinal-only', 'unrecorded-start'].includes(row.timingSource) ? null : Number.isFinite(row.start) && Number.isFinite(row.end) && row.end >= row.start ? row.end - row.start : null;
+  const timelineAxisLabel = (active, total) => total ? (traceSpanOnly ? ui('轮内记录跨度合计 ') : ui('总耗时 ')) + reviewDuration(active) : (traceSpanOnly ? ui('累计记录跨度') : ui('累计执行时间'));
   const dur = ms => { if (ms == null) return ui('未记录'); if (ms < 1000) return (ms < 100 ? '<0.1' : (ms / 1000).toFixed(1)) + ui(' 秒'); const s = ms / 1000; if (s < 60) return s.toFixed(s < 10 ? 1 : 0) + ui(' 秒'); const m = Math.floor(s / 60), r = Math.round(s % 60); return r === 60 ? ui`${m+1} 分` : ui`${m} 分${r ? ui` ${r} 秒` : ''}`; };
   const elapsed = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
   const shorten = (s,n) => String(s).replace(/\s+/g,' ').slice(0,n) + (String(s).replace(/\s+/g,' ').length > n ? '…' : '');
   let session = data.sessions.find(s => s.id === data.mainSession);
+  const traceSpanOnly = session.timingSource === 'recorded-activity-span';
   let turnIndex = Math.max(0,session.turns.findIndex(t => t.number === 6));
   let view = 'overview', zoom = null, groups = [], activeGroup = null, returnState = null;
   const turn = () => session.turns[turnIndex];
@@ -149,7 +151,7 @@ body{margin:0;background:var(--bg)}
     $('rail-footer').innerHTML = session.parentSession ? ui('<button class="back-link" id="parent-link">← 返回主会话</button>') : `${day(session.turns[0].start)} ${clock(session.turns[0].start).slice(0,5)} — ${day(endOf(session.turns.at(-1)))} ${clock(endOf(session.turns.at(-1))).slice(0,5)}`;
     if ($('parent-link')) $('parent-link').onclick = returnParent;
     const max = Math.max(...session.turns.map(t=>endOf(t)-t.start));
-    $('turn-list').innerHTML = session.turns.map((t,i) => ui`<button class="turn" data-turn="${i}" aria-current="${i===turnIndex}" aria-label="第${t.number}轮，${esc(shorten(t.title,70))}，${dur(endOf(t)-t.start)}${t.errors?ui`，${t.errors}次工具报错`:''}"><span class="turn-no">${String(t.number).padStart(2,'0')}</span><span class="turn-title">${esc(t.title)}</span><span class="turn-meta"><span class="mono">${clock(t.start).slice(0,5)}</span><i class="turn-bar" style="width:${Math.max(6,(endOf(t)-t.start)/max*65)}px"></i><span>${dur(endOf(t)-t.start)}</span>${t.errors?`<i class="error-dot"></i><span class="error-small">${t.errors}</span>`:''}</span></button>`).join('');
+    $('turn-list').innerHTML = session.turns.map((t,i) => ui`<button class="turn" data-turn="${i}" aria-current="${i===turnIndex}" aria-label="第${t.number}轮，${esc(shorten(t.title,70))}，${traceSpanOnly ? ui('跨度 ') : ''}${dur(endOf(t)-t.start)}${t.errors?ui`，${t.errors}次工具报错`:''}"><span class="turn-no">${String(t.number).padStart(2,'0')}</span><span class="turn-title">${esc(t.title)}</span><span class="turn-meta"><span class="mono">${clock(t.start).slice(0,5)}</span><i class="turn-bar" style="width:${Math.max(6,(endOf(t)-t.start)/max*65)}px"></i><span>${traceSpanOnly ? ui('跨度 ') : ''}${dur(endOf(t)-t.start)}</span>${t.errors?`<i class="error-dot"></i><span class="error-small">${t.errors}</span>`:''}</span></button>`).join('');
     $('turn-list').querySelectorAll('[data-turn]').forEach(b => b.onclick = () => view==='overview'?focusOverview(Number(b.dataset.turn)):selectTurn(Number(b.dataset.turn)));
     $('count-label').textContent = `${String(turn().number).padStart(2,'0')} / ${session.turns.length}`;
     $('previous').disabled = turnIndex === 0; $('next').disabled = turnIndex === session.turns.length-1;

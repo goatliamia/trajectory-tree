@@ -6,7 +6,7 @@ import { projectOperations } from '../docs/demo/tool-study/model.mjs';
 const option = name => { const at = process.argv.indexOf(name); return at < 0 ? null : process.argv[at + 1]; };
 const id = 'session-2f91dbd3-1dff-4ea2-af09-f1065a89336b';
 const source = option('--source') || join(process.env.USERPROFILE, '.dsh/sessions/--D-projects-math-to-engineering--', id, 'session.v4.jsonl.zstd');
-const workspace = option('--workspace') || 'D:/projects/math-to-engineering';
+const workspace = option('--workspace') || '/workspace/example';
 const loaded = loadSession(source), { events } = loaded;
 const base = buildTracePayload(events, loaded.id).sessions[0];
 const projected = projectOperations(events, { workspace });

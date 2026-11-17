@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN" data-design="__DESIGN__">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
+  <title>Eval · __TITLE__</title>
+  <link rel="stylesheet" href="light.css">
+  <script src="light-data.js" defer></script><script src="light-layout.js" defer></script><script src="light.js" defer></script>
+</head>
+<body>
+  <nav class="design-nav" aria-label="切换设计方案"><span>设计稿</span><a href="matrix.html" data-design-link="matrix">留白矩阵</a><a href="reader.html" data-design-link="reader">分层阅读</a><a href="overview.html" data-design-link="overview">内容总览</a><span class="design-nav-note">同一数据 · 三种查看方式</span></nav>
+  <header class="app-header"><a class="brand" href="matrix.html">Trajectory Tree</a><span class="app-divider">/</span><span class="app-section">Eval</span><div class="header-context"><span>DSH · 首次请求</span><button type="button" id="source-open">冻结样本 <span id="source-date"></span></button></div></header>
+  <main id="app"></main>
+  <dialog id="content-dialog" class="content-dialog"><header class="dialog-header"><div><p id="dialog-location" class="location"></p><h2 id="dialog-title"></h2><p id="dialog-metric" class="dialog-metric"></p></div><button type="button" id="dialog-close" class="close" aria-label="关闭内容">×</button></header><nav class="content-tabs" aria-label="内容展示"><button type="button" data-action="modal-mode" data-mode="read" aria-pressed="true">阅读</button><button type="button" data-action="modal-mode" data-mode="raw" aria-pressed="false">原始文本</button><button type="button" data-action="copy" class="copy-button">复制原文</button></nav><div id="dialog-body" class="doc-content"></div><footer id="dialog-record" class="record-footer"></footer></dialog>
+  <dialog id="index-dialog" class="index-dialog"><header class="dialog-header"><div><p class="location">CONTENT INDEX</p><h2 id="index-title">全部内容</h2></div><button type="button" id="index-close" class="close" aria-label="关闭索引">×</button></header><label class="dialog-search"><span aria-hidden="true">⌕</span><input type="search" id="index-query" placeholder="查找名称、字段或原文" aria-label="搜索全部内容"></label><div id="index-list"></div></dialog>
+  <dialog id="source-dialog" class="source-dialog"><header class="dialog-header"><div><p class="location">DATA SOURCE</p><h2>样本与计量口径</h2></div><button type="button" id="source-close" class="close" aria-label="关闭样本说明">×</button></header><div id="source-body" class="doc-content"></div></dialog>
+  <div id="map-tooltip" class="map-tooltip" role="tooltip" hidden></div>
+</body>
+</html>

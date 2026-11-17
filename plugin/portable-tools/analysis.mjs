@@ -70,7 +70,7 @@ export function selectPortableEvidence(data, q) {
 }
 
 export function inspectData(data, q) {
-  const { p, session, context, range, turns, allCalls, scopedCalls, calls, bySeq, files, usage, turnIds, turnNumbers, callSelection } = selectPortableEvidence(data, q);
+  const { p, context, range, turns, allCalls, scopedCalls, calls, bySeq, files, usage, turnNumbers, callSelection } = selectPortableEvidence(data, q);
   const totals = usageTotal(data.host, usage);
   const nativeSpan = t => valid(t.durationMs) ? t.durationMs : t.endObserved === true && valid(t.start) && valid(t.end) && t.end >= t.start ? t.end - t.start : null;
   const measured = calls.filter(c => c.precise && valid(c.start) && valid(c.end) && c.end >= c.start);
@@ -138,6 +138,9 @@ export function inspectData(data, q) {
   } else if (q.view === 'io') rows = q.groupBy === 'turn' ? turnRows() : q.groupBy === 'file' ? fileRows() :
     q.seqs && !q.groupBy ? calls.map(c => ({ turn: c.turn, step: c.step, seq: c.seq, tool: toolName(c), status: c.status,
       ...(c.attribution ? { attribution: c.attribution } : {}),
+      ...(c.measure ? { measure: c.measure } : {}),
+      ...(c.codeFrames?.length ? { codeFrames: c.codeFrames } : {}),
+      ...(c.controls?.length ? { controls: c.controls } : {}),
       native: bySeq.get(c.seq)?.native, nativeDurationMs: c.durationMs, read: read(c.seq) })) : toolRows();
   else if (q.view === 'repeats') {
     const groups = new Map();

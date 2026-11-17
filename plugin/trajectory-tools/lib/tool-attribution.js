@@ -1,6 +1,6 @@
 // Cause evidence is independent of the recorded host outcome.
 export const failureCategories = [
-  ['文件修改保护', 'File edit protection', ['FS_NOT_OBSERVED', 'FS_STALE_VERSION']],
+  ['文件修改保护', 'File edit protection', ['FS_NOT_OBSERVED', 'FS_STALE_VERSION', 'HOST_WORKTREE_GUARD']],
   ['文件与编辑目标', 'Files and edit targets', ['FS_NOT_FOUND', 'FS_NOT_TEXT', 'FS_EDIT_NOT_FOUND', 'COMMAND_FILE_BUSY', 'FS_NOT_REGULAR_FILE', 'FS_AMBIGUOUS_EDIT', 'FS_REPLACE_FAILED']],
   ['服务与访问', 'Services and access', ['SESSION_QUERY_PERSISTENCE_FAILED', 'SEARCH_FAILED', 'WEB_UNSUPPORTED_CONTENT_TYPE',
     'WEB_PROVIDER_ERROR', 'WEB_REDIRECT_BLOCKED', 'COMMAND_APP_SERVER_EXITED', 'COMMAND_RESPONSE_BODY_UNAVAILABLE',
@@ -27,6 +27,7 @@ const categories = new Map(failureCategories.flatMap(([, , codes], index) => cod
 export const failureCategoryIndex = code => categories.get(code) ?? 7;
 
 export const failureLabels = {
+  HOST_WORKTREE_GUARD: ['工作区隔离边界拦截', 'Worktree isolation guard'],
   INVALID_ARGS: ['调用参数不符合声明', 'Arguments do not match the tool schema'],
   SEARCH_INVALID_PATTERN: ['搜索表达式无效', 'Invalid search pattern'],
   SEARCH_RAW_OUTPUT_OVERFLOW: ['搜索返回超过上限', 'Search output exceeds its limit'],
@@ -40,7 +41,7 @@ export const failureLabels = {
   JOB_WAIT_ABORTED: ['后台任务等待被中止', 'Background job wait aborted'],
   JOB_NOT_FOUND: ['后台任务身份未找到', 'Background job identity not found'],
   COMMAND_EXTERNAL_FEEDBACK: ['外部程序反馈待核对', 'External program feedback needs review'],
-  APPROVAL_REJECTED: ['审批被用户拒绝', 'Approval rejected by user'],
+  APPROVAL_REJECTED: ['审批未获批准', 'Approval not granted'],
   APPROVAL_CANCELLED: ['审批已取消', 'Approval cancelled'],
   APPROVAL_UNAVAILABLE: ['审批服务或通道不可用', 'Approval service or channel unavailable'],
   TOOL_CONTEXT_UNAVAILABLE: ['工具所需运行上下文缺失', 'Required tool context unavailable'],
@@ -194,6 +195,21 @@ export function powerShellScript(command, tool, shell) {
   return null;
 }
 
+export function bashScript(command, tool, shell) {
+  const isBash = value => typeof value === 'string' && /(?:^|[\\/])bash(?:\.exe)?$/i.test(value);
+  if (Array.isArray(command)) {
+    const flag = command.findIndex((value, index) => index > 0 && /^-[a-z]*c[a-z]*$/i.test(value));
+    return isBash(command[0]) && flag > 0 && typeof command[flag + 1] === 'string'
+      ? { language: 'bash', text: command[flag + 1] } : null;
+  }
+  return typeof command === 'string' && (isBash(shell) || !shell && isBash(tool))
+    ? { language: 'bash', text: command } : null;
+}
+
+export function commandScript(command, tool, shell) {
+  return powerShellScript(command, tool, shell) || bashScript(command, tool, shell);
+}
+
 const decolor = text => String(text ?? '').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
 const sourceText = command => {
   if (Array.isArray(command)) return command.at(-1);
@@ -279,6 +295,18 @@ function failureLocation(runtime, program) {
 }
 
 function recordedFailure(runtime, source, shell, detected) {
+  const claudeBody = runtime.replace(/^<tool_use_error>/, '').replace(/<\/tool_use_error>$/, '').trim();
+  if ((claudeBody.startsWith('This session is isolated in the worktree ') &&
+      /Refusing to run it|Edit the worktree copy of this file instead of the shared-checkout path/.test(claudeBody)) ||
+      /^PreToolUse:[^\n]+ hook error: This session is running in an isolated git worktree at /.test(runtime)) {
+    return { ...detected('HOST_WORKTREE_GUARD', claudeBody.slice(0, 220), null, 'claude-tool-result'), pattern: 'claude:worktree-boundary' };
+  }
+  if (/^<tool_use_error>\s*File has not been read yet\./i.test(runtime)) {
+    return detected('FS_NOT_OBSERVED', 'File has not been read yet', null, 'claude-tool-result');
+  }
+  if (/^<tool_use_error>\s*File has been modified since read\b/i.test(runtime)) {
+    return detected('FS_STALE_VERSION', 'File has been modified since read', null, 'claude-tool-result');
+  }
   if (shell) {
     const node = programIn(source, 'node'), python = programIn(source, 'python(?:3)?|py'), git = programIn(source, 'git');
     const lines = runtime.split(/\r?\n/).map(line => line.trim());

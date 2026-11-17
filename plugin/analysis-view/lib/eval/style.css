@@ -182,8 +182,26 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; ba
 .task-records { display: flex; gap: 4px 10px; flex-wrap: wrap; margin-top: 8px; font-size: 11px; color: var(--muted); }
 .basis { margin-top: 12px; padding: 7px 1px; border-top: 1px solid var(--line); }
 .basis > h2 { font-size: 14px; font-weight: 500; margin: 8px 0 12px; }
-.supporting-metrics { margin-top: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-.basis-notes { margin: 8px 0 1px; padding-left: 17px; color: var(--muted); font-size: 12px; }
+.supporting-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.supporting-metrics { min-width: 0; padding: 6px 0 16px; }
+.supporting-metrics + .supporting-metrics { padding-left: 24px; border-left: 1px solid var(--line); }
+.supporting-metrics h3 { font-size: 13px; font-weight: 550; margin-bottom: 18px; }
+.supporting-metrics h3 small { float: right; font-size: 10px; color: var(--muted); font-weight: 400; }
+.supporting-metrics .facts, .supporting-metrics #files .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.supporting-metrics .facts dt { line-height: 1.5; }
+.coverage-metric { margin: 0 0 15px; }
+.coverage-label { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12px; }
+.coverage-label strong { color: var(--ink); font-size: 14px; font-weight: 550; white-space: nowrap; }
+.coverage-track { height: 4px; margin: 7px 0 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.coverage-track i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.coverage-track.is-unmeasured { background: repeating-linear-gradient(110deg, var(--line) 0 2px, transparent 2px 5px); }
+.coverage-metric small, .metric-unavailable { color: var(--muted); font-size: 11px; }
+.metric-unavailable { min-height: 42px; }
+@media (max-width: 760px) {
+  .supporting-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .supporting-metrics + .supporting-metrics { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--line); }
+  .supporting-metrics .facts, .supporting-metrics #files .facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 
 .error-panel { overflow: hidden; }
 .error-panel .section-head { border-bottom: 0; }

@@ -11,7 +11,7 @@ node scripts/serve-layout-review.mjs 3086
 
 打开 `http://127.0.0.1:3086/pi`。可选 `--leaf ID`、`--capture events.jsonl`、`--out path.html`；模拟日志显式加 `--synthetic`。
 
-不传 `--session` 会生成模拟示例，读取本地 Pi 源仓库的固定 revision 校验格式，页面明确标注“模拟会话”，不调用模型。`--source` 保留为 Pi 源仓库路径参数；默认 `D:/projects/new loop/pi`，固定 revision `ad702637fdf6fbd3f965c5dba0b14bae100b74eb`，包版本 1.4.0。使用 `git show`，不会更新源码工作区。
+不传 `--session` 会生成模拟示例，读取本地 Pi 源仓库的固定 revision 校验格式，页面明确标注“模拟会话”，不调用模型。`--source` 保留为 Pi 源仓库路径参数；默认 `../pi`，固定 revision `ad702637fdf6fbd3f965c5dba0b14bae100b74eb`，包版本 1.4.0。使用 `git show`，不会更新源码工作区。
 
 ```sh
 node scripts/build-pi-demo.mjs --source /absolute/pi-source

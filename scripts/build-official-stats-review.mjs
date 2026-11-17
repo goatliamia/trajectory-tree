@@ -22,7 +22,8 @@ const definitions = [], views = [];
 plugin.apply({ effect() {}, locale: { bind: () => key => key }, slots: { inject() {} },
   uiConversation: { events: { register: d => definitions.push(d) }, views: { register: d => views.push(d) } },
 });
-const log = loadSession(process.argv[2] || join(process.env.USERPROFILE, '.dsh/sessions/--D-projects-sql~0020event--', session.id, 'session.v4.jsonl.zstd'));
+const workspaceSlug = '--' + process.cwd().replace(/:/g, '').replace(/[\\/]+/g, '-').replace(/ /g, '~0020') + '--';
+const log = loadSession(process.argv[2] || join(process.env.USERPROFILE, '.dsh/sessions', workspaceSlug, session.id, 'session.v4.jsonl.zstd'));
 if (log.id !== session.id) throw new Error('Fixture session mismatch');
 const events = log.events.filter(e => e.seq <= session.lastSeq);
 const selected = definitions.filter(d => ['stats-step', 'stats-turn-end', 'stats-code-mode', 'stats-compaction'].includes(d.kind));

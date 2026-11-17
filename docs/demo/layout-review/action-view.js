@@ -27,12 +27,15 @@
     if (!count) { $('graph').innerHTML = ''; return; }
     selectedStep = Math.max(0, Math.min(selectedStep, count - 1));
     const selected = steps[selectedStep], showContext = overviewLayers.has('context'), showTime = overviewLayers.has('duration');
+    const contextObstacles = [];
     const geometry = typeof geistActionGeometry === 'function' ? geistActionGeometry(t) : { height: 360, base: 208 };
-    const viewportWidth = Math.max(300, viewport.clientWidth), viewportLeft = viewport.scrollLeft, gutter = 54, { height, base: rawBase } = geometry;
+    const actorReserve = typeof geistActionActorReserve === 'function' ? geistActionActorReserve(t) : 0;
+    const mainHeight = geometry.height, height = mainHeight + actorReserve, rawBase = geometry.base;
+    const viewportWidth = Math.max(300, viewport.clientWidth), viewportLeft = viewport.scrollLeft, gutter = 54;
     // 文件行画在基线下方 78px,再留标签高度;基线太靠下时这一行会被画布裁掉,
     // 所以按"文件行 + 底部刻度"反推一个安全基线,而不是固定 height-96。
     const fileRow = overviewLayers.has('files') ? 46 : 0;
-    let base = Math.min(rawBase, height - 20 - fileRow - 78);
+    let base = Math.min(rawBase, mainHeight - 20 - fileRow - 78);
     const gap = Math.max(128, Math.min(176, (viewportWidth - gutter * 2) / count));
     const width = Math.max(viewportWidth, gutter * 2 + gap * count);
     const start = (width - gap * count) / 2, x = index => start + (index + .5) * gap;
@@ -66,7 +69,7 @@
       // 步号与耗时并成一行,顶部少一行给图。
       part += brText(pos, 48, ui`第 ${step.number} 步` + (showTime ? ' · ' + preciseTime(recordDuration(step)) : ''), 'review-turn-duration');
       // 耗时条:用官方每步的构成画占比,取代原来的等宽区间引导线。
-      {
+      if (showTime && recordDuration(step) != null) {
         const stats = typeof geistStatsByStep !== 'undefined' ? geistStatsByStep.get(t.number + ':' + step.number) : null;
         const total = Math.max(1, step.end - step.start);
         const toolRaw = stats && Number.isFinite(stats.toolWall) ? stats.toolWall
@@ -89,6 +92,8 @@
         const values = CONTEXT_CATEGORIES.map(c => ({ ...c, value: info.parts[c.key] }));
         const plus = values.reduce((n, c) => n + Math.max(0, c.value), 0), minus = values.reduce((n, c) => n + Math.max(0, -c.value), 0);
         const sides = { up: contextDisplaySide(plus, upSide), down: contextDisplaySide(minus, downSide) };
+        if (plus) contextObstacles.push({ left: pos - 22, right: pos + 22, top: -sides.up.height - 5, bottom: 0, routeStem: true });
+        if (minus) contextObstacles.push({ left: pos - 22, right: pos + 22, top: 0, bottom: sides.down.height + 5, routeStem: true });
         let up = base, down = base;
         for (const c of values) {
           if (!c.value) continue;
@@ -113,44 +118,24 @@
       } else if (showContext) part += brText(pos, base - 30, ui('上下文未记录'), 'br-note');
       if (active) part += '<circle cx="' + pos + '" cy="' + base + '" r="18" class="review-action-halo"/>';
       part += '<circle cx="' + pos + '" cy="' + base + '" r="13" class="review-action-node"/>';
-      // 步状态:环表示最严重的结局,徽标给数量。超时/拦截只看得到在支线里,
-      // 原子化之后要在这里补回来,否则评测信息在路径视图里消失。
-      const codes = step.calls.map(c => c.error?.code).filter(Boolean);
-      const timeouts = codes.filter(code => /TIMEOUT/i.test(code)).length;
-      const blocked = codes.filter(code => /^FS_|OBSERVED/i.test(code)).length;
-      const errors = step.calls.filter(c => c.status === 'error').length;
-      const retries = (step.retries || []).length;
-      const worst = errors ? 'error' : timeouts ? 'timeout' : blocked ? 'blocked' : '';
-      if (worst) part += '<circle cx="' + pos + '" cy="' + base + '" r="15.5" class="review-action-ring ' + worst + '"/>';
-    // 目标事件画成状态环外侧的一圈:创建/完成/阻塞各有颜色,读取不画。
+      // One shared corner slot for control, error and retry states. The selected
+      // node keeps its normal focus halo; no additional status rings are drawn.
+      const controls = summarizeControls(step.calls);
+      part += reviewToolMarker(step.calls, pos + TRACE_MARKER_DOCK.x, base + TRACE_MARKER_DOCK.y, { retries: (step.retries || []).length });
+    // 目标图标留在节点中心，与右上的状态角标分开；读取目标不画。
     const goalMark = ((((typeof data !== 'undefined' && data && data.context) ? data.context : {}).goal || {}).markers || []).find(m => m.operation && m.operation !== 'read' && m.time >= step.start && m.time <= (step.end || Infinity));
     if (goalMark) {
       // DSH 的 goal-outline 图标(16×16):两段开口圆弧 + 一支射向靶心的箭头。
       const goalClass = 'review-goal-icon ' + goalMark.operation;
-      const gx = pos - 9, gy2 = base - 9;
-      part += '<g class="' + goalClass + '" transform="translate(' + gx + ' ' + gy2 + ui(') scale(1.125)"><title>目标') + (goalMark.operation === 'create' ? ui('创建') : goalMark.operation === 'complete' ? ui('完成') : ui('中止')) + '</title>'
-        + '<path d="M14.5001 8C14.5 9.28552 14.1188 10.5422 13.4045 11.611C12.6903 12.6799 11.6752 13.5129 10.4875 14.0049C9.29982 14.4968 7.99295 14.6255 6.73212 14.3747C5.4713 14.124 4.31314 13.505 3.4041 12.596C2.49514 11.687 1.87614 10.5288 1.62537 9.26798C1.37459 8.00716 1.50331 6.70028 1.99525 5.51261C2.48719 4.32494 3.32025 3.30981 4.3891 2.59557C5.45795 1.88134 6.71458 1.50008 8.0001 1.5"/>'
-        + '<path d="M11.5 8C11.5001 8.69227 11.2948 9.36901 10.9102 9.94463C10.5257 10.5202 9.97901 10.9689 9.33944 11.2338C8.69986 11.4987 7.99609 11.5681 7.31712 11.433C6.63816 11.2979 6.01449 10.9645 5.52501 10.475C5.03548 9.98552 4.70209 9.36185 4.56702 8.68289C4.43195 8.00392 4.50127 7.30015 4.76619 6.66057C5.03112 6.021 5.47976 5.47436 6.05538 5.08978C6.631 4.70519 7.30774 4.49995 8.00001 4.5"/>'
-        + '<path d="M8.00024 7.99976L11.2 4.80005"/>'
-        + '<path d="M12.4719 5.62245C12.4246 5.66972 12.3569 5.69025 12.2913 5.67715L10.7814 5.37555C10.7022 5.35972 10.6402 5.29781 10.6244 5.2186L10.3228 3.70866C10.3097 3.6431 10.3302 3.57533 10.3775 3.52806L12.1826 1.723C12.2863 1.61929 12.4627 1.65879 12.5122 1.79684L12.9271 2.95225C12.9472 3.00847 12.9915 3.05272 13.0477 3.07291L14.2031 3.48774C14.3412 3.5373 14.3807 3.71368 14.277 3.81739L12.4719 5.62245Z"/></g>';
+      part += '<g class="' + goalClass + '" transform="translate(' + pos + ' ' + base + ui(') scale(1.125)"><title>目标') + (goalMark.operation === 'create' ? ui('创建') : goalMark.operation === 'complete' ? ui('完成') : ui('中止')) + '</title>' + traceSymbolGlyph('goal') + '</g>';
     }
-      const badges = [];
-      if (errors) badges.push(['error', '×', ui('报错 ') + errors + ui(' 次')]);
-      if (timeouts) badges.push(['timeout', '◷', ui('超时 ') + timeouts + ui(' 次')]);
-      if (blocked) badges.push(['blocked', '⊣', ui('拦截 ') + blocked + ui(' 次')]);
-      if (retries) badges.push(['retry', '↻', ui('重试 ') + retries + ui(' 次')]);
-      badges.slice(0, 2).forEach(([kind, glyph, label], i) => {
-        const bx = pos + 17 + i * 17, by = base - 17;
-        part += '<g class="review-action-badge ' + kind + '" transform="translate(' + bx + ' ' + by + ')"><title>' + label + '</title>' +
-          '<circle r="7.5"/><text text-anchor="middle" y="3.2">' + glyph + '</text></g>';
-      });
       const icon = stepIcon(step);
       const toolNames = [...new Set(step.calls.map(call => call.name))];
       part += '<g transform="translate(' + pos + ' ' + base + ')" class="review-action-icon"' + (toolNames.length === 1 ? ' style="stroke:' + globalThis.__trajectoryToolColor(toolNames[0]) + '"' : '') + '>' + icon + '</g>';
       part += reviewToolStepLabel(step, pos, base + 34);
 
       html += brGroup('class="action-step review-action-step' + (active ? ' is-selected' : '') + '" data-step="' + index + '" aria-pressed="' + active + '"', part,
-        ui('第 ') + step.number + ui(' 步 · ') + reviewActionStepLabel(step) + ' · ' + preciseTime(recordDuration(step)) + (info ? ui('；上下文净变化 ') + reviewSigned(info.amount) : ''));
+        ui('第 ') + step.number + ui(' 步 · ') + reviewActionStepLabel(step) + ' · ' + preciseTime(recordDuration(step)) + (info ? ui('；上下文净变化 ') + reviewSigned(info.amount) : '') + (controls ? ' · ' + controlSummaryTitle(controls, globalThis.__trajectoryLocale) : ''));
     });
     const fullTitle = ui('第 ') + t.number + ui(' 轮 · ') + String(t.prompts?.[0]?.text || t.title || '').replace(/\s+/g, ' ');
     const titleWidth = Math.max(60, viewportWidth - gutter * 2 - 210);
@@ -170,8 +155,8 @@
       brText(viewportWidth - gutter, 18, count + ui(' 步') + (showTime ? ' · ' + reviewDuration(endOf(t) - t.start) : '') + (failures ? ' · ' + failures + ui(' 步受阻') : '') + goalText, 'br-note', 'end') +
       brText(gutter, height - 12, showContext ? ui('每步上下文变化 · 显示至 ±') + reviewTokens(scale.limit) : ui('步骤从左到右排列'), 'br-axis', 'start') +
       brText(viewportWidth - gutter, height - 12, ui('间距表示顺序 · 耗时见上方'), 'br-axis', 'end') + '</g>';
-    reviewActionFileFrame = { t, x, base, fileBase: gridBottom, gutter, height, viewportWidth, viewportLeft };
-    html += '<g id="review-files-layer">' + reviewActionFiles(t, x, gridBottom, viewport.scrollLeft + gutter, viewport.scrollLeft + viewportWidth - gutter) + '</g>';
+    reviewActionFileFrame = { t, x, base, fileBase: gridBottom + actorReserve, actorBand: Math.max(92, gridBottom - base + 42), gutter, height, viewportWidth, viewportLeft, contextObstacles };
+    html += '<g id="review-files-layer">' + reviewActionFiles(t, x, gridBottom + actorReserve, viewport.scrollLeft + gutter, viewport.scrollLeft + viewportWidth - gutter) + '</g>';
     const graph = $('graph');
     graph.setAttribute('viewBox', '0 0 ' + width + ' ' + height); graph.setAttribute('height', height);
     graph.style.width = width + 'px'; graph.innerHTML = html;
@@ -268,13 +253,7 @@
     selectStep(index); $('graph').querySelector('[data-step="' + index + '"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }
   function reviewRenderActionCaption() {
-    $('graph-caption').innerHTML = ui('<div class="br-key"><span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" class="review-action-node"/></svg>操作步骤</span>') +
-      '<span class="br-key-item"><svg viewBox="0 0 12 12">' + brCap(6, 6) + ui('</svg>报错</span>') +
-      ui('<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.2" fill="none" stroke="#c0503f" stroke-width="1.6"/></svg>步状态环（红报错 / 橙超时 / 灰拦截）</span>') +
-      ui('<span class="br-key-item"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="#fff" stroke="#6a7f9a"/><text x="6" y="8.6" text-anchor="middle" font-size="7" fill="#4d6076">↻</text></svg>徽标数量</span>') +
-      ui('<span class="br-key-item"><svg viewBox="0 0 12 12"><rect x="2" y="2.5" width="8" height="7" rx="1.5" class="br-glyph"/></svg>文件对象</span>') +
-      ui('<span class="br-key-item"><svg viewBox="0 0 14 10"><path d="M1 9 C5 9 4 3 8 3 H13" class="br-glyph"/></svg>子代理支线</span>') +
-      '</div>' +
+    $('graph-caption').innerHTML = '<div class="br-key"></div>' +
       ui('<div class="review-action-guidance">点图标看这一步 · 双击看原始记录 · 缩小返回总览</div>') +
       '<div class="review-overlay-key" aria-hidden="' + !overviewLayers.has('context') + ui('"><span class="review-overlay-caption" data-context-caption>上下文 <b>↑增 ↓减</b></span>') +
       CONTEXT_CATEGORIES.map(c => '<button class="review-overlay-source" data-action-source="' + c.key + '"><i style="background:' + c.color + '"></i>' + c.label + '</button>').join('') + '</div>';

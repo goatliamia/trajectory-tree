@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, statSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, basename } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { homedir } from 'node:os';
@@ -58,7 +58,8 @@ for(const [id,file] of files){
   finally{processed++;if(processed%10===0)console.log(JSON.stringify({stage:'sessions',processed,total:files.size,usable:sessions.length}));}
 }
 sessions.sort((a,b)=>b.lastAt-a.lastAt);
-const candidate=sessions.find(session=>session.cwd.toLowerCase().includes('sql event')&&session.compactions.length&&session.initial.available)
+const currentWorkspace=basename(process.cwd()).toLowerCase();
+const candidate=sessions.find(session=>session.cwd.toLowerCase().includes(currentWorkspace)&&session.compactions.length&&session.initial.available)
   ??sessions.find(session=>session.compactions.length&&session.initial.available);
 let trace=null;
 if(candidate&&!process.argv.includes('--skip-trace')){

@@ -43,7 +43,7 @@ node --test plugin/analysis-view/goal-events-test.mjs plugin/analysis-view/stage
 本地可以用现有引擎直接比较 Git 版本。先按引擎 README 安装其 Python 环境和锁定的 TypeScript 编译器，然后在本仓库运行：
 
 ```powershell
-$relationsEngine = 'D:\projects\code-relations'
+$relationsEngine = '..\code-relations'
 & "$relationsEngine\.venv\Scripts\python.exe" -B -X utf8 -m code_relations pr-check . --base origin/main --head HEAD --typescript "$relationsEngine\node_modules\typescript\lib\typescript.js" --out .dsh/relations/pr-goals.json
 ```
 

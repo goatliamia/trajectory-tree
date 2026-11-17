@@ -37,6 +37,7 @@
     return String(e.turn).padStart(2, '0') + ' · ' + episodeMeaning(e).short;
   }
   function reviewBranches(mapTime, base, visible, left, right, fullWidth) {
+    const callsBySeq = new Map(session.turns.flatMap(turn => turn.steps.flatMap(step => step.calls)).map(call => [call.seq, call]));
     reviewBranchesNow = layoutBranches(session.overview.episodes.map(e => ({ id: e.id, x: mapTime(e.firstError), at: reviewActiveTime(e.turn, e.firstError), e })), {
       left: 20, right: fullWidth - 20, measure: reviewMeasure, labelOf: reviewBranchLabel,
     });
@@ -51,11 +52,13 @@
       // This is the installed renderer's original twig, cap and return mark.
       const twig = 'M' + p.x + ' ' + (base + sign * 2) + ' V' + (y - sign * 10) + ' Q' + p.x + ' ' + y + ' ' + (p.x + 10) + ' ' + y + ' H' + (p.x + 14);
       part += '<path d="' + twig + '" class="review-branch-halo"/><path d="' + twig + '" class="br-connector"/>';
-      part += brCap(p.x + 18, y, condition);
+      const guardedCalls = events.flatMap(event => event.failureSeqs.map(seq => callsBySeq.get(seq)).filter(Boolean));
+      const controls = summarizeControls(guardedCalls);
+      part += controls ? reviewToolMarker(guardedCalls, p.x + 18, y, { compact: true }) : brCap(p.x + 18, y, condition);
       part += allDone ? '<path d="M' + (p.x + 25) + ' ' + y + 'h6" class="br-association"/>' + brCheck(p.x + 37, y) : brText(p.x + 33, y + 4, '?', 'br-note');
       part += brText(p.cx, p.dy > 0 ? y + 21 : y - 14, p.label, 'br-label' + (allDone ? '' : ' bad'));
       for (const m of p.members) part += '<path d="M' + m.x + ' ' + (base - 3) + 'v6" stroke="var(--branch-bad)" stroke-opacity=".35" stroke-width="1"/>';
-      html += brGroup('class="br-incident" data-review-branch="' + index + '"', part, reviewBranchSentence(events));
+      html += brGroup('class="br-incident" data-review-branch="' + index + '"', part, reviewBranchSentence(events) + (controls ? ' · ' + controlSummaryTitle(controls, globalThis.__trajectoryLocale) : ''));
     });
     return { html, bottom };
   }
@@ -239,7 +242,7 @@
     $('review-path').hidden = path;
     if (path) $('review-state').textContent = ui('第 ') + turn().number + ui(' 轮 › 逐步行动 · 缩小返回');
     else $('review-state').textContent = reviewStress ? ui('160 处合成受阻 · 仅测试密集布局') : reviewFocusedTurn && overviewScale > 1 ? ui('总览 › 第 ') + reviewFocusedTurn + ui(' 轮 · 继续放大看行动') : session.turns.length + ui(' 轮 · 放大逐层查看');
-    if ($('review-rounds')) $('review-rounds').textContent = overviewLayers.has('duration') ? ui('每轮耗时') : ui('定位轮次');
+    if ($('review-rounds')) $('review-rounds').textContent = overviewLayers.has('duration') ? (traceSpanOnly ? ui('每轮记录跨度') : ui('每轮耗时')) : ui('定位轮次');
   }
   const reviewSelectTurnBase = selectTurn;
   selectTurn = function(index) {
