@@ -76,6 +76,7 @@ jobs:
           analyzers/pi-adapter-test.mjs
           analyzers/codex-adapter-test.mjs
           analyzers/claude-adapter-test.mjs
+          analyzers/claude-context-test.mjs
           analyzers/claude-hook-test.mjs
           analyzers/claude-host-test.mjs
           view/assets/pi-host-test.mjs

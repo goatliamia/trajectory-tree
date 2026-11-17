@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const code = readFileSync(new URL('../view/assets/claude-host.js', import.meta.url), 'utf8');
 function host(locale, usage) {
   const elements = new Map();
-  const make = tag => ({ tag, attributes: {}, setAttribute(k, v) { this.attributes[k] = v; }, append() {}, remove() {}, querySelectorAll() { return []; } });
+  const make = tag => ({ tag, dataset: {}, attributes: {}, setAttribute(k, v) { this.attributes[k] = v; }, append() {}, remove() {}, querySelectorAll() { return []; } });
   const graph = make('div');
   graph.before = node => elements.set(node.id, node);
   elements.set('graph-scroll', graph);
@@ -21,7 +21,8 @@ function host(locale, usage) {
     let reviewOpenContext = () => {}, reviewOpenContextSources = () => {}, geistShowCurrentSource = () => {};
     let reviewOpenCompaction = () => {}, geistOpenTiming = () => {}, geistArrangeCaption = () => {};
     const session = { turns: [], totals: { turns: 0, steps: 0, calls: 0 } };
-    const data = { evidence: {} }, reviewContextData = { usage }, geistStatsByStep = new Map();
+    const CONTEXT_CATEGORIES = [{key:'assistant'}];
+    const data = { evidence: {} }, reviewContextData = { usage, requests: [] }, geistStatsByStep = new Map();
     let drawer = null;
     const openDrawer = (...args) => { drawer = args; };
     ${code}

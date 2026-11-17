@@ -1,9 +1,10 @@
-// Project only recorded visible messages and tool blocks. This intermediate
-// structure reuses the Pi renderer; it does not imply Pi request semantics.
+// The intermediate structure reuses the Pi renderer; request evidence is
+// reconstructed separately from CC's recorded API request deltas.
 import { createHash } from 'node:crypto';
 import { win32, posix } from 'node:path';
 import { isShellTool } from '../plugin/trajectory-tools/lib/tool-attribution.js';
 import { failureControls } from '../lib/tool-control.mjs';
+import { claudeRequestContext } from './claude-context.mjs';
 
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const messageKey = row => row.message?.id || row.uuid || 'line:' + row.__trajectoryLine;
@@ -14,6 +15,9 @@ const nativeLocation = (row, callId) => ({
 const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
 const toolInput = block => block?.input && typeof block.input === 'object' && !Array.isArray(block.input) ? block.input : null;
+const humanOrigin = row => row.turnOrigin === 'human' || row.origin?.kind === 'human';
+const metaText = text => /^\s*<(?:local-command-caveat|command-name)>/.test(text);
+const promptContent = content => content.map(block => ({ ...block, text: block.text.replace(/^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*)+/, '') })).filter(block => block.text.trim());
 
 function visible(value, parameters = false) {
   if (Array.isArray(value)) return value.map(v => visible(v, parameters)).filter(v => v !== undefined);
@@ -30,6 +34,7 @@ export function projectClaudeTranscript(native) {
     entries.push({ type: 'message', id, parentId, timestamp, message: { ...message, timestamp: timestamp ? Date.parse(timestamp) : null }, claudeRow: row, claudeBlock: block }); parentId = id;
   };
   for (const row of native.rows) {
+    if (row.type === 'api-request') { add(row, { role: 'custom', content: [] }); continue; }
     if (!['user', 'assistant'].includes(row.type) || !row.message) continue;
     const content = typeof row.message.content === 'string' ? [{ type: 'text', text: row.message.content }] : Array.isArray(row.message.content) ? row.message.content : [];
     if (row.type === 'user') {
@@ -49,8 +54,14 @@ export function projectClaudeTranscript(native) {
         add(row, { role: 'toolResult', toolCallId: matched ? b.tool_use_id : null, content: typeof b.content === 'string' ? [{ type: 'text', text: b.content }] : (b.content || []), isError: b.is_error === true,
           ...(Object.keys(details).length ? { details } : {}) }, b);
       }
-      const visible = content.filter(b => b.type === 'text');
-      if (visible.length) { add(row, { role: 'user', content: visible }); started = true; }
+      const visible = content.filter(b => b.type === 'text' && typeof b.text === 'string');
+      const meta = row.isMeta === true || !humanOrigin(row) && visible.some(b => metaText(b.text));
+      if (meta) { if (visible.length) add(row, { role: 'custom', content: visible }); }
+      else {
+        const prompt = promptContent(visible);
+        if (prompt.length) { add(row, { role: 'user', content: prompt }); started = true; }
+        else if (visible.length) add(row, { role: 'custom', content: visible });
+      }
     } else if (started) {
       const blocks = content.filter(b => {
         if (b.type !== 'tool_use') return b.type === 'text';
@@ -66,12 +77,11 @@ export function projectClaudeTranscript(native) {
 export function finalizeClaudeDataset(data, native, projected = projectClaudeTranscript(native)) {
   data.host = 'claude'; data.payload.host = 'claude';
   const session = data.payload.sessions[0]; session.source.host = 'claude';
+  session.timingSource = 'recorded-activity-span';
   Object.assign(session.diagnostics, projected.resultDiagnostics);
   data.fingerprint = hash(JSON.stringify({ host: 'claude', session: data.session, sha256: native.source.sha256 }));
   data.logId = 'claude:' + data.session + ':' + data.fingerprint.slice(0, 16);
-  data.payload.evidence = { source: native.source, logId: data.logId, context: { estimate: false, incomplete: true, excluded: ['system prompt', 'tool definitions', 'hidden context', 'request serialization', 'branch selection'] }, agents: 'Only the explicitly selected transcript is included.' };
-  data.payload.context.source = { name: 'Claude Code local transcript: visible records only' };
-  data.payload.context.requests = []; data.payload.context.current = null;
+  data.payload.evidence = { source: native.source, logId: data.logId, context: { estimate: true, incomplete: true, excluded: ['hidden thinking', 'media tokens', 'provider serialization', 'unrecorded requests'] }, agents: 'Only the explicitly selected transcript is included.' };
   data.payload.officialStats = null;
   for (const episode of session.overview.episodes) { episode.id = episode.id.replace(/^pi-/, 'claude-'); episode.condition = 'CLAUDE_TOOL_ERROR'; episode.source = 'claude-transcript'; }
   session.overview.representatives = session.overview.episodes.map(e => e.id);
@@ -125,6 +135,7 @@ export function finalizeClaudeDataset(data, native, projected = projectClaudeTra
     turn.native = nativeLocation(byEntry.get(turn.id).claudeRow);
     turn.reason = { kind: 'unknown' };
     turn.endObserved = false;
+    turn.timingSource = 'recorded-activity-span';
     const turnCalls = [];
     for (const step of turn.steps) {
       step.semanticUnit = 'claude-assistant-record';
@@ -133,7 +144,7 @@ export function finalizeClaudeDataset(data, native, projected = projectClaudeTra
       if (row) step.native = nativeLocation(row);
       if (usage && !assigned.has(id)) {
         assigned.add(id);
-        usages.push({ turn: turn.number, turnId: turn.id, step: step.number, seq: step.seq, time: step.start, usage, source: 'claude-transcript', semanticUnit: 'assistant-message-usage' });
+        usages.push({ turn: turn.number, turnId: turn.id, step: step.number, seq: step.seq, time: step.start, usage, requestId: typeof row.requestRef === 'string' ? row.requestRef : row.requestRef?.id ?? row.requestRef?.requestId ?? null, source: 'claude-transcript', semanticUnit: 'assistant-message-usage' });
         step.inTok = usage.input; step.cacheTok = usage.cacheRead; step.outTok = usage.output;
       }
       for (const call of step.calls) {
@@ -176,6 +187,22 @@ export function finalizeClaudeDataset(data, native, projected = projectClaudeTra
     applyClaudeRecovery(turnCalls, episodesBySeq);
   }
   data.payload.context.usage = usages;
+  // A dispatch can be the latest observed activity before an assistant record.
+  // Extend the recorded span without inventing a turn-completion boundary.
+  let requestTurn = -1;
+  for (const event of data.payload.events) {
+    const row = byEntry.get(event.id)?.claudeRow;
+    if (row?.type !== 'api-request') continue;
+    while (requestTurn + 1 < session.turns.length && session.turns[requestTurn + 1].native.line <= row.__trajectoryLine) requestTurn++;
+    const turn = session.turns[requestTurn];
+    if (turn && Number.isFinite(event.time)) {
+      turn.end = Math.max(turn.end ?? turn.start, event.time);
+      turn.endSeq = Math.max(turn.endSeq ?? turn.seq, event.seq);
+    }
+  }
+  Object.assign(data.payload.context, claudeRequestContext(native, session, byEntry, events));
+  const latestRequest = data.payload.context.requests.at(-1);
+  if (latestRequest?.model) data.payload.context.route = { model: latestRequest.model };
   data.payload.evidence.unplacedAssistantUsageRecords = usageById.size - assigned.size;
   for (const file of data.payload.context.fileOperations) if (file.source === 'pi-session-v3') file.source = 'claude-transcript';
   for (const skill of data.payload.context.skillEvents) skill.source = 'claude-transcript';

@@ -62,7 +62,7 @@ if(host==='codex'){
  writeFileSync(join(out,'plugin.json'),JSON.stringify(manifest,null,2)+'\n');
  copyFileSync(join(root,'plugin/codex/mcp.json'),join(out,'mcp.json'));
 }
-if(host==='claude')for(const file of ['.claude-plugin/plugin.json','hooks/hooks.json','scripts/bind-session.mjs']){
+if(host==='claude')for(const file of ['.claude-plugin/plugin.json','hooks/hooks.json','hooks/register.tsx','scripts/bind-session.mjs']){
  const source=join(root,'plugin/claude',file),target=join(out,file),text=readFileSync(source,'utf8');
  mkdirSync(dirname(target),{recursive:true});writeFileSync(target,text);
  skillFiles.push({source:relative(root,source),output:relative(out,target),sha256:createHash('sha256').update(text).digest('hex')});

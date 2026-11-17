@@ -39,6 +39,7 @@ try{
  serving=await startViewServer(view.output);
  const response=await fetch(serving.url);assert.equal(response.status,200);assert.equal(await response.text(),html);
  assert.equal((await fetch(new URL('/other',serving.url))).status,404,'No directory browsing');
+ assert.equal((await fetch(serving.url+'?lang=en')).status,200,'Locale query keeps the exact-file preview route');
  assert.equal((await fetch(serving.url,{method:'POST'})).status,404,'No write route');
  assert.equal(await (await fetch(serving.url,{method:'HEAD'})).text(),'');
  const cancelled=new AbortController();cancelled.abort();await assert.rejects(()=>generateTraceView({host:'pi',input},{signal:cancelled.signal}));

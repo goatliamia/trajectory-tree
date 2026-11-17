@@ -10,7 +10,7 @@ export async function startViewServer(file,{idleMs=15*60*1000,maxAgeMs=60*60*100
  const token=randomBytes(20).toString('hex'),path='/'+token+'/',source=resolve(file);let idle;
  const touch=()=>{clearTimeout(idle);idle=setTimeout(close,idleMs);idle.unref();};
  const server=http.createServer(async(req,res)=>{
-  if(req.url!==path||!['GET','HEAD'].includes(req.method)){res.writeHead(404).end();return;}
+  if(req.url?.split('?')[0]!==path||!['GET','HEAD'].includes(req.method)){res.writeHead(404).end();return;}
   touch();try{const bytes=req.method==='HEAD'?null:await readFile(source);res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}).end(bytes);}catch{res.writeHead(404).end('View file unavailable');}
  });
  const close=()=>{clearTimeout(idle);clearTimeout(expiry);server.close();server.closeAllConnections?.();};
@@ -26,7 +26,7 @@ export async function serveViewFile(file){
    const response=await fetch(url,{method:'HEAD',signal:AbortSignal.timeout(800),redirect:'error'});if(response.ok)return {url:old.url,reused:true};
   }
  }catch{}
- const child=spawn(process.execPath,[fileURLToPath(import.meta.url),'--file',target],{stdio:['ignore','ignore','ignore','ipc'],windowsHide:true});
+ const child=spawn(process.execPath,[fileURLToPath(import.meta.url),'--file',target],{stdio:['ignore','ignore','ignore','ipc'],windowsHide:true,detached:true});
  const result=await new Promise((done,fail)=>{
   const timer=setTimeout(()=>{child.kill();fail(Error('View server startup timed out'));},8000);
   child.once('error',error=>{clearTimeout(timer);fail(error);});
