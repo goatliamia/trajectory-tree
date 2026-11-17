@@ -67,7 +67,7 @@ export function applyBashSyntax(entry, observed, file, excerpt) {
   const { row, source } = entry, parsed = observed.files.get(file.path), syntax = row.syntax;
   syntax.sha256 = createHash('sha256').update(source.text).digest('hex');
   syntax.language = 'bash';
-  if (!parsed?.check) { syntax.state = parsed ? 'pending' : observed.state; return; }
+  if (!parsed?.check || !Array.isArray(parsed.diagnostics)) { syntax.state = parsed ? 'pending' : observed.state; return; }
   const errors = parsed.diagnostics.filter(item => item.severity === 'error');
   syntax.state = errors.length ? 'recovered' : parsed.diagnostics.length ? 'warning' : 'parsed';
   syntax.runtime = observed.runtime;

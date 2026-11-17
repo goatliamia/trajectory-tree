@@ -58,7 +58,8 @@
       report.innerHTML = `<h4>CR · Bash ${esc(syntax.runtime ?? '')} · <code>-n</code></h4><p>${esc(
         syntax.state === 'recovered' ? t('当前语法核对发现错误，历史退出原因仍需结合原始返回。', 'The current syntax check found errors; verify the historical exit cause against its recorded output.')
           : syntax.state === 'warning' ? t('当前语法核对有警告。', 'The current syntax check returned warnings.')
-            : t('当前语法核对未发现错误。', 'The current syntax check found no errors.'))}</p>` +
+            : syntax.state === 'parsed' ? t('当前语法核对未发现错误。', 'The current syntax check found no errors.')
+              : t('当前语法核对未完成。', 'The current syntax check is unavailable.'))}</p>` +
         diagnostics.map(item => `<p class="ce-parser-diagnostic">${item.line ? 'L' + item.line + ' · ' : ''}${esc(item.message)}</p>`).join('');
       $('ce-detail').querySelector('.ce-code-grid').before(report);
     }

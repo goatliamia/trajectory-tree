@@ -10,9 +10,9 @@ import { commandPageCut, commandReport } from '../plugin/portable-tools/command-
 import { datasetAtCut, loadPortableSource } from '../plugin/portable-tools/sources.mjs';
 
 export async function generateCommandView(spec, { signal } = {}) {
-  if (spec.host !== 'codex') throw Error('--commands currently requires --host codex');
+  if (!['codex', 'claude', 'pi'].includes(spec.host)) throw Error('--commands requires --host codex|claude|pi');
   const thread = spec.thread || process.env.CODEX_THREAD_ID || process.env.CODEX_SESSION_ID;
-  if (!spec.snapshot && !spec.file && !thread) throw Error('Provide --thread or --file for command diagnosis');
+  if (!spec.snapshot && !spec.file && !(spec.host === 'codex' && thread)) throw Error('Provide --thread or --file for command diagnosis');
   const seqs = spec.seqs?.length ? [...new Set(spec.seqs)] : undefined;
   if (seqs && (seqs.length > commandBatchLimit || seqs.some(seq => !Number.isSafeInteger(seq) || seq < 0))) {
     throw Error('Select at most 12 nonnegative call sequence numbers with --seq');

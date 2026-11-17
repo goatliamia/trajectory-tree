@@ -198,9 +198,15 @@ export function powerShellScript(command, tool, shell) {
 export function bashScript(command, tool, shell) {
   const isBash = value => typeof value === 'string' && /(?:^|[\\/])bash(?:\.exe)?$/i.test(value);
   if (Array.isArray(command)) {
-    const flag = command.findIndex((value, index) => index > 0 && /^-[a-z]*c[a-z]*$/i.test(value));
-    return isBash(command[0]) && flag > 0 && typeof command[flag + 1] === 'string'
-      ? { language: 'bash', text: command[flag + 1] } : null;
+    if (!isBash(command[0])) return null;
+    for (let index = 1; index < command.length; index++) {
+      const flag = command[index];
+      if (typeof flag !== 'string' || flag === '--' || !/^[+-]/.test(flag)) break;
+      if (/^-[a-z]*c[a-z]*$/i.test(flag)) return typeof command[index + 1] === 'string'
+        ? { language: 'bash', text: command[index + 1] } : null;
+      if (/^[+-][oO]$/.test(flag) || ['--rcfile', '--init-file'].includes(flag)) index++;
+    }
+    return null;
   }
   return typeof command === 'string' && (isBash(shell) || !shell && isBash(tool))
     ? { language: 'bash', text: command } : null;

@@ -75,6 +75,7 @@
     pending: t('暂无语法结果', 'Syntax result unavailable'),
     parsed: t('本地语法检查通过', 'Local syntax check passed'),
     recovered: t('本地语法检查发现错误', 'Local syntax check found errors'),
+    warning: t('本地语法检查返回警告', 'Local syntax check returned warnings'),
   };
   const syntaxNotes = {
     'brace-path-list': [
@@ -125,12 +126,12 @@
   let current = selected, page = 0, durationMode = 'rate';
 
   document.documentElement.lang = locale;
-  document.title = t('PowerShell 命令诊断', 'PowerShell command diagnostics');
+  document.title = t('命令诊断', 'Command diagnostics');
   set('product', t('轨迹树', 'Trajectory Tree'));
   set('crumb', t('/ 命令诊断', '/ Command diagnostics'));
-  set('cut', 'Codex · ' + t('截至 #', 'Through #') + data.cut + (data.synthetic ? t(' · 模拟记录', ' · Synthetic') : ''));
+  set('cut', ({codex:'Codex',claude:'Claude Code',pi:'Pi'}[data.host] || data.host) + ' · ' + t('截至 #', 'Through #') + data.cut + (data.synthetic ? t(' · 模拟记录', ' · Synthetic') : ''));
   set('heading', t('命令诊断', 'Command diagnostics'));
-  set('subtitle', t('查看 PowerShell 调用在哪里报错，点开记录追到具体位置。', 'Find where PowerShell calls failed and open the evidence.'));
+  set('subtitle', t('按记录查看命令反馈与原始脚本。', 'Inspect recorded command feedback and original scripts.'));
   set('overview-title', t('调用概览', 'Call overview'));
   set('turn-title', t('轮次报错率', 'Error rate by turn'));
   set('duration-title', t('耗时与返回', 'Duration and outcome'));
@@ -244,7 +245,7 @@
       const label = t('第 ', start === end ? 'Turn ' : 'Turns ') + range + t(' 轮', '');
       if (!counts) {
         const gap = el('span', null, 'gap');
-        gap.title = label + ' · ' + t('无 PowerShell 调用', 'No PowerShell calls');
+        gap.title = label + ' · ' + t('无命令调用', 'No command calls');
         gap.setAttribute('aria-hidden', 'true');
         $('turns').append(gap);
         continue;
@@ -397,7 +398,8 @@
     }
     const row = current, why = row.cause, syntax = row.syntax;
     const title = el('div'), header = el('div', null, 'detail-head');
-    title.append(heading, el('p', 'PowerShell' + (why.program === 'pwsh' ? '' : ' · ' + (why.program || action(row))), 'quiet'));
+    const shell = row.shell === 'bash' ? 'Bash' : /^(?:pwsh|powershell)$/i.test(row.shell) ? 'PowerShell' : row.shell;
+    title.append(heading, el('p', shell + (why.program && !/^(?:pwsh|bash)$/i.test(why.program) ? ' · ' + why.program : ''), 'quiet'));
     header.append(title, el('span', reasonLabel(row), 'badge' + (row.status === 'error' ? ' error' : '')));
     panel.append(header, el('p', t('第 ', 'Turn ') + num(row.turn) + t(' 轮', '') + ' · ' + t('退出码 ', 'Exit ') + num(row.exitCode) +
       ' · ' + t('返回 ', 'Result ') + (row.resultSeq == null ? '—' : '#' + row.resultSeq) + ' · ' + ms(row.durationMs), 'quiet detail-meta'));
@@ -419,7 +421,7 @@
 
     const structure = el('details', null, 'detail-section');
     structure.append(el('summary', t('语法与原始记录', 'Syntax and original record')),
-      el('p', (parserStates[syntax.state] || syntax.state) + (syntax.runtime ? ' · PowerShell ' + syntax.runtime : ''), 'quiet'));
+      el('p', (parserStates[syntax.state] || syntax.state) + (syntax.runtime ? ' · ' + shell + ' ' + syntax.runtime : ''), 'quiet'));
     if (syntax.rolloutLine) structure.append(el('p', t('原始 argv', 'Original argv') + ' · JSONL L' + syntax.rolloutLine, 'quiet'));
     if (syntax.sha256) structure.append(el('p', 'SHA-256 ' + syntax.sha256.slice(0, 16) + '…', 'quiet'));
     for (const item of syntax.diagnostics || []) {

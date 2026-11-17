@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {attributeToolFailure} from '../trajectory-tools/lib/tool-attribution.js';
+import {attributeToolFailure,commandScript} from '../trajectory-tools/lib/tool-attribution.js';
+import {applyBashSyntax} from './lib/trace/shared/bash-observer.mjs';
 import {buildTracePayload} from './lib/trace-build.js';
 import {codeExecutionData} from './lib/eval/code-data.mjs';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
@@ -9,6 +10,42 @@ import {join,resolve} from 'node:path';
 import {datasetFromNative} from '../portable-tools/sources.mjs';
 import {createPiSample} from '../../analyzers/pi-sample.mjs';
 import {writeHostEvalPage} from '../../view/eval.mjs';
+import {collectToolResults} from '../../docs/demo/layout-review/tool-result-model.mjs';
+
+test('incident branches retain calls from their own session when sequences collide', () => {
+  const incident = { id: 'incident', turn: 1, steps: [1], firstError: 10, failureSeqs: [3], readSeqs: [], pairs: [] };
+  const parentCall = { seq: 3, status: 'error', controls: [{ kind: 'policy', state: 'blocked' }] };
+  const childCall = { seq: 3, status: 'error', controls: [] };
+  const project = call => collectToolResults({ overview: { episodes: [incident] }, turns: [{ number: 1, steps: [{ calls: [call] }] }] }, {}, [])[0];
+  assert.equal(project(parentCall).calls[0], parentCall);
+  assert.equal(project(childCall).calls[0], childCall);
+  assert.deepEqual(project(childCall).calls[0].controls, []);
+});
+
+test('Bash parsing uses the command operand and stops before script arguments', () => {
+  assert.equal(commandScript(['bash', '--noprofile', '-lc', 'printf hello'])?.text, 'printf hello');
+  assert.equal(commandScript(['bash', '-o', 'noclobber', '-c', 'printf hello'])?.text, 'printf hello');
+  assert.equal(commandScript(['bash', 'script.sh', '-c', 'unrelated argument']), null);
+  assert.equal(commandScript(['bash', '--', '-c', 'unrelated argument']), null);
+  assert.equal(commandScript(['sh', '-c', 'printf hello']), null);
+});
+
+test('current Bash noexec findings preserve the recorded outcome and exit cause', () => {
+  const file = { path: 'call-1.sh' }, source = { language: 'bash', text: 'echo )' };
+  const observed = diagnostics => ({ state: 'observed', runtime: '5.2', files: new Map([[file.path, { check: { exit_code: 2 }, diagnostics }]]) });
+  const error = { line: 1, severity: 'error', message: 'syntax error near unexpected token' };
+  const row = { status: 'error', exitCode: null, syntax: {}, attribution: { code: 'UNCLASSIFIED_OUTPUT', certainty: 'unknown' } };
+  applyBashSyntax({ row, source }, observed([error]), file, String);
+  assert.equal(row.status, 'error'); assert.equal(row.exitCode, null);
+  assert.equal(row.attribution.certainty, 'candidate'); assert.equal(row.attribution.exitCode, undefined);
+  assert.equal(row.syntax.exitCode, 2); assert.equal(row.syntax.state, 'recovered');
+  const confirmed = { status: 'error', syntax: {}, attribution: { code: 'COMMAND_PERMISSION', certainty: 'confirmed' } };
+  applyBashSyntax({ row: confirmed, source }, observed([error]), file, String);
+  assert.equal(confirmed.attribution.code, 'COMMAND_PERMISSION');
+  const warning = { status: 'returned', syntax: {}, attribution: null };
+  applyBashSyntax({ row: warning, source }, observed([{ ...error, severity: 'warning' }]), file, String);
+  assert.equal(warning.status, 'returned'); assert.equal(warning.attribution, null); assert.equal(warning.syntax.state, 'warning');
+});
 
 test('PTC native runtime kinds stay separate and captured logs cannot impersonate a failure', () => {
   const kinds={exception:'CODE_EXCEPTION',timeout:'CODE_TIMEOUT',abort:'CODE_ABORTED','worker-exit':'CODE_WORKER_EXIT',

@@ -57,6 +57,27 @@ test('Eval report scope, tool timings and attribution match the dashboard', () =
   assert.equal(single.whole.files.count, expected.files.count);
 });
 
+test('report signals separate long-call records from tool errors and current parser exits', () => {
+  const data = datasetFromNative('pi', createPiSample({ revision: 'report-signal-counts' }));
+  const session = data.payload.sessions[0], turn = session.turns[0], step = turn.steps[0];
+  const template = step.calls[0];
+  step.calls = [
+    { ...template, name: 'bash', nativeName: 'bash', seq: 1, startSeq: 1, resultSeq: 2,
+      status: 'returned', start: 0, end: 35_000, durationMs: 35_000, timingSource: 'native', attribution: null },
+    { ...template, name: 'bash', nativeName: 'bash', seq: 3, startSeq: 3, resultSeq: 4,
+      status: 'error', start: 35_000, end: 35_001, durationMs: 1, timingSource: 'native',
+      attribution: { code: 'COMMAND_PERMISSION', certainty: 'confirmed', syntax: { language: 'bash', exitCode: 2 } } },
+  ];
+  turn.steps = [step]; session.turns = [turn]; session.overview.episodes = [];
+  const catalog = createOverviewModels();
+  const tables = evaluationReportTables(session, buildEvalData(session, portableRuntime(data.payload), { host: 'pi' }),
+    projectPortableOverview(data, catalog), catalog.models, sourceFor(data));
+  const longCall = tables.findings.rows.find(row => row.code === 'LONG_CALL');
+  assert.equal(longCall.records, 1); assert.equal(longCall.errors, 0);
+  assert.equal(tables.findings.rows.find(row => row.code === 'COMMAND_PERMISSION').errors, 1);
+  assert.equal(tables['code-execution'].rows[0].exitCode, null, 'A current bash -n exit is not the historical call exit');
+});
+
 test('record continuation rebuilds the frozen cut and retains its native pointer', async () => {
   const source = { host: 'codex', session: 'continued', snapshot: 'frozen', log: 'same-log', cut: 10 };
   const argsSeen = [];

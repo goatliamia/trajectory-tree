@@ -75,7 +75,7 @@
     },
     {
       "path": "plugin/analysis-view/lib/trace/shared/tool-attribution.mjs",
-      "sha256": "59b75b33837c5b7460b4865ddbe909e3b74ca9594f1de34309db830dbd1cb085"
+      "sha256": "605c31aaa8809daab9ecc909e2ab3d62f3a6236992b03f13cf9afe06cd15c3ee"
     },
     {
       "path": "scripts/dsh-management-config.mjs",

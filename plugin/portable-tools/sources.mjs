@@ -7,7 +7,7 @@ import { omitCodexImages, omitCodexImageValues } from '../../analyzers/codex-ima
 import { readCodexRollout, validateCodexRollout } from '../../analyzers/codex-rollout.mjs';
 import { readClaudeTranscript } from '../../analyzers/claude-reader.mjs';
 import { projectClaudeTranscript, finalizeClaudeDataset } from '../../analyzers/claude-adapter.mjs';
-import { powerShellScript } from '../trajectory-tools/lib/tool-attribution.js';
+import { commandScript } from '../trajectory-tools/lib/tool-attribution.js';
 import {readEvidenceFile} from './evidence-file.mjs';
 
 export const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
@@ -116,11 +116,11 @@ export function datasetFromNative(host, native, options = {}) {
       if (native.capturedAt && Date.parse(row.timestamp) > Date.parse(native.capturedAt)) continue;
       const item = row.payload;
       if (commandScripts && row.type === 'event_msg' && item?.type === 'item_completed' && Number.isFinite(Date.parse(row.timestamp))) {
-        const completed = item.item, script = powerShellScript(completed?.command);
+        const completed = item.item, script = commandScript(completed?.command);
         if (items.get(completed?.id)?.item.type === 'commandExecution' && script && !script.text.includes('[inline image omitted ')) {
           const previous = commandScripts.get(completed.id);
           if (!commandScripts.has(completed.id)) commandScripts.set(completed.id, { line: line + 1, ...script });
-          else if (previous?.text !== script.text || previous?.edition !== script.edition) commandScripts.set(completed.id, null);
+          else if (previous?.text !== script.text || previous?.edition !== script.edition || previous?.language !== script.language) commandScripts.set(completed.id, null);
         }
       }
       if (row.type !== 'response_item' || !item) continue;

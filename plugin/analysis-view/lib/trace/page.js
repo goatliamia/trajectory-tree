@@ -1665,9 +1665,7 @@ function fileChangeHistory(operations, path) {
     return '<g class="review-tool-marker trace-symbol-mark" data-trace-symbol="' + symbol + '" data-marker-state="' + esc(state) + '"' + (control ? ' data-control-state="' + esc(control.state) + '"' : '') + ' transform="translate(' + x + ' ' + y + ')" aria-label="' + esc(title) + '"><title>' + esc(title) + '</title><g' + (compact ? ' transform="scale(.9)"' : '') + '>' + traceSymbolGlyph(symbol) + '</g></g>';
   }
   function reviewResultControlCalls(result) {
-    if (result.kind !== 'incident') return result.calls || [];
-    const seqs = new Set(result.incident.failureSeqs);
-    return session.turns.find(turn => turn.number === result.turn)?.steps.flatMap(step => step.calls).filter(call => seqs.has(call.seq)) || [];
+    return result.calls || [];
   }
   function reviewControlChips(call) {
     return toolControls(call).map(signal => '<span class="geist-tool-control" data-control-state="' + esc(signal.state) + '">' + esc(controlTitle(signal, globalThis.__trajectoryLocale)) + '</span>').join('');
@@ -3216,10 +3214,12 @@ function fileChangeHistory(operations, path) {
   if(!$('review-return')){const stub=document.createElement('button');stub.id='review-return';stub.hidden=true;stub.style.display='none';(document.querySelector('.review-toolbar')||document.body).appendChild(stub);}// Transform recorded outcomes, not tool names alone, into a small branch vocabulary.
 function collectToolResults(session, facts, fileOperations) {
   const covered = new Set();
+  const callsBySeq = new Map(session.turns.flatMap(turn => turn.steps.flatMap(step => step.calls)).map(call => [call.seq, call]));
   const results = session.overview.episodes.map(e => {
     const seqs = [...e.failureSeqs, ...e.readSeqs, ...e.pairs.map(p => p.successSeq)];
     seqs.forEach(seq => covered.add(seq));
-    return { id: 'incident:' + e.id, kind: 'incident', turn: e.turn, step: e.steps?.[0], time: e.firstError, seqs, incident: e, calls: [] };
+    return { id: 'incident:' + e.id, kind: 'incident', turn: e.turn, step: e.steps?.[0], time: e.firstError, seqs, incident: e,
+      calls: e.failureSeqs.map(seq => callsBySeq.get(seq)).filter(Boolean) };
   });
   const files = new Map();
   for (const op of fileOperations) { if (!files.has(op.seq)) files.set(op.seq, []); files.get(op.seq).push(op); }
@@ -4028,7 +4028,7 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     }    geistOutcomeBranches = packed;
     let html = '', bottom = base + 42;
     packed.forEach((p, index) => {
-      const y = base + p.dy, sign = p.dy > 0 ? 1 : -1;
+      const y = base + p.dy;
       bottom = Math.max(bottom, y + 25);
       if (!visible(p.left, p.right)) return;
       const body = geistResultBranchBody(p, base);
@@ -4349,7 +4349,6 @@ function layoutAgentForks(items, { left, right, measure, labelOf, expanded = nul
     const branches = geistActorLayers.agents && geistActors.branches.some(b => b.turn === t.number && b.results?.length);
     // 行动路径的高度跟着对话区走:短面板里先保住步标签、主图和步骤详情。
     const available = $('canvas')?.clientHeight || window.innerHeight;
-    const tight = available < 620, compact = available < 760;
     // 高度跟实际图区走,不再写死:写死会在图区下方留出一整块空白。
     const viewportHeight = Math.max(240, Math.round(($('graph-scroll')?.clientHeight || available * 0.55) - geistActionActorReserve(t) - 6));
     const height = Math.min(620, viewportHeight);

@@ -1,5 +1,6 @@
 import { commandBatchLimit, commandCrOptions, observeCommandEntries } from '../trace/shared/pwsh-observer.mjs';
-import { isShellTool, powerShellScript } from '../trace/shared/tool-attribution.mjs';
+import { isShellTool, commandScript } from '../trace/shared/tool-attribution.mjs';
+import { diagnosticLayer } from './diagnostic-rules.mjs';
 
 // Bounded enrichment of an overview's existing observations. The historical
 // script is parser input only; neither its commands nor its child programs run.
@@ -7,10 +8,10 @@ export async function enrichFindingPowerShell(rows, events, cr = commandCrOption
   const records = new Map(events.map(event => [event.seq, event]));
   const result = rows.map(row => ({ ...row })), selected = [];
   for (const row of result) {
-    if (!row.powerShell || row.status !== 'error' && !row.command?.feedback) continue;
+    if ((!row.powerShell && !isShellTool(row.tool)) || row.status !== 'error' && !row.command?.feedback) continue;
     let args = records.get(row.seq)?.data?.arguments;
     if (typeof args === 'string') { try { args = JSON.parse(args); } catch { args = null; } }
-    const source = powerShellScript(args?.command ?? args?.cmd, row.tool, args?.shell);
+    const source = commandScript(args?.command ?? args?.cmd, row.tool, args?.shell);
     row.syntax = { state: !source ? 'no-source' : !cr?.root ? 'not-configured' : 'not-selected' };
     if (!source || !cr?.root) continue;
     selected.push({ source, original: row, row: { seq: row.seq, status: 'error', exitCode: row.exitCode,
@@ -32,7 +33,7 @@ export async function enrichFindingPowerShell(rows, events, cr = commandCrOption
     const a = row.attribution;
     Object.assign(original, { code: a.code, label: a.label, certainty: a.certainty, attributionBasis: a.basis,
       program: a.program ?? '', evidence: a.evidence ?? '', site: a.site, commandSite: a.commandSite, guidance: a.guidance,
-      pattern:a.pattern??null,layer:a.layer??original.layer??null,diagnosticIds:a.diagnosticIds??original.diagnosticIds??[] });
+      pattern:a.pattern??null,layer:diagnosticLayer(a)??original.layer??null,diagnosticIds:a.diagnosticIds??original.diagnosticIds??[] });
     if(a.codeFrames?.length)original.codeFrames=a.codeFrames;
   }
   return result;
@@ -51,7 +52,7 @@ export async function evalPowerShellEvidence(session, events, signal, cr = comma
     if (typeof args === 'string') {
       try { args = JSON.parse(args); } catch { continue; }
     }
-    const source = powerShellScript(args?.command ?? args?.cmd, call.name, args?.shell);
+    const source = commandScript(args?.command ?? args?.cmd, call.name, args?.shell);
     if (!source) continue;
     entries.push({ source, row: { seq: call.seq, status: call.status, exitCode: call.attribution?.exitCode,
       attribution: call.attribution, syntax: { state: 'not-selected' } } });
@@ -67,5 +68,6 @@ export async function evalPowerShellEvidence(session, events, signal, cr = comma
     if (budget.aborted) return null;
     throw error;
   }
-  return new Map(selected.filter(({ row }) => row.attribution?.site||row.attribution?.codeFrames?.length).map(({ row }) => [row.seq, row.attribution]));
+  return new Map(selected.filter(({ row }) => row.attribution?.site || row.attribution?.codeFrames?.length || row.syntax?.language === 'bash')
+    .map(({ row }) => [row.seq, { ...row.attribution, syntax: row.syntax }]));
 }

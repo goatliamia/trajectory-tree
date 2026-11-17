@@ -10,9 +10,7 @@
     return '<g class="review-tool-marker trace-symbol-mark" data-trace-symbol="' + symbol + '" data-marker-state="' + esc(state) + '"' + (control ? ' data-control-state="' + esc(control.state) + '"' : '') + ' transform="translate(' + x + ' ' + y + ')" aria-label="' + esc(title) + '"><title>' + esc(title) + '</title><g' + (compact ? ' transform="scale(.9)"' : '') + '>' + traceSymbolGlyph(symbol) + '</g></g>';
   }
   function reviewResultControlCalls(result) {
-    if (result.kind !== 'incident') return result.calls || [];
-    const seqs = new Set(result.incident.failureSeqs);
-    return session.turns.find(turn => turn.number === result.turn)?.steps.flatMap(step => step.calls).filter(call => seqs.has(call.seq)) || [];
+    return result.calls || [];
   }
   function reviewControlChips(call) {
     return toolControls(call).map(signal => '<span class="geist-tool-control" data-control-state="' + esc(signal.state) + '">' + esc(controlTitle(signal, globalThis.__trajectoryLocale)) + '</span>').join('');

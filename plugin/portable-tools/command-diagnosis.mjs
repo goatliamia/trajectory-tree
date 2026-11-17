@@ -2,13 +2,13 @@ import { Type } from 'typebox';
 import { Compile } from 'typebox/compile';
 import { commandBatchLimit, commandEvidenceExcerpt as excerpt, observeCommandEntries } from '../analysis-view/lib/trace/shared/pwsh-observer.mjs';
 import { datasetAtCut } from './sources.mjs';
-import { attributeToolFailure, commandPowerShellEdition, isShellTool, legacyParserDiagnostic, powerShellScript } from '../trajectory-tools/lib/tool-attribution.js';
+import { attributeToolFailure, commandPowerShellEdition, isShellTool, legacyParserDiagnostic, commandScript } from '../trajectory-tools/lib/tool-attribution.js';
 
 const seqSchema = { type: 'integer', minimum: 0 };
 const identity = { type: 'string', minLength: 1 };
 export const COMMAND_TOOL = {
   name: 'trajectory_command_diagnose',
-  description: '核对指定命令调用的退出原因。存在原始 PowerShell 脚本时可补查语法和命令位置。',
+  description: '核对指定命令调用的退出原因。原始 PowerShell 或 Bash 脚本可通过 CR 补查语法；PowerShell 另可提供命令位置。',
   inputSchema: { type: 'object', required: ['seqs'], additionalProperties: false, properties: {
     session: identity, snapshot: identity, logId: identity, cut: seqSchema,
     seqs: { type: 'array', minItems: 1, maxItems: commandBatchLimit, items: seqSchema,
@@ -80,7 +80,7 @@ function resultCause(call, exitCode, output, script) {
   return { kind: 'unresolved', ...(first >= 0 ? { outputRecorded: true } : {}) };
 }
 
-function collectCommands(data, powerShellOnly) {
+function collectCommands(data, { parserOnly, powerShellOnly }) {
   const records = new Map(data.records.map(record => [record.seq, record]));
   const entries = [];
   for (const turn of data.payload.sessions[0].turns) for (const step of turn.steps) for (const call of step.calls) {
@@ -89,9 +89,10 @@ function collectCommands(data, powerShellOnly) {
     const record = records.get(call.seq), args = record?.arguments ?? record?.body?.arguments;
     const command = args?.command ?? args?.cmd;
     const captured = Object.hasOwn(data.commandScripts ?? {}, call.id) ? data.commandScripts[call.id] : null;
-    const source = captured || powerShellScript(command, name, args?.shell);
+    const source = captured || commandScript(command, name, args?.shell);
     const edition = source?.edition ?? (data.host === 'codex' ? commandPowerShellEdition(command) : null);
-    if (powerShellOnly && !source && !edition) continue;
+    if (powerShellOnly && (source?.language === 'bash' || !source && !edition)) continue;
+    if (parserOnly && !source && !edition) continue;
     const body = records.get(call.resultSeq)?.body;
     const result = data.host === 'codex' ? body?.result : body?.toolUseResult ?? body?.details;
     const output = result?.output ?? (typeof body?.content === 'string' ? body.content : Array.isArray(body?.content)
@@ -115,7 +116,7 @@ function collectCommands(data, powerShellOnly) {
     const durationMs = Number.isFinite(call.durationMs) && call.durationMs >= 0 ? call.durationMs : null;
     entries.push({ source, row: {
       seq: call.seq, resultSeq: call.resultSeq, itemId: record?.native?.itemId, turn: turn.number,
-      shell: edition === 'Desktop' ? 'powershell' : edition === 'Core' ? 'pwsh' : name,
+      shell: source?.language === 'bash' ? 'bash' : edition === 'Desktop' ? 'powershell' : edition === 'Core' ? 'pwsh' : name,
       operation: call.classification?.kind ?? 'run', status: call.status, exitCode, durationMs, cause, attribution,
       syntax: { state: source ? 'not-selected' : edition ? 'no-source' : 'other-shell', ...(source?.line ? { rolloutLine: source.line } : {}) },
     } });
@@ -129,9 +130,9 @@ export function commandPageCut(data) {
   return closed >= 0 && closed < turns.length - 1 ? turns[closed + 1].seq - 1 : session.lastSeq;
 }
 
-export async function commandReport(data, { seqs, whole = false, cr, signal, powerShellOnly = whole } = {}) {
+export async function commandReport(data, { seqs, whole = false, cr, signal, powerShellOnly = false, parserOnly = whole } = {}) {
   signal?.throwIfAborted();
-  const entries = collectCommands(data, powerShellOnly), bySeq = new Map(entries.map(entry => [entry.row.seq, entry]));
+  const entries = collectCommands(data, { parserOnly, powerShellOnly }), bySeq = new Map(entries.map(entry => [entry.row.seq, entry]));
   const selected = seqs ? [...new Set(seqs)].map(seq => {
     const entry = bySeq.get(seq);
     if (!entry) throw Error('No command call at #' + seq + ' in this cut');
@@ -148,15 +149,16 @@ export async function commandReport(data, { seqs, whole = false, cr, signal, pow
   const observed = await observeCommandEntries(selected, cr, signal);
   return {
     host: data.host, session: data.session, cut: data.cut, logId: data.logId, synthetic: data.synthetic,
-    cr: { state: observed.state, runtime: observed.runtime, edition: observed.edition, selected: selected.length },
+    cr: { state: observed.state, runtime: observed.runtime, edition: observed.edition, selected: selected.length, providers: observed.providers },
     rows: (whole ? entries : selected).map(entry => entry.row),
   };
 }
 
 export async function commandAttributionDetails(data, cr, signal) {
   if (!cr?.root) return;
-  const { rows } = await commandReport(data, { cr, signal, powerShellOnly: true });
-  return new Map(rows.filter(row => row.attribution?.site).map(row => [row.seq, row.attribution]));
+  const { rows } = await commandReport(data, { cr, signal, parserOnly: true });
+  return new Map(rows.filter(row => row.attribution?.site || row.syntax?.language === 'bash' || row.syntax?.diagnostics?.length)
+    .map(row => [row.seq, { ...row.attribution, syntax: row.syntax }]));
 }
 
 export async function executeCommandTool(service, args, cr, signal) {

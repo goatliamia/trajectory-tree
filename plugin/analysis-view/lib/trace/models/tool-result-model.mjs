@@ -4,10 +4,12 @@ import { presentCallFact } from './step-insight.mjs';
 // Transform recorded outcomes, not tool names alone, into a small branch vocabulary.
 export function collectToolResults(session, facts, fileOperations) {
   const covered = new Set();
+  const callsBySeq = new Map(session.turns.flatMap(turn => turn.steps.flatMap(step => step.calls)).map(call => [call.seq, call]));
   const results = session.overview.episodes.map(e => {
     const seqs = [...e.failureSeqs, ...e.readSeqs, ...e.pairs.map(p => p.successSeq)];
     seqs.forEach(seq => covered.add(seq));
-    return { id: 'incident:' + e.id, kind: 'incident', turn: e.turn, step: e.steps?.[0], time: e.firstError, seqs, incident: e, calls: [] };
+    return { id: 'incident:' + e.id, kind: 'incident', turn: e.turn, step: e.steps?.[0], time: e.firstError, seqs, incident: e,
+      calls: e.failureSeqs.map(seq => callsBySeq.get(seq)).filter(Boolean) };
   });
   const files = new Map();
   for (const op of fileOperations) { if (!files.has(op.seq)) files.set(op.seq, []); files.get(op.seq).push(op); }
