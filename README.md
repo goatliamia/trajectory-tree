@@ -11,6 +11,7 @@
 </p>
 
 <p align="center"><code>DSH</code> &nbsp; <code>Pi</code> &nbsp; <code>Codex</code> &nbsp; <code>Claude Code</code></p>
+<p align="center"><a href="#antigravity"><code>Antigravity · 上下文侧栏</code></a></p>
 
 开发与审查：[PR 关系诊断与原生回归](docs/relation-ci.md)。
 
@@ -109,6 +110,8 @@ Eval 从日常任务的记录中提取指标，与轨迹树共用数据和切点
 
 Pi、Codex 和 Claude Code 的轨迹生成入口也接受 `--eval`、`--overview` 或 `--code`。DSH 直接使用常驻面板。[完整宿主入口](docs/host-entrypoints.md)
 
+Antigravity 提供独立的[上下文与用量前端侧栏](plugin/antigravity/README.md)：读取最近请求中的系统提示、工具定义和消息，沿用七类缩放矩阵，来源文本估算与实报用量分开展示。该接入只包含前端，不注册工具能力或 skill。
+
 <details>
 <summary><strong>DSH · 原生插件与分析面板</strong></summary>
 
@@ -183,6 +186,20 @@ claude --plugin-dir ./dist/trajectory-tree-claude
 使用 `/trajectory-tree:trajectory-view` 或 `/trajectory-tree:trajectory-eval` 打开视图，再把诊断草稿复制回 Claude Code。插件在会话启动、恢复等时机提供当前 transcript 路径。
 
 [Claude Code 使用说明](plugin/claude/README.md)
+
+</details>
+
+<a id="antigravity"></a>
+<details>
+<summary><strong>Antigravity · 上下文与用量前端插件</strong></summary>
+
+```sh
+node scripts/install-antigravity.mjs
+```
+
+需要 Node.js 24+。刷新宿主插件或重启后，在会话顶部 `+` 菜单打开「上下文与用量」。矩阵支持滚轮缩放、拖动、搜索和正文懒读；趋势与对照使用已记录请求的输入、缓存和输出。页面隐藏后暂停轮询。
+
+[安装、数据口径与维护](plugin/antigravity/README.md)
 
 </details>
 

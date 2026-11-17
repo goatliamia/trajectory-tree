@@ -27,6 +27,12 @@ DSH's PowerShell renderer reports non-zero process exits in the returned text wi
 
 Codex analysis replaces inline Base64 images in App Server responses, saved snapshots and local rollouts with a compact reference. It keeps the surrounding record, image type, encoded size and a digest. Native request usage still comes from the host's telemetry.
 
+## Antigravity frontend extension
+
+Antigravity has a separate [context and usage sidebar](../plugin/antigravity/README.md), outside the four full trajectory integrations above. It uses the shared seven-category treemap, reads the latest request's stored system sections, tool schemas and messages, and compares recorded request usage. It registers no tools, MCP server or skills. Its current interface is Chinese and follows the host's light/dark theme.
+
+Source areas estimate visible text only; reported input, cache and output remain separate. Older complete prompts can be stripped by the host, so a missing latest prompt stays unavailable. The pane stays bound to the selected conversation, checks snapshot versions for body reads, caches unchanged records and pauses polling while hidden.
+
 ## Automatic language selection
 
 The trajectory tree, Eval and their diagnostic drafts choose a language automatically. Pass `?lang=en` or `?lang=zh-CN` in the URL, or set `--lang` when exporting a portable page. Selection order:

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="frame-src 'none'; child-src 'none'">
+  <title>上下文与用量</title>
+  <script src="/preload.js"></script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app" class="shell">
+    <!-- Sticky Header -->
+    <header class="header">
+      <div class="header-top">
+        <div class="title-group">
+          <h1 class="title">上下文与用量</h1>
+          <select id="conv-select" class="conv-select" aria-label="选择会话" title="切换要观察的会话"></select>
+        </div>
+        <span id="live-pill" class="live" role="status" title="可见时每 1.5 秒检查请求记录更新">
+          <span id="live-dot" class="live-dot" aria-hidden="true"></span>
+          <span id="live-label">实时</span>
+        </span>
+      </div>
+
+      <!-- Single-Row Quiet Official Token Metric Strip -->
+      <div id="metric-strip" class="metric-strip">
+        <div class="metric-cell">
+          <span class="metric-k">最近请求输入</span>
+          <strong id="m-win" class="metric-v">—</strong>
+          <span id="m-win-sub" class="metric-sub">—</span>
+        </div>
+        <div class="metric-cell">
+          <span class="metric-k">累计缓存命中</span>
+          <strong id="m-hit" class="metric-v is-good">—</strong>
+          <span id="m-hit-sub" class="metric-sub">—</span>
+        </div>
+        <div class="metric-cell">
+          <span class="metric-k">压缩切点</span>
+          <strong id="m-cp" class="metric-v">—</strong>
+          <span id="m-cp-sub" class="metric-sub">—</span>
+        </div>
+        <div class="metric-cell">
+          <span class="metric-k">累计输出</span>
+          <strong id="m-out" class="metric-v">—</strong>
+          <span id="m-out-sub" class="metric-sub">—</span>
+        </div>
+      </div>
+
+      <p id="source-note" class="source-note">读取最近请求记录…</p>
+
+      <!-- Underline Tabs -->
+      <nav class="tabs" role="tablist" aria-label="视图切换">
+        <button type="button" role="tab" id="tab-surface" aria-controls="panel-surface" data-tab="surface" class="tab active" aria-selected="true">上下文构成</button>
+        <button type="button" role="tab" id="tab-curve" aria-controls="panel-curve" data-tab="curve" class="tab" aria-selected="false" tabindex="-1">趋势与对照</button>
+        <button type="button" role="tab" id="tab-steps" aria-controls="panel-steps" data-tab="steps" class="tab" aria-selected="false" tabindex="-1">请求记录 <span id="step-count" class="tab-count"></span></button>
+      </nav>
+    </header>
+
+    <main class="main">
+      <!-- Tab 1: Native Continuous Zoomable Treemap (mountCurrentContext) -->
+      <section id="panel-surface" class="tab-panel active" role="tabpanel" aria-labelledby="tab-surface">
+        <div id="cc-host" class="cc-host"></div>
+      </section>
+
+      <!-- Tab 2: Recorded request usage, changes and comparison -->
+      <section id="panel-curve" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-curve">
+        <figure id="fig-context" class="report-figure">
+          <div class="figure-head">
+            <strong>请求输入与相邻请求净变化</strong>
+            <span id="fig-context-scope">宿主记录用量</span>
+          </div>
+          <div id="fig-context-canvas" class="figure-canvas"></div>
+          <div id="fig-context-readout" class="figure-readout" data-state="idle">移动到图中记录，查看请求的输入、缓存、输出与调用工具。</div>
+        </figure>
+
+        <div class="curve-grid">
+          <figure id="fig-comparison" class="report-figure">
+            <div class="figure-head">
+              <strong>压缩后起点与最近请求</strong>
+              <span id="fig-comparison-scope">压缩后起点对照当前步</span>
+            </div>
+            <div id="fig-comparison-canvas" class="figure-canvas"></div>
+          </figure>
+
+          <figure id="fig-top-steps" class="report-figure">
+            <div class="figure-head">
+              <strong>请求输入净增 Top 8</strong>
+              <span>仍在最近请求中的片段可定位</span>
+            </div>
+            <div id="fig-top-steps-canvas" class="figure-canvas"></div>
+          </figure>
+        </div>
+      </section>
+
+      <!-- Tab 3: Live Step Feed -->
+      <section id="panel-steps" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-steps">
+        <div class="search-row">
+          <input id="step-filter" type="search" class="search-input" aria-label="过滤请求记录" placeholder="过滤工具名或 #序号…" autocomplete="off">
+        </div>
+        <div id="step-feed" class="step-feed"></div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

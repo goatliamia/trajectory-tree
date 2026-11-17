@@ -45,6 +45,7 @@ jobs:
           node scripts/sync-view-assets.mjs --check
           node scripts/sync-inspect-models.mjs --check
           node scripts/sync-host-skills.mjs --check
+          node scripts/sync-antigravity.mjs --check
       - name: Run synthetic observations and actual package loading
         run: >-
           node --test
@@ -65,6 +66,7 @@ jobs:
           analyzers/eval-home-test.mjs
           scripts/dsh-native-config-test.mjs
           scripts/dsh-current-preset-test.mjs
+          scripts/antigravity-test.mjs
           lib/context-diagnosis-test.mjs
           analyzers/context-overlap-test.mjs
           plugin/trajectory-tools/inspect-test.mjs

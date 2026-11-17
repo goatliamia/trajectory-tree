@@ -11,6 +11,7 @@
 </p>
 
 <p align="center"><code>DSH</code> &nbsp; <code>Pi</code> &nbsp; <code>Codex</code> &nbsp; <code>Claude Code</code></p>
+<p align="center"><a href="#antigravity"><code>Antigravity · Context sidebar</code></a></p>
 
 > Screenshots use reproducible public synthetic examples, with no private conversations. Model A / B illustrate comparisons. [Media and reproduction](docs/media/README.md)
 
@@ -107,6 +108,8 @@ Run commands from the repository root. The plugin packages declare Node.js 18+, 
 
 The trajectory generation entry in Pi, Codex and Claude Code also accepts `--eval`, `--overview` or `--code`. DSH uses its persistent panels. [All host entry points](docs/host-entrypoints.md)
 
+Antigravity has a separate [context and usage frontend plugin](plugin/antigravity/README.md). It reads the latest request's recorded system sections, tool definitions and messages into the shared seven-category zoomable treemap. Visible text estimates remain separate from reported usage. This integration adds a frontend only, with no tools or skills.
+
 <details>
 <summary><strong>DSH · Native plugins and analysis panel</strong></summary>
 
@@ -181,6 +184,20 @@ claude --plugin-dir ./dist/trajectory-tree-claude
 Use `/trajectory-tree:trajectory-view` or `/trajectory-tree:trajectory-eval` to open a view, then copy a diagnosis draft back into Claude Code. The plugin provides the current transcript path at session startup, resume and related lifecycle events.
 
 [Claude Code setup](plugin/claude/README.md)
+
+</details>
+
+<a id="antigravity"></a>
+<details>
+<summary><strong>Antigravity · Context and usage frontend</strong></summary>
+
+```sh
+node scripts/install-antigravity.mjs
+```
+
+Requires Node.js 24+. Refresh plugins or restart the host, then open **上下文与用量** from the conversation header's `+` menu. Zoom, pan, search and load exact source text on demand. Request trends compare recorded input, cache and output. Polling pauses while the page is hidden.
+
+[Installation, data semantics and maintenance](plugin/antigravity/README.md)
 
 </details>
 

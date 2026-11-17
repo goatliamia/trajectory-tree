@@ -32,6 +32,9 @@ Thumbs.db
 .vscode/
 .claude/
 .agents/worktrees/
+# Local Antigravity development installs; canonical frontend is plugin/antigravity/.
+.agents/plugins/
+.agents/skills/ctx/
 *.suo
 
 # secrets

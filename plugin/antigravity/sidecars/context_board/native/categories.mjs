@@ -1,0 +1,2 @@
+// Generated from the shared trajectory context categories.
+export const CONTEXT_CATEGORIES=[{"key":"system","label":"系统提示","color":"#7065c6"},{"key":"tools","label":"工具定义","color":"#bf8b32"},{"key":"user","label":"用户输入","color":"#4c946d"},{"key":"inject","label":"运行时注入","color":"#ab6ba4"},{"key":"skill","label":"技能内容","color":"#cf7950"},{"key":"assistant","label":"模型输出（含思考）","color":"#5286bf"},{"key":"tool","label":"工具输出","color":"#39a29b"}];

@@ -11,6 +11,16 @@ Pi 的 `/trajectory`、Codex 的 `$trajectory-view` / `$trajectory-eval` 和 Cla
 | Claude Code | `/trajectory-tree:trajectory-view` | `/trajectory-tree:trajectory-eval` | `/trajectory-tree:trace-analysis` | `/trajectory-tree:context-profile` |
 | DSH Web | `/trajectory` | 会话「评估」标签 | `trace-analysis` | `context-profile` |
 
+## Antigravity 前端插件
+
+```sh
+node scripts/install-antigravity.mjs
+```
+
+需要 Node.js 24+。安装到 `~/.gemini/config/plugins/trajectory-tree`，刷新插件后从会话顶部 `+` 菜单打开「上下文与用量」。此接入只提供前端，按宿主绑定的会话读取最近请求的系统提示、工具定义与消息，展示七类缩放矩阵及实报用量趋势；不安装工具、MCP 或 skill。它不进入上表的轨迹树、Eval 与诊断入口。
+
+[数据口径、旧版迁移与维护](../plugin/antigravity/README.md)
+
 ## Eval 总览
 
 总览只保留跨会话统计，原先内置的「单会话」页已移除。单会话继续使用原 Eval 面板。两处共用程序信号归组规则，并随项目、时间、模型或轮次筛选更新；处置列表示可调查方向，不表示已经修复或需要保存长期知识。具体判断从选区草稿进入 `trace-analysis`，保留各来源的 session、cut 和便携宿主 logId。全局的跨会话草稿分别列出每段来源的查询；便携快照不假定绑定当前活动会话。

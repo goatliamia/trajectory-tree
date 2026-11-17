@@ -1,0 +1,11 @@
+{
+  "name": "trajectory-tree",
+  "displayName": "Trajectory Tree · 上下文与用量",
+  "description": "Antigravity 前端面板：缩放查看最近请求的上下文来源，核对实报 Token、缓存与压缩切点。",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "打开上下文与用量面板"
+  ],
+  "homepage": "https://github.com/goatliamia/trajectory-tree#antigravity",
+  "repository": "https://github.com/goatliamia/trajectory-tree"
+}
