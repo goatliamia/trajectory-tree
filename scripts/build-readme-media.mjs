@@ -1,46 +1,32 @@
 // Public showcase fixtures only. Never reads local sessions or private reports.
-import {mkdirSync,readFileSync,writeFileSync,existsSync,copyFileSync} from 'node:fs';
-import {join,extname} from 'node:path';
+import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,existsSync,copyFileSync,rmSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {join,extname,dirname,basename,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import http from 'node:http';
-import {createPiSample} from '../analyzers/pi-sample.mjs';
-import {datasetFromNative} from '../plugin/portable-tools/sources.mjs';
-import {writeHostTracePage} from '../view/render.mjs';
 import {renderTracePage} from '../plugin/analysis-view/lib/index.js';
 import {inlineTraceFonts} from '../plugin/analysis-view/lib/eval/render.mjs';
 import {renderReport} from '../report/render.mjs';
 import {assemblyConcept} from '../docs/demo/assembly-study/sequence.mjs';
 import {compileMarkdown} from '../report/compile.mjs';
 import {publicEvalShowcase} from './readme-fixtures.mjs';
+import {captureAntigravity,captureDsh} from './capture-readme-hosts.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url)),out=join(root,'.dsh/readme-media');mkdirSync(out,{recursive:true});
-const sample=createPiSample({revision:'public-readme-fixture'},{skillStudy:true});
 const languages=[
- {locale:'zh-CN',suffix:'',title:'账单导出 · 示例会话'},
- {locale:'en',suffix:'-en',title:'Billing export · sample session'},
+ {locale:'zh-CN',suffix:''},
+ {locale:'en',suffix:'-en'},
 ];
-const agentTimes=type=>sample.capture.filter(row=>row.event.type===type).map(row=>row.observedAt);
-const starts=agentTimes('agent_start'),ends=agentTimes('agent_end');
 const pages=languages.flatMap(({suffix})=>['path','eval','diagnosis','global-eval','report'].map(name=>name+suffix));
-for(const {locale,suffix,title} of languages){
- const input=structuredClone(sample),last=input.entries.at(-1);
- input.entries.push({type:'session_info',id:'readme-session-title',parentId:last.id,timestamp:last.timestamp,name:title});
- const dataset=datasetFromNative('pi',input),trace=dataset.payload,turns=trace.sessions[0].turns;
- // The public fixture includes simulated agent start/end capture. Show the
- // complete-data chart using those observations, without changing live Pi.
- if(starts.length!==turns.length||ends.length!==turns.length)throw Error('Incomplete showcase turn timing');
- for(const [i,turn] of turns.entries()){
-  if(ends[i]<starts[i])throw Error('Invalid showcase turn timing');
-  Object.assign(turn,{start:starts[i],end:ends[i],endObserved:true,durationMs:ends[i]-starts[i]});
- }
- writeHostTracePage(trace,join(out,'path'+suffix+'.html'),{locale});
- const showcase=publicEvalShowcase(locale);
+for(const {locale,suffix} of languages){
+ const showcase=await publicEvalShowcase(locale);
+ const path=inlineTraceFonts(renderTracePage({...showcase.tracePayload,host:'dsh',locale}));
+ writeFileSync(join(out,'path'+suffix+'.html'),path);
  writeFileSync(join(out,'eval'+suffix+'.html'),inlineTraceFonts(showcase.evaluation));
  writeFileSync(join(out,'global-eval'+suffix+'.html'),showcase.overview);
  writeFileSync(join(out,'report'+suffix+'.html'),showcase.report);
- // Exercise the DSH selection UI with the same public fixture, never a host profile.
- writeFileSync(join(out,'diagnosis'+suffix+'.html'),inlineTraceFonts(renderTracePage({...trace,host:'dsh',locale})));
+ writeFileSync(join(out,'diagnosis'+suffix+'.html'),path);
 }
 const source={host:'synthetic',session:'public-readme-example',snapshot:'showcase-v1',log:'synthetic-example',cut:24};
 const series=['system','tools','user','inject','skill','assistant','tool'];
@@ -87,6 +73,13 @@ if(process.argv.includes('--capture')){
    const takeElement=async(name,selector)=>{const filename=name+suffix+'.jpg';await page.locator(selector).screenshot({path:join(capture,filename),type:'jpeg',quality:89,animations:'disabled'});captured.push(filename);};
    await open('path');
    await page.locator('#graph .br-trunk').waitFor({state:'attached'});
+   await page.waitForFunction(()=>{
+    const segments=[...document.querySelectorAll('#graph [data-context-turn] [data-context-segment]')];
+    return segments.length>=16 && segments.every(node=>{
+     const r=node.getBoundingClientRect();
+     return r.width>0 && r.height>0 && r.right>0 && r.left<innerWidth && r.bottom>0 && r.top<innerHeight;
+    });
+   });
    await take('trajectory-overview');
    await open('eval');
    await page.locator('#turn-usage .usage-point').first().waitFor();
@@ -96,7 +89,6 @@ if(process.argv.includes('--capture')){
    await page.locator('#review-rounds').click();
    await page.locator('[data-review-round-path="2"]').click();
    const step=page.locator('#graph [data-step="1"]');
-   await step.press('Enter');
    await step.press('Shift+Enter');
    await page.locator('#diagnosis-confirm').click();
    await page.locator('#questions button').nth(1).click();
@@ -116,8 +108,33 @@ if(process.argv.includes('--capture')){
    await open('report');
    await page.locator('[data-flow-node]').first().waitFor({state:'visible'});
    await take('diagnostic-report');
+   if(!suffix){
+    await open('context');
+    await takeElement('context-trend','[data-dataset="context"]');
+    if(process.argv.includes('--animation')){
+     await open('assembly');
+     const figure=page.locator('[data-context-assembly]'), timeline=figure.locator('[data-assembly-frame]');
+     const frames=mkdtempSync(join(out,'assembly-frames-'));
+     try{
+      const count=await timeline.count();
+      if(count<2)throw Error('Assembly showcase requires multiple cuts');
+      for(let i=0;i<count;i++){
+       await timeline.nth(i).click();
+       await page.waitForFunction(index=>Number(document.querySelector('[data-assembly-progress]').textContent.split('/')[0])===index+1,i);
+       await figure.screenshot({path:join(frames,'frame-'+String(i).padStart(3,'0')+'.png'),scale:'css'});
+      }
+      execFileSync('ffmpeg',['-v','error','-y','-framerate','1','-i',join(frames,'frame-%03d.png'),
+        '-filter_complex','split[a][b];[a]palettegen[p];[b][p]paletteuse=dither=bayer','-loop','0',join(capture,'context-assembly.gif')]);
+      captured.push('context-assembly.gif');
+     }finally{
+      if(dirname(frames)===resolve(out)&&basename(frames).startsWith('assembly-frames-'))rmSync(frames,{recursive:true,force:true});
+     }
+    }
+   }
    await page.close();
   }
+  captured.push(await captureAntigravity(browser,root,capture));
+  if(process.argv.includes('--dsh')) captured.push(...await captureDsh(browser,root,capture));
  }finally{await browser.close();}
  if(process.argv.includes('--publish-captures'))for(const name of captured)copyFileSync(join(capture,name),join(root,'docs/media',name));
  console.log(JSON.stringify({captures:capture,count:captured.length,published:process.argv.includes('--publish-captures')}));

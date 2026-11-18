@@ -2,13 +2,19 @@
 
 封面由 imagegen 生成。左侧的原始日志接入主干，右侧展开成枝条。[查看封面](trajectory-tree-cover.png)
 
-README 截图使用当前界面和公开合成案例，不读取用户的 DSH profile、会话或私人报告。轨迹与选区草稿来自 Pi 样例；新版总览、窗口占用、代码执行、诊断线索和报告来自两项目、四会话、64 轮的固定事件序列。Model A / B 是演示路由，不代表任何模型的实测排名。
+DSH 首页截自独立的 DSH Web rc4 profile 中实际加载的轨迹树插件。轨迹、选区、Eval 和报告使用两项目、四会话、64 轮的公开合成事件。轨迹样例中的 16 轮、60 次请求经过 DSH 的消息投影和 Token 估算，截图前会检查可见的上下文增量。Antigravity 总览使用四个虚构对话，复用插件的统计函数和界面。图中的 Model A、B、C 均为示例名称。
 
 运行 `node scripts/build-readme-media.mjs --serve 3099`，打开 `/path`、`/eval`、`/global-eval`、`/diagnosis` 或 `/report`；在路径后加 `-en` 可打开英文页面。上下文示例在 `/context`、`/assembly`。
 
-安装 `test/browser` 的 Playwright 依赖和 Chromium 后，可用 `node scripts/build-readme-media.mjs --capture` 截取 16 张中英文图片，输出到 `.dsh/readme-media/captures/`。加 `--publish-captures` 会将本次生成的图片复制到这里；不会复制其他本地素材。案例源文件在 [readme-fixtures.mjs](../../scripts/readme-fixtures.mjs)。
+复现使用 Node.js 24、DSH 0.2.2-rc.4 及其 SDK、`test/browser` 的 Playwright 和 Chromium。用 `--dsh` 启动隔离的原生 Web profile，用 `--animation` 通过 FFmpeg 将 13 个实际装配切点导出为 GIF。素材先写入 `.dsh/readme-media/captures/`，`--publish-captures` 将本次生成的图复制到本目录。[公开事件样例](../../scripts/readme-fixtures.mjs) · [原生面板截图](../../scripts/capture-readme-hosts.mjs)
+
+```sh
+node scripts/build-readme-media.mjs --capture --dsh --animation --publish-captures
+```
 
 - [轨迹树](trajectory-overview.jpg) · [English](trajectory-overview-en.jpg)
+- [DSH Eval 预设首页](dsh-preset.jpg) · [English](dsh-preset-en.jpg)
+- [Antigravity 跨对话用量](antigravity-usage.jpg)
 - [Eval 轮次对照](eval-overview.jpg) · [English](eval-overview-en.jpg)
 - [项目总览](global-eval.jpg) · [English](global-eval-en.jpg)
 - [窗口占用交叉对照](window-comparison.jpg) · [English](window-comparison-en.jpg)

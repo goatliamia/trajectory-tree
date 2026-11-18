@@ -545,6 +545,7 @@ function chronologicalContextSamples(rows) {
 return {compactTrendPolyline};
 })();
 const POLL_MS = 1500;
+const USAGE_POLL_MS = 15000;
 const $ = (id) => document.getElementById(id);
 
 const SERIES_META = [
@@ -557,6 +558,8 @@ const state = {
   selectedConv: '', // '' follows the host-bound conversation, never latest mtime
   etag: '',
   snap: null,
+  usage: null,
+  usageModel: '',
   tab: 'surface',
   filter: '',
   activeSources: new Set(SERIES_META.map((s) => s.key)),
@@ -634,7 +637,7 @@ function renderHeader(snap, conversations) {
   const select = $('conv-select');
   const hostConv = window.sidecar?.conversationId || '';
   const options = [
-    `<option value="">当前会话 (${esc(snap.shortId)} · #${snap.cutSeq})</option>`,
+    `<option value="">${state.selectedConv ? '跟随当前会话' : `当前会话 (${esc(snap.shortId)} · #${snap.cutSeq})`}</option>`,
     ...(conversations || []).map(
       (c) => `<option value="${esc(c.id)}" ${state.selectedConv === c.id ? 'selected' : ''}>${esc(c.shortId)}${c.id === hostConv ? ' (当前)' : ''}</option>`
     ),
@@ -860,18 +863,86 @@ function renderAll() {
   if (state.tab === 'steps') renderSteps(state.snap);
 }
 
+const USAGE_PARTS = [
+  ['inputTokens', '新增输入', 'var(--u-input)'], ['cacheReadTokens', '缓存读取', 'var(--u-read)'],
+  ['cacheWriteTokens', '缓存写入', 'var(--u-write)'], ['outputTokens', '模型输出', 'var(--u-output)'],
+];
+const exact = n => n == null ? '—' : n.toLocaleString('zh-CN');
+const speed = n => n == null ? '—' : n.toLocaleString('zh-CN', { maximumFractionDigits: 1 });
+
+function renderUsage(data) {
+  const t = data.totals, chats = data.conversations;
+  const select = $('usage-model');
+  select.innerHTML = '<option value="">全部模型</option>' + data.models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  select.value = data.model;
+  state.usageModel = data.model;
+  $('usage-scope').textContent = `本机全部历史 · ${exact(chats.length)} 个对话 · ${exact(t.requests)} 次请求`;
+  $('usage-content').classList.toggle('hidden', !chats.length);
+  $('u-total').textContent = exact(t.totalTokens);
+  $('u-total-note').textContent = t.completeRequests === t.requests && t.requests ? '含缓存读取与写入' : `${exact(t.completeRequests)} / ${exact(t.requests)} 次请求有完整用量`;
+  $('u-tps').textContent = speed(t.tps);
+  $('u-tps-note').textContent = t.timedRequests ? `${exact(t.timedRequests)} 次有流式计时` : '暂无流式计时样本';
+  $('u-first').textContent = t.firstTokenSeconds == null ? '—' : t.firstTokenSeconds.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+  $('u-first-note').textContent = t.firstRequests ? `${exact(t.firstRequests)} 次有首 Token 计时` : '暂无首 Token 计时样本';
+
+  const ring = $('usage-ring'), stops = [];
+  let start = 0, largest = null;
+  $('usage-legend').innerHTML = USAGE_PARTS.map(([key, label, color]) => {
+    const value = t[key], share = value == null ? '—' : pct(value, t.totalTokens);
+    if (value > 0) {
+      const end = start + value / t.totalTokens * 100;
+      stops.push(`${color} ${start}% ${end}%`);
+      start = end;
+      if (!largest || value > largest.value) largest = { label, value, share };
+    }
+    return `<li><i style="background:${color}"></i><span>${label}</span><b>${exact(value)}</b><small>${share}</small></li>`;
+  }).join('');
+  ring.style.background = stops.length ? `conic-gradient(${stops.join(',')})` : 'var(--sw-fill)';
+  ring.setAttribute('aria-label', 'Token 构成，' + USAGE_PARTS.map(([key, label]) => label + ' ' + exact(t[key])).join('，'));
+  $('u-largest-label').textContent = largest?.label || '占比';
+  $('u-largest-share').textContent = largest?.share || '—';
+
+  const max = data.byModel[0]?.tps || 1;
+  $('usage-speeds').innerHTML = data.byModel.map(m => `<li>
+    <div><span>${esc(m.name)}</span><b>${speed(m.tps)}</b></div>
+    <div class="usage-speed-detail"><span class="usage-track"><i style="width:${(m.tps ?? 0) / max * 100}%"></i></span><small>${exact(m.timedRequests)} 次测速</small></div>
+    </li>`).join('') || '<li class="usage-empty">暂无模型记录</li>';
+  $('usage-conversations').innerHTML = chats.map(c => {
+    const name = c.title || '对话 ' + c.id.slice(0, 8);
+    return `<tr><th scope="row"><button type="button" data-usage-chat="${esc(c.id)}" title="查看对话 · ${esc(name)}"><span>${esc(name)}</span><i aria-hidden="true">↗</i></button></th><td>${exact(c.requests)}</td><td title="${exact(c.totalTokens)} Token">${exact(c.totalTokens)}</td><td>${speed(c.tps)}</td></tr>`;
+  }).join('');
+  const notes = ['输出速度按有计时请求的输出 Token 总和除以流式生成总秒数计算。'];
+  if (data.sharedRequests) notes.push(`已合并 ${exact(data.sharedRequests)} 条具有相同响应 ID 的重复记录。`);
+  if (data.transcriptChats) notes.push(`本机有 ${exact(data.transcriptChats)} 个对话使用 transcript，用量以已记录分项为准。`);
+  if (data.unavailableChats) notes.push(`有 ${exact(data.unavailableChats)} 个对话暂不可读。`);
+  if (data.staleChats) notes.push(`有 ${exact(data.staleChats)} 个对话暂用上次统计。`);
+  $('usage-footnote').textContent = notes.join(' ');
+}
+
+function usageStatus(message, label, error = false) {
+  $('usage-live').classList.toggle('is-error', error);
+  $('usage-live-label').textContent = label;
+  $('usage-message').textContent = message;
+  $('usage-message').classList.toggle('hidden', !message);
+}
+
+let chooseStartTab = true;
 function switchTab(nextTab) {
+  chooseStartTab = false;
+  const wasUsage = state.tab === 'usage', isUsage = nextTab === 'usage';
   state.tab = nextTab;
+  document.querySelector('.header').classList.toggle('usage-active', isUsage);
   for (const btn of document.querySelectorAll('[data-tab]')) {
     const active = btn.dataset.tab === state.tab;
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-selected', String(active));
     btn.tabIndex = active ? 0 : -1;
   }
-  for (const name of ['surface', 'curve', 'steps']) {
+  for (const name of ['surface', 'curve', 'steps', 'usage']) {
     $('panel-' + name).classList.toggle('hidden', name !== state.tab);
   }
   state.ccInstance?.setActive(state.tab === 'surface');
+  if (wasUsage !== isUsage) poll();
   renderAll();
 }
 
@@ -897,8 +968,17 @@ async function poll() {
   pollRequest?.abort();
   const controller = new AbortController(), epoch = ++pollEpoch;
   pollRequest = controller;
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const isUsage = state.tab === 'usage';
+  const timeout = setTimeout(() => controller.abort(), isUsage ? 60000 : 12000);
   try {
+    if (isUsage) {
+      const qs = new URLSearchParams({ model: state.usageModel, etag: state.usage?.etag || '' });
+      const result = await getJson('/api/usage?' + qs, controller.signal);
+      if (epoch !== pollEpoch) return;
+      if (!result.unchanged) { state.usage = result; renderUsage(result); }
+      usageStatus(state.usage.conversations.length ? '' : '本机暂无 Antigravity 对话记录。', '已同步');
+      return;
+    }
     const conv = state.selectedConv || window.sidecar?.conversationId || '';
     const qs = new URLSearchParams({ conversationId: conv });
     if (state.etag) qs.set('etag', state.etag);
@@ -908,6 +988,7 @@ async function poll() {
       clearSnapshot('当前会话暂无请求记录，请选择要查看的会话。');
       $('conv-select').innerHTML = '<option value="">当前会话</option>' + (res.conversations || []).map(c => '<option value="' + esc(c.id) + '">' + esc(c.shortId) + '</option>').join('');
       $('live-label').textContent = '暂无记录';
+      if (chooseStartTab && !conv) switchTab('usage');
     } else {
       if (!res.unchanged) { state.etag = res.etag; state.snap = res; }
       if (state.snap) {
@@ -915,14 +996,19 @@ async function poll() {
         if (!res.unchanged) { renderAll(); ensureNativeTreemapMounted(); state.ccInstance?.refresh(0); }
       }
     }
+    chooseStartTab = false;
   } catch (error) {
     if (epoch !== pollEpoch) return;
+    if (isUsage) {
+      usageStatus(state.usage ? '更新失败，显示上次统计。' : '暂时无法读取用量，正在重试。', '读取失败', true);
+      return;
+    }
     $('live-pill').classList.add('is-error');
     $('live-label').textContent = state.snap ? '同步失败 · 保留上次读数' : '读取失败 · 正在重试';
     if (!state.snap) $('cc-host').textContent = '暂时无法读取请求记录。';
   } finally {
     clearTimeout(timeout);
-    if (epoch === pollEpoch && document.visibilityState !== 'hidden') pollTimer = setTimeout(poll, POLL_MS);
+    if (epoch === pollEpoch && document.visibilityState !== 'hidden') pollTimer = setTimeout(poll, isUsage ? USAGE_POLL_MS : POLL_MS);
   }
 }
 document.addEventListener('visibilitychange', () => {
@@ -944,6 +1030,14 @@ document.addEventListener('click', (e) => {
   const tabBtn = e.target.closest('[data-tab]');
   if (tabBtn) {
     switchTab(tabBtn.dataset.tab);
+    return;
+  }
+  const usageChat = e.target.closest('[data-usage-chat]');
+  if (usageChat) {
+    state.selectedConv = usageChat.dataset.usageChat;
+    clearSnapshot('读取会话…');
+    switchTab('surface');
+    $('tab-surface').focus();
     return;
   }
 
@@ -995,9 +1089,19 @@ $('fig-context-canvas').addEventListener('mousemove', (e) => {
 });
 
 $('conv-select').addEventListener('change', (e) => {
+  chooseStartTab = false;
   state.selectedConv = e.target.value;
   ++pollEpoch; pollRequest?.abort(); clearTimeout(pollTimer);
   clearSnapshot('读取会话…');
+  poll();
+});
+
+$('usage-model').addEventListener('change', (e) => {
+  state.usageModel = e.target.value;
+  state.usage = null;
+  $('usage-content').classList.add('hidden');
+  $('usage-scope').textContent = '本机 · 全部历史';
+  usageStatus('正在汇总所选模型…', '读取中');
   poll();
 });
 

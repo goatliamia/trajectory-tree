@@ -110,6 +110,86 @@ test('an unchanged database can recover after a transient read lock', async t =>
   assert.equal((await api.context({ etag: restored.etag })).unchanged, true);
 });
 
+const secondChat = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+function usageRecord(id, model, counts, stream, first) {
+  const duration = value => proto(field(1, Math.floor(value)), field(2, Math.round((value % 1) * 1e9)));
+  return field(1, proto(field(21, model), field(4, proto(field(11, id), ...counts.map(([k, n]) => field(k, n)))),
+    ...(stream == null ? [] : [field(12, duration(stream))]), ...(first == null ? [] : [field(11, duration(first))])));
+}
+
+test('all-history overview counts forked responses once and weights throughput by timed output and streaming seconds', async t => {
+  const f = fixture(t), parent = new DatabaseSync(f.dbPath);
+  const shared = usageRecord('response-one', 'Model A', [[2, 100], [3, 100], [4, 20], [5, 200]], 0.5, 0.25);
+  parent.prepare('UPDATE gen_metadata SET data = ? WHERE idx = 0').run(shared); parent.close();
+  const fork = new DatabaseSync(join(f.root, 'conversations', secondChat + '.db'));
+  fork.exec('CREATE TABLE gen_metadata(idx INTEGER PRIMARY KEY, data BLOB); CREATE TABLE parent_references(data BLOB)');
+  fork.prepare('INSERT INTO parent_references VALUES (?)').run(field(6, conversation));
+  const insert = fork.prepare('INSERT INTO gen_metadata VALUES (?, ?)');
+  insert.run(0, shared);
+  insert.run(1, usageRecord('response-two', 'Model B', [[2, 10], [3, 60]], 1.5, 0.75));
+  insert.run(2, usageRecord('response-three', 'Model A', [[2, 20], [3, 500]], 0, null));
+  insert.run(3, usageRecord('no-counters', 'Model B', [], null, null));
+  insert.run(4, field(7, 'injected step'));
+  fork.close();
+  const catalog = new DatabaseSync(join(f.root, 'conversation_summaries.db'));
+  catalog.exec('CREATE TABLE conversation_summaries(conversation_id TEXT, title TEXT)');
+  catalog.prepare('INSERT INTO conversation_summaries VALUES (?, ?)').run(secondChat, 'Fork title'); catalog.close();
+  const api = createContextApi({ dirs: [f.root], conversationId: secondChat });
+  const [a, b] = await Promise.all([api.usage({}), api.usage({ model: 'Model A' })]);
+  assert.equal(a.totals.requests, 4); assert.equal(a.totals.completeRequests, 3); assert.equal(a.sharedRequests, 1);
+  assert.equal(a.totals.totalTokens, 1010); assert.equal(a.totals.tps, 80); assert.equal(a.totals.timedRequests, 2);
+  assert.equal(a.totals.firstTokenSeconds, 0.5); assert.equal(a.totals.firstRequests, 2);
+  assert.equal(a.conversations.find(c => c.id === conversation).totalTokens, 420);
+  assert.equal(a.conversations.find(c => c.title === 'Fork title').totalTokens, 590);
+  assert.equal(b.totals.requests, 2); assert.equal(b.totals.outputTokens, 600); assert.equal(b.totals.tps, 200);
+  assert.equal(b.byModel.length, 1); assert.deepEqual(b.models, ['Model A', 'Model B']);
+  assert.doesNotMatch(JSON.stringify(a), /response-one|PRIVATE_|Skill body|requestId/);
+  assert.equal((await api.usage({ etag: a.etag })).unchanged, true);
+  // An archived DB without a brain directory remains selectable for detail.
+  assert.equal((await api.context({ conversationId: secondChat })).conversationId, secondChat);
+});
+
+test('overview spans the whole catalog and keeps transcript-only, zero and unknown metrics distinct', async t => {
+  const f = fixture(t);
+  for (let i = 0; i < 10; i++) {
+    const id = 'cccccccc-cccc-cccc-cccc-' + String(i).padStart(12, '0');
+    const path = join(f.root, 'brain', id, '.system_generated/logs/transcript.jsonl');
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify({ step_index: 1, type: 'PLANNER_RESPONSE', cache_write_tokens: 8, output_tokens: 0, created_at: '2026-11-01T00:00:00Z' }));
+  }
+  const api = createContextApi({ dirs: [f.root] });
+  assert.equal((await api.context({})).conversations.length, 8);
+  const all = await api.usage();
+  assert.equal(all.conversations.length, 11); assert.equal(all.transcriptChats, 10);
+  assert.equal(all.totals.totalTokens, 1220); assert.equal(all.totals.outputTokens, 40);
+  assert.equal(all.totals.tps, null); assert.equal(all.totals.firstTokenSeconds, null);
+  const db = new DatabaseSync(f.dbPath);
+  db.exec('PRAGMA journal_mode=WAL');
+  try {
+    db.prepare('INSERT INTO gen_metadata VALUES (?, ?)').run(1, usageRecord('new', 'New model', [[3, 20]], 0.5, 0));
+    const update = await api.usage({ etag: all.etag });
+    assert.equal(update.totals.totalTokens, 1240); assert.equal(update.totals.tps, 40);
+    assert.equal(update.totals.firstTokenSeconds, 0);
+    const selected = await api.usage({ model: 'New model' });
+    assert.equal(selected.totals.inputTokens, null); assert.equal(selected.totals.outputTokens, 20);
+  } finally { db.close(); }
+  const none = await createContextApi({ dirs: [] }).usage();
+  assert.equal(none.totals.totalTokens, null); assert.equal(none.conversations.length, 0);
+});
+
+test('overview retries a locked native database and replaces provisional transcript numbers', async t => {
+  const f = fixture(t), api = createContextApi({ dirs: [f.root] });
+  const db = new DatabaseSync(f.dbPath);
+  try {
+    db.exec('BEGIN EXCLUSIVE');
+    const fallback = await api.usage();
+    assert.equal(fallback.transcriptChats, 1); assert.equal(fallback.totals.totalTokens, null);
+    db.exec('ROLLBACK');
+    const recovered = await api.usage({ etag: fallback.etag });
+    assert.equal(recovered.transcriptChats, 0); assert.equal(recovered.totals.totalTokens, 1140);
+  } finally { db.close(); }
+});
+
 test('800k estimated tokens stay out of list payloads while the body remains readable', () => {
   const decoded = decodeRequest(request(), 0), body = 'x'.repeat(3_040_000);
   decoded.messages = [{ seq: 1, source: 4, content: body, calls: [] }];

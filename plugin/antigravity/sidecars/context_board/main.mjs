@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildConversationSnapshot, findAppDataDirs, listConversations, readContextBody, resolveConversation } from './context-data.mjs';
+import { createUsageOverview } from './usage-data.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const STATIC = {
@@ -18,6 +19,7 @@ export function createContextApi({ dirs = findAppDataDirs(), conversationId = ''
     return { target: resolveConversation(id, entries), entries };
   }
   return {
+    usage: createUsageOverview(dirs),
     async context(data) {
       const { target, entries } = resolve(data);
       const recent = entries.slice(0, 8);
@@ -51,6 +53,7 @@ export async function startSidecar() {
       : new Response('not found', { status: 404 }), 'GET');
   }
   app.api('/api/context', api.context, 'GET');
+  app.api('/api/usage', api.usage, 'GET');
   app.api('/api/current-context', api.currentContext, 'GET');
   app.api('/api/current-context/body', async data => {
     const result = await api.body(data);

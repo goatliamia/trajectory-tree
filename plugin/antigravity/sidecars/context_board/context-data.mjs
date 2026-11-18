@@ -19,18 +19,28 @@ export function findAppDataDirs(env = process.env, home = homedir()) {
   for (let d = env.ANTIGRAVITY_EXECUTABLE_DATA_DIR; d && d !== dirname(d); d = dirname(d)) {
     if (basename(d) === 'sidecar_data') return [dirname(d)];
   }
-  return readDir(join(home, '.gemini')).sort().map(name => join(home, '.gemini', name)).filter(p => existsSync(join(p, 'brain')));
+  return readDir(join(home, '.gemini')).sort().map(name => join(home, '.gemini', name))
+    .filter(p => existsSync(join(p, 'brain')) || existsSync(join(p, 'conversations')));
 }
 
 export function listConversations(dirs = findAppDataDirs()) {
-  return dirs.flatMap(appData => readDir(join(appData, 'brain')).filter(id => ID_RE.test(id)).map(id => {
-    const logs = join(appData, 'brain', id, '.system_generated', 'logs');
-    const path = join(logs, existsSync(join(logs, 'transcript_full.jsonl')) ? 'transcript_full.jsonl' : 'transcript.jsonl');
-    const dbPath = join(appData, 'conversations', id + '.db');
-    const mtime = Math.max(...[path, dbPath, dbPath + '-wal'].map(p => { try { const s = statSync(p); return p.endsWith('-wal') && s.size <= 32 ? 0 : s.mtimeMs; } catch { return 0; } }));
-    return { id, path, dbPath, mtime };
-  })).filter(e => e.mtime > 0).sort((a, b) => b.mtime - a.mtime);
+  const entries = new Map();
+  for (const appData of dirs) {
+    const databases = readDir(join(appData, 'conversations')).filter(name => name.endsWith('.db')).map(name => name.slice(0, -3));
+    const ids = new Set([...readDir(join(appData, 'brain')), ...databases]);
+    for (const id of ids) {
+      if (!ID_RE.test(id)) continue;
+      const logs = join(appData, 'brain', id, '.system_generated', 'logs');
+      const path = join(logs, existsSync(join(logs, 'transcript_full.jsonl')) ? 'transcript_full.jsonl' : 'transcript.jsonl');
+      const dbPath = join(appData, 'conversations', id + '.db');
+      const mtime = Math.max(...[path, dbPath, dbPath + '-wal'].map(p => { try { const s = statSync(p); return p.endsWith('-wal') && s.size <= 32 ? 0 : s.mtimeMs; } catch { return 0; } }));
+      if (mtime > (entries.get(id)?.mtime ?? 0)) entries.set(id, { id, path, dbPath, mtime, appData });
+    }
+  }
+  return [...entries.values()].sort((a, b) => b.mtime - a.mtime);
 }
+
+export const conversationVersion = entry => `${entry.id}:${[entry.path, entry.dbPath, entry.dbPath + '-wal'].map(stamp).join(':')}`;
 
 export function resolveConversation(id, entries = listConversations()) {
   // An explicit or host-bound session must never fall through to another chat.
@@ -92,20 +102,23 @@ export function projectContext(request, stepTypes = new Map()) {
   return { context: { available: Boolean(request?.hasPrompt), bodyAvailable: true, contextWindow: null, totals, items }, fullBodies };
 }
 
+export function transcriptTokens(row) {
+  const count = value => (typeof value === 'number' || (typeof value === 'string' && value.trim())) &&
+    Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+  const input = count(row.input_tokens), read = count(row.cache_read_tokens), write = count(row.cache_write_tokens);
+  const reported = input != null || read != null || write != null;
+  return { inputTokens: reported ? input ?? 0 : null, cacheReadTokens: reported ? read ?? 0 : null,
+    cacheWriteTokens: reported ? write ?? 0 : null, outputTokens: count(row.output_tokens) };
+}
 function transcriptRequest(row, index) {
-  const reported = row.input_tokens != null || row.cache_read_tokens != null || row.cache_write_tokens != null;
-  const inputTokens = reported ? Number(row.input_tokens) || 0 : null;
-  const cacheReadTokens = reported ? Number(row.cache_read_tokens) || 0 : null;
-  const cacheWriteTokens = reported ? Number(row.cache_write_tokens) || 0 : null;
+  const tokens = transcriptTokens(row);
   return { index, seq: row.step_index, at: row.created_at || '',
-    inputTokens, cacheReadTokens, cacheWriteTokens,
-    outputTokens: row.output_tokens == null ? null : Number(row.output_tokens),
-    windowTokens: reported ? inputTokens + cacheReadTokens + cacheWriteTokens : null,
+    ...tokens, windowTokens: tokens.inputTokens == null ? null : tokens.inputTokens + tokens.cacheReadTokens + tokens.cacheWriteTokens,
     hasPrompt: false, messages: [], tools: [], sections: [] };
 }
 
 export async function buildConversationSnapshot(entry) {
-  const fileVersion = `${entry.id}:${[entry.path, entry.dbPath, entry.dbPath + '-wal'].map(stamp).join(':')}`;
+  const fileVersion = conversationVersion(entry);
   const prior = cache.get(entry.path);
   if (prior?.version === fileVersion) return prior;
   const rows = rowsOf(entry.path), bySeq = new Map(rows.map(r => [r.step_index, r]));

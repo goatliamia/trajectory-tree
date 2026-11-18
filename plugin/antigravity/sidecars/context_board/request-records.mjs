@@ -57,6 +57,57 @@ function integers(map, key) {
   });
 }
 
+function tokenCounts(usage) {
+  // A usage message can contain just the model and provider after a cancelled request.
+  const inputReported = [2, 4, 5].some(key => usage.has(key));
+  return {
+    inputTokens: inputReported ? number(usage, 2) : null,
+    cacheWriteTokens: inputReported ? number(usage, 4) : null,
+    cacheReadTokens: inputReported ? number(usage, 5) : null,
+    outputTokens: number(usage, 3, null),
+  };
+}
+
+function durationSeconds(model, key) {
+  if (!model.has(key)) return null;
+  const duration = first(model, key);
+  const seconds = duration.get(1)?.[0]?.value ?? 0n;
+  const nanos = duration.get(2)?.[0]?.value ?? 0n;
+  if (typeof seconds !== 'bigint' || typeof nanos !== 'bigint' ||
+      seconds > 315576000000n || nanos >= 1000000000n) return null;
+  return Number(seconds) + Number(nanos) / 1e9;
+}
+
+// Only the recorded counters, timing and identity are needed for the overview.
+// Skipping the nested prompt and response-header fields also keeps bodies out of its cache.
+export async function readUsageRecords(path) {
+  const { DatabaseSync } = await import('node:sqlite');
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    db.exec('BEGIN');
+    const records = [], parents = new Set();
+    if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='parent_references'").get()) {
+      for (const row of db.prepare('SELECT data FROM parent_references').iterate()) {
+        const parentId = text(fields(row.data), 6); // The recorded parent conversation (cascade) ID.
+        if (parentId) parents.add(parentId);
+      }
+    }
+    for (const row of db.prepare('SELECT data FROM gen_metadata ORDER BY idx').iterate()) {
+      const model = first(fields(row.data), 1);
+      if (!model.size) continue;
+      const usage = first(model, 4), modelId = number(usage, 1) || number(model, 3);
+      const responseId = text(usage, 11) || text(usage, 7);
+      records.push({
+        requestId: responseId ? number(usage, 6) + '/' + responseId : null,
+        model: text(model, 21) || text(model, 19) || text(model, 22) || (modelId ? '模型 #' + modelId : '未记录模型'),
+        ...tokenCounts(usage),
+        firstTokenSeconds: durationSeconds(model, 11), streamSeconds: durationSeconds(model, 12),
+      });
+    }
+    return { records, parents: [...parents] };
+  } finally { db.close(); }
+}
+
 export function decodeRequest(data, index) {
   const record = fields(data), model = first(record, 1), usage = first(model, 4);
   const start = first(model, 9), window = first(start, 10), time = first(start, 4);
@@ -65,10 +116,7 @@ export function decodeRequest(data, index) {
     index, seq: indices[0] ?? number(start, 1, null),
     checkpoint: stepNumber(start, 2),
     at: number(time, 1) > 0 ? new Date(number(time, 1) * 1000).toISOString() : '',
-    inputTokens: usage.size ? number(usage, 2) : null,
-    outputTokens: usage.size ? number(usage, 3) : null,
-    cacheWriteTokens: usage.size ? number(usage, 4) : null,
-    cacheReadTokens: usage.size ? number(usage, 5) : null,
+    ...tokenCounts(usage),
     contextWindow: number(window, 4, null),
     system: text(model, 1),
     sections: nested(model, 16).map(s => ({ title: text(s, 1), content: text(s, 2), tokenType: number(s, 6) })),

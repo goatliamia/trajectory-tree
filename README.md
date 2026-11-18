@@ -15,7 +15,7 @@
 
 开发与审查：[PR 关系诊断与原生回归](docs/relation-ci.md)。
 
-> 截图来自可复现的公开合成案例，不含私人对话。示例中的 Model A / B 用来演示模型对照。[素材与复现](docs/media/README.md)
+> 截图使用独立的 DSH 示例配置和公开合成对话。图中的模型名称、用量和速度用于演示。[素材与复现](docs/media/README.md)
 
 ## 轨迹树
 
@@ -35,10 +35,12 @@ Eval 从日常任务的记录中提取指标，与轨迹树共用数据和切点
 - **加载项管理与上下文重合（Context Overlap）**：按预设独立停用或恢复 Skill（提供可撤回覆盖与缓存影响说明）；跨系统提示、`AGENTS.md`、工具说明与 Skill 自动做 64 字符 winnowing 精确重合检测，并排展示共同原句、覆盖比例与 `L1 ↔ L2` 行号对照。
 - **窗口占用与统一处置矩阵**：按 `5%` 窗口占用刻度拖选或点选区间，将反馈频次、窗口分布、调用耗时与请求等待直接编码进四类处置方向，筛选与选区跨刷新保留。
 
-![项目总览：任务推进、目标、交付与模型对照](docs/media/global-eval.jpg)
+![DSH Eval 的静态内容分布图，各色块展示当前预设的工具、指令与 Skill](docs/media/dsh-preset.jpg)
 
 <details>
 <summary>窗口占用的交叉对照与单会话指标</summary>
+
+![跨会话执行记录中的任务推进、目标和模型对照](docs/media/global-eval.jpg)
 
 ![按模型和窗口占用区间对照请求与工具结果](docs/media/window-comparison.jpg)
 
@@ -110,7 +112,7 @@ Eval 从日常任务的记录中提取指标，与轨迹树共用数据和切点
 
 Pi、Codex 和 Claude Code 的轨迹生成入口也接受 `--eval`、`--overview` 或 `--code`。DSH 直接使用常驻面板。[完整宿主入口](docs/host-entrypoints.md)
 
-Antigravity 提供独立的[上下文与用量前端侧栏](plugin/antigravity/README.md)：读取最近请求中的系统提示、工具定义和消息，沿用七类缩放矩阵，来源文本估算与实报用量分开展示。该接入只包含前端，不注册工具能力或 skill。
+Antigravity 的「上下文与用量」侧栏可查看最近一次请求，也能跨对话统计 Token、输出速度和首 Token 等待时间。[侧栏与统计口径](plugin/antigravity/README.md)
 
 <details>
 <summary><strong>DSH · 原生插件与分析面板</strong></summary>
@@ -193,11 +195,15 @@ claude --plugin-dir ./dist/trajectory-tree-claude
 <details>
 <summary><strong>Antigravity · 上下文与用量前端插件</strong></summary>
 
+将 ZIP 中的 `trajectory-tree` 目录解压到 `~/.gemini/config/plugins/`，或从仓库根目录运行下方命令。[下载 Antigravity 1.1.0 安装包](https://github.com/goatliamia/trajectory-tree/releases/download/v0.2.7/trajectory-tree-antigravity-1.1.0.zip)
+
 ```sh
 node scripts/install-antigravity.mjs
 ```
 
 需要 Node.js 24+。刷新宿主插件或重启后，在会话顶部 `+` 菜单打开「上下文与用量」。矩阵支持滚轮缩放、拖动、搜索和正文懒读；趋势与对照使用已记录请求的输入、缓存和输出。页面隐藏后暂停轮询。
+
+![Antigravity 用量总览，按模型查看 Token 构成、输出速度和对话明细](docs/media/antigravity-usage.jpg)
 
 [安装、数据口径与维护](plugin/antigravity/README.md)
 

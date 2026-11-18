@@ -1,5 +1,7 @@
 // Public, deterministic showcase data. No user profiles, transcripts or models.
 import {buildTracePayload} from '../plugin/analysis-view/lib/trace-build.js';
+import {traceContext} from '../plugin/analysis-view/lib/trace-context.js';
+import {readRequestContext} from '../plugin/analysis-view/lib/trace/shared/request-context.mjs';
 import {buildEvalData,diagnosisSource} from '../plugin/analysis-view/lib/eval/data.mjs';
 import {createRuntimeMetrics} from '../plugin/analysis-view/lib/eval-evidence.js';
 import {createOverviewModels,overviewCategories} from '../plugin/analysis-view/lib/eval/overview/shared.mjs';
@@ -17,28 +19,31 @@ const runtime={pressure,stream:{isTokenDelta:chunk=>chunk.type==='text-delta',ch
 function eventsFor(index){
   const events=[],route={provider:'example',model:index%2?'Model B':'Model A'};
   let clock=epoch+index*86400000,callId=0;
-  const add=(type,data,elapsed=30)=>{clock+=elapsed;events.push({seq:events.length,time:clock,type,data});};
-  add('request/header',{header:{config:route}});
+  const messageTypes=new Set(['user/message','system/message','assistant/message','tool/result']);
+  const add=(type,data,elapsed=30)=>{clock+=elapsed;events.push({seq:events.length,time:clock,type,data,...(messageTypes.has(type)?{surfaceOp:'append'}:{})});};
+  add('request/header',{header:{config:route,tools:['read','edit','pwsh'].map(name=>({name,description:'Billing project '+name,inputSchema:{type:'object'}}))}});
+  add('system/message',{message:{role:'system',content:[{type:'text',text:'Work in the billing project. Verify the CSV export with the project tests.'}]}});
   add('session/title',{title:index<2?'Invoice export':'Documentation preview'});
   for(let turn=1;turn<=16;turn++){
     clock+=60000+(turn%3)*12000;
     add('request/context',{...route,contextWindow:256000});
-    add('turn/start',{turn});add('user/message',{turn,content:[{type:'text',text:turn===1?'Implement the CSV export and verify it.':'Check the recorded change and continue.'}]});
+    add('turn/start',{turn});add('user/message',{turn,role:'user',source:{kind:'user'},content:[{type:'text',text:turn===1?'Implement the CSV export and verify it.':'Check the recorded change and continue.'}]});
     if(turn===1)add('goal/change',{operation:'create',goal:{id:'export-check',objective:'Verify the CSV export',phase:'active'}});
     const step=(number,name,args,output,error,elapsed=200,ptc=false)=>{
       const id='c'+(++callId),loc={turn,step:number},input=18000+((turn+index)%6)*36000;
       add('step/start',loc);
       add('assistant/live-chunk',{...loc,chunk:{type:'text-delta',text:'Checking the implementation.'}},500+(index%2)*350+(turn%4)*130);
-      add('assistant/message',{...loc,message:{source:{kind:'model',...route},content:[{type:'text',text:'Checking the implementation.'},{type:'tool-call',id,name:ptc?'run_code':name}]},
+      const toolArgs=ptc?{code:'await tools.pwsh('+JSON.stringify(args)+')'}:args;
+      add('assistant/message',{...loc,message:{role:'assistant',source:{kind:'model',...route},content:[{type:'text',text:'Checking the implementation.'},{type:'tool-call',id,name:ptc?'run_code':name,arguments:JSON.stringify(toolArgs)}]},
         usage:{inputTokens:Math.round(input*.3),cacheReadTokens:Math.round(input*.7),cacheWriteTokens:0,outputTokens:160+turn*28+number*37},
         stream:[{type:'chunk',time:clock,chunk:{type:'text-delta',text:'Checking the implementation.'}}]},900+(turn%3)*200);
-      add('tool/call',{...loc,callId:id,name:ptc?'run_code':name,arguments:ptc?{code:'await tools.pwsh('+JSON.stringify(args)+')'}:args});
+      add('tool/call',{...loc,callId:id,name:ptc?'run_code':name,arguments:toolArgs});
       if(ptc){
         add('tool/ptc-dispatch-start',{...loc,rootCallId:id,subCallId:id+'-child',name,arguments:args});
         add('tool/ptc-dispatch',{...loc,rootCallId:id,subCallId:id+'-child',name,arguments:args,isError:Boolean(error),error,
           content:[{type:'text',text:output}]},elapsed);
       }
-      add('tool/result',{...loc,callId:id,message:{toolCallId:id,isError:!ptc&&Boolean(error),content:[{type:'text',text:ptc?'Child call returned.':output}]},...(!ptc&&error?{error}:{})},ptc?30:elapsed);
+      add('tool/result',{...loc,callId:id,message:{role:'tool',source:{kind:'tool',callId:id},toolCallId:id,isError:!ptc&&Boolean(error),content:[{type:'text',text:ptc?'Child call returned.':output}]},...(!ptc&&error?{error}:{})},ptc?30:elapsed);
       add('step/end',loc);
     };
     step(1,'read',{path:'src/invoice.ts'},'export function total(rows) { return rows.reduce((n, row) => n + row.amount, 0); }');
@@ -68,14 +73,21 @@ function eventsFor(index){
   return events;
 }
 
-export function publicEvalShowcase(locale='zh-CN'){
+export async function publicEvalShowcase(locale='zh-CN'){
   const en=locale==='en',say=(zh,english)=>en?english:zh,catalog=createOverviewModels();
   const sources=Array.from({length:4},(_,index)=>({id:'showcase-session-'+(index+1),events:eventsFor(index),project:index<2?0:1}));
   const sessions=sources.map(({id,events,project})=>({...projectOverviewSession(id,events,{cwd:project?'/example/docs':'/example/billing'},catalog,runtime),project,synthetic:true}));
   if(sessions.some(session=>session.turns.some(turn=>turn.requests.some(request=>request.input==null||!request.window))))throw Error('Public window comparison requires paired request usage and capacity');
   const latest=Math.max(...sessions.flatMap(session=>session.turns.map(turn=>turn.at)));
   const overview=renderOverviewPage({locale,data:{host:'dsh',projects:[{name:'billing-api'},{name:'docs-preview'}],sessions,models:catalog.models,categories:overviewCategories,latest}});
-  const selected=sources[0],trace=buildTracePayload(selected.events,selected.id,{cwd:'/example/billing'}).sessions[0];
+  const selected=sources[0],tracePayload=buildTracePayload(selected.events,selected.id,{cwd:'/example/billing'}),trace=tracePayload.sessions[0];
+  const series=await readRequestContext(selected.events);
+  tracePayload.context=traceContext(selected.events,tracePayload,series);
+  tracePayload.officialStats={context:{pressure:series.pressure}};
+  const retained=tracePayload.context.requests;
+  const responseCount=selected.events.filter(event=>event.type==='assistant/message').length;
+  if(!series.current?.total || retained.length!==responseCount || new Set(retained.map(row=>row.turn)).size!==trace.turns.length || !tracePayload.context.fileOperations.length)
+    throw Error('README trace requires a retained context sample for every recorded response and the recorded file operations.');
   const args=new Map(selected.events.filter(row=>row.type==='tool/call'||row.type==='tool/ptc-dispatch').map(row=>[row.seq,row.data.arguments]));
   const data=buildEvalData(trace,createRuntimeMetrics(trace,{events:selected.events}),{argumentsBySeq:args});
   const evaluation=renderEvalPage(data,{mode:'dsh',locale,integrated:true,diagnosis:diagnosisSource(trace,data)});
@@ -96,5 +108,5 @@ export function publicEvalShowcase(locale='zh-CN'){
     '# The guarded edit recovered; the recorded tests passed\n\nPublic synthetic example · This report and its charts share one frozen session cut. Model A and Model B are illustrative routes.\n\n> **Core judgment & exit**: The file read guard blocked an unrecorded edit in Turn 2, which self-healed within the same turn after reading the target file and passing all 8 unit tests (**No-Action Exit** for the guard; **Repair** for the CSV header omission).\n\n[[figure:overviewMetrics]]\n\n## The guarded edit recovered in the same turn\n\nThe read guard rejected the initial edit. A subsequent read of `src/export.ts` was followed by the same-input edit returning successfully and all eight recorded tests passing.\n\n[[figure:flow]]\n\n## [pair] Window occupancy and tool breakdown\n\nRequests are counted once in their recorded occupancy bands, while signal groups and tool tables separate self-healed file guards from test failures and long preview runs.\n\n[[figure:windows]]\n\n[[figure:errors]]\n\n[[figure:tools]]\n\n## [actions] Disposition and verification\n\n1. **No action needed (`FS_NOT_OBSERVED`)**: Self-corrected within Turn 2 after reading `src/export.ts` and verified by `test/export.test.mjs`.\n2. **Keep CSV header fix (`src/invoice.ts`)**: Verified in the original test runner (`pass 8, fail 0`).':
     '# 读取保护后的修改已同轮恢复，原测试全部通过\n\n公开合成案例 · 报告与图表共用同一会话切点，Model A / Model B 仅为演示路由。\n\n> **核心判断与出口**：第 2 轮修改因未读保护被拦截，随后同轮补读 `src/export.ts` 并以原参数完成修改、通过 8 项单元测试（**无需处置出口**）；CSV 表头缺失已在 `src/invoice.ts` 修复并完成原链验收。\n\n[[figure:overviewMetrics]]\n\n## 从保护拦截到同轮验收\n\n读取保护拦截初次修改后，记录显示先读取同一目标文件，再以原参数修改成功，随后八项测试全部通过。\n\n[[figure:flow]]\n\n## [pair] 窗口占用与信号拆解\n\n每个请求计入对应的窗口占用档位；下方信号与工具表将已同轮自愈的保护拦截、测试断言失败与长耗时预览任务分开统计。\n\n[[figure:windows]]\n\n[[figure:errors]]\n\n[[figure:tools]]\n\n## [actions] 处置出口与原链验证\n\n1. **无需处置（`FS_NOT_OBSERVED` 单步自愈）**：第 2 轮已补读 `src/export.ts` 并完成同参修改，无需追加常驻规则。\n2. **保留代码修复（`src/invoice.ts` 表头补齐）**：已在原执行器运行 `node --test test/export.test.mjs` 验证通过（`pass 8, fail 0`）。';
   const report=renderReport({locale,markdown,datasets:{...tables,recovery:records},figures,template:'diagnostic'}).html;
-  return {overview,evaluation,report,sessions:sessions.length,turns:sessions.reduce((n,session)=>n+session.turns.length,0)};
+  return {overview,evaluation,report,tracePayload,sessions:sessions.length,turns:sessions.reduce((n,session)=>n+session.turns.length,0)};
 }

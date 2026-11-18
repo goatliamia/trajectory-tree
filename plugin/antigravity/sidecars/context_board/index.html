@@ -21,6 +21,9 @@
           <span id="live-dot" class="live-dot" aria-hidden="true"></span>
           <span id="live-label">实时</span>
         </span>
+        <span id="usage-live" class="live" role="status" title="总览可见时每 15 秒检查更新">
+          <span class="live-dot" aria-hidden="true"></span><span id="usage-live-label">读取中</span>
+        </span>
       </div>
 
       <!-- Single-Row Quiet Official Token Metric Strip -->
@@ -54,6 +57,7 @@
         <button type="button" role="tab" id="tab-surface" aria-controls="panel-surface" data-tab="surface" class="tab active" aria-selected="true">上下文构成</button>
         <button type="button" role="tab" id="tab-curve" aria-controls="panel-curve" data-tab="curve" class="tab" aria-selected="false" tabindex="-1">趋势与对照</button>
         <button type="button" role="tab" id="tab-steps" aria-controls="panel-steps" data-tab="steps" class="tab" aria-selected="false" tabindex="-1">请求记录 <span id="step-count" class="tab-count"></span></button>
+        <button type="button" role="tab" id="tab-usage" aria-controls="panel-usage" data-tab="usage" class="tab" aria-selected="false" tabindex="-1">用量总览</button>
       </nav>
     </header>
 
@@ -99,6 +103,43 @@
           <input id="step-filter" type="search" class="search-input" aria-label="过滤请求记录" placeholder="过滤工具名或 #序号…" autocomplete="off">
         </div>
         <div id="step-feed" class="step-feed"></div>
+      </section>
+
+      <section id="panel-usage" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-usage">
+        <div class="usage-heading">
+          <div><h2>跨对话用量</h2><p id="usage-scope">本机 · 全部历史</p></div>
+          <label class="usage-filter">模型<select id="usage-model"><option value="">全部模型</option></select></label>
+        </div>
+        <p id="usage-message" class="usage-message" role="status">正在汇总本机请求记录…</p>
+        <div id="usage-content" class="hidden">
+          <div class="usage-metrics">
+            <div class="usage-total"><span>累计 Token</span><strong id="u-total">—</strong><small id="u-total-note"></small></div>
+            <div title="有计时请求的输出 Token 之和 ÷ 对应流式生成秒数之和"><span>输出速度</span><strong><b id="u-tps">—</b> <em>tok/s</em></strong><small id="u-tps-note"></small></div>
+            <div title="宿主记录的首 Token 等待时长的算术平均"><span>平均首 Token 等待</span><strong><b id="u-first">—</b> <em>秒</em></strong><small id="u-first-note"></small></div>
+          </div>
+          <div class="usage-charts">
+            <figure class="usage-card">
+              <figcaption>Token 构成</figcaption>
+              <div class="usage-composition">
+                <div class="usage-ring" id="usage-ring" role="img" aria-label="Token 构成">
+                  <div class="usage-ring-center"><small id="u-largest-label"></small><strong id="u-largest-share">—</strong></div>
+                </div>
+                <ul class="usage-legend" id="usage-legend"></ul>
+              </div>
+            </figure>
+            <figure class="usage-card">
+              <figcaption>各模型输出速度 <small>tok/s</small></figcaption>
+              <ul id="usage-speeds" class="usage-speeds"></ul>
+            </figure>
+          </div>
+          <section class="usage-history">
+            <h3>对话明细 <small>按 Token 用量排序</small></h3>
+            <table><thead><tr><th scope="col">对话</th><th scope="col">请求</th><th scope="col">Token</th><th scope="col">tok/s</th></tr></thead>
+              <tbody id="usage-conversations"></tbody>
+            </table>
+          </section>
+          <p id="usage-footnote" class="usage-footnote"></p>
+        </div>
       </section>
     </main>
   </div>

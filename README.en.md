@@ -13,7 +13,7 @@
 <p align="center"><code>DSH</code> &nbsp; <code>Pi</code> &nbsp; <code>Codex</code> &nbsp; <code>Claude Code</code></p>
 <p align="center"><a href="#antigravity"><code>Antigravity · Context sidebar</code></a></p>
 
-> Screenshots use reproducible public synthetic examples, with no private conversations. Model A / B illustrate comparisons. [Media and reproduction](docs/media/README.md)
+> Screenshots use an isolated DSH profile and public synthetic conversations. Model names, usage and speeds in the examples are illustrative. [Media and reproduction](docs/media/README.md)
 
 ## Trajectory tree
 
@@ -33,10 +33,12 @@ Eval extracts metrics from everyday tasks using the same trace data and cut as t
 - **Capability management and context overlap**: Enable or disable Skills per preset with reversible overrides and cache-impact previews; automatically detect exact 64-character winnowing overlaps across system prompts, `AGENTS.md`, tool descriptions and Skills with shared quotes, coverage ratios and `L1 ↔ L2` line comparisons.
 - **Window occupancy and unified disposition matrix**: Drag or click `5%` window occupancy bins to encode feedback counts, window distributions, call latency and request wait times directly across the four disposition directions.
 
-![Project overview with task progress, goals, deliverables and model comparisons](docs/media/global-eval-en.jpg)
+![DSH Eval’s interactive treemap of tools, instructions and Skills in the active preset](docs/media/dsh-preset-en.jpg)
 
 <details>
 <summary>Window occupancy comparisons and session metrics</summary>
+
+![Task progress, goals and model comparisons across session records](docs/media/global-eval-en.jpg)
 
 ![Compare request and tool outcomes by model and window occupancy](docs/media/window-comparison-en.jpg)
 
@@ -108,7 +110,7 @@ Run commands from the repository root. The plugin packages declare Node.js 18+, 
 
 The trajectory generation entry in Pi, Codex and Claude Code also accepts `--eval`, `--overview` or `--code`. DSH uses its persistent panels. [All host entry points](docs/host-entrypoints.md)
 
-Antigravity has a separate [context and usage frontend plugin](plugin/antigravity/README.md). It reads the latest request's recorded system sections, tool definitions and messages into the shared seven-category zoomable treemap. Visible text estimates remain separate from reported usage. This integration adds a frontend only, with no tools or skills.
+Antigravity's context and usage sidebar shows the latest request and aggregates token counts, streaming output speed and time to first token across local conversations. [Panel and metric definitions](plugin/antigravity/README.md)
 
 <details>
 <summary><strong>DSH · Native plugins and analysis panel</strong></summary>
@@ -191,6 +193,8 @@ Use `/trajectory-tree:trajectory-view` or `/trajectory-tree:trajectory-eval` to 
 <details>
 <summary><strong>Antigravity · Context and usage frontend</strong></summary>
 
+Extract the `trajectory-tree` folder from the ZIP into `~/.gemini/config/plugins/`, or run the command below from the repository root. [Download Antigravity 1.1.0](https://github.com/goatliamia/trajectory-tree/releases/download/v0.2.7/trajectory-tree-antigravity-1.1.0.zip)
+
 ```sh
 node scripts/install-antigravity.mjs
 ```
@@ -198,6 +202,8 @@ node scripts/install-antigravity.mjs
 Requires Node.js 24+. Refresh plugins or restart the host, then open **上下文与用量** from the conversation header's `+` menu. Zoom, pan, search and load exact source text on demand. Request trends compare recorded input, cache and output. Polling pauses while the page is hidden.
 
 [Installation, data semantics and maintenance](plugin/antigravity/README.md)
+
+![Antigravity’s Chinese-language usage panel showing token mix, model speeds and per-conversation totals](docs/media/antigravity-usage.jpg)
 
 </details>
 
