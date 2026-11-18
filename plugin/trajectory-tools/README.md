@@ -168,6 +168,16 @@ reply should end with the two lines, and the host log gains one `compaction reco
 
 ### Install (permanent, not a dynamic plugin)
 
+```sh
+dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path:/plugin/trajectory-tools"
+```
+
+The `#path:` fragment names this package inside the repository. The repository URL on its own is
+rejected: the root has no `package.json`, so pnpm resolves an empty `trajectory-tree@0.0.0` and the
+host reports that the package declares no bundle.
+
+Without the host CLI:
+
 ```text
 1. pnpm pack                      # -> dsh-trajectory-tools-0.6.0.tgz
 2. in ~/.dsh/profiles/web/package.json:
@@ -344,6 +354,14 @@ import { ENTRY_PROMPTS } from 'dsh-trajectory-tools/prompts';
 只有真的发生过压缩它才说话,所以平时沉默是正常的。想马上看到,不用等真的压满:在会话里 `/compact`,然后随便回一句话 —— 那一轮的回复结尾应该多出那两行,host 日志里同时多一行 `compaction reconcile`。
 
 ### 安装(常驻,非动态插件)
+
+```sh
+dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path:/plugin/trajectory-tools"
+```
+
+`#path:` 指向仓库里的这个包目录。直接填仓库地址装不上：根目录没有 `package.json`，pnpm 只会装出一个空的 `trajectory-tree@0.0.0`，宿主会提示「这个包没有声明组合包」。
+
+不用宿主命令行时：
 
 ```text
 1. pnpm pack                      # 生成 dsh-trajectory-tools-0.6.0.tgz

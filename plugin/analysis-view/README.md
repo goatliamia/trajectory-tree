@@ -60,6 +60,13 @@ Open **Detailed metrics** for the session overview and the optional interpretati
 Install into your DSH Web profile and restart DSH Web.
 
 ```sh
+dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path:/plugin/analysis-view"
+```
+
+The `#path:` fragment names this package inside the repository; the repository URL on its own is
+rejected because the root has no `package.json`. To install from a local checkout instead:
+
+```sh
 npm pack ./plugin/analysis-view
 dsh plugin --profile web add ./dsh-analysis-view-0.11.1.tgz
 ```
@@ -135,6 +142,12 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
 ### 安装
 
 安装到 DSH 的 Web profile 后重启 `dsh web`。
+
+```sh
+dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path:/plugin/analysis-view"
+```
+
+`#path:` 指向仓库里的这个包目录；直接填仓库地址装不上，因为根目录没有 `package.json`。要从本地检出安装：
 
 ```sh
 npm pack ./plugin/analysis-view
