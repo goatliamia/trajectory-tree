@@ -389,9 +389,10 @@ async function checkPowerShellDraft(page) {
 }
 
 async function checkCommands(page) {
-  await page.goto(commandUrl);
+  await page.goto(commandUrl, { waitUntil: 'commit' });
   const select = (dimension, value) => page.locator('[data-filter="' + dimension + '"][data-value="' + value + '"]');
   const rows = page.locator('#rows [data-seq]');
+  await rows.first().waitFor({ state: 'visible' });
   await select('turn', '1').click();
   await select('duration', '0').click();
   await select('reason', 'syntax').click();
@@ -594,12 +595,23 @@ for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
     await checkEval(page);
     await checkPowerShellDraft(page);
     await checkTurnComparison(page);
-    await checkCommands(page);
     await checkReport(page);
     await checkCodeExecution(page);
     await checkFindings(page);
     await checkStreamingOverview(page);
     assert.deepEqual(dshRequests, [], 'Frozen and portable pages do not request live DSH stages');
     assert.deepEqual(errors, [], 'No renderer errors');
+  });
+
+  // Windows WebKit can spend several seconds on each input action for file URLs.
+  const offlineTimeout = name === 'webkit' && process.platform === 'win32' ? 180_000 : 90_000;
+  test(name + ' opens the standalone command diagnostics file', { timeout: offlineTimeout }, async t => {
+    const browser = await engine.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await checkCommands(page);
+    assert.deepEqual(errors, [], 'No offline renderer errors');
   });
 }

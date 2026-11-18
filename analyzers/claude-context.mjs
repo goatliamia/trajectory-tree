@@ -45,19 +45,43 @@ function messageParts(message, skillCalls) {
 // Resolve every reference before publishing an estimate.
 export function claudeRequestContext(native, session, byEntry, events) {
   const messages = new Map(), groups = new Map(), shapes = new Map(), states = new Map(), skillCalls = new Set();
+  const references = new Set(native.rows.filter(row => row.type === 'api-request' && Array.isArray(row.tail)).flatMap(row => row.tail));
+  function indexMessage(message, declaredHash) {
+    const key = digest(message);
+    if (references.has(key) && (declaredHash === undefined || declaredHash === key)) messages.set(key, message);
+  }
+  let userMessages = [];
+  function finishUserRun() {
+    if (userMessages.length > 1) indexMessage({ role: 'user', content: userMessages.flatMap(message => blocks(message.content)) });
+    userMessages = [];
+  }
   for (const row of native.rows) {
+    if (row.type === 'assistant' || row.type === 'api-request') finishUserRun();
+    // Claude can reference native user records directly, including consecutive
+    // tool results and text sent together as a single API message.
+    if (row.type === 'user' && row.message) {
+      const message = { role: 'user', content: row.message.content };
+      indexMessage(message);
+      if (typeof message.content === 'string') indexMessage({ ...message, content: blocks(message.content) });
+      userMessages.push(message);
+    }
     if (row.type !== 'assistant' || !row.message?.id) continue;
     const group = groups.get(row.message.id) || { role: 'assistant', content: [] };
     group.content.push(...blocks(row.message.content)); groups.set(row.message.id, group);
     const message = { role: 'assistant', content: blocks(row.message.content) };
-    messages.set(digest(message), message);
+    indexMessage(message);
     for (const block of message.content) if (block.type === 'tool_use' &&
       (block.name === 'Skill' || block.name === 'Read' && /(?:^|[\\/])SKILL\.md$/i.test(block.input?.file_path || ''))) skillCalls.add(block.id);
   }
-  for (const message of groups.values()) messages.set(digest(message), message);
+  finishUserRun();
+  for (const message of groups.values()) indexMessage(message);
   for (const row of native.rows) {
     if (row.type === 'api-request-shape' && row.shape && digest(row.shape) === row.shapeHash) shapes.set(row.shapeHash, row.shape);
-    if (row.type === 'api-request-blob' && row.message && digest(row.message) === row.hash) messages.set(row.hash, row.message);
+    if (row.type === 'api-request-blob' && row.message && typeof row.hash === 'string') {
+      indexMessage(row.message, row.hash);
+      // Some system blobs store plain text but reference the equivalent text block.
+      if (typeof row.message.content === 'string') indexMessage({ ...row.message, content: blocks(row.message.content) }, row.hash);
+    }
   }
   const anchors = new Map(), requestSeqs = new Map();
   for (const event of events.values()) {
@@ -80,11 +104,15 @@ export function claudeRequestContext(native, session, byEntry, events) {
     if (!row.id || !Number.isFinite(Date.parse(row.timestamp))) reason = 'invalid-request-anchor';
     else if (!Number.isInteger(row.keep) || row.keep < 0 || row.keep > (prior?.length ?? 0)) reason = 'missing-or-invalid-base';
     else if (!Array.isArray(row.tail) || row.tail.some(key => typeof key !== 'string')) reason = 'invalid-message-tail';
-    else if (!shape || !Array.isArray(shape.tools) || !Array.isArray(shape.system) && typeof shape.system !== 'string') reason = 'missing-or-invalid-shape';
     const hashes = reason ? null : [...(prior || []).slice(0, row.keep), ...row.tail];
-    if (hashes && hashes.some(key => !messages.has(key))) reason = 'unresolved-message';
+    if (hashes) {
+      // A later delta can drop an unresolved body and still have a fully
+      // verifiable prefix. Keep the identities independently of the estimates.
+      states.set(row.id, hashes);
+      if (!shape || !Array.isArray(shape.tools) || !Array.isArray(shape.system) && typeof shape.system !== 'string') reason = 'missing-or-invalid-shape';
+      else if (hashes.some(key => !messages.has(key))) reason = 'unresolved-message';
+    }
     if (reason) { failures.push({ requestId: row.id, line: row.__trajectoryLine, reason }); continue; }
-    states.set(row.id, hashes);
     while (turnIndex + 1 < session.turns.length && session.turns[turnIndex + 1].native.line <= row.__trajectoryLine) turnIndex++;
     const turn = session.turns[turnIndex];
     if (!turn) { failures.push({ requestId: row.id, line: row.__trajectoryLine, reason: 'request-before-user-turn' }); continue; }

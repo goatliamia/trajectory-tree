@@ -81,6 +81,12 @@ Rebuild shared assets and all three portable packages after changing presentatio
 
 ## DSH version
 
+### 0.2.2-rc.4 (2026-11-18)
+
+The first GitHub release targets DSH Web `0.2.2-rc.4` with `dsh-analysis-view` `0.11.1` and `dsh-trajectory-tools` `0.6.9`. The native CI uses the rc.4 host packages. The Windows compatibility replay passed all 34 checks against the installed runtime, including session events, subagent records and error attribution.
+
+The plugin manager reads the English and Chinese introductions from the installed bundle through `meta.detail`. The basic settings control conversation search, the default context and file layers, and the default Eval tool order.
+
 ### 0.2.2-rc.3 (2026-11-14)
 
 The local npm CLI is now `0.2.2-rc.3`. Its version, a native PTY child, the 34 source-derived consumer goals and the existing Skill/tool lifetime fixtures pass. The published upgrade index adds no rc.2-specific migration section. The linked view bundle is `0.11.0`, and the evidence/Skill bundle is `0.6.8`; an already-running host must reload these modules or restart before it uses them.

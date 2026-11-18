@@ -118,7 +118,7 @@ Antigravity 提供独立的[上下文与用量前端侧栏](plugin/antigravity/R
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.8.tgz ./dsh-analysis-view-0.11.0.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.9.tgz ./dsh-analysis-view-0.11.1.tgz
 ```
 
 重启 `dsh web`，在会话里打开「评估」或用 `/trajectory` 打开轨迹树。选好诊断问题后，点「填入对话」把草稿追加到当前输入框。插件面向 DSH 0.2.2 系列，逐包核对见[兼容与语言说明](docs/host-compatibility.md#dsh-version)。

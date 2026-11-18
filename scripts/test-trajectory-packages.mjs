@@ -159,6 +159,10 @@ try{
  assert.ok(existsSync(join(dshView,viewPackage.main)));
  assert.equal(JSON.parse(readFileSync(join(dshView,'locale/zh.json'),'utf8')).meta.title,'轨迹树');
  assert.equal(JSON.parse(readFileSync(join(dshView,'locale/en.json'),'utf8')).meta.title,'Trajectory Tree');
+ for (const locale of ['zh','en']) {
+  const {meta} = JSON.parse(readFileSync(join(dshView,'locale',locale+'.json'),'utf8'));
+  assert.ok(readFileSync(join(dshView,meta.detail),'utf8').includes('/context-map'), 'Localized settings introduction is present in the archive');
+ }
  assert.match(readFileSync(join(dshView,'lib/trace/fonts/LICENSE.txt'),'utf8'), /SIL OPEN FONT LICENSE Version 1\.1/);
  const {buildDigest}=await import(pathToFileURL(join(dshView,'lib/index.js')).href);
  const packagedFacts=buildDigest('package-observations',[{type:'turn/start',seq:0},{type:'tool/call',seq:1,data:{name:'read',callId:'c',arguments:'{}'}},{type:'tool/result',seq:2,data:{callId:'c',error:{code:'FAIL'}}}]);

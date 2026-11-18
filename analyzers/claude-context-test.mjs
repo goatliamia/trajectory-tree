@@ -73,8 +73,26 @@ const broken = load([...rows, request('missing', shape, 1, [], 'absent')]);
 assert.equal(broken.payload.context.requests.length, 3);
 assert.equal(broken.payload.context.current, null, 'Unresolved latest requests do not display stale composition as current');
 assert.equal(broken.payload.context.capture.unresolved, 1);
-const damaged = load(rows.map(row => row.type === 'api-request-blob' && row.hash === hash(returned) ? { ...row, message: { role: 'user', content: 'tampered' } } : row));
+const damagedRows = rows.map(row => row.type === 'api-request-blob' && row.hash === hash(returned) ? { ...row, message: { role: 'user', content: 'tampered' } } : row);
+assert.equal(load(damagedRows).payload.context.capture.reconstructed, 3, 'An independently verified native record can supply an intact message');
+const damaged = load(damagedRows.filter(row => row.message !== returned));
 assert.deepEqual(damaged.payload.context.requests.map(row => row.requestId), ['r1', 'r3'], 'Hash validation rejects damaged content; an independent compacted request can recover');
+const systemText = 'Session-specific instruction';
+const systemBlocks = { role: 'system', content: content(systemText) };
+const firstUser = { role: 'user', content: content('Inspect') };
+const merged = { role: 'user', content: [...returned.content, ...content('Continue')] };
+const alternate = load([
+  human('Inspect'), { type: 'api-request-shape', shapeHash: hash(shape), shape },
+  { type: 'api-request-blob', hash: hash(systemBlocks), message: { role: 'system', content: systemText } },
+  request('first', shape, 0, [hash(systemBlocks), hash(firstUser)]),
+  { type: 'user', message: returned }, human('Continue'),
+  request('second', shape, 2, [hash(merged)], 'first'),
+  request('partial', shape, 2, ['missing-body'], 'second'),
+  request('recovered', shape, 2, [], 'partial'),
+]).payload.context;
+assert.deepEqual(alternate.requests.map(r => r.requestId), ['first', 'second', 'recovered']);
+assert.ok(alternate.requests[0].inject > 0 && alternate.requests[1].tool > 0);
+assert.equal(alternate.capture.unresolved, 1);
 const legacy = load(rows.filter(row => !row.type.startsWith('api-request')));
 assert.deepEqual(legacy.payload.context.requests, []);
 assert.equal(legacy.payload.context.current, null);

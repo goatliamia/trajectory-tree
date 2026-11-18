@@ -93,19 +93,21 @@ export function projectContext(request, stepTypes = new Map()) {
 }
 
 function transcriptRequest(row, index) {
-  const reported = row.input_tokens != null || row.cache_read_tokens != null;
+  const reported = row.input_tokens != null || row.cache_read_tokens != null || row.cache_write_tokens != null;
+  const inputTokens = reported ? Number(row.input_tokens) || 0 : null;
+  const cacheReadTokens = reported ? Number(row.cache_read_tokens) || 0 : null;
+  const cacheWriteTokens = reported ? Number(row.cache_write_tokens) || 0 : null;
   return { index, seq: row.step_index, at: row.created_at || '',
-    inputTokens: reported ? Number(row.input_tokens) || 0 : null,
-    cacheReadTokens: reported ? Number(row.cache_read_tokens) || 0 : null, cacheWriteTokens: 0,
+    inputTokens, cacheReadTokens, cacheWriteTokens,
     outputTokens: row.output_tokens == null ? null : Number(row.output_tokens),
-    windowTokens: reported ? (Number(row.input_tokens) || 0) + (Number(row.cache_read_tokens) || 0) : null,
+    windowTokens: reported ? inputTokens + cacheReadTokens + cacheWriteTokens : null,
     hasPrompt: false, messages: [], tools: [], sections: [] };
 }
 
 export async function buildConversationSnapshot(entry) {
-  const version = `${entry.id}:${[entry.path, entry.dbPath, entry.dbPath + '-wal'].map(stamp).join(':')}`;
+  const fileVersion = `${entry.id}:${[entry.path, entry.dbPath, entry.dbPath + '-wal'].map(stamp).join(':')}`;
   const prior = cache.get(entry.path);
-  if (prior?.version === version) return prior;
+  if (prior?.version === fileVersion) return prior;
   const rows = rowsOf(entry.path), bySeq = new Map(rows.map(r => [r.step_index, r]));
   const stepTypes = new Map(rows.map(r => [r.step_index, r.type]));
   const turns = new Map(); let turn = 0;
@@ -116,6 +118,9 @@ export async function buildConversationSnapshot(entry) {
     catch { sourceError = '请求数据库暂不可读；仅展示 transcript 已记录用量。'; }
   }
   if (!requests.length) requests = rows.filter(r => r.type === 'PLANNER_RESPONSE').map(transcriptRequest);
+  // A read lock can clear without changing the files. Retry on the next poll
+  // and let clients distinguish the recovered snapshot from this fallback.
+  const version = sourceError ? fileVersion + ':transcript-fallback' : fileVersion;
   const current = requests.at(-1), projected = projectContext(current, stepTypes);
   projected.context.version = version;
   const currentRow = bySeq.get(current?.seq);
@@ -157,6 +162,7 @@ export async function buildConversationSnapshot(entry) {
     recentSteps: intervals.slice(-60).reverse(),
   };
   bodies.set(data, projected.fullBodies);
+  if (sourceError) return data;
   cache.delete(entry.path); cache.set(entry.path, data);
   while (cache.size > 4) cache.delete(cache.keys().next().value);
   return data;

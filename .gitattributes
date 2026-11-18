@@ -1,0 +1,6 @@
+# Keep transcripts and their verbatim experiment excerpts out of release source archives.
+experiments/corpus/tier1-corpus.txt export-ignore
+experiments/corpus/tier1-keys.json export-ignore
+experiments/probes/tier1-* export-ignore
+experiments/probes/tier0-raw.md export-ignore
+experiments/reports export-ignore

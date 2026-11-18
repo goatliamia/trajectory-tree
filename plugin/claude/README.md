@@ -4,7 +4,7 @@ Build with `node scripts/package-trajectory.mjs --host claude`, then load using 
 
 The SessionStart hook provides the current `session_id` and `transcript_path` to Claude at startup, resume, clear, compaction, or fork. Use the exact path with `--host claude --file <transcript>` in the Trajectory Tree CLI. Parallel sessions do not share a current-session file. The hook does not read the transcript or send it anywhere.
 
-The reader opens only the explicit local file. It includes visible user and assistant text, tool calls/results, and recorded message usage. It does not reconstruct branches, subagent transcripts, complete model requests, or context composition. An incomplete final JSONL line is excluded. Use results as partial evidence.
+The reader opens the selected local transcript. It shows visible messages, tool calls and results, and usage reported per assistant message. When Claude Code records request shapes and message hashes, the tree verifies the referenced content and charts changes in estimated source tokens. Conversations without these records still show their reported usage. Coverage shows how many requests could be reconstructed. The selected file determines which branches and subagent activity are visible.
 
 Use `/trajectory-tree:trajectory-eval` to open Eval for the bound transcript. To open a specific transcript from a terminal, run `node scripts/trajectory-view.mjs --host claude --file "<transcript_path>" --eval --serve` and open the returned local URL. The view uses the transcript revision captured at generation. Tool outcomes, same-input returns, file calls and recorded usage are observations. Execution duration, full request composition and task completion require other evidence.
 

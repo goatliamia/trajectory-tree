@@ -1691,6 +1691,9 @@ window.__ModuleLoader__.load({
 .av-prefs-group h3{margin:0 0 4px;font-size:14px;font-weight:600;color:var(--dsw-alias-label-primary)}
 .av-prefs-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px}
 .av-prefs-note{display:block;margin:3px 0 6px;font-size:12px;color:var(--dsw-alias-label-secondary)}
+.av-prefs-toggle{cursor:pointer}
+.av-prefs-toggle input{width:18px;height:18px;flex:none;accent-color:var(--dsw-alias-label-primary);cursor:inherit}
+.av-prefs-toggle:has(input:disabled){cursor:default;opacity:.65}
 .av-prefs-choice{display:inline-flex;align-items:center;gap:8px;flex:none;padding:7px 12px;border:0;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer}
 .av-prefs-choice:hover:enabled{background:var(--dsw-alias-interactive-bg-hover)}
 .av-prefs-choice:disabled{opacity:.55;cursor:default}
@@ -1732,29 +1735,31 @@ window.__ModuleLoader__.load({
         finally { setSaving(false); }
       }
       const section = (title, ...rows) => h("section", { className: "av-prefs-group", "aria-label": title }, h("h3", null, title), ...rows);
-      const visibility = (key, label, visible) => h(PreferenceChoice, {
-        label, value: visible ? "show" : "hide", disabled,
-        options: [{ id: "show", label: cmUi("显示", "Show") }, { id: "hide", label: cmUi("隐藏", "Hide") }],
-        onSelect: id => save(key, id === "show"),
-      });
+      const toggle = (key, label, hint) => h("label", { className: "av-prefs-row av-prefs-toggle" },
+        h("span", null, label, h("small", { className: "av-prefs-note", id: "av-pref-" + key }, hint)),
+        h("input", { type: "checkbox", role: "switch", "aria-label": label, "aria-describedby": "av-pref-" + key,
+          checked: value?.[key] !== false, disabled, onChange: event => save(key, event.target.checked) }));
       const sortOptions = [
         { id: "time", label: cmUi("累计耗时", "Total duration") },
         { id: "errors", label: cmUi("报错数", "Errors") },
         { id: "calls", label: cmUi("调用量", "Calls") },
       ];
       return h(React.Fragment, null,
-        section(cmUi("入口与可见性", "Entry points and visibility"),
-          visibility("conversationSearch", cmUi("右侧栏 · 对话搜索", "Right sidebar · Conversation search"), value?.conversationSearch !== false)),
-        section(cmUi("视图默认值", "View defaults"),
-          visibility("traceContext", cmUi("轨迹树 · 上下文变化图层", "Trajectory Tree · Context changes"), value?.traceContext !== false),
-          visibility("traceFiles", cmUi("轨迹树 · 文件图层", "Trajectory Tree · Files"), value?.traceFiles !== false),
+        section(cmUi("右侧栏", "Right sidebar"),
+          toggle("conversationSearch", cmUi("对话搜索", "Conversation search"),
+            cmUi("搜索整段会话，点选匹配的消息或工具结果即可跳回原文。", "Search the conversation and jump to a matching message or tool result."))),
+        section(cmUi("轨迹树默认图层", "Default trace layers"),
+          toggle("traceContext", cmUi("上下文变化", "Context changes"),
+            cmUi("比较相邻轮次中各来源内容的增减。", "Compare changes in context sources between turns.")),
+          toggle("traceFiles", cmUi("文件活动", "File activity"),
+            cmUi("在行动路径旁显示读取和修改过的文件。", "Show the files read or changed along the action path.")),
+          h("p", { className: "av-prefs-note" }, cmUi("已有会话优先使用你在图中保存的图层选择。", "A conversation's saved layer choices take precedence."))),
+        section(cmUi("会话评估", "Session Eval"),
           h(PreferenceChoice, {
-            label: cmUi("Eval · 工具排序", "Eval · Tool sort"),
+            label: cmUi("工具列表默认排序", "Default tool order"),
             value: sortOptions.some(option => option.id === value?.evalToolSort) ? value.evalToolSort : "time",
             options: sortOptions, disabled, onSelect: id => save("evalToolSort", id),
-          }),
-          h("p", { className: "av-prefs-note" }, cmUi("重新打开视图时应用默认值。已调整的会话图层会保留。",
-            "Defaults apply when a view is reopened. Per-session layer choices are kept."))),
+          })),
         failed || (status === "ready" && !writable)
           ? h("p", { className: "av-prefs-note", role: "status" }, failed ? cmUi("设置未保存，请重试。", "The setting could not be saved. Try again.")
             : cmUi("此配置为只读。", "This configuration is read-only.")) : null);

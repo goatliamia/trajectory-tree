@@ -61,7 +61,7 @@ Install into your DSH Web profile and restart DSH Web.
 
 ```sh
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-analysis-view-0.10.147.tgz
+dsh plugin --profile web add ./dsh-analysis-view-0.11.1.tgz
 ```
 
 ### Plugin settings
@@ -138,7 +138,7 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
 
 ```sh
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-analysis-view-0.10.147.tgz
+dsh plugin --profile web add ./dsh-analysis-view-0.11.1.tgz
 ```
 
 ### 插件设置

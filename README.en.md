@@ -116,7 +116,7 @@ Antigravity has a separate [context and usage frontend plugin](plugin/antigravit
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.8.tgz ./dsh-analysis-view-0.11.0.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.9.tgz ./dsh-analysis-view-0.11.1.tgz
 ```
 
 Restart `dsh web`, then open **Eval** or use `/trajectory` for the current session's path. Choose a diagnostic question and select **Fill conversation** to append the draft to the composer. The plugins target the DSH 0.2.2 line; see the [host compatibility notes](docs/host-compatibility.md#dsh-version).

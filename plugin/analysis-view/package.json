@@ -1,6 +1,6 @@
 {
   "name": "dsh-analysis-view",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "private": true,
   "type": "module",
   "description": "Trajectory Tree, Eval and conversation search for DSH",
@@ -37,6 +37,7 @@
     "lib/trace",
     "lib/eval",
     "locale/*.json",
+    "locale/*.md",
     "cordis.patch.yml",
     "README.md",
     "self-test.mjs",

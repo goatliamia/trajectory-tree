@@ -3,14 +3,12 @@ import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 let transcriptBinding: { id: string; path: string } | null = null
 
 async function findGenerator($: EngineInterface): Promise<string | null> {
-  const cwd = await $.session.cwd()
-  const candidates = [
-    `${$.plugin.root}/scripts/trajectory-view.mjs`,
-    `${$.plugin.root}/../../scripts/trajectory-view.mjs`,
-    `${cwd}/scripts/trajectory-view.mjs`,
-  ]
-  for (const path of candidates) {
-    if (await $.fs.exists(path)) return path
+  const root = $.plugin.root.replace(/[\\/]+$/, '')
+  const bundled = `${root}/scripts/trajectory-view.mjs`
+  if (await $.fs.exists(bundled)) return bundled
+  if (/(?:^|[\\/])plugin[\\/]claude$/.test(root)) {
+    const checkout = `${root}/../../scripts/trajectory-view.mjs`
+    if (await $.fs.exists(checkout)) return checkout
   }
   return null
 }

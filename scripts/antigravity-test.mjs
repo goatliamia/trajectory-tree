@@ -77,6 +77,39 @@ test('WAL updates invalidate a cached snapshot before a checkpoint reaches the d
   } finally { db.close(); }
 });
 
+test('transcript fallback includes cache writes in request totals, deltas and cache hit rate', async t => {
+  const f = fixture(t);
+  const entry = { id: conversation, path: f.path, dbPath: join(f.root, 'absent.db') };
+  writeFileSync(f.path, [
+    { step_index: 0, type: 'USER_INPUT' },
+    { step_index: 1, type: 'PLANNER_RESPONSE', input_tokens: 100, cache_read_tokens: 50, cache_write_tokens: 25 },
+    { step_index: 2, type: 'PLANNER_RESPONSE', cache_write_tokens: 40 },
+  ].map(JSON.stringify).join('\n'));
+  const snap = await buildConversationSnapshot(entry);
+  assert.deepEqual(snap.trendSeries.map(r => r.windowTokens), [175, 40]);
+  assert.equal(snap.currentWrite, 40);
+  assert.equal(snap.totalWrite, 65);
+  assert.equal(snap.cacheHitRate, 23.3);
+  assert.equal(snap.trendSeries[1].deltaTokens, -135);
+});
+
+test('an unchanged database can recover after a transient read lock', async t => {
+  const f = fixture(t), api = createContextApi({ dirs: [f.root], conversationId: conversation });
+  const db = new DatabaseSync(f.dbPath);
+  let fallback;
+  try {
+    db.exec('BEGIN EXCLUSIVE');
+    fallback = await api.context({});
+    assert.equal(fallback.currentContext.available, false);
+    assert.ok(fallback.source.error);
+    db.exec('ROLLBACK');
+  } finally { db.close(); }
+  const restored = await api.context({ etag: fallback.etag });
+  assert.equal(restored.currentContext?.available, true);
+  assert.equal(restored.currentWindow, 1100);
+  assert.equal((await api.context({ etag: restored.etag })).unchanged, true);
+});
+
 test('800k estimated tokens stay out of list payloads while the body remains readable', () => {
   const decoded = decodeRequest(request(), 0), body = 'x'.repeat(3_040_000);
   decoded.messages = [{ seq: 1, source: 4, content: body, calls: [] }];

@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "轨迹树",
-    "description": "查看会话的行动路径、运行评估和诊断证据，支持右侧栏对话搜索。"
+    "description": "沿会话轨迹查看工具、文件和上下文变化，用 Eval 对照耗时、用量与报错。",
+    "detail": "locale/detail.zh.md"
   }
 }

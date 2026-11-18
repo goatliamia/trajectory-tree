@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Trajectory Tree",
-    "description": "Explore session traces, Eval and diagnostic evidence, with conversation search in the right sidebar."
+    "description": "Follow tools, files and context through a conversation. Compare timing, usage and errors in Eval.",
+    "detail": "locale/detail.en.md"
   }
 }

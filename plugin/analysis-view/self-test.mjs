@@ -65,6 +65,7 @@ const ReactShim = {
   useRef(value) {
     return { current: value };
   },
+  useSyncExternalStore(_subscribe, getSnapshot) { return getSnapshot(); },
 };
 
 let moduleDef = null;
@@ -98,6 +99,7 @@ const required = [];
 const mod = moduleDef.factory((name) => {
   required.push(name);
   if (name === "react") return ReactShim;
+  if (name === "@deepseek-ai/dsh-client-ui-primitives") return { Menu: props => ({ type: "menu", props }) };
   throw new Error("unexpected module: " + name);
 });
 check("client: 只依赖 react", required.length > 0 && required.every((name) => name === "react"), required);
@@ -107,7 +109,7 @@ const conversationPanels = [];
 const contextPanels = [];
 const configListeners = new Set(), tabListeners = new Set(), rightTabs = new Map();
 const notify = listeners => { for (const listener of listeners) listener(); };
-let settingsCard, searchBody, searchEnabled;
+let settingsCard, settingsView, searchBody, searchEnabled;
 const form = {
   getSnapshot: () => ({ status: "ready", value: { conversationSearch: searchEnabled } }),
   subscribe(listener) { configListeners.add(listener); return () => configListeners.delete(listener); },
@@ -145,7 +147,7 @@ const ctx = {
       if (definition && definition.id === "analysis") EvalDashboard = component;
       if (definition && definition.id === "path") PathView = component;
       if (definition.id === "context-manager" || definition.key === "context-manager") contextPanels.push(definition.name);
-      if (definition.name === "plugins.bundle.config") settingsCard = definition;
+      if (definition.name === "plugins.bundle.config") { settingsCard = definition; settingsView = component; }
       if (definition.name === "sidebar.right.pane.tab" && definition.key === 'trajectory-conversation-search') {
         searchBody = definition;
         return () => { searchBody = undefined; };
@@ -208,6 +210,27 @@ function all(node, out = []) {
   if (node.props) all(node.props.children, out);
   return out;
 }
+
+const saved = [];
+const savedValues = { conversationSearch: false, evalToolSort: "errors" };
+const settingsForm = {
+  ...form,
+  getSnapshot: () => ({ status: "ready", writable: true, value: savedValues }),
+  async set(key, value) { saved.push([key, value]); return true; },
+};
+const prefs = all(render(settingsView, { form: settingsForm }));
+const switches = prefs.filter(node => node.props?.role === "switch"), sortMenu = prefs.find(node => node.type === "menu");
+check("settings: existing values and defaults reach the native controls",
+  switches.map(node => node.props.checked).join(",") === "false,true,true" && sortMenu?.props.selectedId === "errors");
+await switches[0].props.onChange({ target: { checked: true } });
+await switches[1].props.onChange({ target: { checked: false } });
+await switches[2].props.onChange({ target: { checked: false } });
+sortMenu.props.onSelect("calls");
+check("settings: controls save the corresponding configuration fields",
+  JSON.stringify(saved) === JSON.stringify([["conversationSearch", true], ["traceContext", false], ["traceFiles", false], ["evalToolSort", "calls"]]));
+const readOnly = all(render(settingsView, { form: { ...settingsForm, getSnapshot: () => ({ status: "ready", writable: false, value: savedValues }) } }));
+check("settings: read-only profiles disable switches and sort order",
+  readOnly.filter(node => node.props?.role === "switch").every(node => node.props.disabled) && readOnly.find(node => node.type === "menu")?.props.anchor.props.disabled);
 
 const digest = {
   sessionId: "session-fixture",

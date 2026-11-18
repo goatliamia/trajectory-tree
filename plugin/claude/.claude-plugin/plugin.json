@@ -1,5 +1,5 @@
 {
   "name": "trajectory-tree",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Trajectory Tree, Eval and Code buttons for the current Claude Code transcript."
 }
