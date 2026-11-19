@@ -28,7 +28,7 @@ export function codeExecutionData(session, { host = 'dsh', attributions, argumen
     const { call } = location, name = call.nativeName || call.name;
     let args = argumentsBySeq?.get(call.seq) ?? argumentsOf(call);
     if (typeof args === 'string') { try { args = JSON.parse(args); } catch { args = null; } }
-    const command = args?.command ?? args?.cmd;
+    const command = args?.command ?? args?.cmd ?? args?.CommandLine;
     const source = commandScripts?.[call.id] ?? commandScript(command, name, args?.shell);
     const edition = call.powerShellEdition || source?.edition || commandPowerShellEdition(command);
     const program = isProgramTool(call.name);
@@ -44,7 +44,9 @@ export function codeExecutionData(session, { host = 'dsh', attributions, argumen
   }
   const rows = calls.filter(({ call }) => call.status === 'error').map(({ call, turn, step, name, args, command, source, edition, program, executor }) => {
     const attribution = attributions?.get(call.seq) ?? call.attribution;
-    const identified = args?.commandActions?.map(action => action.command).filter(value => typeof value === 'string').join('\n');
+    const identified = Array.isArray(args?.commandActions)
+      ? args.commandActions.map(action => action?.command).filter(value => typeof value === 'string').join('\n')
+      : null;
     const script = program ? args?.code : source?.text ?? (identified || (typeof command === 'string' ? command : Array.isArray(command) ? command.join(' ') : null));
     const exact = program ? typeof args?.code === 'string' : !!source;
     const phase = phaseOf(attribution), code = attribution?.code ?? call.error?.code ?? 'TOOL_ERROR';

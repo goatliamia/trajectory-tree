@@ -30,6 +30,7 @@ function request({ prompt = true, input = 200, cache = 900, output = 40, seq = 4
   return proto(field(1, model), field(2, encode(seq)));
 }
 const conversation = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+const viewData = (html, id) => JSON.parse(new RegExp('id="' + id + '"[^>]*>([\\s\\S]*?)</script>').exec(html)[1]);
 test('project, calendar and mode filters count dated requests under their main conversation', () => {
   const now = new Date(2026,10,19,12).getTime(), boundary = new Date(2026,10,13).getTime();
   const row = (requestId, at, mode, responseModel, outputTokens, streamSeconds) => ({requestId,at,mode,responseModel,outputTokens,streamSeconds});
@@ -338,7 +339,84 @@ test('install contains only frontend runtime files and removes its own legacy sk
   mkdirSync(join(root, 'skills/ctx'), { recursive: true }); writeFileSync(join(root, 'skills/ctx/SKILL.md'), 'sidecar://trajectory-tree/context_board/');
   installAntigravity(root);
   for (const file of INSTALL_FILES) assert.ok(existsSync(join(root, file)), file);
+  assert.ok(existsSync(join(root, 'sidecars/context_board/native/antigravity-adapter.mjs')));
+  assert.ok(existsSync(join(root, 'sidecars/context_board/native/trace/presentation.mjs')));
+  assert.ok(existsSync(join(root, 'sidecars/context_board/native/eval/render.mjs')));
   assert.equal(existsSync(join(root, 'skills/ctx/SKILL.md')), false);
   assert.equal(existsSync(join(root, 'mcp_config.json')), false);
   assert.doesNotMatch(readFileSync(join(root, 'plugin.json'), 'utf8'), /\/ctx|trace-analysis|context-profile/);
+});
+
+test('traceHtml and evalHtml render official views with served fonts, checkpoints and tool errors', async t => {
+  const f = fixture(t);
+  writeFileSync(f.path, [
+    { step_index: 0, type: 'USER_INPUT', content: 'Inspect readme', created_at: '2026-11-19T08:00:00Z' },
+    { step_index: 1, type: 'PLANNER_RESPONSE', content: 'Reading file', input_tokens: 1000, cache_read_tokens: 8000, output_tokens: 50, created_at: '2026-11-19T08:00:02Z', tool_calls: [{ id: 'c1', name: 'read_file', arguments: '{"Path":"/repo/README.md"}' }] },
+    { step_index: 2, type: 'GENERIC', tool_call_id: 'c1', status: 'ERROR', error: 'file does not exist', created_at: '2026-11-19T08:00:03Z' },
+    { step_index: 3, type: 'CHECKPOINT', content: 'Compacted summary', input_tokens: 500, cache_read_tokens: 100, output_tokens: 80, created_at: '2026-11-19T08:00:05Z' },
+    { step_index: 4, type: 'PLANNER_RESPONSE', content: 'Done', input_tokens: 2000, cache_read_tokens: 1000, output_tokens: 40, created_at: '2026-11-19T08:00:08Z' },
+  ].map(r => JSON.stringify(r)).join('\n'));
+  const api = createContextApi({ dirs: [f.root], conversationId: conversation });
+  const trace = await api.traceHtml({});
+  const ev = await api.evalHtml({});
+  assert.match(trace, /id="trace-data"/);
+  assert.match(trace, /Antigravity/);
+  assert.match(trace, /\/fonts\/Geist-Variable\.woff2/);
+  assert.match(trace, /antigravity-transcript-visible-context/);
+  assert.match(ev, /id="eval-data"/);
+  assert.match(ev, /cache-compaction/);
+  assert.match(ev, /url\(\/fonts\/Geist-Variable\.woff2\)/);
+  assert.doesNotMatch(ev, /data:font\/woff2/);
+  const payload = viewData(trace, 'trace-data');
+  const dashboard = viewData(ev, 'eval-data');
+  assert.equal(payload.sessions[0].lastSeq, dashboard.cut);
+  assert.deepEqual(payload.context.usage.map(row => row.usage.cacheRead), [8000, 900]);
+  assert.equal(dashboard.cacheCompaction.summary.requestsWithUsage, 2);
+  assert.deepEqual(dashboard.cacheCompaction.drops.map(drop => [drop.prevSeq, drop.seq, drop.lostCacheTokens]), [[1, 4, 7100]]);
+  assert.equal(dashboard.cacheCompaction.compactions[0].shadowedTokenCount, null);
+  assert.equal(dashboard.whole.files.count, 1);
+  assert.equal(dashboard.whole.tools.find(tool => tool.name === 'read_file').errors, 1);
+  assert.doesNotMatch(await api.traceHtml({ session: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' }), /id="trace-data"/);
+});
+
+test('native views retry after a read lock and invalidate both views when the transcript changes', async t => {
+  const f = fixture(t), api = createContextApi({ dirs: [f.root], conversationId: conversation });
+  const db = new DatabaseSync(f.dbPath);
+  try {
+    db.exec('BEGIN EXCLUSIVE');
+    const fallback = viewData(await api.traceHtml(), 'trace-data');
+    assert.equal(fallback.evidence.source.nativeUnavailable, true);
+    assert.deepEqual(fallback.context.usage, []);
+    db.exec('ROLLBACK');
+    const recovered = viewData(await api.evalHtml(), 'eval-data');
+    assert.equal(recovered.cacheCompaction.summary.totalCacheReadTokens, 900);
+    const trace = viewData(await api.traceHtml(), 'trace-data');
+    assert.equal(trace.evidence.source.nativeUnavailable, false);
+    assert.equal(trace.context.usage[0].usage.cacheRead, 900);
+    assert.equal(recovered.whole.timing.turns.measured, 0);
+  } finally { db.close(); }
+  const after = { step_index: 5, type: 'PLANNER_RESPONSE', input_tokens: 170, output_tokens: 30 };
+  writeFileSync(f.path, readFileSync(f.path, 'utf8') + '\n' + JSON.stringify(after));
+  const [trace, dashboard] = await Promise.all([api.traceHtml(), api.evalHtml()]);
+  assert.equal(viewData(trace, 'trace-data').sessions[0].lastSeq, 5);
+  assert.equal(viewData(dashboard, 'eval-data').cut, 5);
+});
+
+test('transcript-only cache observations preserve missing usage, tool declarations and unknown clocks', async t => {
+  const f = fixture(t);
+  const legacy = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const path = join(f.root, 'brain', legacy, '.system_generated/logs/transcript.jsonl');
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, [
+    { step_index: 0, type: 'USER_INPUT', content: 'Old session', created_at: 'invalid' },
+    { step_index: 1, type: 'PLANNER_RESPONSE', input_tokens: 100, cache_read_tokens: 8000 },
+    { step_index: 2, type: 'PLANNER_RESPONSE', output_tokens: 0 },
+    { step_index: 3, type: 'PLANNER_RESPONSE', input_tokens: 100, cache_read_tokens: 100, tool_calls: [{ name: 'read_file' }] },
+  ].map(r => JSON.stringify(r)).join('\n'));
+  const api = createContextApi({ dirs: [f.root], conversationId: legacy });
+  const data = viewData(await api.evalHtml(), 'eval-data');
+  assert.equal(data.cacheCompaction.summary.requestsWithUsage, 2);
+  assert.deepEqual(data.cacheCompaction.drops, []);
+  assert.equal(data.whole.tools.find(tool => tool.name === 'read_file').unknown, 1);
+  assert.equal(data.whole.timing.steps.measured, 0);
 });

@@ -1,7 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <rect x="16" y="16" width="96" height="96" rx="20" fill="#171717"/>
-  <path d="M38 88V40M38 64H66C74 64 78 58 78 50V40M38 74H82C88 74 92 78 92 84V88" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="38" cy="40" r="6" fill="#3b82f6"/>
-  <circle cx="78" cy="40" r="6" fill="#10b981"/>
-  <circle cx="92" cy="88" r="6" fill="#f59e0b"/>
+  <rect x="10" y="10" width="108" height="108" rx="24" fill="#12141a" stroke="#282d38" stroke-width="2"/>
+  <!-- subtle top context bar -->
+  <rect x="26" y="27" width="24" height="5" rx="2.5" fill="#7065c6"/>
+  <rect x="53" y="27" width="20" height="5" rx="2.5" fill="#5286bf"/>
+  <rect x="76" y="27" width="26" height="5" rx="2.5" fill="#39a29b"/>
+  <!-- compaction dashed vertical guide -->
+  <path d="M68 42V96" stroke="#6366f1" stroke-width="2.5" stroke-dasharray="4 4" stroke-linecap="round" opacity="0.7"/>
+  <!-- horizontal main trajectory trunk -->
+  <path d="M24 68H104" stroke="#f4f6fa" stroke-width="6" stroke-linecap="round"/>
+  <!-- upward execution branch -->
+  <path d="M44 68V52C44 47 47 44 52 44H58" stroke="#39a29b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="58" cy="44" r="5.5" fill="#39a29b"/>
+  <!-- downward execution branch -->
+  <path d="M80 68V84C80 89 83 92 88 92H94" stroke="#cf7950" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="94" cy="92" r="5.5" fill="#cf7950"/>
+  <!-- trunk anchor nodes -->
+  <circle cx="28" cy="68" r="5" fill="#f4f6fa"/>
+  <circle cx="100" cy="68" r="5.5" fill="#5286bf" stroke="#f4f6fa" stroke-width="2"/>
 </svg>

@@ -2,19 +2,19 @@
   "command": "node",
   "args": ["main.mjs"],
   "restart_policy": "always",
-  "display_name": "上下文与用量",
-  "description": "按轮查看上下文输入、窗口占用和输出速度，或用热力图对照各主对话的模型 Token 用量并展开运行模式。",
+  "display_name": "轨迹树",
+  "description": "查看当前会话的轨迹树、单对话运行 Eval（含缓存与压缩、工具归因、代码执行）、上下文构成及跨对话模型用量。",
   "has_web_ui": true,
   "agent_permissions": {
     "allows_user_interactions": false
   },
   "ui_config": {
-    "display_name": "上下文与用量",
+    "display_name": "轨迹树",
     "views": [
       {
         "path": "/",
         "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE",
-        "title": "上下文与用量"
+        "title": "轨迹树"
       }
     ]
   }

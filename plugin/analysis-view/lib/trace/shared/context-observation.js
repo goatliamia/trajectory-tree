@@ -1,5 +1,5 @@
   // Shared host study: independent overlay switches and source multi-selection.
-  const studyMeaning = data.host === 'claude' ? { delta: ui('请求来源变化'), total: ui('请求构成趋势'), title: ui('请求构成趋势'), quantity: ui('请求文本估算') } : data.host === 'codex' ? { delta: ui('可见文本变化'), total: ui('文本趋势'), title: ui('可见文本趋势'), quantity: ui('可见文本估算') } : data.host === 'pi' ? { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文估算趋势'), quantity: ui('可见上下文估算') } : { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文总趋势'), quantity: ui('上下文构成估算') };
+  const studyMeaning = data.host === 'claude' ? { delta: ui('请求来源变化'), total: ui('请求构成趋势'), title: ui('请求构成趋势'), quantity: ui('请求文本估算') } : data.host === 'codex' ? { delta: ui('可见文本变化'), total: ui('文本趋势'), title: ui('可见文本趋势'), quantity: ui('可见文本估算') } : data.host === 'antigravity' ? { delta: ui('可见文本变化'), total: ui('总趋势'), title: ui('可见文本趋势'), quantity: ui('转录可见文本估算（不含系统/工具定义）') } : data.host === 'pi' ? { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文估算趋势'), quantity: ui('可见上下文估算') } : { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文总趋势'), quantity: ui('上下文构成估算') };
   const studySources = new Set(CONTEXT_CATEGORIES.map(c => c.key));
   let studyShowTotal = false;
   const studyCategories = () => CONTEXT_CATEGORIES.filter(c => studySources.has(c.key));

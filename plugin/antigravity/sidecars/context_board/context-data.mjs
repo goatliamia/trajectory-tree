@@ -53,7 +53,7 @@ function estimate(text) {
   for (const ch of text) if (/[\u3400-\u9fff]/u.test(ch)) cjk++;
   return text.length ? Math.max(1, Math.round(cjk * .68 + (text.length - cjk) / 3.8)) : 0;
 }
-function rowsOf(path) {
+export function transcriptRows(path) {
   if (!existsSync(path)) return [];
   return readFileSync(path, 'utf8').split(/\r?\n/).flatMap(line => { try { const row = JSON.parse(line); return row && Number.isInteger(row.step_index) ? [row] : []; } catch { return []; } });
 }
@@ -91,11 +91,22 @@ export function projectContext(request, stepTypes = new Map()) {
     for (const message of request.messages) for (const call of message.calls) if (call.id) calls.set(call.id, call);
     request.messages.forEach((m, index) => {
       const type = stepTypes.get(m.seq), call = calls.get(m.toolCallId);
-      const category = type === 'CHECKPOINT' || type === 'SYSTEM_MESSAGE' || [0, 3, 6].includes(m.source) ? 'inject'
+      const rawContent = m.content || '';
+      const contentInject = m.source === 1 && /^\s*(?:<CONTEXT_SUMMARY>|The following is a <SYSTEM_MESSAGE>|Error:\s*The stream was interrupted\b)/i.test(rawContent);
+      const isCheckpoint = type === 'CHECKPOINT' || /^\s*<CONTEXT_SUMMARY>/i.test(rawContent);
+      const category = isCheckpoint || type === 'SYSTEM_MESSAGE' || type === 'ERROR_MESSAGE' || contentInject || [0, 3, 6].includes(m.source) ? 'inject'
         : m.source === 4 ? (call && skillCall(call) ? 'skill' : 'tool')
           : m.source === 1 ? 'user' : m.source === 5 ? 'system' : 'assistant';
+      if (category === 'user' && /<ADDITIONAL_METADATA>/i.test(rawContent)) {
+        const metaChunks = [];
+        const userBody = rawContent.replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/gi, chunk => { metaChunks.push(chunk); return ''; })
+          .replace(/<\/?USER_REQUEST>/gi, '').trim();
+        add(`message-${index}`, 'user', `用户输入 · #${m.seq ?? '?'}`, userBody, m.seq);
+        if (metaChunks.length) add(`message-${index}-meta`, 'inject', `运行时注入 · 附加元数据 · #${m.seq ?? '?'}`, metaChunks.join('\n'), m.seq);
+        return;
+      }
       const label = category === 'tool' || category === 'skill' ? call?.name || '工具输出'
-        : category === 'user' ? '用户输入' : category === 'system' ? '系统提示' : category === 'inject' ? (type === 'CHECKPOINT' ? '压缩摘要' : '运行时注入') : '模型输出';
+        : category === 'user' ? '用户输入' : category === 'system' ? '系统提示' : category === 'inject' ? (isCheckpoint ? '压缩摘要' : '运行时注入') : '模型输出';
       add(`message-${index}`, category, `${label} · #${m.seq ?? '?'} · ${m.calls.map(c => c.name).join(' · ')}`,
         [m.content, ...m.calls.map(c => `${c.name}\n${c.args}`)].filter(Boolean).join('\n\n'), m.seq);
     });
@@ -203,7 +214,7 @@ export async function buildConversationSnapshot(entry) {
   const fileVersion = conversationVersion(entry);
   const prior = cache.get(entry.path);
   if (prior?.version === fileVersion) return prior;
-  const bySeq = new Map(rowsOf(entry.path).map(r => [r.step_index, r]));
+  const bySeq = new Map(transcriptRows(entry.path).map(r => [r.step_index, r]));
   const rows = [...bySeq.values()].sort((a, b) => a.step_index - b.step_index);
   const stepTypes = new Map(rows.map(r => [r.step_index, r.type]));
   const boundaries = rows.filter(r => r.type === 'USER_INPUT').map(r => r.step_index);

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>运行评估 · 轨迹树</title>
+  <!-- eval:styles -->
+</head>
+<body data-view="overview" data-theme="white">
+  <header class="app-header">
+    <div class="header-inner">
+      <!-- eval:details -->
+      <div class="brand">
+        <span>轨迹树</span><i class="brand-divider" aria-hidden="true"></i><span class="brand-context">Eval</span>
+      </div>
+      <div class="scope-control"><label for="scope">统计范围</label><select id="scope"></select></div>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <header class="workspace-head">
+      <div class="workspace-heading">
+        <h1 id="view-title">运行评估</h1>
+        <p class="workspace-meta"><span id="workspace-context"></span><span id="snapshot-range" class="mono"></span></p>
+      </div>
+      <div class="source">
+        <span class="source-badge"><i aria-hidden="true"></i><span id="source-label"></span></span><code id="source-cut" title="日志切点"></code>
+      </div>
+    </header>
+
+    <aside class="workspace-rail" aria-label="会话概况与导航">
+      <section class="run-context" aria-label="运行概况">
+        <div id="summary"></div>
+        <div id="outcome-chart" class="outcome-strip"></div>
+      </section>
+    </aside>
+
+    <section id="eval-findings"></section>
+
+    <section id="tool-comparison" class="panel comparison" aria-labelledby="tools-title">
+      <header class="section-head comparison-head">
+        <div><h2 id="tools-title" tabindex="-1">工具对照</h2><p id="tool-caption"></p></div>
+        <div class="segmented" id="tool-sort" role="group" aria-label="工具排序">
+          <button type="button" data-sort="time" aria-pressed="true">累计耗时</button>
+          <button type="button" data-sort="errors" aria-pressed="false">报错数</button>
+          <button type="button" data-sort="calls" aria-pressed="false">调用量</button>
+        </div>
+      </header>
+
+      <div class="comparison-layout">
+        <div class="comparison-chart">
+          <div class="compare-columns" aria-hidden="true">
+            <span>工具</span>
+            <span><i class="swatch swatch-time"></i>累计耗时</span>
+            <span><i class="swatch swatch-error"></i>报错次数</span>
+          </div>
+          <div id="tool-rows" class="compare-rows" role="group" aria-label="选择工具查看详情"></div>
+          <footer class="comparison-foot">
+            <p id="tool-footnote"></p>
+            <button type="button" class="text-action" id="tool-more" aria-controls="tool-rows" hidden></button>
+          </footer>
+        </div>
+
+        <aside id="tool-inspector" class="tool-inspector" aria-labelledby="selected-tool-title">
+          <header class="inspector-head">
+            <h3 id="selected-tool-title" tabindex="-1" aria-live="polite"></h3>
+            <button type="button" class="text-action" id="show-all-latency">全体耗时分布</button>
+          </header>
+          <div id="tool-evidence"></div>
+          <button type="button" class="text-action" id="tool-error-link" aria-controls="error-example" hidden>查看此工具报错</button>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tool-errors" class="panel error-panel" aria-labelledby="errors-title">
+      <header class="section-head comparison-head">
+        <div><h2 id="errors-title">工具报错分布</h2><p id="error-caption"></p></div>
+      </header>
+      <div id="error-layout" class="error-layout">
+        <div class="matrix-section">
+          <div id="error-matrix"></div>
+          <p id="matrix-note" class="matrix-note" hidden>每格为报错次数。点选查看调用记录。</p>
+        </div>
+        <aside id="error-example" class="error-example" aria-label="报错样本" aria-live="polite" tabindex="-1" hidden></aside>
+      </div>
+    </section>
+
+    <section id="turn-usage" class="panel usage-panel" aria-labelledby="usage-title">
+      <header class="section-head comparison-head">
+        <div><h2 id="usage-title">输出 token × 轮次耗时</h2><p id="usage-caption"></p></div>
+        <span id="usage-coverage" class="usage-coverage" title="有轮次起止，且每条已记录的模型响应都有输出 token"></span>
+      </header>
+      <div id="usage-layout" class="usage-layout">
+        <div class="usage-chart-wrap">
+          <div id="usage-chart"></div>
+        </div>
+        <aside id="usage-inspector" class="usage-inspector" aria-label="轮次样本" hidden>
+          <div id="usage-evidence" aria-live="polite"></div>
+          <button type="button" class="text-action" id="usage-open-turn" aria-controls="tool-rows">查看该轮工具</button>
+          <div id="usage-examples" class="usage-examples" role="group" aria-label="选择对照轮次" hidden></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="cache-compaction" class="panel cache-panel" aria-labelledby="cache-compaction-title" hidden></section>
+
+    <section id="eval-basis" class="basis" aria-labelledby="eval-basis-title">
+      <h2 id="eval-basis-title">运行细节</h2>
+      <div class="supporting-grid">
+      <section class="supporting-metrics" aria-labelledby="file-title">
+        <h3 id="file-title">文件与交付</h3>
+        <div id="files"></div>
+      </section>
+      <section class="supporting-metrics" aria-labelledby="timing-title">
+        <h3 id="timing-title">时间观测 <small>记录覆盖</small></h3>
+        <div id="time-basis"></div>
+      </section>
+      <section class="supporting-metrics" aria-labelledby="calls-context-title">
+        <h3 id="calls-context-title">调用与上下文</h3>
+        <div id="more-metrics"></div>
+      </section>
+      </div>
+    </section>
+  </main>
+
+  <!-- eval:data -->
+  <!-- eval:script -->
+</body>
+</html>

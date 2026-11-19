@@ -112,7 +112,7 @@ Eval 从日常任务的记录中提取指标，与轨迹树共用数据和切点
 
 Pi、Codex 和 Claude Code 的轨迹生成入口也接受 `--eval`、`--overview` 或 `--code`。DSH 直接使用常驻面板。[完整宿主入口](docs/host-entrypoints.md)
 
-Antigravity 的「上下文与用量」侧栏可查看最近一次请求，也能跨对话统计 Token、输出速度和首 Token 等待时间。[侧栏与统计口径](plugin/antigravity/README.md)
+Antigravity 的「轨迹树」侧栏提供会话轨迹树、单对话 Eval、最近请求的上下文构成和跨对话用量总览。[侧栏与统计口径](plugin/antigravity/README.md)
 
 <details>
 <summary><strong>DSH · 原生插件与分析面板</strong></summary>
@@ -209,7 +209,7 @@ claude --plugin-dir ./dist/trajectory-tree-claude
 node scripts/install-antigravity.mjs
 ```
 
-需要 Node.js 24+。刷新宿主插件或重启后，在会话顶部 `+` 菜单打开「上下文与用量」。矩阵支持滚轮缩放、拖动、搜索和正文懒读；趋势与对照使用已记录请求的输入、缓存和输出。页面隐藏后暂停轮询。
+需要 Node.js 24+。从仓库安装后刷新插件，在会话顶部 `+` 菜单打开「轨迹树」。在「单对话 Eval」查看缓存读取、压缩切点和工具执行数据。矩阵支持缩放、搜索和按需读取正文。
 
 ![Antigravity 用量总览，对话与模型热力图、Token 构成和输出速度](docs/media/antigravity-usage.jpg)
 

@@ -57,6 +57,7 @@ jobs:
           plugin/analysis-view/workspace-test.mjs
           plugin/analysis-view/current-context-test.mjs
           analyzers/diagnosis-workspace-test.mjs
+          analyzers/dsh-cache-compaction-test.mjs
           analyzers/diagnostic-rules-test.mjs
           analyzers/incident-observations-test.mjs
           analyzers/shape-law.mjs

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { CONTEXT_CATEGORIES } from '../docs/demo/layout-review/context-model.mjs';
@@ -15,6 +15,13 @@ function replaceOnce(source, pattern, replacement) {
 function moduleScope(source, exports) {
   const body = source.replace(/^import [^\n]+;\n/gm, '').replace(/^export \{[^\n]+\};?\n/gm, '').replace(/\bexport (function|const) /g, '$1 ');
   return `const {${exports.join(',')}}=(()=>{\n${body}\nreturn {${exports.join(',')}};\n})();`;
+}
+
+function listFiles(relDir, exts) {
+  const dir = join(root, relDir);
+  return readdirSync(dir, { withFileTypes: true })
+    .filter(e => e.isFile() && (!exts || exts.some(ext => e.name.endsWith(ext))))
+    .map(e => e.name);
 }
 
 export function syncAntigravity({ check = false } = {}) {
@@ -34,13 +41,50 @@ export function syncAntigravity({ check = false } = {}) {
     moduleScope(panel, ['mountCurrentContext']),
   ];
   const css = read('design/tokens.css') + '\n' + read('view/current-context/panel.css').replace(/@font-face\{[^}]+\}/g, '') + '\n' + read('docs/demo/preset-context/zoom-treemap.css') + '\n' + read('plugin/antigravity/sidecars/context_board/styles.base.css');
+
+  const adapterSrc = read('analyzers/antigravity-adapter.mjs')
+    .replaceAll('../plugin/antigravity/sidecars/context_board/request-records.mjs', '../request-records.mjs')
+    .replaceAll('../plugin/antigravity/sidecars/context_board/context-data.mjs', '../context-data.mjs')
+    .replaceAll('../plugin/analysis-view/lib/trace/', './trace/');
+
+  const traceFontsSrc = read('plugin/analysis-view/lib/trace/fonts.mjs')
+    .replaceAll("'fonts/'", "'../../fonts/'")
+    .replaceAll("'/analysis-view/trace/fonts/'", "'/fonts/'");
+
+  const evalRuntimeFiles = [
+    'data.mjs', 'render.mjs', 'code-data.mjs', 'findings.mjs', 'diagnostic-rules.mjs', 'dsh-command-evidence.mjs',
+    'index.html', 'style.css', 'themes.css', 'code-execution.css', 'code-execution.js',
+    'findings.css', 'findings.js', 'cache-compaction.css', 'cache-compaction.js', 'dashboard.js',
+    'editor.css', 'editor.html', 'diagnosis.js', 'diagnosis-gesture.js', 'diagnosis-trace.js',
+  ];
+
   const output = new Map([
     ['app.js', `(()=>{\n"use strict";\n${ui}\n${modules.join('\n')}\n${read('plugin/antigravity/sidecars/context_board/app.src.js')}\n})();\n`],
-    ['styles.css', css], ['native/categories.mjs', categories],
+    ['styles.css', css],
+    ['native/categories.mjs', categories],
     ['native/tool-behavior.mjs', read('plugin/analysis-view/lib/eval/workspace/ui/tool-behavior.mjs')],
+    ['native/antigravity-host.js', read('view/assets/antigravity-host.js')],
+    ['native/antigravity-adapter.mjs', adapterSrc],
+    ['native/trace/page.html', read('plugin/analysis-view/lib/trace/page.html')],
+    ['native/trace/page.js', read('plugin/analysis-view/lib/trace/page.js')],
+    ['native/trace/presentation.mjs', read('plugin/analysis-view/lib/trace/presentation.mjs')],
+    ['native/trace/fonts.mjs', traceFontsSrc],
+    ...listFiles('plugin/analysis-view/lib/trace/models', ['.mjs', '.js']).map(name => [
+      'native/trace/models/' + name,
+      read('plugin/analysis-view/lib/trace/models/' + name),
+    ]),
+    ...listFiles('plugin/analysis-view/lib/trace/shared', ['.mjs', '.js', '.css']).map(name => [
+      'native/trace/shared/' + name,
+      read('plugin/analysis-view/lib/trace/shared/' + name),
+    ]),
+    ...evalRuntimeFiles.map(name => [
+      'native/eval/' + name,
+      read('plugin/analysis-view/lib/eval/' + name),
+    ]),
     ...['Geist-Variable.woff2', 'GeistMono-Variable.woff2'].map(name => ['fonts/' + name, readFileSync(join(root, 'plugin/analysis-view/lib/trace/fonts', name))]),
     ['fonts/LICENSE.txt', read('plugin/analysis-view/lib/trace/fonts/LICENSE.txt')],
   ]);
+
   const changed = [];
   for (const [name, content] of output) {
     const path = join(sidecar, name), expected = Buffer.from(content);

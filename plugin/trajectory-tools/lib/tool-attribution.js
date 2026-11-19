@@ -160,7 +160,7 @@ export const failureViewRuntime = () => [
   ['__trajectoryFailureCoverageText', describeFailureCoverage],
 ].map(([name, fn]) => 'globalThis.' + name + ' = ' + fn.toString() + ';\n').join('');
 
-export const isShellTool = name => /^(?:commandExecution|bash|pwsh|powershell|shell|terminal|exec_command)$/i.test(name ?? '');
+export const isShellTool = name => /^(?:commandExecution|bash|pwsh|powershell|shell|terminal|exec_command|run_command)$/i.test(name ?? '');
 export const isProgramTool = name => /^run_?code$/i.test(name ?? '');
 export function powerShellEdition(executable) {
   const name = String(executable ?? '').trim().replace(/^["']|["']$/g, '').split(/[\\/]/).at(-1);
@@ -356,8 +356,18 @@ function recordedFailure(runtime, source, shell, detected) {
     if (lines.includes('Line |') && /The process cannot access the file .{1,512} because it is being used by another process\./i.test(runtime)) {
       return detected('COMMAND_FILE_BUSY', 'File is being used by another process', 'PowerShell');
     }
-    if (lines.includes('Get-CimInstance:') && lines.includes('| 无法从客户端中访问 CIM 资源。')) {
+    if (lines.includes('Get-CimInstance:') && lines.includes('| 无法从客户端中访问 CIM 资源。')
+        || /^Get-CimInstance\s*:.*(?:无法从客户端中访问 CIM 资源|Access to a CIM resource was not available)/im.test(runtime)) {
       return detected('COMMAND_CIM_UNAVAILABLE', 'Get-CimInstance', 'PowerShell');
+    }
+    if (/^[A-Za-z]+-[A-Za-z]+\s*:.*Access to the path .* is denied/im.test(runtime) || ids.includes('UnauthorizedAccessException')) {
+      return detected('COMMAND_PERMISSION', 'Access to the path is denied', 'PowerShell');
+    }
+    if (/^curl(?:\.exe)?:\s*\(\d+\)\s*(?:Failed to connect|Could not resolve host|Connection refused|Recv failure|Empty reply)/im.test(runtime)) {
+      return detected('COMMAND_CONNECTION_FAILED', 'curl: connection failed', 'curl');
+    }
+    if (/^error connecting to [^\s]+/im.test(runtime)) {
+      return detected('COMMAND_CONNECTION_FAILED', 'gh: connection failed', programIn(source, 'gh') ? 'gh' : null);
     }
     if (/^\[?ERR_PNPM_NO_OFFLINE_TARBALL\]?(?=\s|:)/m.test(runtime)) {
       return detected('COMMAND_OFFLINE_DEPENDENCY', 'ERR_PNPM_NO_OFFLINE_TARBALL', 'pnpm');
@@ -412,17 +422,23 @@ function recordedFailure(runtime, source, shell, detected) {
         return detected('COMMAND_TEST_FAILED', 'Node assertion failed', 'Node');
       }
       if (/^(?:Error|TypeError|ReferenceError|RangeError|SyntaxError)(?: \[[A-Z_]+\])?:\s+\S/m.test(runtime)
-          && /(?:^|\n)\s+at (?:.*\(|file:\/\/\/|node:)/m.test(runtime)) {
+          && /(?:^|\n)\s+at (?:.*\(|file:\/\/\/|node:|\[eval\]:)/m.test(runtime)) {
         return detected('COMMAND_RUNTIME_ERROR', 'Node runtime stack', 'Node');
       }
     }
     if (/^(?:TimeoutError:|Timed out\b|command timed out\b)/im.test(runtime)) {
       return detected('COMMAND_TIMEOUT', 'Timed out');
     }
-  } else if (/^(?:File not found|No such file or directory|ENOENT\b|找不到文件|文件不存在)/im.test(runtime)) {
+  } else if (/target content not found in the file/i.test(runtime)) {
+    return detected('FS_EDIT_NOT_FOUND', 'Target content not found in file');
+  } else if (/^(?:File not found|file does not exist|No such file or directory|ENOENT\b|找不到文件|文件不存在)/im.test(runtime)) {
     return detected('FS_NOT_FOUND', 'File not found');
-  } else if (/^(?:Permission denied|Access is denied|EACCES\b|EPERM\b|拒绝访问)/im.test(runtime)) {
+  } else if (/^(?:Permission denied|Access is denied|permission check failed for \w+|EACCES\b|EPERM\b|拒绝访问)/im.test(runtime)) {
     return detected('TOOL_PERMISSION', 'Permission denied');
+  } else if (/The requested operation cannot be performed on a file with a user-mapped section open/i.test(runtime)) {
+    return detected('COMMAND_FILE_BUSY', 'File locked by another process');
+  } else if (/^invalid line range:/im.test(runtime)) {
+    return detected('INVALID_ARGS', 'Invalid line range');
   } else if (/^(?:TimeoutError:|Timed out\b|Tool timed out\b)/im.test(runtime)) {
     return detected('TOOL_TIMEOUT', 'Timed out');
   }

@@ -187,6 +187,12 @@ test('file read order uses paired calls in the selected scope', () => {
 });
 
 test('the Eval route reads the existing cut and publishes read-only metrics', async () => {
+  const lastSeq = raw.at(-1).seq;
+  const events = [...raw, ...[
+    ['assistant/message', { turn: 2, step: 1, usage: { inputTokens: 1100, cacheReadTokens: 10_000 } }],
+    ['compaction/summary', { turn: 2, summary: 'Legacy summary' }],
+    ['assistant/message', { turn: 2, step: 1, usage: { inputTokens: 1100, cacheReadTokens: 0 } }],
+  ].map(([type, data], index) => ({ type, data, seq: lastSeq + index + 1, time: (lastSeq + index + 1) * 10 }))];
   const disposers = [];
   let route, reads = 0, releases = 0;
   const services = {
@@ -194,12 +200,12 @@ test('the Eval route reads the existing cut and publishes read-only metrics', as
     sessionQuery: { async observeSession(sessionId) {
       assert.equal(sessionId, 'test');
       reads++;
-      return { events: raw, [Symbol.dispose]() { releases++; } };
+      return { events, [Symbol.dispose]() { releases++; } };
     } },
-    sessions: new Map([['test', { seq: raw.at(-1).seq + 1 }]]),
+    sessions: new Map([['test', { seq: events.at(-1).seq + 1 }]]),
     sessionProjections: { snapshot(_session, keys) {
       assert.deepEqual(keys, ['contextPressure']);
-      return { asOfSeq: raw.at(-1).seq + 1, values: {} };
+      return { asOfSeq: events.at(-1).seq + 1, values: {} };
     } },
   };
   apply({ get(name) {
@@ -217,7 +223,7 @@ test('the Eval route reads the existing cut and publishes read-only metrics', as
   try {
     const response = await request('GET');
     assert.equal(response.status, 200);
-    const expected = summarizeTrajectoryEval(buildTracePayload(raw, 'test').sessions[0]);
+    const expected = summarizeTrajectoryEval(buildTracePayload(events, 'test').sessions[0]);
     assert.equal(response.data.cut, expected.cut);
     assert.deepEqual(response.data.execution, expected.execution);
     assert.equal(response.data.metrics.files.returnedWriteCalls, 1);
@@ -227,6 +233,9 @@ test('the Eval route reads the existing cut and publishes read-only metrics', as
     assert.equal(page.status, 200);
     const dashboard = JSON.parse(page.data.match(/id="eval-data">([^<]+)<\/script>/)[1]);
     assert.equal(dashboard.cut, expected.cut);
+    assert.equal(dashboard.cacheCompaction.summary.cacheDrops, 1);
+    assert.equal(dashboard.cacheCompaction.compactions[0].nextRequestSeq, dashboard.cut);
+    assert.match(page.data, /id="cache-compaction"/);
     assert.deepEqual(dashboard.whole.outcomes, expected.execution.outcomes ?? Object.fromEntries(
       Object.keys(dashboard.whole.outcomes).map(key => [key, expected.execution[key]])));
     assert.match(page.data, /id="diagnosis-editor"/);

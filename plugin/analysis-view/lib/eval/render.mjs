@@ -22,16 +22,18 @@ export const demoBridge = [
   '};',
 ].join('\n');
 
-export function renderEvalPage(data, { integrated = false, script = '', diagnosis, mode, locale, toolSort, section } = {}) {
+export function renderEvalPage(data, { integrated = false, script = '', diagnosis, mode, locale, toolSort, section, fontPath } = {}) {
   const native = integrated && mode === 'dsh';
+  const servedFontPath = fontPath ?? (native ? geistFontPath : null);
   const styles = [readFileSync(new URL('../trace/shared/visual-tokens.css', import.meta.url), 'utf8'),
     ...geistFontFiles.map(file => {
       const family = file.startsWith('GeistMono') ? 'GeistMono' : 'Geist';
-      const url = native ? geistFontPath + file : geistFontUrl(file);
+      const url = servedFontPath ? servedFontPath + file : geistFontUrl(file);
       return '@font-face{font-family:' + family + ';src:url(' + url + ") format('woff2');font-weight:100 900;font-display:swap}";
     }),
-    ...['style.css', 'themes.css', 'code-execution.css', 'findings.css'].map(evalAsset),toolColorCss(),toolFeedbackCss(),
+    ...['style.css', 'themes.css', 'code-execution.css', 'findings.css', 'cache-compaction.css'].map(evalAsset),toolColorCss(),toolFeedbackCss(),
     integrated ? '.brand{display:none}.header-inner{justify-content:flex-end}.eval-native-details{margin-inline-end:auto}' : '',
+    mode === 'antigravity' && !diagnosis ? '#eval-findings,[data-ce-findings],#ce-ask-group,#ce-ask-call{display:none!important}.ce-ref{pointer-events:none;text-decoration:none;cursor:default}' : '',
     '.eval-diagnosis-action + .eval-diagnosis-action{margin-inline-start:12px}',
   ].join('\n');
   const editor = diagnosis ? editorMarkup() : '';
@@ -43,14 +45,14 @@ export function renderEvalPage(data, { integrated = false, script = '', diagnosi
     detailsButton.onclick = () => parent.postMessage({ type: 'analysis-eval-details', sessionId: ${embedJson(diagnosis.session)} }, location.origin);
   ` : '';
   return evalAsset('index.html')
-    .replace('<!-- eval:styles -->', () => (native ? '' : geistLicenseNotice()) + '<style>\n' + styles + '\n</style>')
+    .replace('<!-- eval:styles -->', () => (servedFontPath ? '' : geistLicenseNotice()) + '<style>\n' + styles + '\n</style>')
     .replace('<!-- eval:details -->', () => details)
     .replace('<!-- eval:data -->', () => json('eval-data', data))
     .replace('<!-- eval:script -->', () => editor + inline([
       i18nRuntime(locale, failureMessages), toolColorRuntime(), toolFeedbackRuntime(), failureViewRuntime(), findingsRuntime(), evalAsset('findings.js'), editorScript, detailsScript, script,
       native && toolSort ? 'window.__trajectoryEvalToolSort = ' + embedJson(toolSort) + ';' : '',
       section === 'code' ? 'window.__trajectoryEvalInitialSection = "code";' : '',
-      evalAsset('dashboard.js'), evalAsset('code-execution.js'),
+      evalAsset('cache-compaction.js'), evalAsset('dashboard.js'), evalAsset('code-execution.js'),
     ].join('\n')));
 }
 

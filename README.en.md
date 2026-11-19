@@ -110,7 +110,7 @@ Run commands from the repository root. The plugin packages declare Node.js 18+, 
 
 The trajectory generation entry in Pi, Codex and Claude Code also accepts `--eval`, `--overview` or `--code`. DSH uses its persistent panels. [All host entry points](docs/host-entrypoints.md)
 
-Antigravity's context and usage sidebar shows the latest request and aggregates token counts, streaming output speed and time to first token across local conversations. [Panel and metric definitions](plugin/antigravity/README.md)
+Antigravity's Trajectory Tree pane includes the conversation trace, single-session Eval, the latest request's context and a usage overview across local conversations. [Pane and metric definitions](plugin/antigravity/README.md)
 
 <details>
 <summary><strong>DSH · Native plugins and analysis panel</strong></summary>
@@ -207,7 +207,7 @@ Extract the `trajectory-tree` folder from the ZIP into `~/.gemini/config/plugins
 node scripts/install-antigravity.mjs
 ```
 
-Requires Node.js 24+. Refresh plugins or restart the host, then open **上下文与用量** from the conversation header's `+` menu. Zoom, pan, search and load exact source text on demand. Request trends compare recorded input, cache and output. Polling pauses while the page is hidden.
+Requires Node.js 24+. After installing from the repository, refresh the plugins and open **轨迹树** from the conversation header's `+` menu. Single-session Eval shows cache reads, compaction boundaries and tool execution. The context matrix supports zoom, search and loading source text on demand.
 
 [Installation, data semantics and maintenance](plugin/antigravity/README.md)
 

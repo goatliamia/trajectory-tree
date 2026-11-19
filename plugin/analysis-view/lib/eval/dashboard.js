@@ -41,6 +41,15 @@
     },
     onDiagnose:(selection,button,view)=>window.__diagnosisDemoAsk?.(selection,button,view),
   });
+  const cachePulseBoard = globalThis.__mountCacheCompaction?.($('cache-compaction'), data.cacheCompaction, {
+    host: data.host,
+    onOpenTurn: turn => {
+      if (turns.has(turn)) {
+        selectTurn(turn);
+        $('tools-title')?.scrollIntoView({ block: 'start' });
+      }
+    },
+  });
 
   function clockDuration(ms) {
     if (!Number.isFinite(ms) || ms < 60_000) return shortDuration(ms);
@@ -631,13 +640,14 @@
     selectUsageTurn(turn ?? usageTurn ?? defaultUsageTurn);
     renderSupporting(metrics);
     findingsBoard?.refresh();
+    cachePulseBoard?.setTurn(turn);
   }
 
   function initializeLayout() {
     $('view-title').textContent = data.title;
     $('workspace-context').textContent = t('轮次总览', 'Turn overview');
     $('usage-evidence').before($('usage-examples'));
-    for (const section of ['turn-usage', 'tool-comparison', 'tool-errors', 'eval-findings']) $('eval-basis').before($(section));
+    for (const section of ['turn-usage', 'cache-compaction', 'tool-comparison', 'tool-errors', 'eval-findings']) $('eval-basis').before($(section));
   }
 
   const defaultUsageTurn = renderUsagePlot();

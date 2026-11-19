@@ -1,23 +1,37 @@
 #!/usr/bin/env node
-import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { syncAntigravity } from './sync-antigravity.mjs';
 
 const source = fileURLToPath(new URL('../plugin/antigravity/', import.meta.url));
+function walkRelative(dir, prefix) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const rel = `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...walkRelative(join(dir, entry.name), rel));
+    else out.push(rel);
+  }
+  return out;
+}
+function collectInstallFiles() {
+  return [
+    'plugin.json', 'assets/logo.svg',
+    ...['sidecar.json', 'package.json', 'index.html', 'main.mjs', 'context-data.mjs', 'request-records.mjs', 'usage-data.mjs',
+      'app.js', 'styles.css', 'fonts/Geist-Variable.woff2', 'fonts/GeistMono-Variable.woff2', 'fonts/LICENSE.txt']
+      .map(name => 'sidecars/context_board/' + name),
+    ...walkRelative(join(source, 'sidecars/context_board/native'), 'sidecars/context_board/native'),
+  ];
+}
 // The install list deliberately contains only the panel and its local assets.
-export const INSTALL_FILES = [
-  'plugin.json', 'assets/logo.svg',
-  ...['sidecar.json', 'package.json', 'index.html', 'main.mjs', 'context-data.mjs', 'request-records.mjs', 'usage-data.mjs',
-    'app.js', 'styles.css', 'native/categories.mjs', 'native/tool-behavior.mjs', 'fonts/Geist-Variable.woff2', 'fonts/GeistMono-Variable.woff2', 'fonts/LICENSE.txt']
-    .map(name => 'sidecars/context_board/' + name),
-];
+export const INSTALL_FILES = collectInstallFiles();
 
 export function installAntigravity(destination) {
   const target = resolve(destination);
   if (target === resolve(source)) throw new Error('Install destination must differ from the plugin source.');
-  for (const file of INSTALL_FILES) {
+  for (const file of collectInstallFiles()) {
     const path = join(target, file);
     mkdirSync(dirname(path), { recursive: true }); copyFileSync(join(source, file), path);
   }

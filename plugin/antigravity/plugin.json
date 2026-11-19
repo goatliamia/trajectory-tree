@@ -1,10 +1,10 @@
 {
   "name": "trajectory-tree",
-  "displayName": "Trajectory Tree · 上下文与用量",
-  "description": "按轮查看输入变化、窗口占用与输出速度，跨对话比较各模型的 Token 用量和首 Token 等待时间。",
+  "displayName": "Trajectory Tree · 轨迹树",
+  "description": "查看会话轨迹树、单对话运行 Eval、缓存与压缩诊断、上下文构成及跨对话模型用量。",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
-    "打开上下文与用量面板"
+    "打开轨迹树面板"
   ],
   "homepage": "https://github.com/goatliamia/trajectory-tree#antigravity",
   "repository": "https://github.com/goatliamia/trajectory-tree"

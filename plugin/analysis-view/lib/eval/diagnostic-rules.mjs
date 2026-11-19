@@ -40,10 +40,22 @@ export function diagnosticSignals(group) {
     add('capability','D-C1','核对能力供给','已有命令、工具、服务或上下文不可用的线索；查清缺少的是能力还是使用条件。',
       ['任务需要完成的具体动作','已安装、已加载、可发现、可调用与权限分别核对','检查本地与远端边界，优先使用已有能力']);
   }
-  if(['guard','recovery','cancellation','outcome','input'].includes(group.focus))add('recover',
-    'D-O1',group.focus==='guard'?'核对保护条件':group.focus==='outcome'?'查明实际结果':'核对后续状态',
-    group.focus==='guard'?'保护条件未被接受；结合先前读取、文件版本与后续调用调查。':'先核对原操作已产生的效果、停止来源和后续结果，再判断是否需要继续。',
-    ['是否已有副作用、仍在运行或得到后续结果','用户是否希望继续、当前任务是否已完成','按具体效果选择恢复或观察，保留原权限边界']);
+  if(['guard','recovery','cancellation','outcome','input'].includes(group.focus)){
+    let guardSummary=group.focus==='guard'?'保护条件未被接受；结合先前读取、文件版本与后续调用调查。':'先核对原操作已产生的效果、停止来源和后续结果，再判断是否需要继续。';
+    let guardFactors=['是否已有副作用、仍在运行或得到后续结果','用户是否希望继续、当前任务是否已完成','按具体效果选择恢复或观察，保留原权限边界'];
+    if(group.code==='FS_NOT_OBSERVED'){
+      const reloaded=rows.filter(r=>r.priorRead?.reloadedAfter!=null).length;
+      const priorSame=rows.filter(r=>r.priorRead&&r.priorRead.reloadedAfter==null).length;
+      const neverRead=rows.length-reloaded-priorSame;
+      if(reloaded>0){
+        guardSummary=`${reloaded} 次调用在先前读取后经历会话重载${neverRead?`，另有 ${neverRead} 次当前会话未记录读取`:''}。核对重载后的观测状态，再确认如何恢复。`;
+        guardFactors=['核对先前读取、重载和修改的记录顺序','检查重载后宿主是否保留该文件的观测状态','确认本轮重新读取和修改的结果'];
+      } else if(neverRead===rows.length){
+        guardSummary='当前会话未记录对应文件的 read 读取，修改被保护拦截；先读取目标文件再修改。';
+      }
+    }
+    add('recover','D-O1',group.focus==='guard'?'核对保护条件':group.focus==='outcome'?'查明实际结果':'核对后续状态',guardSummary,guardFactors);
+  }
   if(group.focus==='recovery'&&repeated)add('repair','D-R2','重复的环境反馈','相同服务或运行环境反馈跨尝试出现，可调查持续的配置或实现因素。',
     ['比较各次触发条件及环境版本','核对已有恢复是否有效','找同环境的成功对照']);
   const evidence=[...new Set(rows.map(r=>r.pattern||r.evidence||'').filter(Boolean))];
@@ -52,8 +64,8 @@ export function diagnosticSignals(group) {
   if(repeated&&specific&&['arguments','availability'].includes(group.focus))add('knowledge','D-K1','重复的调用约束',
     '同一具体调用约束或执行模式跨尝试重现，值得核对能否形成或更新复用方法。',
     ['共同的缺失字段、参数规则或执行边界','当时已收到的 AGENTS.md、工具说明、Skill 与注入','已有成功改法、适用条件及原说明是否应更新']);
-  if(repeated&&group.focus==='guard'&&rows.some(r=>r.priorRead))add('knowledge','D-K3','保护条件反复失配',
-    '部分调用此前已有成功读取，仍跨轮触发保护；可调查观测状态与操作流程如何失配。',
+  if(repeated&&group.focus==='guard'&&rows.some(r=>r.priorRead&&r.priorRead.reloadedAfter==null))add('knowledge','D-K3','保护条件反复失配',
+    '部分调用此前已有成功读取且未经历会话重载，仍跨轮触发保护；可调查观测状态与操作流程如何失配。',
     ['读取与修改之间的版本、Agent 和作用域变化','工具当时给出的保护契约及已有指导','已验证的有效操作流程，避免追加同义提醒']);
   return signals;
 }

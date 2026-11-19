@@ -22,6 +22,21 @@
 .review-compact-fold{fill:none;stroke:var(--review-compact);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .review-compaction-marker:hover .review-compaction-hit,.review-compaction-marker:focus-visible .review-compaction-hit{fill:#e3e7ff;stroke:var(--review-compact)}
 .review-compaction-count{font:10px var(--mono);fill:var(--review-compact)}
+.review-prune-divider{fill:none;stroke:#a67323;stroke-width:1.25;stroke-dasharray:3 4;opacity:.85;pointer-events:none}
+.review-prune-marker{cursor:pointer;outline:none}
+.review-prune-hit{fill:#fff8eb;stroke:#e3c48d;stroke-width:1}
+.review-prune-marker:hover .review-prune-hit,.review-prune-marker:focus-visible .review-prune-hit{fill:#fef0d6;stroke:#a67323}
+.review-prune-dot{fill:#a67323}
+.review-compaction-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;margin:10px 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--soft)}
+.review-compaction-metrics div{min-width:0}
+.review-compaction-metrics dt{font-size:11px;color:var(--muted)}
+.review-compaction-metrics dd{margin:2px 0 0;font:560 12px/1.35 var(--mono);color:var(--ink)}
+.review-compaction-files{list-style:none;padding:0;margin:8px 0 12px;display:flex;flex-direction:column;gap:4px}
+.review-compaction-files li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:11px}
+.review-compaction-files code{font:11px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.review-compaction-tag{padding:1px 6px;border-radius:999px;font-size:10px;white-space:nowrap;background:var(--soft);color:var(--muted)}
+.review-compaction-tag.is-pure{background:#fff4df;color:#996314}
+.review-compaction-tag.is-mod{background:#e7f5f3;color:#1f706d}
 .review-activity-label{paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round}
 .review-duration-band{fill:#f2f6fa;stroke:#dce5ed;stroke-width:.7}
 .review-duration-value{font-size:9px;fill:#697b92}

@@ -225,18 +225,88 @@
         traceSymbolMark('compact', x, 79) +
         (events.length > 1 ? brText(x + 15, 83, String(events.length), 'review-compaction-count') : ''), caption);
     }
+    const pruneMarkers = (reviewContextData.boundaries || []).filter(e => e.kind === 'prune' && e.prunePass && !e.prunePass.followedBySummary)
+      .map(e => ({ id: e.seq, at: reviewActiveTime(e.turn, e.time), x: mapTime(e.time), e }));
+    for (const group of aggregateInScreen(pruneMarkers, 20)) {
+      const x = group[0].x;
+      if (x < left || x > right) continue;
+      const events = group.map(item => item.e);
+      const caption = events.length === 1 ? ui('工具结果裁短 · 第 ') + (events[0].turn ?? '?') + ui(' 轮') : events.length + ui(' 次工具结果裁短');
+      html += '<path d="M' + x + ' 98V' + (mainHeight - 38) + '" class="review-prune-divider"/>';
+      html += brGroup('class="review-prune-marker" data-context-prune="' + events.map(e => e.seq).join(',') + '"',
+        '<rect x="' + (x - 9) + '" y="76" width="18" height="16" rx="4" class="review-prune-hit"/>' +
+        '<circle cx="' + x + '" cy="84" r="3.2" class="review-prune-dot"/>' +
+        (events.length > 1 ? brText(x + 12, 87, String(events.length), 'review-compaction-count') : ''), caption);
+    }
     return html;
+  }
+  function reviewCompactionDetailHtml(detail) {
+    if (!detail) return '';
+    const pct = v => Number.isFinite(v) ? (v * 100).toFixed(1) + '%' : '—';
+    const cny = v => Number.isFinite(v) ? '¥' + v.toFixed(2) : null;
+    const rows = [];
+    if (detail.shadowedTokenCount != null) {
+      rows.push([ui('上下文缩减'), reviewTokens(detail.shadowedTokenCount) + ' → ~' + reviewTokens(detail.summaryEstimatedTokens || 0) + (detail.shadowedSeqCount ? ' (' + detail.shadowedSeqCount + ui(' 节点)') : '')]);
+    }
+    if (detail.summaryUsage) {
+      rows.push([ui('总结调用缓存命中') + (detail.precededByPrune ? ui('（前有裁短）') : ''), pct(detail.summaryUsage.cacheHitRatio) + ' · ' + reviewTokens(detail.summaryUsage.cacheReadTokens) + ' / ' + reviewTokens((detail.summaryUsage.cacheReadTokens || 0) + (detail.summaryUsage.uncachedInputTokens || 0))]);
+    }
+    if (detail.nextRequestDrop) {
+      const d = detail.nextRequestDrop;
+      const cost = cny(d.extraCostCny);
+      rows.push([ui('次步前缀缓存回落'), reviewTokens(d.prevCacheRead) + ' → ' + reviewTokens(d.currCacheRead) + ' (-' + reviewTokens(d.lostCacheTokens) + ')' + (cost ? ' · ' + cost : '')]);
+    }
+    if (detail.postWindow) {
+      const pw = detail.postWindow;
+      rows.push([ui('后 15 步文件重读'), ui('未改动 ') + pw.pureReReads + ui(' · 改后 ') + pw.modifiedReReads + ' / ' + pw.readCalls + ui(' 次读取')]);
+    }
+    let out = rows.length ? '<dl class="review-compaction-metrics">' + rows.map(([k, v]) => '<div><dt>' + k + '</dt><dd>' + esc(v) + '</dd></div>').join('') + '</dl>' : '';
+    const items = detail.postWindow?.reReadItems || [];
+    if (items.length) {
+      out += '<p class="review-context-change-note">' + ui('压缩后重读的文件（压缩前 → 压缩后 seq）：') + '</p><ul class="review-compaction-files">' +
+        items.map(it => '<li><code title="' + esc(it.path) + '">' + esc(it.basename) + ' #' + it.priorReadSeq + ' → #' + it.postReadSeq + '</code><span class="review-compaction-tag ' + (it.modifiedInBetween ? 'is-mod' : 'is-pure') + '">' + (it.modifiedInBetween ? ui('改后重读') : ui('未改动重读')) + '</span></li>').join('') + '</ul>';
+    }
+    return out;
   }
   function reviewOpenCompaction(seqs) {
     const events = reviewContextData.boundaries.filter(e => seqs.includes(e.seq));
     const event = events[0], row = reviewContextMap.get(event.turn);
     let html = ui('<p class="review-explain">系统把较早的一段对话整理成摘要，再带着摘要继续。靛蓝虚线标出摘要实际写入上下文的位置；原会话日志仍然保留。</p>');
     if (row) html += ui('<p class="review-context-change-note">第 ') + row.turn + ui(' 轮净变化 ') + reviewSigned(row.net) + ui(' tokens。这个数还包含本轮新增内容，不等于这次压缩单独减少的量。</p>');
+    for (const e of events) if (e.detail) html += reviewCompactionDetailHtml(e.detail);
     html += '<div class="review-list">' + events.map(e => '<button data-compaction-turn="' + e.turn + ui('">第 ') + e.turn + ui(' 轮 · 查看上下文来源变化<small>压缩记录 seq ') + e.seq + '</small></button>').join('') + '</div>';
     html += ui('<div class="drawer-actions"><button class="action-button primary" id="review-compaction-path">查看本轮行动路径 ↗</button></div>');
     openDrawer(events.length > 1 ? events.length + ui(' 次压缩上下文') : ui('压缩上下文'), ui('较早的对话 → 摘要'), html);
     document.querySelectorAll('[data-compaction-turn]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.compactionTurn)));
     $('review-compaction-path').onclick = () => reviewEnterPath(event.turn);
+  }
+  function reviewOpenPrune(seqs) {
+    const events = reviewContextData.boundaries.filter(e => e.kind === 'prune' && seqs.includes(e.seq));
+    const event = events[0], pass = event?.prunePass;
+    let html = ui('<p class="review-explain">宿主在不触发摘要压缩的情况下，原地裁短了部分较长工具返回。由于改写了历史前缀，后续请求可能发生前缀缓存回落。</p>');
+    if (pass) {
+      const d = pass.nextRequestDrop;
+      const ratio = pass.shadowedTokenCount > 0 && d?.lostCacheTokens > 0 ? (d.lostCacheTokens / pass.shadowedTokenCount).toFixed(1) + '×' : null;
+      const cny = Number.isFinite(d?.extraCostCny) ? '¥' + d.extraCostCny.toFixed(2) : null;
+      const rows = [
+        [ui('裁短省下'), reviewTokens(pass.shadowedTokenCount) + ' tokens (' + pass.prunedCount + ui(' 条)')],
+        [ui('次步缓存回落'), d ? reviewTokens(d.prevCacheRead) + ' → ' + reviewTokens(d.currCacheRead) + ' (-' + reviewTokens(d.lostCacheTokens) + ')' : ui('未发生显著回落')],
+      ];
+      if (ratio) rows.push([ui('回落 / 省下'), ratio]);
+      if (cny) rows.push([ui('估算额外花费'), cny]);
+      html += '<dl class="review-compaction-metrics">' + rows.map(([k, v]) => '<div><dt>' + k + '</dt><dd>' + esc(v) + '</dd></div>').join('') + '</dl>';
+      if (pass.prunedReadFiles?.length) {
+        html += '<p class="review-context-change-note">' + ui('被裁短的读取文件：') + '</p><ul class="review-compaction-files">' +
+          pass.prunedReadFiles.map(f => '<li><code title="' + esc(f.path) + '">' + esc(f.basename) + ' #' + f.originalSeq + '</code><span class="review-compaction-tag ' + (f.reReadCount === 0 ? '' : f.modifiedBeforeReRead ? 'is-mod' : 'is-pure') + '">' + (f.reReadCount === 0 ? ui('后续未重读') : (f.modifiedBeforeReRead ? ui('改后重读') : ui('未改动重读')) + ' #' + f.firstReReadSeq) + '</span></li>').join('') + '</ul>';
+      }
+    }
+    if (event?.turn != null) {
+      html += '<div class="review-list"><button data-prune-turn="' + event.turn + ui('">第 ') + event.turn + ui(' 轮 · 查看上下文来源变化<small>裁短记录 seq ') + event.seq + '</small></button></div>';
+      html += ui('<div class="drawer-actions"><button class="action-button primary" id="review-prune-path">查看本轮行动路径 ↗</button></div>');
+    }
+    openDrawer(ui('工具结果裁短'), ui('原地裁短历史工具返回'), html);
+    document.querySelectorAll('[data-prune-turn]').forEach(el => el.onclick = () => reviewOpenContext(Number(el.dataset.pruneTurn)));
+    if ($('review-prune-path')) $('review-prune-path').onclick = () => reviewEnterPath(event.turn);
   }
   // 抽屉的当前目标:上下文数据晚到时按它重开,不把步级视图退回轮级。
   let reviewContextDrawer = null;
@@ -388,6 +458,12 @@
       el.onclick = e => { e.stopPropagation(); reviewOpenCompaction(seqs); };
       el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reviewOpenCompaction(seqs); } };
       el.onmouseenter = () => tlReadout(ui('折叠标记与靛蓝虚线：较早的对话在这里被整理成摘要。点击看详情。'));
+    });
+    $('graph').querySelectorAll('[data-context-prune]').forEach(el => {
+      const seqs = el.dataset.contextPrune.split(',').map(Number);
+      el.onclick = e => { e.stopPropagation(); reviewOpenPrune(seqs); };
+      el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reviewOpenPrune(seqs); } };
+      el.onmouseenter = () => tlReadout(ui('工具结果裁短标记：较长工具返回在这里被原地裁短。点击看省下量与缓存变化。'));
     });
     $('canvas').querySelectorAll('[data-context-category]').forEach(el => {
       el.onclick = () => reviewOpenContextSources(el.dataset.contextCategory);

@@ -23,6 +23,7 @@ const assets={
  'tool-behavior.mjs':readFileSync(new URL('lib/tool-behavior.mjs',root),'utf8'),
  'tool-control.mjs':readFileSync(new URL('lib/tool-control.mjs',root),'utf8'),
  'tool-feedback.mjs':readFileSync(new URL('lib/tool-feedback.mjs',root),'utf8'),
+ 'dsh-cache-compaction.mjs':readFileSync(new URL('lib/dsh-cache-compaction.mjs',root),'utf8').replace('../docs/demo/layout-review/context-cost-model.mjs','../models/context-cost-model.mjs'),
 };
 let changed=false;
 for(const [name,content] of Object.entries(assets)){

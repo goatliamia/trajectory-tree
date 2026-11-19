@@ -6,6 +6,7 @@ import { describeCall } from "./trace/models/step-insight.mjs";
 import { describeOperation } from "./trace/models/tool-operation-model.mjs";
 import { collectToolResults } from "./trace/models/tool-result-model.mjs";
 import { replaySkillEvidence } from "./trace-skill-evidence.js";
+import { analyzeDshCacheCompaction } from "./trace/shared/dsh-cache-compaction.mjs";
 
 const fullCall = (call, native, result) => {
   const args = native?.data?.arguments;
@@ -21,10 +22,48 @@ const fullCall = (call, native, result) => {
 
 export function traceRequestLayer(events, series) {
   // 压缩与裁短分开记:压缩是摘要替换,裁短是工具返回被就地替换。
-  const boundaries = events.filter(event => event.type === "compaction/start").map(event => ({
-    seq: event.seq, time: event.time, kind: "compaction",
-    turn: event.data?.turn ?? null, step: event.data?.step ?? null,
-  }));
+  const hasBoundary = events.some(event => event.type === "compaction/start" || event.type === "compaction/prune");
+  const cc = hasBoundary ? analyzeDshCacheCompaction(events) : null;
+  const compByStart = new Map((cc?.compactions ?? []).filter(c => c.startSeq != null).map(c => [c.startSeq, c]));
+  const prunePassBySeq = new Map((cc?.prunePasses ?? []).map(p => [p.seq, p]));
+  const compactDrop = d => d ? {
+    seq: d.seq, prevSeq: d.prevSeq, cause: d.cause,
+    prevCacheRead: d.prevCacheRead, currCacheRead: d.currCacheRead,
+    lostCacheTokens: d.lostCacheTokens, prevHitRatio: d.prevHitRatio, currHitRatio: d.currHitRatio,
+    gapSec: d.gapSec, extraCostCny: d.extraCostCny,
+  } : null;
+
+  const boundaries = events.filter(event => event.type === "compaction/start").map(event => {
+    const matched = compByStart.get(event.seq);
+    const detail = matched ? {
+      summarySeq: matched.seq,
+      shadowedTokenCount: matched.shadowedTokenCount,
+      shadowedSeqCount: matched.shadowedSeqCount,
+      summaryEstimatedTokens: matched.summaryEstimatedTokens,
+      precededByPrune: matched.precededByPrune,
+      summaryUsage: matched.summaryUsage ? {
+        cacheReadTokens: matched.summaryUsage.cacheReadTokens,
+        uncachedInputTokens: matched.summaryUsage.uncachedInputTokens,
+        cacheHitRatio: matched.summaryUsage.cacheHitRatio,
+      } : null,
+      nextRequestDrop: compactDrop(matched.nextRequestDrop),
+      postWindow: matched.postWindow ? {
+        windowLimit: matched.postWindow.windowLimit,
+        toolCallsObserved: matched.postWindow.toolCallsObserved,
+        readCalls: matched.postWindow.readCalls,
+        pureReReads: matched.postWindow.pureReReads,
+        modifiedReReads: matched.postWindow.modifiedReReads,
+        editCalls: matched.postWindow.editCalls,
+        editErrors: matched.postWindow.editErrors,
+        reReadItems: matched.postWindow.reReadItems.slice(0, 12),
+      } : null,
+    } : null;
+    return {
+      seq: event.seq, time: event.time, kind: "compaction",
+      turn: event.data?.turn ?? matched?.turn ?? null, step: event.data?.step ?? null,
+      ...(detail ? { detail } : {}),
+    };
+  });
   const prunes = events.filter(event => event.type === "compaction/prune");
   const bySeq = prunes.length ? new Map(events.map(event => [event.seq, event])) : null;
   const calls = prunes.length ? new Map(events.filter(event => event.type === "tool/call").map(event => [event.data.callId, event])) : null;
@@ -36,9 +75,19 @@ export function traceRequestLayer(events, series) {
       const call = source?.kind === "tool" ? calls.get(source.callId) : null;
       return { seq, turn: call?.data?.turn ?? null, step: call?.data?.step ?? null, tool: call?.data?.name ?? null };
     });
+    const pass = prunePassBySeq.get(event.seq);
+    const prunePass = pass ? {
+      endSeq: pass.endSeq,
+      prunedCount: pass.prunedCount,
+      shadowedTokenCount: pass.shadowedTokenCount,
+      followedBySummary: pass.followedBySummary,
+      nextRequestDrop: compactDrop(pass.nextRequestDrop),
+      prunedReadFiles: pass.prunedReadFiles.slice(0, 12),
+    } : null;
     boundaries.push({ seq: event.seq, time: event.time, kind: "prune",
-      turn: event.data?.turn ?? null, step: event.data?.step ?? null,
-      tools: [...new Set(replaced.map(r => r.tool).filter(Boolean))], replaced });
+      turn: event.data?.turn ?? pass?.turn ?? null, step: event.data?.step ?? null,
+      tools: [...new Set(replaced.map(r => r.tool).filter(Boolean))], replaced,
+      ...(prunePass ? { prunePass } : {}) });
   }
   boundaries.sort((a, b) => a.seq - b.seq);
   // 用量记录按全部请求行走：总价可能估不出来，供应方回报的桶仍然在。

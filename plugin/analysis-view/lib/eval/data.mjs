@@ -4,13 +4,14 @@ import { scopeByTurn } from '../trace/shared/scope-index.mjs';
 import { codeExecutionData } from './code-data.mjs';
 import { projectFindingCalls } from './findings.mjs';
 import { failureCategories, failureCategoryIndex, failureCondition, failureLabels, powerShellEdition, summarizeFailureAttributions } from '../trace/shared/tool-attribution.mjs';
+import { analyzeDshCacheCompaction } from '../trace/shared/dsh-cache-compaction.mjs';
 
 const longCallMs = 30_000;
 const bins = [
   [20, '<20', 'ms'], [50, '20–50', 'ms'], [200, '50–200', 'ms'], [1000, '0.2–1', 's'],
   [5000, '1–5', 's'], [longCallMs, '5–30', 's'], [Infinity, '≥30', 's'],
 ];
-const hostNames = { dsh: 'DSH', codex: 'Codex', pi: 'Pi', claude: 'Claude Code' };
+const hostNames = { dsh: 'DSH', codex: 'Codex', pi: 'Pi', claude: 'Claude Code', antigravity: 'Antigravity' };
 export const EVAL_DETAIL_TURNS = 120;
 
 export function evalCallInterval(call, host) {
@@ -77,12 +78,18 @@ function toolErrorDetails(episodes, calls, attributions) {
 
 function execution(turns, episodes, host, attributions) {
   const groups = new Map(), calls = [];
-  for (const turn of turns) for (const step of turn.steps) for (const call of step.calls) {
-    const name = (host === 'dsh' ? call.name : call.nativeName || call.name) ?? '';
-    if (!groups.has(name)) groups.set(name, []);
-    const row = { call, turn: turn.number, name };
-    groups.get(name).push(row);
-    calls.push(row);
+  for (const turn of turns) for (const step of turn.steps) {
+    const declarations = host === 'antigravity' ? step.declaredTools : null;
+    const effectiveCalls = !step.calls.length && declarations ? declarations.map(name => ({
+      name, status: 'unknown', startSeq: null, resultSeq: null,
+    })) : step.calls;
+    for (const call of effectiveCalls) {
+      const name = (host === 'dsh' ? call.name : call.nativeName || call.name) ?? '';
+      if (!groups.has(name)) groups.set(name, []);
+      const row = { call, turn: turn.number, name };
+      groups.get(name).push(row);
+      calls.push(row);
+    }
   }
   const details = toolErrorDetails(episodes, calls, attributions);
   const tools = [...groups].map(([name, rows]) => ({
@@ -97,7 +104,7 @@ function execution(turns, episodes, host, attributions) {
 }
 
 // Presentation adapter. All evidence is already projected from one source cut.
-export function buildEvalData(session, runtime, { host = 'dsh', title = session.title, turnLimit, synthetic = false, attributions, argumentsBySeq, resultsBySeq, commandScripts, events } = {}) {
+export function buildEvalData(session, runtime, { host = 'dsh', title = session.title, turnLimit, synthetic = false, attributions, argumentsBySeq, resultsBySeq, commandScripts, events, cacheCompaction: providedCacheCompaction } = {}) {
   const episodesIn = scopeByTurn(session.overview?.episodes ?? []);
   const scope = (turns, number) => {
     const { timing, usage, files, task, context, repeats, parameters } = runtime(turns, number);
@@ -119,10 +126,14 @@ export function buildEvalData(session, runtime, { host = 'dsh', title = session.
     };
   };
   const turns = turnLimit ? session.turns.slice(-turnLimit) : session.turns;
+  const cacheCompaction = providedCacheCompaction ?? (host === 'dsh' && Array.isArray(events) && events.length
+    ? analyzeDshCacheCompaction(events)
+    : null);
   return { title, host, sourceLabel: hostNames[host] + (synthetic ? ' 模拟记录' : ' 实录'),
     cut: session.lastSeq, longCallMs, totalTurns: session.turns.length,
     codeExecution: codeExecutionData(session, { host, attributions, argumentsBySeq, resultsBySeq, commandScripts }),
     findingCalls: projectFindingCalls(session, { host, attributions, events }),
+    ...(cacheCompaction ? { cacheCompaction } : {}),
     failureLabels, failureCategories: failureCategories.map(([zh, en]) => [zh, en]),
     durationBins: bins.map(([, label, unit]) => ({ label, unit })),
     whole: scope(session.turns, null), turns: turns.map(turn => ({ number: turn.number, metrics: scope([turn], turn.number) })) };

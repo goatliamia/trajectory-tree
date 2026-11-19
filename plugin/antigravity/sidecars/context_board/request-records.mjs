@@ -192,21 +192,25 @@ export function decodeRequest(data, index) {
   return request;
 }
 
+export function readRequestRows(db, times) {
+  const requests = [];
+  for (const row of db.prepare('SELECT idx, data FROM gen_metadata ORDER BY idx').iterate()) {
+    const request = decodeRequest(row.data, row.idx);
+    if (request) {
+      if (!request.at && times.has(request.seq)) request.at = new Date(times.get(request.seq)).toISOString();
+      requests.push(request);
+    }
+  }
+  return requests;
+}
+
 export async function readRequests(path, evidence) {
   const { DatabaseSync } = await import('node:sqlite');
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     db.exec('BEGIN');
-    const requests = [];
     const { times, tools } = stepEvidence(db, Boolean(evidence));
     if (evidence) evidence.tools = tools;
-    for (const row of db.prepare('SELECT idx, data FROM gen_metadata ORDER BY idx').iterate()) {
-      const request = decodeRequest(row.data, row.idx);
-      if (request) {
-        if (!request.at && times.has(request.seq)) request.at = new Date(times.get(request.seq)).toISOString();
-        requests.push(request);
-      }
-    }
-    return requests;
+    return readRequestRows(db, times);
   } finally { db.close(); }
 }

@@ -8,6 +8,16 @@ export function projectFindingCalls(session, { host = 'dsh', attributions, turns
   const records = host === 'dsh' && events ? new Map(events.map(event => [event.seq, event])) : null;
   const returned = new Map((session.overview?.episodes ?? []).flatMap(episode => episode.pairs.map(pair => [pair.failedSeq, pair.successSeq])));
   const allowed = turns && new Set(turns);
+  const reloadSeqs = [];
+  const compactionSeqs = [];
+  if (host === 'dsh' && Array.isArray(events)) {
+    let seenAssistant = false;
+    for (const ev of events) {
+      if (ev?.type === 'assistant/message' && !(ev.surfaceOp && typeof ev.surfaceOp === 'object')) seenAssistant = true;
+      else if (ev?.type === 'session/end-seed' && seenAssistant) reloadSeqs.push(ev.seq);
+      else if (ev?.type === 'compaction/summary' && Number.isSafeInteger(ev.seq)) compactionSeqs.push(ev.seq);
+    }
+  }
   const reads = new Map();
   for (const turn of session.turns) for (const step of turn.steps) for (const call of step.calls) {
     if (call.status !== 'returned' || !call.target || !['read','read_file','read_text_file'].includes(call.name) || !Number.isSafeInteger(call.resultSeq)) continue;
@@ -39,7 +49,14 @@ export function projectFindingCalls(session, { host = 'dsh', attributions, turns
         reportedMessage: call.result?.text?.slice(0, 600) ?? '', target: call.target ?? null,
         measure:call.measure??null,codeFrames:attribution?.codeFrames??call.codeFrames??[],
         ...(call.controls?.length ? { controls: call.controls } : {}),
-        ...(attribution?.code === 'FS_NOT_OBSERVED' ? { priorRead: reads.get(call.target)?.findLast(read=>read.result<(start??call.seq)) ?? null } : {}),
+        ...(attribution?.code === 'FS_NOT_OBSERVED' ? { priorRead: (() => {
+          const prior = reads.get(call.target)?.findLast(read => read.result < (start ?? call.seq)) ?? null;
+          if (!prior) return null;
+          const callBoundary = start ?? call.seq;
+          const reloadedAfter = reloadSeqs.find(seq => seq > prior.result && seq < callBoundary) ?? null;
+          const compactedAfter = compactionSeqs.find(seq => seq > prior.result && seq < callBoundary) ?? null;
+          return { ...prior, ...(reloadedAfter != null ? { reloadedAfter } : {}), ...(compactedAfter != null ? { compactedAfter } : {}) };
+        })() } : {}),
         returned: returned.get(call.seq) ?? null, root: call.rootSeq ?? null, durationMs });
     }
   }

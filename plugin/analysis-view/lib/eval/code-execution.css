@@ -2,7 +2,7 @@
 .ce-tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;padding:10px 0;background:none;color:var(--muted);font:inherit;cursor:pointer}
 .ce-tabs button[aria-pressed=true]{border-bottom-color:var(--ink);color:var(--ink)}
 .ce-tabs a{margin-inline-start:auto;color:var(--muted);font-size:11px;padding:12px 0;text-decoration:none}.ce-tabs a:hover{color:var(--accent)}
-body[data-eval-section=code] :is(.workspace-rail,#eval-findings,#tool-comparison,#tool-errors,#turn-usage,#eval-basis){display:none!important}
+body[data-eval-section=code] :is(.workspace-rail,#eval-findings,#tool-comparison,#tool-errors,#turn-usage,#cache-compaction,#eval-basis){display:none!important}
 .ce-panel{grid-column:1/-1;min-width:0;color:var(--ink)}
 .ce-heading{display:flex;justify-content:space-between;gap:20px;align-items:start;margin-bottom:24px}
 .ce-heading h2{font-size:23px;font-weight:550;letter-spacing:-.5px}.ce-heading p{color:var(--muted);font-size:13px;margin-top:8px}

@@ -1,0 +1,195 @@
+  // Shared host study: independent overlay switches and source multi-selection.
+  const studyMeaning = data.host === 'claude' ? { delta: ui('请求来源变化'), total: ui('请求构成趋势'), title: ui('请求构成趋势'), quantity: ui('请求文本估算') } : data.host === 'codex' ? { delta: ui('可见文本变化'), total: ui('文本趋势'), title: ui('可见文本趋势'), quantity: ui('可见文本估算') } : data.host === 'antigravity' ? { delta: ui('可见文本变化'), total: ui('总趋势'), title: ui('可见文本趋势'), quantity: ui('转录可见文本估算（不含系统/工具定义）') } : data.host === 'pi' ? { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文估算趋势'), quantity: ui('可见上下文估算') } : { delta: ui('上下文增量'), total: ui('总趋势'), title: ui('上下文总趋势'), quantity: ui('上下文构成估算') };
+  const studySources = new Set(CONTEXT_CATEGORIES.map(c => c.key));
+  let studyShowTotal = false;
+  const studyCategories = () => CONTEXT_CATEGORIES.filter(c => studySources.has(c.key));
+  const studyLabel = () => studySources.size === CONTEXT_CATEGORIES.length ? ui('全部构成') : studySources.size ? studyCategories().map(c => c.label).join(' + ') : ui('未选择构成');
+  const studySum = row => studyCategories().reduce((sum, c) => sum + Number(row?.[c.key] || 0), 0);
+  function studyAmounts(row) {
+    const values = Object.fromEntries(CONTEXT_CATEGORIES.map(c => [c.key, row && studySources.has(c.key) ? row.parts[c.key][row.isBaseline ? 'after' : 'delta'] : 0]));
+    return { values, increase: Object.values(values).reduce((n, v) => n + Math.max(0, v), 0), decrease: Object.values(values).reduce((n, v) => n + Math.max(0, -v), 0) };
+  }
+  contextBarAmounts = studyAmounts;
+  const studyOriginalStepContext = reviewStepContext;
+  reviewStepContext = function(t, step) {
+    const info = studyOriginalStepContext(t, step); if (!info) return info;
+    const parts = Object.fromEntries(CONTEXT_CATEGORIES.map(c => [c.key, studySources.has(c.key) ? info.parts[c.key] : 0]));
+    return { ...info, total: studySum(info.current), amount: Object.values(parts).reduce((n, v) => n + v, 0), parts };
+  };
+  const studyOriginalNote = reviewContextNote;
+  reviewContextNote = function(row, number) {
+    if (!row) return studyOriginalNote(row, number);
+    const amount = studyCategories().reduce((n, c) => n + row.parts[c.key][row.isBaseline ? 'after' : 'delta'], 0);
+    return ui('第 ') + row.turn + ui(' 轮 · ') + studyLabel() + (row.isBaseline ? ' ≈' + reviewTokens(amount) : ' ' + reviewSigned(amount));
+  };
+  geistOverviewGeometry = function() {
+    geistRenderContextOverview();
+    const total = studyShowTotal && view === 'overview';
+    // 高度跟随图区盒子:固定 430/350 会在高窗口留一截白、矮窗口把底部顶出画布。
+    const context = overviewLayers.has('context');
+    const box = $('graph-scroll') ? $('graph-scroll').clientHeight : 0;
+    const height = Math.round(Math.max(240, box > 120 ? box : (context ? 430 : 350)));
+    // 柱带、主干、枝条按盒子等比放大(有上限),再按上下留白平衡把主干放进去:
+    // 上方放柱带 + 留白,下方放枝条 + 文件行/时间轴,两侧余量接近。
+    const scale = Math.max(1, Math.min(1.95, height / 430));
+    const pixels = Math.round(76 * scale);
+    reviewContextScale.pixels = pixels;
+    reviewContextScale.trendScale = scale;
+    const below = Math.round(150 * scale), reserve = 72, topInset = 162;
+    const slack = height - pixels - topInset - below - reserve;
+    const base = Math.round(pixels + topInset + Math.max(0, slack) * 0.45);
+    return { height, base };
+  };
+  function studySyncSources() {
+    const region = $('geist-context-overview'); if (!region) return;
+    for (const button of region.querySelectorAll('[data-current-source]')) {
+      const key = button.dataset.currentSource, category = geistContextCategory(key), selected = studySources.has(key);
+      button.style.setProperty('--source-color', category.color);
+      button.setAttribute('aria-pressed', String(selected)); button.dataset.muted = String(!selected);
+      button.title = ui(selected ? '取消{category}' : '选上{category}').replace('{category}', category.label) + ui('；可同时选择多类');
+      button.onclick = () => studyToggle(key);
+    }
+    for (const [index, segment] of [...region.querySelectorAll('.geist-context-occupied > span')].entries()) {
+      const key = region.querySelectorAll('[data-current-source]')[index]?.dataset.currentSource;
+      segment.dataset.muted = String(!studySources.has(key)); segment.onclick = () => studyToggle(key);
+    }
+  }
+  function studyToggle(key) { studySources.has(key) ? studySources.delete(key) : studySources.add(key); studyRefresh(); }
+  const studyOverviewHeader = geistRenderContextOverview;
+  geistRenderContextOverview = function(...args) { const value = studyOverviewHeader(...args); studySyncSources(); return value; };
+  function studyRefresh({ geometryChanged = false } = {}) {
+    const pixels = reviewContextScale.pixels;
+    reviewContextScale = contextDisplayScale(reviewContextRows.map(row => ({ ...row, ...studyAmounts(row) })));
+    reviewContextScale.pixels = pixels;
+    reviewActionScales.clear();
+    if ($('step-panel')) delete $('step-panel').dataset.detailKey;
+    $('canvas').dataset.contextTotal = String(studyShowTotal && view === 'overview');
+    if (view === 'path') renderActionPath();
+    else if (!geometryChanged && $('trace-context-layer') && overviewProjection) {
+      const p = overviewProjection, visible = (a, b = a) => b >= p.visibleLeft - 90 && a <= p.visibleRight + 90;
+      $('trace-context-layer').innerHTML = reviewContextLayer(p.layout, p.mainY, p.visibleLeft, p.visibleRight, visible);
+      reviewContextBind(); studyBindStock();
+      if ($('review-context-scale-note')) $('review-context-scale-note').textContent = ui('柱高至 ±') + reviewTokens(reviewContextScale.limit) + ui(' · …收起更大量');
+    } else renderOverview({ plotOnly: true });
+    studySyncSources();
+  }
+  function studyNice(value) {
+    const magnitude = 10 ** Math.floor(Math.log10(Math.max(1, value)));
+    return [1, 2, 2.5, 4, 5, 8, 10].map(n => n * magnitude).find(n => n >= value) || magnitude * 10;
+  }
+  const studyDeltaLayer = reviewContextLayer;
+  let studySeriesCache, studyProjectionCache;
+  function studySeries() {
+    const categories = studyCategories(), mask = categories.map(c => c.key).join(':');
+    const source = reviewContextData.timeline?.length ? reviewContextData.timeline : reviewContextRequests;
+    if (studySeriesCache?.source === source && studySeriesCache.mask === mask) return studySeriesCache;
+    const rows = chronologicalContextSamples(source);
+    let maximum = 0;
+    const values = rows.map(row => {
+      let sum = 0;
+      const upper = categories.map(c => sum += Number(row[c.key] || 0));
+      maximum = Math.max(maximum, sum); return upper;
+    });
+    const numbers = new Map(session.turns.map(turn => [turn.id,turn.number])), lastByTurn = new Map();
+    for (const row of rows) { const number = row.turn ?? numbers.get(row.turnId); if (number != null) lastByTurn.set(number,row); }
+    return studySeriesCache = { source, rows, mask, categories, values, maximum, lastByTurn };
+  }
+  function studyStockSummary(number) {
+    if (!reviewContextData.timeline?.length) return reviewContextMap.get(number);
+    const sample = studySeries().lastByTurn.get(number);
+    return sample ? {turn:number,parts:Object.fromEntries(CONTEXT_CATEGORIES.map(c=>[c.key,{after:sample[c.key] || 0}]))} : null;
+  }
+  function studyStockLayer(layout, base, left, right, visible) {
+    if (!studyShowTotal || view !== 'overview') return '';
+    if (!studySources.size) return brText(left + 8, base - 54, ui('点选上方构成项，选择要追踪的类型'), 'br-note', 'start');
+    const projection = overviewProjection;
+    const series = studySeries();
+    const axis = projection.layout.map(l => [l.turn.number, l.turn.start, endOf(l.turn), l.x, l.end].join(':')).join('|');
+    if (studyProjectionCache?.series !== series || studyProjectionCache.axis !== axis)
+      studyProjectionCache = { series, axis, points: series.rows.map((row, index) => ({ row, index, x: projection.mapTime(row.time) })) };
+    const points = studyProjectionCache.points;
+    if (!points.length) return '';
+    const max = studyNice(series.maximum * 1.03), pixels = 154, stockBase = base;
+    const y = value => stockBase - value / max * pixels;
+    const firstVisible = points.findIndex(p => p.x >= left);
+    const first = firstVisible < 0 ? Math.max(0, points.length - 1) : Math.max(0, firstVisible - 1);
+    const after = points.findIndex(p => p.x > right);
+    const shown = points.slice(first, after < 0 ? undefined : after + 1);
+    let html = '<defs><clipPath id="study-stock-clip"><rect x="' + left + '" y="' + (stockBase - pixels - 2) + '" width="' + Math.max(0, right - left) + '" height="' + (pixels + 4) + '"/></clipPath></defs>';
+    const paired = overviewLayers.has('context');
+    for (const amount of [0, max / 2, max]) {
+      html += '<path d="M' + left + ' ' + y(amount) + 'H' + right + '" class="review-context-grid"/>' + brText(paired ? right + 7 : left - 7, y(amount) + 3, reviewTokens(amount), 'review-context-axis', paired ? 'start' : 'end');
+    }
+    html += brText(left + 6, base - pixels - 14, studyMeaning.title + ' · ' + studyLabel(), 'study-stock-title', 'start');
+    html += '<g clip-path="url(#study-stock-clip)">';
+    let lower = stepTrendPolyline(shown.map(p => [p.x, y(0)]));
+    for (const [index, category] of series.categories.entries()) {
+      const upper = stepTrendPolyline(shown.map(p => [p.x, y(series.values[p.index][index])]));
+      const d = 'M' + upper.join('L') + 'L' + [...lower].reverse().join('L') + 'Z';
+      html += '<path data-study-area="' + category.key + '" d="' + d + '" fill="' + category.color + '" class="study-stock-fill"/>';
+      html += '<path d="M' + upper.join('L') + '" stroke="' + category.color + '" class="study-stock-edge"/>';
+      lower = upper;
+    }
+    html += '</g>';
+    for (const entry of layout) {
+      if (!visible(entry.x, entry.end)) continue;
+      const row = studyStockSummary(entry.turn.number); if (!row) continue;
+      html += brGroup('class="study-stock-turn" data-stock-turn="' + row.turn + '"', '<rect class="br-hit" x="' + entry.x + '" y="' + (stockBase - pixels) + '" width="' + Math.max(1, entry.end - entry.x) + '" height="' + pixels + '"/>', studyStockNote(row) + ui('；点击查看保留量'));
+    }
+    return html;
+  }
+  // Translucent retained context sits behind the original delta bars and path.
+  // Both layers share the path baseline; their token scales stay separate.
+  reviewContextLayer = function(...args) { return studyStockLayer(...args) + studyDeltaLayer(...args); };
+  const studyCompactions = reviewCompactionLayer;
+  reviewCompactionLayer = function(...args) {
+    if (!studyShowTotal || overviewLayers.has('context')) return studyCompactions(...args);
+    overviewLayers.add('context');
+    try { return studyCompactions(...args); } finally { overviewLayers.delete('context'); }
+  };
+  function studyStockNote(row) {
+    const amount = studyCategories().reduce((n, c) => n + row.parts[c.key].after, 0);
+    return ui('第 ') + row.turn + ui(' 轮 · ') + studyLabel() + ui(' 保留 ≈') + reviewTokens(amount);
+  }
+  function studyOpenStock(number) {
+    const row = studyStockSummary(number); if (!row) return;
+    const total = studyCategories().reduce((n, c) => n + row.parts[c.key].after, 0);
+    const all = CONTEXT_CATEGORIES.reduce((n, c) => n + row.parts[c.key].after, 0);
+    let html = '<div class="review-context-headline"><strong>≈' + reviewTokens(total) + ui('</strong><span>tokens · 选中构成保留量</span></div>');
+    html += '<div class="review-context-breakdown">' + studyCategories().map(c => '<div class="review-context-category"><div><i style="background:' + c.color + '"></i><span>' + c.label + '</span><b>≈' + reviewTokens(row.parts[c.key].after) + ui('</b></div><small>占完整构成 ') + (all ? row.parts[c.key].after / all * 100 : 0).toFixed(1) + '%</small></div>').join('') + '</div>';
+    openDrawer(ui('第 ') + number + ui(' 轮 · ') + studyMeaning.title, studyMeaning.quantity + ' · ' + studyLabel(), html);
+  }
+  const studyArrange = geistArrangeCaption;
+  geistArrangeCaption = function(...args) {
+    const result = studyArrange(...args); studySyncSources();
+    const caption = $('graph-caption');
+    const input = caption.querySelector('[data-br-layer="context"], [data-action-layer="context"]');
+    if (!input) return result;
+    const label = input.parentElement;
+    const text = [...label.childNodes].find(node => node.nodeType === 3); if (text) text.textContent = studyMeaning.delta;
+    const span = label.querySelector('span'); if (span) span.textContent = studyMeaning.delta;
+    const available = typeof reviewContextRequests === 'undefined' || reviewContextRequests.length > 0;
+    input.disabled = !available; input.checked = available && input.checked;
+    label.title = available ? ui('显示每轮或每步的上下文增减，可与总趋势同时开启') : ui('当前记录没有可显示的上下文组成');
+    let totalToggle = $('study-total-toggle');
+    if (!totalToggle) { totalToggle = document.createElement('label'); totalToggle.id = 'study-total-toggle'; totalToggle.className = 'br-layer'; }
+    label.after(totalToggle);
+    if (!available) studyShowTotal = false;
+    const total = studyShowTotal && view === 'overview';
+    // 总趋势只在总览成立:行动路径按步排列、没有连续时间轴,叠存量带会与步布局打架。
+    totalToggle.style.display = view === 'path' ? 'none' : '';
+    totalToggle.innerHTML = '<input type="checkbox" data-study-total' + (total ? ' checked' : '') + (available ? '' : ' disabled') + '>' + studyMeaning.total;
+    totalToggle.title = available ? ui('把保留量叠加在原图上，与增量共用主干和时间轴，可同时开启') : ui('当前记录没有可显示的上下文组成');
+    totalToggle.querySelector('input').onchange = event => { studyShowTotal = event.target.checked; if (studyShowTotal && view !== 'overview') reviewReturnOverview(); studyRefresh({ geometryChanged: true }); };
+    $('canvas').dataset.contextTotal = String(total);
+    studyBindStock();
+    return result;
+  };
+  function studyBindStock() {
+    const graph = $('graph'); if (graph.dataset.studyStockBound) return;
+    graph.dataset.studyStockBound = 'true';
+    const record = event => { const node = event.target.closest('[data-stock-turn]'); return node && graph.contains(node) ? studyStockSummary(Number(node.dataset.stockTurn)) : null; };
+    graph.addEventListener('mouseover', event => { const row = record(event); if (row) tlReadout(studyStockNote(row)); });
+    graph.addEventListener('click', event => { const row = record(event); if (row) { event.stopPropagation(); studyOpenStock(row.turn); } });
+    graph.addEventListener('keydown', event => { const row = record(event); if (row && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); studyOpenStock(row.turn); } });
+  }

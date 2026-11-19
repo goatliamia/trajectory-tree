@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="frame-src 'none'; child-src 'none'">
-  <title>上下文与用量</title>
+  <meta http-equiv="Content-Security-Policy" content="frame-src 'self'; child-src 'self'">
+  <title>轨迹树</title>
   <script src="/preload.js"></script>
   <link rel="stylesheet" href="/styles.css">
 </head>
@@ -14,7 +14,7 @@
     <header class="header">
       <div class="header-top">
         <div class="title-group">
-          <h1 class="title">上下文与用量</h1>
+          <h1 class="title">轨迹树</h1>
           <select id="conv-select" class="conv-select" aria-label="选择会话" title="切换要观察的会话"></select>
         </div>
         <span id="live-pill" class="live" role="status" title="可见时每 1.5 秒检查请求记录更新">
@@ -65,9 +65,11 @@
       <!-- Underline Tabs -->
       <nav class="tabs" role="tablist" aria-label="视图切换">
         <button type="button" role="tab" id="tab-surface" aria-controls="panel-surface" data-tab="surface" class="tab active" aria-selected="true">上下文构成</button>
-        <button type="button" role="tab" id="tab-curve" aria-controls="panel-curve" data-tab="curve" class="tab" aria-selected="false" tabindex="-1">趋势与对照</button>
-        <button type="button" role="tab" id="tab-steps" aria-controls="panel-steps" data-tab="steps" class="tab" aria-selected="false" tabindex="-1">工具 Eval <span id="step-count" class="tab-count"></span></button>
+        <button type="button" role="tab" id="tab-trace" aria-controls="panel-trace" data-tab="trace" class="tab" aria-selected="false" tabindex="-1">轨迹树</button>
+        <button type="button" role="tab" id="tab-eval" aria-controls="panel-eval" data-tab="eval" class="tab" aria-selected="false" tabindex="-1">单对话 Eval</button>
         <button type="button" role="tab" id="tab-usage" aria-controls="panel-usage" data-tab="usage" class="tab" aria-selected="false" tabindex="-1">用量总览</button>
+        <span class="tabs-spacer"></span>
+        <button type="button" id="refresh-embed" class="embed-action hidden" title="重新读取最新记录">刷新</button>
       </nav>
     </header>
 
@@ -77,47 +79,14 @@
         <div id="cc-host" class="cc-host"></div>
       </section>
 
-      <!-- Tab 2: Recorded request usage, changes and comparison -->
-      <section id="panel-curve" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-curve">
-        <figure id="fig-context" class="report-figure">
-          <div class="figure-head">
-            <strong>每轮上下文输入</strong>
-            <span id="fig-context-scope">宿主记录用量</span>
-          </div>
-          <div id="fig-context-canvas" class="figure-canvas"></div>
-          <div id="fig-context-readout" class="turn-readout"></div>
-          <div id="inline-turn" class="inline-turn"></div>
-        </figure>
-
-        <div class="curve-grid">
-          <figure id="fig-comparison" class="report-figure">
-            <div class="figure-head">
-              <strong>压缩后起点与最近请求</strong>
-              <span id="fig-comparison-scope">压缩后起点对照当前步</span>
-            </div>
-            <div id="fig-comparison-canvas" class="figure-canvas"></div>
-          </figure>
-
-          <figure id="fig-top-steps" class="report-figure">
-            <div class="figure-head">
-              <strong>请求输入净增 Top 8</strong>
-              <span>点选可查看所在轮次或保留的来源片段</span>
-            </div>
-            <div id="fig-top-steps-canvas" class="figure-canvas"></div>
-          </figure>
-        </div>
+      <!-- Tab 2: Official Geist Trajectory Tree -->
+      <section id="panel-trace" class="tab-panel embed-panel hidden" role="tabpanel" aria-labelledby="tab-trace">
+        <iframe id="frame-trace" class="embed-frame" title="轨迹树"></iframe>
       </section>
 
-      <!-- Tab 3: Live Step Feed -->
-      <section id="panel-steps" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-steps">
-        <div class="eval-head"><h2>工具调用</h2><label>范围 <select id="step-turn" aria-label="工具评估范围"><option value="">全部轮次</option></select></label></div>
-        <p id="eval-source" class="chart-caption"></p>
-        <div id="eval-summary" class="eval-summary"></div>
-        <div id="tool-evaluation"></div>
-        <details id="request-evidence"><summary>请求明细</summary>
-          <input id="step-filter" type="search" class="search-input" aria-label="过滤请求记录" placeholder="搜索工具或请求序号…" autocomplete="off">
-          <div id="step-feed" class="step-feed"></div>
-        </details>
+      <!-- Tab 3: Official Single-Session Eval -->
+      <section id="panel-eval" class="tab-panel embed-panel hidden" role="tabpanel" aria-labelledby="tab-eval">
+        <iframe id="frame-eval" class="embed-frame" title="单对话 Eval"></iframe>
       </section>
 
       <section id="panel-usage" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-usage">
