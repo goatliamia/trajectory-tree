@@ -46,6 +46,7 @@ jobs:
           node scripts/sync-inspect-models.mjs --check
           node scripts/sync-host-skills.mjs --check
           node scripts/sync-antigravity.mjs --check
+          node scripts/verify-dsh-git-install.mjs --check
       - name: Run synthetic observations and actual package loading
         run: >-
           node --test

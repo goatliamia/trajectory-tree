@@ -21,7 +21,9 @@ node scripts/install-antigravity.mjs
 
 [数据口径、旧版迁移与维护](../plugin/antigravity/README.md)
 
-「用量总览」覆盖本机历史对话，支持按模型查看 Token 构成、输出速度和首 Token 等待时间。选择对话名称可进入对应的请求详情。
+「趋势与对照」按用户轮次展示轮末请求输入、轮内峰值和压缩位置。点选某轮可查看该轮的全部请求。会话顶部同时显示最近请求的输出速度和上下文窗口占比。
+
+「用量总览」默认显示近七天，可按项目、时间和模式筛选。子会话用量归入主对话标题。热力图先按模型展示该时段各对话的 Token 占比，勾选「细分模式」可在模型下展开运行模式，协作模式的生成速度按调度和执行分别展示。「工具 Eval」可按轮对照调用分布、执行结果和计时。
 
 ## Eval 总览
 
@@ -87,6 +89,8 @@ node scripts/package-trajectory.mjs --host claude
 包分别位于 `dist/trajectory-tree-codex`、`dist/trajectory-tree-pi` 和 `dist/trajectory-tree-claude`，包含脚本、字体、组件与所需的 TypeBox 依赖。来源清单及内容哈希在各包的 `bundle-manifest.json`。
 
 用 `npm pack <包目录> --pack-destination <输出目录>` 生成归档。将三个便携包和 DSH 的 `plugin/trajectory-tools`、`plugin/analysis-view` 两个包放在同一输出目录，可用 `node scripts/test-trajectory-packages.mjs --dir <输出目录>` 验证解包后的入口。
+
+DSH 还支持从 Git 子目录安装。仓库可解析 `@deepseek-ai/dsh` 且本机有 pnpm 时，运行 `node scripts/verify-dsh-git-install.mjs` 会在空白 Web profile 中实际执行 README 的公开安装命令，并检查两个组合包的注册与入口。传入 `--archives <目录>` 可用同一空白 profile 流程验证两个发布归档的安装、版本及入口。CI 运行 `--check` 核对中英文安装命令和 README 中的归档文件名。
 
 Codex：构建后刷新或重启客户端，在 Plugins Directory 选择 `Trajectory Tree 本地插件` 源并安装。缺少当前会话 ID 时生成器要求明确的 `--thread`，不改选最近会话。
 

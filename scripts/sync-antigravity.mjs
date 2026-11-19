@@ -32,12 +32,12 @@ export function syncAntigravity({ check = false } = {}) {
     moduleScope(read('docs/demo/preset-context/zoom-treemap.js'), ['toggleZoomFocus', 'zoomMapOverlay', 'zoomMapIndex', 'createZoomTreemap']),
     moduleScope(model.replace('Math.max(480,', 'Math.max(180,'), ['currentContextScene']),
     moduleScope(panel, ['mountCurrentContext']),
-    moduleScope(read('lib/context-trend-geometry.mjs'), ['compactTrendPolyline']),
   ];
-  const css = read('view/current-context/panel.css').replace(/@font-face\{[^}]+\}/g, '') + '\n' + read('docs/demo/preset-context/zoom-treemap.css') + '\n' + read('plugin/antigravity/sidecars/context_board/styles.base.css');
+  const css = read('design/tokens.css') + '\n' + read('view/current-context/panel.css').replace(/@font-face\{[^}]+\}/g, '') + '\n' + read('docs/demo/preset-context/zoom-treemap.css') + '\n' + read('plugin/antigravity/sidecars/context_board/styles.base.css');
   const output = new Map([
     ['app.js', `(()=>{\n"use strict";\n${ui}\n${modules.join('\n')}\n${read('plugin/antigravity/sidecars/context_board/app.src.js')}\n})();\n`],
     ['styles.css', css], ['native/categories.mjs', categories],
+    ['native/tool-behavior.mjs', read('plugin/analysis-view/lib/eval/workspace/ui/tool-behavior.mjs')],
     ...['Geist-Variable.woff2', 'GeistMono-Variable.woff2'].map(name => ['fonts/' + name, readFileSync(join(root, 'plugin/analysis-view/lib/trace/fonts', name))]),
     ['fonts/LICENSE.txt', read('plugin/analysis-view/lib/trace/fonts/LICENSE.txt')],
   ]);

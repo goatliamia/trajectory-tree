@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { buildConversationSnapshot, findAppDataDirs, listConversations, readContextBody, resolveConversation } from './context-data.mjs';
-import { createUsageOverview } from './usage-data.mjs';
+import { buildConversationSnapshot, findAppDataDirs, listConversations, readContextBody, resolveConversation, turnRequests } from './context-data.mjs';
+import { conversationCatalog, createUsageOverview } from './usage-data.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const STATIC = {
@@ -22,13 +22,20 @@ export function createContextApi({ dirs = findAppDataDirs(), conversationId = ''
     usage: createUsageOverview(dirs),
     async context(data) {
       const { target, entries } = resolve(data);
-      const recent = entries.slice(0, 8);
+      const catalog = await conversationCatalog(dirs);
+      const info = e => catalog.get(join(e.appData,e.id)) || {};
+      const ids = new Set(entries.map(e => e.id));
+      const roots = entries.filter(e => !ids.has(info(e).parent));
+      const recent = data?.list === 'all' ? roots : roots.slice(0, 8);
       if (target && !recent.includes(target)) recent.push(target);
-      const conversations = recent.map(e => ({ id: e.id, shortId: e.id.slice(0, 8) }));
+      const conversations = recent.map(e => ({ id: e.id, shortId: e.id.slice(0, 8), title: info(e).title || '未命名对话' }));
       if (!target) return { empty: true, conversationId: null, conversations };
       const snap = await buildConversationSnapshot(target);
-      if (data?.etag === snap.etag) return { unchanged: true, conversationId: target.id, etag: snap.etag, conversations };
-      return { ...snap, conversations };
+      const turn = /^\d+$/.test(data?.turn) ? Number(data.turn) : null;
+      const selected = snap.turnSeries.some(bucket => bucket.turn === turn);
+      const etag = selected ? snap.etag + '/turn/' + turn : snap.etag;
+      if (data?.etag === etag) return { unchanged: true, conversationId: target.id, etag, conversations };
+      return { ...snap, etag, conversations, ...(selected ? { turnDetail: { turn, rows: turnRequests(snap, turn) } } : {}) };
     },
     async currentContext(data) {
       const { target } = resolve(data);

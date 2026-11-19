@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { createReadStream, existsSync, readFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setImmediate as yieldToHost } from 'node:timers/promises';
-import { conversationVersion, listConversations, transcriptTokens } from './context-data.mjs';
-import { readUsageRecords } from './request-records.mjs';
+import { conversationVersion, listConversations, transcriptRoute, transcriptTokens } from './context-data.mjs';
+import { outputRate, readUsageRecords, requestRoute } from './request-records.mjs';
 
 const tokenKeys = ['inputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'outputTokens'];
 
@@ -17,8 +17,7 @@ async function readTranscriptUsage(path) {
       let row;
       try { row = JSON.parse(line); } catch { continue; }
       if (row?.type !== 'PLANNER_RESPONSE' || !Number.isInteger(row.step_index)) continue;
-      const model = typeof row.model === 'string' && row.model.trim() || '未记录模型';
-      steps.set(row.step_index, { model, ...transcriptTokens(row) });
+      steps.set(row.step_index, { seq: row.step_index, at: Date.parse(row.created_at) || null, ...transcriptRoute(row), ...transcriptTokens(row) });
     }
   } finally { lines.close(); stream.destroy(); }
   return [...steps.values()];
@@ -29,7 +28,15 @@ async function loadConversation(entry) {
   if (existsSync(entry.dbPath)) {
     try {
       const native = await readUsageRecords(entry.dbPath);
-      if (native.records.length) return { ...native, source: 'database', retry };
+      if (native.records.length) {
+        if (native.records.some(r => r.at == null) && existsSync(entry.path)) {
+          try {
+            const times = new Map((await readTranscriptUsage(entry.path)).map(r => [r.seq, r.at]));
+            for (const r of native.records) r.at ??= times.get(r.seq) ?? null;
+          } catch { retry = true; }
+        }
+        return { ...native, source: 'database', retry };
+      }
     } catch { retry = true; }
   }
   if (existsSync(entry.path)) {
@@ -39,7 +46,7 @@ async function loadConversation(entry) {
   return { records: [], parents: [], source: retry ? 'unavailable' : 'empty', retry };
 }
 
-async function conversationTitles(dirs) {
+export async function conversationCatalog(dirs) {
   const { DatabaseSync } = await import('node:sqlite');
   const titles = new Map();
   for (const dir of dirs) {
@@ -48,8 +55,28 @@ async function conversationTitles(dirs) {
     let db;
     try {
       db = new DatabaseSync(path, { readOnly: true });
-      for (const row of db.prepare("SELECT conversation_id, substr(title,1,160) AS title FROM conversation_summaries WHERE title <> ''").iterate()) {
-        titles.set(join(dir, row.conversation_id), row.title);
+      const columns = new Set(db.prepare('PRAGMA table_info(conversation_summaries)').all().map(r => r.name));
+      const extra = ['project_id', 'workspace_uris', 'parent_conversation_id'].filter(key => columns.has(key));
+      const names = new Map();
+      for (const row of db.prepare('SELECT ' + ['conversation_id','substr(title,1,160) AS title',...extra].join(',') + ' FROM conversation_summaries').iterate()) {
+        let workspace = '';
+        try { workspace = JSON.parse(row.workspace_uris || '[]')[0] || ''; } catch {}
+        const project = row.project_id || workspace;
+        if (project && !names.has(project)) {
+          let label;
+          if (/^[a-f0-9-]{36}$/i.test(row.project_id || '')) {
+            try { label = JSON.parse(readFileSync(join(dirname(dir),'config/projects',row.project_id + '.json'),'utf8')).name; } catch {}
+          }
+          try { label ||= basename(decodeURIComponent(new URL(workspace).pathname)); } catch {}
+          names.set(project, label || project);
+        }
+        titles.set(join(dir, row.conversation_id), {title: row.title || '', project, projectName: names.get(project), parent:row.parent_conversation_id || ''});
+      }
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='conversation_parents'").get()) {
+        for (const row of db.prepare('SELECT conversation_id,parent_id FROM conversation_parents').iterate()) {
+          const key = join(dir,row.conversation_id), info = titles.get(key) || {};
+          if (!info.parent) titles.set(key,{ ...info, parent:row.parent_id });
+        }
       }
     } catch { /* Older or busy title indices can still show short conversation IDs. */ }
     finally { db?.close(); }
@@ -65,7 +92,7 @@ function parentFirst(conversations) {
   function visit(chat) {
     if (!chat || seen.has(chat.id)) return;
     seen.add(chat.id);
-    for (const id of chat.parents) visit(byId.get(id));
+    for (const id of [chat.parent,...chat.parents]) visit(byId.get(id));
     ordered.push(chat);
   }
   for (const id of [...byId.keys()].sort()) visit(byId.get(id));
@@ -74,14 +101,15 @@ function parentFirst(conversations) {
 
 function counters() {
   return { requests: 0, completeRequests: 0, inputTokens: null, cacheReadTokens: null, cacheWriteTokens: null,
-    outputTokens: null, timedRequests: 0, timedTokens: 0, streamSeconds: 0, firstRequests: 0, firstSeconds: 0 };
+    outputTokens: null, timedRequests: 0, timedTokens: 0, streamSeconds: 0, firstRequests: 0, firstSeconds: 0, responseModels: new Set() };
 }
 
 function add(c, row) {
   c.requests++;
+  if (row.responseModel) c.responseModels.add(row.responseModel);
   if (row.inputTokens != null && row.outputTokens != null) c.completeRequests++;
   for (const key of tokenKeys) if (row[key] != null) c[key] = (c[key] ?? 0) + row[key];
-  if (row.streamSeconds > 0 && row.outputTokens != null) {
+  if (outputRate(row.outputTokens, row.streamSeconds) != null) {
     c.timedRequests++;
     c.timedTokens += row.outputTokens;
     c.streamSeconds += row.streamSeconds;
@@ -95,43 +123,122 @@ function metrics(c) {
   const tokens = Object.fromEntries(tokenKeys.map(k => [k, c[k]]));
   const totalTokens = tokenKeys.some(k => c[k] != null) ? tokenKeys.reduce((n, k) => n + (c[k] ?? 0), 0) : null;
   return { ...tokens, totalTokens, requests: c.requests, completeRequests: c.completeRequests,
-    tps: c.timedRequests ? c.timedTokens / c.streamSeconds : null, timedRequests: c.timedRequests,
+    tps: outputRate(c.timedTokens, c.streamSeconds), timedRequests: c.timedRequests, responseModels: [...c.responseModels].sort(),
     firstTokenSeconds: c.firstRequests ? c.firstSeconds / c.firstRequests : null, firstRequests: c.firstRequests };
 }
 
-export function summarizeUsage(chats, requestedModel) {
-  const models = [...new Set(chats.flatMap(chat => [...new Set(chat.records.map(r => r.model))]))].sort();
-  const model = models.includes(requestedModel) ? requestedModel : '';
+const modeName = row => (Object.hasOwn(row, 'mode') ? row.mode : row.model) || '未记录模式';
+const orderedModes = ['协作','高强度','中强度','低强度'];
+function compareMode(a,b) {
+  const rank = value => orderedModes.includes(value) ? orderedModes.indexOf(value) : orderedModes.length;
+  return rank(a) - rank(b) || a.localeCompare(b);
+}
+
+function addModelUsage(families, route, row) {
+  if (!families.has(route.modelName)) families.set(route.modelName, { counts:counters(), modes:new Map() });
+  const family = families.get(route.modelName);
+  if (!family.modes.has(route.mode)) family.modes.set(route.mode, { counts:counters(), roles:new Set() });
+  const mode = family.modes.get(route.mode);
+  add(family.counts,row);
+  add(mode.counts,row);
+  if (route.role) mode.roles.add(route.role);
+}
+
+function modelUsageRows(families) {
+  return [...families].map(([name, family]) => ({ name, ...metrics(family.counts),
+    modes: [...family.modes].map(([name, mode]) => ({name, roles:[...mode.roles].sort(), ...metrics(mode.counts)}))
+      .sort((a,b) => compareMode(a.name,b.name)) }));
+}
+
+export function summarizeUsage(chats, requestedMode, options = {}) {
+  const grouped = options.group === 'mode';
+  const groupName = row => grouped ? requestRoute(modeName(row), row.responseModel).mode : modeName(row);
+  const days = Number(options.days);
+  const now = new Date(options.now ?? Date.now()), start = new Date(now);
+  start.setHours(0,0,0,0);
+  start.setDate(start.getDate() - (days - 1));
+  const dated = [1,7,30].includes(days);
+  const projects = new Map(), assignments = new Map();
+  let ordered = parentFirst(chats);
+  if (grouped) {
+    const owners = new Map(), roots = [];
+    for (const chat of ordered) {
+      const owner = owners.get(chat.parent || (!chat.title && chat.parents[0]));
+      if (owner) {
+        owners.set(chat.id,owner);
+        for (const record of chat.records) owner.records.push(record);
+        owner.children++;
+      } else {
+        const root = {...chat, records:[...chat.records], children:0};
+        roots.push(root); owners.set(chat.id,root);
+      }
+    }
+    ordered = roots;
+  }
+  for (const chat of ordered) {
+    const inherited = chat.parents.map(id => assignments.get(id)).find(p => p && p !== 'unknown');
+    const project = chat.project || inherited || 'unknown';
+    assignments.set(chat.id, project);
+    projects.set(project, chat.projectName || projects.get(project) || (project === 'unknown' ? '未归属项目' : project));
+  }
+  const inProject = chat => !options.project || assignments.get(chat.id) === options.project;
+  const inTime = row => !dated || (row.at != null && row.at >= start.getTime() && row.at <= now.getTime());
+  const available = new Set();
+  for (const chat of ordered.filter(inProject)) for (const row of chat.records) if (inTime(row)) available.add(groupName(row));
+  const models = [...available].sort(grouped ? compareMode : undefined), model = requestedMode || '';
   const seen = new Set(), speeds = new Map(), conversations = [], total = counters();
-  let sharedRequests = 0;
-  for (const chat of parentFirst(chats)) {
-    const own = counters();
+  const routes = new Map();
+  let sharedRequests = 0, undatedRequests = 0;
+  for (const chat of ordered) {
+    const all = counters(), modes = new Map(), families = new Map();
     let shared = 0;
     for (const row of chat.records) {
       const duplicate = row.requestId && seen.has(row.requestId);
       if (row.requestId) seen.add(row.requestId);
-      if (model && model !== row.model) continue;
-      if (duplicate) { shared++; continue; }
-      if (!speeds.has(row.model)) speeds.set(row.model, counters());
-      add(total, row); add(own, row); add(speeds.get(row.model), row);
+      if (!inProject(chat)) continue;
+      const name = groupName(row);
+      if (!inTime(row)) { if (!duplicate && row.at == null && (!model || name === model)) undatedRequests++; continue; }
+      if (duplicate) { if (!model || model === name) shared++; continue; }
+      add(all, row);
+      if (model && model !== name) continue;
+      if (!speeds.has(name)) speeds.set(name, counters());
+      if (!modes.has(name)) modes.set(name, counters());
+      add(total, row); add(modes.get(name), row); add(speeds.get(name), row);
+      if (grouped) {
+        const route = requestRoute(modeName(row), row.responseModel);
+        addModelUsage(families, route, row);
+        const key = JSON.stringify([name,route.label]);
+        if (!routes.has(key)) routes.set(key, { mode:name, label:route.label, counts:counters(), raw:new Set() });
+        const bucket = routes.get(key);
+        add(bucket.counts,row); bucket.raw.add(modeName(row));
+      }
     }
     sharedRequests += shared;
-    if (!model || own.requests || shared) conversations.push({ id: chat.id, title: chat.title, shared, ...metrics(own) });
+    if (inProject(chat) && (modes.size || shared || (!dated && !model))) {
+      const full = metrics(all);
+      conversations.push({ id: chat.id, title: chat.title || '未命名对话', children:chat.children || 0, shared, ...(model ? metrics(modes.get(model) ?? counters()) : full),
+        allModeTokens: full.totalTokens, ...(grouped ? {modelUsage:modelUsageRows(families)} : {}),
+        byMode: [...modes].map(([name, counts]) => ({ name, ...metrics(counts) })) });
+    }
   }
   conversations.sort((a, b) => (b.totalTokens ?? -1) - (a.totalTokens ?? -1) || a.id.localeCompare(b.id));
   const byModel = [...speeds].map(([name, counts]) => ({ name, ...metrics(counts) }))
     .sort((a, b) => (b.tps ?? -1) - (a.tps ?? -1) || a.name.localeCompare(b.name));
-  return { model, models, totals: metrics(total), byModel, conversations, sharedRequests,
-    transcriptChats: chats.filter(c => c.source === 'transcript').length,
-    unavailableChats: chats.filter(c => c.source === 'unavailable').length,
-    staleChats: chats.filter(c => c.stale).length };
+  const scopeChats = ordered.filter(inProject);
+  return { model, models, totals: metrics(total), byModel, conversations, sharedRequests, undatedRequests,
+    projects: [...projects].map(([id,name]) => ({id,name})).sort((a,b) => a.name.localeCompare(b.name)), project: options.project || '',
+    speeds: [...routes.values()].map(r => ({mode:r.mode,label:r.label,raw:[...r.raw],...metrics(r.counts)}))
+      .sort((a,b) => compareMode(a.mode,b.mode) || a.label.localeCompare(b.label)),
+    transcriptChats: scopeChats.filter(c => c.source === 'transcript').length,
+    unavailableChats: scopeChats.filter(c => c.source === 'unavailable').length,
+    staleChats: scopeChats.filter(c => c.stale).length };
 }
 
 export function createUsageOverview(dirs) {
   const cache = new Map();
   let loading;
   async function load() {
-    const entries = listConversations(dirs), titles = await conversationTitles(dirs);
+    const entries = listConversations(dirs), titles = await conversationCatalog(dirs);
     const present = new Set(entries.map(e => e.dbPath));
     for (const path of cache.keys()) if (!present.has(path)) cache.delete(path);
     const chats = [];
@@ -149,13 +256,13 @@ export function createUsageOverview(dirs) {
           else cache.delete(entry.dbPath);
         }
       }
-      chats.push({ ...data, id: entry.id, title: titles.get(join(entry.appData, entry.id)) || '' });
+      chats.push({ ...data, id: entry.id, title: '', ...titles.get(join(entry.appData, entry.id)) });
     }
     return chats;
   }
   return async function overview(data = {}) {
     loading ??= load().finally(() => { loading = null; });
-    const result = summarizeUsage(await loading, data.model);
+    const result = summarizeUsage(await loading, data.mode ?? data.model, {group:data.group, project:data.project, days:data.days});
     const etag = createHash('sha256').update(JSON.stringify(result)).digest('hex').slice(0, 24);
     return data.etag === etag ? { etag, unchanged: true } : { ...result, etag };
   };

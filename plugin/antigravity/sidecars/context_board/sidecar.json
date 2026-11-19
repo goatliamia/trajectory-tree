@@ -3,7 +3,7 @@
   "args": ["main.mjs"],
   "restart_policy": "always",
   "display_name": "上下文与用量",
-  "description": "查看当前对话的上下文来源、缓存与压缩切点，或打开用量总览统计本机对话的 Token 和模型输出速度。",
+  "description": "按轮查看上下文输入、窗口占用和输出速度，或用热力图对照各主对话的模型 Token 用量并展开运行模式。",
   "has_web_ui": true,
   "agent_permissions": {
     "allows_user_interactions": false

@@ -1,7 +1,7 @@
 {
   "name": "trajectory-tree",
   "displayName": "Trajectory Tree · 上下文与用量",
-  "description": "查看单次请求的上下文与缓存，跨对话统计 Token 用量，比较各模型的输出速度与首 Token 等待时间。",
+  "description": "按轮查看输入变化、窗口占用与输出速度，跨对话比较各模型的 Token 用量和首 Token 等待时间。",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
     "打开上下文与用量面板"

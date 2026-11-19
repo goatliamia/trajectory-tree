@@ -128,7 +128,7 @@ Or pack a local checkout and install the archives:
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.9.tgz ./dsh-analysis-view-0.11.1.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.10.tgz ./dsh-analysis-view-0.11.1.tgz
 ```
 
 Restart `dsh web`, then open **Eval** or use `/trajectory` for the current session's path. Choose a diagnostic question and select **Fill conversation** to append the draft to the composer. The plugins target the DSH 0.2.2 line; see the [host compatibility notes](docs/host-compatibility.md#dsh-version).
@@ -203,7 +203,7 @@ Use `/trajectory-tree:trajectory-view` or `/trajectory-tree:trajectory-eval` to 
 <details>
 <summary><strong>Antigravity · Context and usage frontend</strong></summary>
 
-Extract the `trajectory-tree` folder from the ZIP into `~/.gemini/config/plugins/`, or run the command below from the repository root. [Download Antigravity 1.1.0](https://github.com/goatliamia/trajectory-tree/releases/download/v0.2.7/trajectory-tree-antigravity-1.1.0.zip)
+Extract the `trajectory-tree` folder from the ZIP into `~/.gemini/config/plugins/`, or run the command below from the repository root. [Download Antigravity 1.2.3](https://github.com/goatliamia/trajectory-tree/releases/download/v0.2.8/trajectory-tree-antigravity-1.2.3.zip)
 
 ```sh
 node scripts/install-antigravity.mjs
@@ -213,7 +213,7 @@ Requires Node.js 24+. Refresh plugins or restart the host, then open **上下文
 
 [Installation, data semantics and maintenance](plugin/antigravity/README.md)
 
-![Antigravity’s Chinese-language usage panel showing token mix, model speeds and per-conversation totals](docs/media/antigravity-usage.jpg)
+![Antigravity's usage panel showing token shares by conversation and model, token mix and streaming speed](docs/media/antigravity-usage.jpg)
 
 </details>
 

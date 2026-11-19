@@ -7,24 +7,79 @@ import { test } from 'node:test';
 import { decodeRequest } from '../plugin/antigravity/sidecars/context_board/request-records.mjs';
 import { projectContext, listConversations, buildConversationSnapshot } from '../plugin/antigravity/sidecars/context_board/context-data.mjs';
 import { createContextApi } from '../plugin/antigravity/sidecars/context_board/main.mjs';
+import { summarizeUsage } from '../plugin/antigravity/sidecars/context_board/usage-data.mjs';
 import { installAntigravity, INSTALL_FILES } from './install-antigravity.mjs';
 
 const encode = n => { let v = BigInt.asUintN(64, BigInt(n)); const b = []; do { const byte = Number(v & 127n); v >>= 7n; b.push(byte | (v ? 128 : 0)); } while (v); return Buffer.from(b); };
 const field = (n, value) => typeof value === 'number' ? Buffer.concat([encode(n * 8), encode(value)]) : Buffer.concat([encode(n * 8 + 2), encode(Buffer.byteLength(value)), Buffer.from(value)]);
 const proto = (...parts) => Buffer.concat(parts);
 const message = (source, seq, text, extra = []) => proto(field(2, source), field(18, seq), field(3, text), ...extra);
-function request({ prompt = true, input = 200, cache = 900, output = 40 } = {}) {
+const duration = value => proto(field(1, Math.floor(value)), field(2, Math.round((value % 1) * 1e9)));
+function request({ prompt = true, input = 200, cache = 900, output = 40, seq = 4, capacity, used, stream } = {}) {
   const section = '<skills>Catalog</skills>';
-  const model = proto(field(4, proto(field(2, input), field(5, cache), field(3, output))), field(9, field(2, -1)),
+  const window = proto(...[[1, used], [4, capacity]].filter(([,v]) => v != null).map(([k,v]) => field(k,v)));
+  const model = proto(field(4, proto(field(2, input), field(5, cache), field(3, output))),
+    field(9, proto(field(2, -1), ...(window.length ? [field(10, window)] : []))),
+    ...(stream == null ? [] : [field(12, duration(stream))]),
     ...(prompt ? [field(1, 'Identity\n' + section), field(16, proto(field(1, 'skills'), field(2, section), field(6, 1))),
       field(8, proto(field(1, 'read_file'), field(2, 'Read a file'), field(3, '{"type":"object"}'))),
       field(2, message(1, 0, 'Hello')),
       field(2, message(2, 1, 'Visible reply', [field(11, 'PRIVATE_THINKING'), field(12, 'PRIVATE_SIGNATURE'), field(6, proto(field(1, 'call-1'), field(2, 'read_file'), field(3, '{"Path":"/project/skills/example/SKILL.md"}')))])),
       field(2, message(4, 2, 'Skill body', [field(7, 'call-1')])),
       field(2, message(4, 3, 'Unrelated SKILL.md mention', [field(7, 'other-call')]))] : []));
-  return proto(field(1, model), field(2, encode(4)));
+  return proto(field(1, model), field(2, encode(seq)));
 }
 const conversation = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+test('project, calendar and mode filters count dated requests under their main conversation', () => {
+  const now = new Date(2026,10,19,12).getTime(), boundary = new Date(2026,10,13).getTime();
+  const row = (requestId, at, mode, responseModel, outputTokens, streamSeconds) => ({requestId,at,mode,responseModel,outputTokens,streamSeconds});
+  const first = row('a', boundary, 'Orchestrator (Carbon)','gemini-pro-orchestrator',30,3);
+  const chats = [
+    {id:'root',title:'Project Alpha',project:'a',parents:[],records:[first,row('old',boundary-1,'X (High)','x',800,2)]},
+    {id:'child',parent:'root',parents:['root'],records:[first,row('b',now,'Gemini (Orchestrator)','gemini-flash-worker',90,1),row('unknown',null,'X (High)','x',7,1)]},
+    {id:'other',project:'b',parents:[],records:[row('c',now,'X (High)','x',5,1)]}
+  ];
+  const opts = {group:'mode',days:'7',project:'a',now};
+  const scoped = summarizeUsage(chats,'',opts);
+  assert.equal(scoped.conversations.length,1); assert.equal(scoped.conversations[0].title,'Project Alpha');
+  assert.equal(scoped.conversations[0].children,1); assert.equal(scoped.totals.totalTokens,120);
+  assert.equal(scoped.totals.tps,30); assert.equal(scoped.sharedRequests,1); assert.equal(scoped.undatedRequests,1);
+  assert.deepEqual(scoped.models,['协作']);assert.equal(scoped.projects.length,2);
+  assert.deepEqual(scoped.conversations[0].modelUsage.map(f => [f.name,f.totalTokens,f.modes[0].roles]),[
+    ['Carbon',30,['调度']],['Gemini',90,['执行']]]);
+  assert.deepEqual(scoped.speeds.map(r=>r.tps).sort((a,b)=>a-b),[10,90]);
+  assert.equal(summarizeUsage(chats,'',{...opts,days:0}).totals.totalTokens,927);
+  assert.equal(summarizeUsage(chats,'高强度',opts).conversations.length,0);
+});
+
+test('model columns retain distinct families at the same intensity and aggregate a family across modes', () => {
+  const records = [
+    ['Alpha (High)','alpha-high',70], ['Alpha (Medium)','alpha-med',10], ['Beta (High)','beta',15],
+    [null,'response-only',5], [null,null,null], ['Beta (High)',null,0]
+  ].map(([mode,responseModel,outputTokens]) => ({mode,responseModel,outputTokens}));
+  const chats = [{id:'one',title:'One',parents:[],records}];
+  const all = summarizeUsage(chats,'',{group:'mode'}).conversations[0];
+  assert.deepEqual(all.modelUsage.map(m => [m.name,m.totalTokens]), [
+    ['Alpha',80],['Beta',15],['response-only',5],['未记录模型',null]]);
+  assert.deepEqual(all.modelUsage[0].modes.map(m => [m.name,m.totalTokens]),[['高强度',70],['中强度',10]]);
+  const scoped = summarizeUsage(chats,'高强度',{group:'mode'}).conversations[0];
+  assert.equal(scoped.allModeTokens,100); assert.equal(scoped.totalTokens,85);
+  assert.deepEqual(scoped.modelUsage.map(m => [m.name,m.requests,m.totalTokens]),[['Alpha',1,70],['Beta',2,15]]);
+});
+
+test('tool Eval counts execution status and pairs start/completion times on the same native step', async t => {
+  const f = fixture(t), db = new DatabaseSync(f.dbPath);
+  db.exec('CREATE TABLE steps(idx INTEGER, status INTEGER, metadata BLOB)');
+  const put = db.prepare('INSERT INTO steps VALUES (?,?,?)');
+  const call = field(4,proto(field(2,'read_file')));
+  put.run(2,3,proto(call,field(32,duration(10)),field(8,duration(12))));
+  put.run(3,7,proto(call,field(32,duration(20)),field(8,duration(19))));
+  put.run(4,6,call); db.close();
+  const snap = await createContextApi({dirs:[f.root],conversationId:conversation}).context({});
+  const tool = snap.toolEval.all[0];
+  assert.deepEqual([tool.calls,tool.done,tool.error,tool.stopped,tool.timed,tool.seconds],[3,1,1,1,1,2]);
+  assert.deepEqual(tool.errors,[3]); assert.deepEqual(snap.toolEval.byTurn[1],[tool]);
+});
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'trajectory-antigravity-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -111,11 +166,90 @@ test('an unchanged database can recover after a transient read lock', async t =>
 });
 
 const secondChat = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-function usageRecord(id, model, counts, stream, first) {
-  const duration = value => proto(field(1, Math.floor(value)), field(2, Math.round((value % 1) * 1e9)));
-  return field(1, proto(field(21, model), field(4, proto(field(11, id), ...counts.map(([k, n]) => field(k, n)))),
+function usageRecord(id, model, counts, stream, first, responseModel) {
+  return field(1, proto(...(model ? [field(21, model)] : []), ...(responseModel ? [field(19, responseModel)] : []),
+    field(4, proto(field(11, id), ...counts.map(([k, n]) => field(k, n)))),
     ...(stream == null ? [] : [field(12, duration(stream))]), ...(first == null ? [] : [field(11, duration(first))])));
 }
+
+test('turns use all requests, retain intra-turn peaks and missing boundaries, and serve the exact selected turn', async t => {
+  const f = fixture(t), db = new DatabaseSync(f.dbPath);
+  writeFileSync(f.path, [10, 200, 200, 300, 400].map(step_index => JSON.stringify({ type: 'USER_INPUT', step_index })).join('\n') +
+    '\n' + JSON.stringify({type: 'CHECKPOINT', step_index: 81}));
+  try {
+    db.exec('BEGIN; DELETE FROM gen_metadata');
+    const insert = db.prepare('INSERT INTO gen_metadata VALUES (?, ?)');
+    for (let seq = 5; seq <= 205; seq++) {
+      insert.run(seq, request({ seq, input: seq === 82 ? 12000 : seq === 205 ? 10 : seq, cache: 0, prompt: false }));
+    }
+    insert.run(402, request({ seq: 402, input: 500, cache: 0, prompt: false }));
+    db.exec('COMMIT');
+  } finally { db.close(); }
+  const api = createContextApi({ dirs: [f.root], conversationId: conversation });
+  const snap = await api.context({});
+  assert.equal(snap.turns, 4);
+  assert.deepEqual(snap.turnSeries.map(r => [r.turn, r.requests]), [[0,5],[1,190],[2,6],[3,0],[4,1]]);
+  assert.equal(snap.turnSeries[1].peak, 12000);
+  assert.equal(snap.turnSeries[1].windowTokens, 199);
+  assert.equal(snap.turnSeries[1].deltaTokens, null);
+  assert.equal(snap.turnSeries[2].deltaTokens, -189);
+  assert.equal(snap.turnSeries[1].checkpoints, 1);
+  assert.equal(snap.turnSeries[3].windowTokens, null); assert.equal(snap.turnSeries[4].deltaTokens, null);
+  assert.equal(snap.recentSteps.length, 60); assert.ok(snap.trendSeries.length < snap.plannerSteps);
+  assert.equal(snap.turnDetail, undefined);
+  const first = await api.context({ turn: '1', etag: snap.etag });
+  assert.equal(first.version, snap.version); assert.notEqual(first.etag, snap.etag);
+  assert.equal(first.turnDetail.rows.length, 190); assert.equal(first.turnDetail.rows[0].seq, 10);
+  assert.equal(first.turnDetail.rows.at(-1).seq, 199);
+  assert.doesNotMatch(JSON.stringify(first.turnDetail), /PRIVATE_|messagePrompts|system_prompt/);
+  assert.equal((await api.context({ turn: '1', etag: first.etag })).unchanged, true);
+  assert.equal((await api.context({ turn: '2', etag: first.etag })).turnDetail.rows.length, 6);
+  assert.equal((await api.context({ turn: '0' })).turnDetail.rows.length, 5);
+  assert.equal((await api.context({ turn: '99' })).turnDetail, undefined);
+});
+
+test('single-chat speed and occupancy use paired measurements, handle zero and do not borrow an earlier capacity', async t => {
+  const f = fixture(t), api = createContextApi({ dirs: [f.root], conversationId: conversation });
+  const db = new DatabaseSync(f.dbPath);
+  try {
+    db.exec('PRAGMA journal_mode=WAL; DELETE FROM gen_metadata');
+    const put = (seq, data) => db.prepare('INSERT INTO gen_metadata VALUES (?, ?)').run(seq,request({ seq, prompt: false, ...data }));
+    put(1, { input: 100, cache: 0, output: 80, stream: 2, capacity: 2000, used: 600 });
+    put(2, { input: 150, cache: 100, output: 40, stream: .25, capacity: 1000, used: 400 });
+    let snap = await api.context({});
+    assert.deepEqual(snap.occupancy, {used:400,capacity:1000,basis:'host-estimate',percent:40});
+    assert.equal(snap.currentWindow, 250); assert.equal(snap.currentTps, 160);
+    assert.equal(snap.averageTps, 120/2.25); assert.equal(snap.timedRequests, 2);
+    put(3, { input: 25, cache: 25, stream: 0, capacity: 500 });
+    snap = await api.context({});
+    assert.deepEqual(snap.occupancy, {used:50,capacity:500,basis:'reported-input',percent:10});
+    assert.equal(snap.currentTps, null); assert.equal(snap.averageTps, 120/2.25);
+    put(4, { capacity: 800, used: 0, output: 0, stream: 1 });
+    snap = await api.context({}); assert.equal(snap.currentTps, 0); assert.equal(snap.occupancy.percent, 0);
+    put(5, {}); snap = await api.context({}); assert.equal(snap.occupancy, null);
+  } finally { db.close(); }
+});
+
+test('mode heatmap separates host modes sharing a response model and keeps the all-mode denominator under filtering', async t => {
+  const f = fixture(t), db = new DatabaseSync(f.dbPath);
+  try {
+    db.exec('DELETE FROM gen_metadata');
+    const insert = db.prepare('INSERT INTO gen_metadata VALUES (?, ?)');
+    insert.run(0, usageRecord('a', 'Family (High)', [[2,70],[3,10]], .5, 1, 'runtime-a'));
+    insert.run(1, usageRecord('b', 'Family (Medium)', [[2,10],[3,10]], 1, 1, 'runtime-a'));
+    insert.run(2, usageRecord('c', null, [], null, null, 'runtime-b'));
+    insert.run(3, usageRecord('b', 'Family (Medium)', [[2,10],[3,10]], 1, 1, 'runtime-a'));
+  } finally { db.close(); }
+  const api = createContextApi({ dirs: [f.root] });
+  const all = await api.usage(), chat = all.conversations[0];
+  assert.equal(all.sharedRequests, 1); assert.equal(chat.allModeTokens, 100);
+  assert.deepEqual(chat.byMode.map(m => [m.name,m.totalTokens,m.responseModels]), [
+    ['Family (High)',80,['runtime-a']], ['Family (Medium)',20,['runtime-a']], ['未记录模式',null,['runtime-b']] ]);
+  const filtered = await api.usage({mode:'Family (Medium)'});
+  assert.equal(filtered.conversations[0].totalTokens,20); assert.equal(filtered.conversations[0].allModeTokens,100);
+  assert.equal(filtered.conversations[0].byMode.length,1); assert.equal(filtered.totals.tps,10);
+  assert.equal((await api.usage({model:'Family (Medium)'})).etag,filtered.etag);
+});
 
 test('all-history overview counts forked responses once and weights throughput by timed output and streaming seconds', async t => {
   const f = fixture(t), parent = new DatabaseSync(f.dbPath);

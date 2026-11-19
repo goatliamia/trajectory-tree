@@ -2,10 +2,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { CONTEXT_CATEGORIES } from './native/categories.mjs';
-import { readRequests } from './request-records.mjs';
+import { outputRate, readRequests, requestRoute } from './request-records.mjs';
+import { toolVisualFamily } from './native/tool-behavior.mjs';
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const cache = new Map(), bodies = new WeakMap();
+const cache = new Map(), bodies = new WeakMap(), requestsByTurn = new WeakMap();
 const emptyTotals = () => ({ total: 0, ...Object.fromEntries(CONTEXT_CATEGORIES.map(c => [c.key, 0])) });
 const readDir = path => { try { return readdirSync(path); } catch { return []; } };
 const stamp = path => {
@@ -110,24 +111,106 @@ export function transcriptTokens(row) {
   return { inputTokens: reported ? input ?? 0 : null, cacheReadTokens: reported ? read ?? 0 : null,
     cacheWriteTokens: reported ? write ?? 0 : null, outputTokens: count(row.output_tokens) };
 }
+export function transcriptRoute(row) {
+  return { mode: typeof row.model_display_name === 'string' ? row.model_display_name.trim() || null : null,
+    responseModel: typeof row.model === 'string' ? row.model.trim() || null : null };
+}
 function transcriptRequest(row, index) {
   const tokens = transcriptTokens(row);
   return { index, seq: row.step_index, at: row.created_at || '',
-    ...tokens, windowTokens: tokens.inputTokens == null ? null : tokens.inputTokens + tokens.cacheReadTokens + tokens.cacheWriteTokens,
+    ...tokens, ...transcriptRoute(row), windowTokens: tokens.inputTokens == null ? null : tokens.inputTokens + tokens.cacheReadTokens + tokens.cacheWriteTokens,
     hasPrompt: false, messages: [], tools: [], sections: [] };
+}
+
+// A turn starts at a user input, even if intermediate transcript steps are missing.
+// Bucket zero keeps unassigned requests inspectable without inventing a user turn.
+function turnAt(boundaries, seq) {
+  if (seq == null) return 0;
+  let lo = 0, hi = boundaries.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (boundaries[mid] <= seq) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function summarizeTurns(series, boundaries, checkpoints) {
+  const groups = new Map(boundaries.map((_, i) => [i + 1, []]));
+  for (const row of series) {
+    if (!groups.has(row.turn)) groups.set(row.turn, []);
+    groups.get(row.turn).push(row);
+  }
+  const compressions = new Map();
+  for (const seq of checkpoints) {
+    const turn = turnAt(boundaries, seq);
+    const cuts = compressions.get(turn) || [];
+    cuts.push({seq, before:series.findLast(r => r.seq != null && r.seq < seq)?.windowTokens ?? null,
+      after:series.find(r => r.seq != null && r.seq > seq)?.windowTokens ?? null});
+    compressions.set(turn, cuts);
+  }
+  const turns = [];
+  for (const turn of [...groups.keys()].sort((a, b) => a - b)) {
+    const rows = groups.get(turn), last = rows.at(-1);
+    let peak = null, metered = 0;
+    for (const row of rows) {
+      if (row.windowTokens == null) continue;
+      metered++;
+      peak = Math.max(peak ?? 0, row.windowTokens);
+    }
+    const previous = turns.at(-1);
+    const comparable = turn > 1 && previous?.turn === turn - 1 && previous.windowTokens != null && last?.windowTokens != null;
+    turns.push({ turn, requests: rows.length, metered, endSeq: last?.seq ?? null,
+      windowTokens: last?.windowTokens ?? null, peak, checkpoints: compressions.get(turn)?.length || 0, cuts: compressions.get(turn) || [],
+      inputTokens: last?.inputTokens ?? null, cacheReadTokens: last?.cacheReadTokens ?? null, cacheWriteTokens: last?.cacheWriteTokens ?? null,
+      deltaTokens: comparable ? last.windowTokens - previous.windowTokens : null,
+      deltaBySource: comparable ? Object.fromEntries(['inputTokens','cacheReadTokens','cacheWriteTokens'].map(k => [k, last[k] - previous[k]])) : null });
+  }
+  return { groups, turns };
+}
+
+function toolEvaluation(calls, boundaries) {
+  const byTurn = new Map(), all = new Map();
+  const aliases = {run_command:'commandExecution',edit_file:'edit',search_web:'web_search',swarm:'subagent',manage_task:'todo_write'};
+  function add(buckets, call) {
+    let bucket = buckets.get(call.name);
+    if (!bucket) {
+      bucket = {name:call.name, family:toolVisualFamily({name:aliases[call.name] || call.name}), calls:0,
+        done:0, error:0, stopped:0, unknown:0, timed:0, seconds:0, errors:[]};
+      buckets.set(call.name,bucket);
+    }
+    bucket.calls++; bucket[call.outcome]++;
+    if (call.outcome === 'error' && bucket.errors.length < 6) bucket.errors.push(call.seq);
+    if (call.seconds != null) { bucket.timed++; bucket.seconds += call.seconds; }
+  }
+  for (const call of calls) {
+    const turn = turnAt(boundaries,call.seq);
+    if (!byTurn.has(turn)) byTurn.set(turn,new Map());
+    add(byTurn.get(turn),call); add(all,call);
+  }
+  return {all:[...all.values()], byTurn:Object.fromEntries([...byTurn].map(([turn,tools]) => [turn,[...tools.values()]]))};
+}
+
+function windowOccupancy(request) {
+  const capacity = request?.contextWindow;
+  if (!(capacity > 0)) return null;
+  const estimated = request.estimatedTokensUsed != null;
+  const used = estimated ? request.estimatedTokensUsed : request.windowTokens;
+  return { used, capacity, basis: estimated ? 'host-estimate' : 'reported-input', percent: used == null ? null : used / capacity * 100 };
 }
 
 export async function buildConversationSnapshot(entry) {
   const fileVersion = conversationVersion(entry);
   const prior = cache.get(entry.path);
   if (prior?.version === fileVersion) return prior;
-  const rows = rowsOf(entry.path), bySeq = new Map(rows.map(r => [r.step_index, r]));
+  const bySeq = new Map(rowsOf(entry.path).map(r => [r.step_index, r]));
+  const rows = [...bySeq.values()].sort((a, b) => a.step_index - b.step_index);
   const stepTypes = new Map(rows.map(r => [r.step_index, r.type]));
-  const turns = new Map(); let turn = 0;
-  for (const row of rows) { if (row.type === 'USER_INPUT') turn++; turns.set(row.step_index, turn); }
+  const boundaries = rows.filter(r => r.type === 'USER_INPUT').map(r => r.step_index);
   let requests = [], sourceError = '';
+  const evidence = {};
   if (existsSync(entry.dbPath)) {
-    try { requests = await readRequests(entry.dbPath); }
+    try { requests = await readRequests(entry.dbPath, evidence); }
     catch { sourceError = '请求数据库暂不可读；仅展示 transcript 已记录用量。'; }
   }
   if (!requests.length) requests = rows.filter(r => r.type === 'PLANNER_RESPONSE').map(transcriptRequest);
@@ -140,30 +223,44 @@ export async function buildConversationSnapshot(entry) {
   const checkpointRow = rows.findLast(r => r.type === 'CHECKPOINT' && r.step_index <= (current?.seq ?? Infinity));
   const beforeCP = checkpointRow && requests.findLast(r => r.seq < checkpointRow.step_index);
   const afterCP = checkpointRow && requests.find(r => r.seq > checkpointRow.step_index);
+  const retained = new Set(projected.context.items.map(item => item.seq).filter(seq => seq != null));
+  let timedOutput = 0, streamSeconds = 0, timedRequests = 0;
   const series = requests.map(r => {
     const row = bySeq.get(r.seq), tools = (Array.isArray(row?.tool_calls) ? row.tool_calls : []).map(c => c.name).filter(Boolean);
-    return { ...Object.fromEntries(['index', 'seq', 'at', 'inputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'outputTokens', 'windowTokens'].map(k => [k, r[k]])),
-      turn: turns.get(r.seq) || 0, checkpoint: row?.type === 'CHECKPOINT',
+    const tps = outputRate(r.outputTokens, r.streamSeconds);
+    if (tps != null) { timedRequests++; timedOutput += r.outputTokens; streamSeconds += r.streamSeconds; }
+    return { ...Object.fromEntries(['index', 'seq', 'inputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'outputTokens', 'windowTokens'].map(k => [k, r[k]])),
+      at: r.at || row?.created_at || '', tps, mode: r.mode ?? null, retained: retained.has(r.seq),
+      turn: turnAt(boundaries, r.seq), checkpoint: row?.type === 'CHECKPOINT',
       label: row?.type === 'CHECKPOINT' ? '压缩请求' : tools.length ? tools.join(' · ') : `请求 #${r.seq ?? r.index}` };
   });
   series.forEach((r, i) => {
     r.deltaTokens = i && r.windowTokens != null && series[i - 1].windowTokens != null ? r.windowTokens - series[i - 1].windowTokens : null;
     r.deltaBySource = r.deltaTokens == null ? null : Object.fromEntries(['inputTokens', 'cacheReadTokens', 'cacheWriteTokens'].map(key => [key, r[key] - series[i - 1][key]]));
   });
-  const intervals = series.map((r, i) => ({ s: r.seq, cat: 'assistant', t: r.turn, at: r.at, w: r.windowTokens, o: r.outputTokens,
-    d: i && r.windowTokens != null && series[i - 1].windowTokens != null ? r.windowTokens - series[i - 1].windowTokens : null,
-    tl: r.label, retained: projected.context.items.some(item => item.seq === r.seq) }));
+  const intervals = series.map(r => ({ s: r.seq, index: r.index, cat: 'assistant', t: r.turn, at: r.at, w: r.windowTokens, o: r.outputTokens,
+    d: r.deltaTokens, tl: r.label, retained: r.retained, tps: r.tps, mode: r.mode }));
+  const perTurn = summarizeTurns(series, boundaries, rows.filter(r => r.type === 'CHECKPOINT').map(r => r.step_index));
+  const nativeTools = evidence.tools?.length > 0;
+  const toolCalls = nativeTools ? evidence.tools : rows.flatMap(r => r.type === 'PLANNER_RESPONSE' && Array.isArray(r.tool_calls)
+    ? r.tool_calls.filter(c => typeof c?.name === 'string').map(c => ({name:c.name,seq:r.step_index,outcome:'unknown',seconds:null})) : []);
   const sum = key => requests.some(r => r[key] != null) ? requests.reduce((n, r) => n + (r[key] ?? 0), 0) : null;
   const totalIn = sum('inputTokens'), totalCache = sum('cacheReadTokens'), totalWrite = sum('cacheWriteTokens');
   const stride = Math.max(1, Math.ceil(series.length / 160));
   const data = {
     version, etag: version, conversationId: entry.id, shortId: entry.id.slice(0, 8),
-    cutSeq: rows.at(-1)?.step_index ?? current?.seq ?? 0, turns: turn, plannerSteps: requests.length,
+    cutSeq: rows.at(-1)?.step_index ?? current?.seq ?? 0, turns: boundaries.length, plannerSteps: requests.length,
+    turnSeries: perTurn.turns, currentTurn: turnAt(boundaries, current?.seq),
+    toolEval: { ...toolEvaluation(toolCalls,boundaries), source:nativeTools ? 'steps' : 'transcript' },
+    currentRoute:requestRoute(current?.mode,current?.responseModel), currentResponseModel:current?.responseModel,
+    currentOutput:current?.outputTokens, currentStreamSeconds:current?.streamSeconds,
+    occupancy: windowOccupancy(current), currentTps: outputRate(current?.outputTokens, current?.streamSeconds),
+    averageTps: outputRate(timedOutput, streamSeconds), timedRequests,
     currentWindow: current?.windowTokens ?? null, currentCached: current?.cacheReadTokens ?? null,
     currentUncached: current?.inputTokens ?? null, currentWrite: current?.cacheWriteTokens ?? null,
     usageSeq: current?.seq ?? null, usageAt: current?.at || currentRow?.created_at || '',
     peakWindow: requests.some(r => r.windowTokens != null) ? Math.max(0, ...requests.map(r => r.windowTokens || 0)) : null,
-    checkpoint: checkpointRow ? { step: checkpointRow.step_index, beforeWindow: beforeCP?.windowTokens ?? null, afterWindow: afterCP?.windowTokens ?? null } : null,
+    checkpoint: checkpointRow ? { step: checkpointRow.step_index, turn: turnAt(boundaries, checkpointRow.step_index), beforeWindow: beforeCP?.windowTokens ?? null, afterWindow: afterCP?.windowTokens ?? null } : null,
     totalIn, totalCache, totalWrite, totalOut: requests.some(r => r.outputTokens != null) ? sum('outputTokens') : null,
     cacheHitRate: totalIn + totalCache + totalWrite > 0 ? +(totalCache / (totalIn + totalCache + totalWrite) * 100).toFixed(1) : null,
     currentContext: projected.context,
@@ -175,10 +272,15 @@ export async function buildConversationSnapshot(entry) {
     recentSteps: intervals.slice(-60).reverse(),
   };
   bodies.set(data, projected.fullBodies);
+  requestsByTurn.set(data, perTurn.groups);
   if (sourceError) return data;
   cache.delete(entry.path); cache.set(entry.path, data);
   while (cache.size > 4) cache.delete(cache.keys().next().value);
   return data;
+}
+
+export function turnRequests(snapshot, turn) {
+  return requestsByTurn.get(snapshot)?.get(turn) ?? [];
 }
 
 export function readContextBody(snapshot, itemId, version) {

@@ -8,18 +8,20 @@ import { summarizeUsage } from '../plugin/antigravity/sidecars/context_board/usa
 
 export async function captureAntigravity(browser, root, capture) {
   const names = ['账单导出与回归测试', '对照格式化结果', '修复空报表', '核对接口文档'];
+  const modes = ['Model A (High)', 'Model A (Medium)', 'Model B (Orchestrator)'];
+  const routes = [[0, 0, 0, 1], [1, 1, 1, 2], [2], [0, 2, 2, 2]];
   const chats = names.map((title, i) => ({
-    id: 'cccccccc-cccc-4ccc-8ccc-' + String(i + 1).padStart(12, '0'), title, parents: [], source: 'database',
-    records: Array.from({ length: 18 + i * 11 }, (_, j) => ({
-      model: ['Model A', 'Model B', 'Model C'][(i + j) % 3],
-      inputTokens: 2800 + j * 270, cacheReadTokens: 3200 + j * 980,
-      cacheWriteTokens: j % 7 ? 0 : 3200, outputTokens: 340 + j * 96,
-      streamSeconds: j % 13 ? (340 + j * 96) / [45, 92, 71][(i + j) % 3] : null,
-      firstTokenSeconds: 0.54 + (j % 8) / 5,
-    })),
+    id: 'cccccccc-cccc-4ccc-8ccc-' + String(i + 1).padStart(12, '0'), title, project: i < 2 ? 'api' : 'web', projectName:i < 2 ? 'API' : 'Web', parents: [], source: 'database',
+    records: Array.from({ length: 18 + i * 11 }, (_, j) => {
+      const route = routes[i][j % routes[i].length];
+      return { at:Date.now() - (i + 1) * 86400000, mode: modes[route], responseModel: route === 2 ? 'model-b-worker' : 'model-a',
+        inputTokens: 2800 + j * 270, cacheReadTokens: 3200 + j * 980,
+        cacheWriteTokens: j % 7 ? 0 : 3200, outputTokens: 340 + j * 96,
+        streamSeconds: j % 13 ? (340 + j * 96) / [45, 92, 71][route] : null, firstTokenSeconds: 0.54 + (j % 8) / 5 };
+    }),
   }));
   const assets = join(root, 'plugin/antigravity/sidecars/context_board');
-  const page = await browser.newPage({ viewport: { width: 900, height: 750 }, deviceScaleFactor: 1.5 });
+  const page = await browser.newPage({ viewport: { width: 1040, height: 810 }, deviceScaleFactor: 1.5 });
   try {
     const files = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']],
       ['/styles.css', ['styles.css', 'text/css']], ...['Geist', 'GeistMono'].map(f => {
@@ -28,7 +30,7 @@ export async function captureAntigravity(browser, root, capture) {
     await page.route('http://readme.invalid/**', route => {
       const url = new URL(route.request().url()), path = url.pathname;
       if (path === '/api/context') return route.fulfill({ json: { empty: true, conversations: [] } });
-      if (path === '/api/usage') return route.fulfill({ json: summarizeUsage(chats, url.searchParams.get('model')) });
+      if (path === '/api/usage') return route.fulfill({ json: summarizeUsage(chats, url.searchParams.get('mode'), Object.fromEntries(url.searchParams)) });
       if (path === '/preload.js') return route.fulfill({ contentType: 'text/javascript', body: '' });
       const file = files.get(path);
       return file ? route.fulfill({ contentType: file[1], body: readFileSync(join(assets, file[0])) }) : route.abort();

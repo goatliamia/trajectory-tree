@@ -506,52 +506,14 @@ function mountCurrentContext(host, { sessionId, active = false, base = '/analysi
 
 return {mountCurrentContext};
 })();
-const {compactTrendPolyline}=(()=>{
-// Match the existing SVG's two-decimal geometry exactly. Remove only duplicate
-// or collinear points in the same direction; keep corners and reversals.
-function compactTrendPolyline(points) {
-  const line = [];
-  for (const point of points) {
-    const next = point.map(value => Math.round(Number(value.toFixed(2)) * 100));
-    const last = line.at(-1);
-    if (last && last[0] === next[0] && last[1] === next[1]) continue;
-    while (line.length > 1) {
-      const a = line.at(-2), b = line.at(-1);
-      const dx = b[0] - a[0], dy = b[1] - a[1], nx = next[0] - b[0], ny = next[1] - b[1];
-      if (dx * ny !== dy * nx || dx * nx + dy * ny < 0) break;
-      line.pop();
-    }
-    line.push(next);
-  }
-  return line.map(([x, y]) => x / 100 + ',' + y / 100);
-}
-
-// A retained-text snapshot holds until the next recorded change. Never draw a
-// slope that suggests gradual growth (or compaction) between observations.
-function stepTrendPolyline(points) {
-  const stairs = [];
-  for (const [x,y] of points) {
-    if (stairs.length) stairs.push([x,stairs.at(-1)[1]]);
-    stairs.push([x,y]);
-  }
-  return compactTrendPolyline(stairs);
-}
-
-function chronologicalContextSamples(rows) {
-  return rows.filter(row => Number.isFinite(row.time)).slice().sort((a,b) =>
-    a.time-b.time || (a.ordinal ?? a.contextLine ?? a.seq ?? 0)-(b.ordinal ?? b.contextLine ?? b.seq ?? 0));
-}
-
-return {compactTrendPolyline};
-})();
 const POLL_MS = 1500;
 const USAGE_POLL_MS = 15000;
 const $ = (id) => document.getElementById(id);
 
 const SERIES_META = [
-  { key: 'cacheReadTokens', label: '缓存读取', color: '#39a29b' },
-  { key: 'inputTokens', label: '新增输入', color: '#5286bf' },
-  { key: 'cacheWriteTokens', label: '缓存写入', color: '#bf8b32' },
+  { key: 'cacheReadTokens', label: '缓存读取', color: 'var(--u-read)' },
+  { key: 'inputTokens', label: '新增输入', color: 'var(--u-input)' },
+  { key: 'cacheWriteTokens', label: '缓存写入', color: 'var(--u-write)' },
 ];
 
 const state = {
@@ -559,11 +521,16 @@ const state = {
   etag: '',
   snap: null,
   usage: null,
-  usageModel: '',
+  usageMode: '',
+  usageProject: '', usageDays: '7', heatPage: 0,
+  heatSelection: null,
   tab: 'surface',
   filter: '',
+  chartTurn: null,
+  inlineTurn: null,
+  stepTurn: null,
   activeSources: new Set(SERIES_META.map((s) => s.key)),
-  activeLayers: new Set(['total']),
+  trendMetric: 'total',
   ccInstance: null,
   mountedSession: null,
 };
@@ -575,6 +542,7 @@ const fmt = (n) => {
   return String(Math.round(n));
 };
 const pct = (n, total) => (total > 0 ? ((n / total) * 100).toFixed(1) + '%' : '—');
+const turnName = turn => turn > 0 ? `第 ${turn} 轮` : '未分轮';
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -636,10 +604,11 @@ function ensureNativeTreemapMounted() {
 function renderHeader(snap, conversations) {
   const select = $('conv-select');
   const hostConv = window.sidecar?.conversationId || '';
+  const currentTitle = conversations?.find(c => c.id === snap.conversationId)?.title || '当前对话';
   const options = [
-    `<option value="">${state.selectedConv ? '跟随当前会话' : `当前会话 (${esc(snap.shortId)} · #${snap.cutSeq})`}</option>`,
-    ...(conversations || []).map(
-      (c) => `<option value="${esc(c.id)}" ${state.selectedConv === c.id ? 'selected' : ''}>${esc(c.shortId)}${c.id === hostConv ? ' (当前)' : ''}</option>`
+    `<option value="">${state.selectedConv ? '跟随当前对话' : esc(currentTitle) + '（当前）'}</option>`,
+    ...(conversations || []).filter(c => c.id !== (hostConv || (!state.selectedConv && snap.conversationId)) || c.id === state.selectedConv).map(
+      (c) => `<option value="${esc(c.id)}" ${state.selectedConv === c.id ? 'selected' : ''}>${esc(c.title || '未命名对话')}</option>`
     ),
   ];
   select.innerHTML = options.join('');
@@ -647,17 +616,28 @@ function renderHeader(snap, conversations) {
   const pill = $('live-pill');
   pill.classList.remove('is-error');
   $('live-label').textContent = `已同步 · #${snap.cutSeq}`;
-  $('source-note').textContent = snap.source.note + (snap.currentContext.available ? ` 来源文本约 ${fmt(snap.currentContext.totals.total)} tokens。` : '');
+  $('source-note').textContent = snap.currentContext.available ? `最近请求 #${snap.usageSeq ?? '—'} · 可见来源文本约 ${fmt(snap.currentContext.totals.total)} Token` : snap.source.note;
+  $('source-note').title = snap.source.note;
 
   $('m-win').textContent = fmt(snap.currentWindow);
-  $('m-win-sub').textContent = `#${snap.usageSeq ?? '?'} · 缓 ${fmt(snap.currentCached)} · 新 ${fmt(snap.currentUncached)}${snap.currentWrite ? ' · 写 ' + fmt(snap.currentWrite) : ''}`;
+  $('m-win-sub').textContent = `${turnName(snap.currentTurn)} · #${snap.usageSeq ?? '?'}`;
+  $('m-win').title = `缓存读取 ${exact(snap.currentCached)} · 新增输入 ${exact(snap.currentUncached)} · 缓存写入 ${exact(snap.currentWrite)}`;
+  const occ = snap.occupancy;
+  const basis = occ?.basis === 'host-estimate' ? '宿主估算' : '实报输入';
+  $('m-occupancy').textContent = occ?.percent == null ? '—' : occ.percent.toFixed(1) + '%';
+  $('m-occupancy-sub').textContent = occ ? `${basis} ${fmt(occ.used)} / ${fmt(occ.capacity)}` : '未记录窗口上限';
+  $('window-metric').title = occ ? `${basis} ${exact(occ.used)} / 同次请求窗口上限 ${exact(occ.capacity)} Token` : '宿主未记录本次请求的窗口上限';
+  $('m-tps').textContent = speed(snap.currentTps);
+  const route = snap.currentRoute;
+  $('m-tps-sub').textContent = [route?.mode, route?.role, snap.timedRequests ? `会话均速 ${speed(snap.averageTps)}` : '暂无计时'].filter(Boolean).join(' · ');
+  $('speed-metric').title = `${snap.currentResponseModel || route?.label || ''} · ${exact(snap.currentOutput)} 输出 Token / ${speedSeconds(snap.currentStreamSeconds)} 流式生成秒。会话均速按 ${snap.timedRequests} 次请求的流式生成时长加权。`;
 
   $('m-hit').textContent = snap.cacheHitRate == null ? '—' : `${snap.cacheHitRate}%`;
   $('m-hit-sub').textContent = `读缓 ${fmt(snap.totalCache)}`;
 
   if (snap.checkpoint) {
-    $('m-cp').textContent = `#${snap.checkpoint.step}`;
-    $('m-cp-sub').textContent = `${fmt(snap.checkpoint.beforeWindow)} → ${fmt(snap.checkpoint.afterWindow)}`;
+    $('m-cp').textContent = snap.checkpoint.turn ? turnName(snap.checkpoint.turn) : `#${snap.checkpoint.step}`;
+    $('m-cp-sub').textContent = `#${snap.checkpoint.step} · ${fmt(snap.checkpoint.beforeWindow)} → ${fmt(snap.checkpoint.afterWindow)}`;
   } else {
     $('m-cp').textContent = '未压缩';
     $('m-cp-sub').textContent = `峰值 ${fmt(snap.peakWindow)}`;
@@ -665,107 +645,117 @@ function renderHeader(snap, conversations) {
 
   $('m-out').textContent = fmt(snap.totalOut);
   $('m-out-sub').textContent = `${snap.turns} 轮 · ${snap.plannerSteps} 次请求`;
-  $('step-count').textContent = snap.recentSteps?.length || 0;
+  $('step-count').textContent = snap.turns || '';
+}
+
+function renderTurnReadout(row) {
+  const host = $('fig-context-readout');
+  if (!row) { host.replaceChildren(); return; }
+  const change = row.deltaTokens == null ? '—' : (row.deltaTokens > 0 ? '+' : '') + fmt(row.deltaTokens);
+  host.innerHTML = `<strong>${turnName(row.turn)}</strong>
+    <span>轮末输入 <b>${fmt(row.windowTokens)}</b></span><span>轮内峰值 <b>${fmt(row.peak)}</b></span>
+    <span>较上轮 <b>${change}</b></span>${row.checkpoints ? `<span class="checkpoint-note">压缩 ${row.checkpoints} 次</span>` : ''}
+    <button type="button" data-toggle-inline="${row.turn}" aria-expanded="${state.inlineTurn === row.turn}">${state.inlineTurn === row.turn ? '收起本轮' : '展开 ' + row.requests + ' 次请求'}</button>`;
+}
+
+const speedSeconds = n => n == null ? '—' : n.toLocaleString('zh-CN', {maximumFractionDigits:3});
+
+function renderInlineTurn(snap) {
+  const panel = $('inline-turn');
+  const row = snap.turnSeries.find(r => r.turn === state.inlineTurn);
+  if (!row) { panel.replaceChildren(); return; }
+  const cuts = row.cuts.map(c => `<span class="cut-caption">压缩 #${c.seq}　${fmt(c.before)} → ${fmt(c.after)} Token</span>`).join('');
+  const rows = snap.turnDetail?.turn === row.turn ? snap.turnDetail.rows : null;
+  panel.innerHTML = cuts + (rows ? rows.length ? `<div class="inline-scroll" tabindex="0" aria-label="本轮请求"><table><thead><tr><th>请求</th><th>工具与动作</th><th>输入</th><th>输出</th><th>tok/s</th></tr></thead><tbody>${rows.map(r =>
+    `<tr><td>#${r.seq ?? r.index}</td><td>${esc(r.label)}</td><td>${fmt(r.windowTokens)}</td><td>${fmt(r.outputTokens)}</td><td>${speed(r.tps)}</td></tr>`).join('')}</tbody></table></div>` : '本轮没有请求记录。' : '读取本轮请求…');
+}
+
+function openInline(turn) {
+  state.inlineTurn = turn;
+  selectChartTurn(turn);
+  renderTurnReadout(state.snap.turnSeries.find(r => r.turn === turn));
+  renderInlineTurn(state.snap);
+  if (state.snap.turnDetail?.turn !== turn) poll();
+}
+
+function selectChartTurn(turn) {
+  if (state.chartTurn === turn) return;
+  const row = state.snap?.turnSeries.find(r => r.turn === turn);
+  if (!row) return;
+  state.chartTurn = turn;
+  for (const mark of $('fig-context-canvas').querySelectorAll('[data-chart-turn]')) {
+    const active = Number(mark.dataset.chartTurn) === turn;
+    mark.classList.toggle('is-current', active);
+    mark.setAttribute('tabindex', active ? '0' : '-1');
+  }
+  renderTurnReadout(row);
 }
 
 function renderNativeContextChart(snap) {
-  const rows = (snap.trendSeries || []).filter(r => r.windowTokens != null);
-  const host = $('fig-context-canvas');
+  const rows = snap.turnSeries, host = $('fig-context-canvas');
+  const known = rows.filter(r => r.turn > 0).length;
+  $('fig-context-scope').textContent = `${known} 轮 · ${snap.plannerSteps} 次请求`;
   if (!rows.length) {
-    host.innerHTML = '<p class="chart-caption">当前范围暂无请求用量记录。</p>';
+    host.innerHTML = '<p class="chart-caption">暂无已记录的轮次或请求。</p>';
+    renderTurnReadout(null);
     return;
   }
-  $('fig-context-scope').textContent = `${snap.plannerSteps} 次请求 · ${rows.length} 个采样点`;
-
-  const W = Math.max(280, Math.round(host.clientWidth || 760));
-  const leftPad = 56;
-  const rightPad = 18;
-  const plotW = W - leftPad - rightPad;
-
-  const activeSeries = SERIES_META.filter((s) => state.activeSources.has(s.key));
-  const seriesKeys = activeSeries.length ? activeSeries.map((s) => s.key) : SERIES_META.map((s) => s.key);
-  const colorOf = (key) => SERIES_META.find((s) => s.key === key)?.color || '#2378dc';
-
-  const totals = rows.map((r) => seriesKeys.reduce((acc, k) => acc + (Number(r[k]) || 0), 0));
-  const max = Math.max(1, ...totals);
-  const first = rows[0].seq;
-  const last = Math.max(first + 1, rows.at(-1).seq);
-  const px = (seq) => leftPad + ((seq - first) / Math.max(1, last - first)) * plotW;
-  const py = (val) => 204 - (val / max) * 156;
-  const rule = (y) => `<path class="plot-grid" d="M${leftPad} ${y.toFixed(1)}H${W - rightPad}"/>`;
-  const tx = (x, y, v, cl = 'plot-axis', anchor = 'start') =>
-    `<text class="${cl}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}">${esc(v)}</text>`;
-
-  const controlsHtml = `<div class="report-context-controls">
-    <div class="report-source-toggles">${SERIES_META.map(
-      (s) =>
-        `<button type="button" data-report-source="${s.key}" aria-pressed="${seriesKeys.includes(s.key)}" style="--source-color:${s.color}"><i></i>${esc(s.label)}</button>`
-    ).join('')}</div>
-    <div class="report-layer-toggles">${[
-      ['total', '请求输入'],
-      ['delta', '增减'],
-    ]
-      .map(
-        ([k, label]) =>
-          `<button type="button" data-report-layer="${k}" aria-pressed="${state.activeLayers.has(k)}">${label}</button>`
-      )
-      .join('')}</div>
-  </div>`;
-
-  let totalSvg = '';
-  if (state.activeLayers.has('total')) {
-    let b = '';
-    for (let i = 0; i <= 3; i++) {
-      const n = (max * i) / 3;
-      b += rule(py(n)) + tx(leftPad - 8, py(n) + 4, fmt(n), 'plot-axis', 'end');
-    }
-    let lower = rows.map(() => 0);
-    for (const key of seriesKeys) {
-      const upper = rows.map((r, i) => lower[i] + (Number(r[key]) || 0));
-      const upperLine = compactTrendPolyline(rows.map((r, i) => [px(r.seq), py(upper[i])])).join('L');
-      const lowerLine = compactTrendPolyline(rows.map((r, i) => [px(r.seq), py(lower[i])]).reverse()).join('L');
-      b += `<path d="M${upperLine}L${lowerLine}Z" fill="${colorOf(key)}" opacity="0.24"/>`;
-      b += `<path d="M${upperLine}" fill="none" stroke="${colorOf(key)}" stroke-width="1.35"/>`;
-      lower = upper;
-    }
-    const tickCount = Math.min(8, Math.max(4, Math.floor(plotW / 120)));
-    for (let i = 0; i <= tickCount; i++) {
-      const n = first + ((last - first) * i) / tickCount;
-      b += tx(px(n), 228, `#${Math.round(n)}`, 'plot-axis', 'middle');
-    }
-    if (snap.checkpoint) {
-      const cpRow = rows.find((r) => r.seq >= snap.checkpoint.step) || rows.at(-1);
-      if (cpRow) {
-        const idx = rows.indexOf(cpRow);
-        const xx = px(cpRow.seq), yy = py(totals[idx]);
-        b += `<circle class="context-pin" cx="${xx.toFixed(1)}" cy="${yy.toFixed(1)}" r="3.8"/>`;
-        b += tx(Math.min(W - 140, xx + 8), Math.max(20, yy - 10), `CHECKPOINT #${snap.checkpoint.step}`, 'context-annotation');
+  const selected = rows.find(r => r.turn === state.chartTurn) || rows.at(-1);
+  const series = SERIES_META.filter(s => state.activeSources.has(s.key));
+  const delta = state.trendMetric === 'delta', showPeak = !delta && series.length === SERIES_META.length;
+  const valueOf = row => {
+    const source = delta ? row.deltaBySource : row;
+    if (row.windowTokens == null || !source) return null;
+    return series.reduce((n, s) => n + source[s.key], 0);
+  };
+  const left = 49, right = 12, top = 20, bottom = 166;
+  curveWidth = host.clientWidth;
+  const width = Math.max(240, host.clientWidth, left + right + rows.length * 24);
+  const slot = (width - left - right) / rows.length, bar = Math.min(48, slot * .57);
+  const zero = delta ? (top + bottom) / 2 : bottom;
+  const max = rows.reduce((n, r) => Math.max(n, Math.abs(valueOf(r) ?? 0), showPeak ? (r.peak ?? 0) : 0), 1);
+  const scale = (zero - top) / max, y = value => zero - value * scale;
+  const ticks = delta ? [max, 0, -max] : [max, max / 2, 0];
+  const tickEvery = Math.max(1, Math.ceil(58 / slot));
+  const chart = ticks.map(value => `<path class="plot-grid" d="M${left} ${y(value)}H${width - right}"/>
+    <text class="plot-axis" x="${left - 7}" y="${y(value) + 3}" text-anchor="end">${fmt(value)}</text>`).join('');
+  const bars = rows.map((row, i) => {
+    const x = left + (i + .5) * slot, value = valueOf(row);
+    let shapes = `<rect class="turn-hit" x="${x - slot / 2 + 1}" y="${top - 8}" width="${slot - 2}" height="${bottom - top + 16}" rx="3"/>`;
+    if (value == null) {
+      shapes += `<text class="plot-axis" text-anchor="middle" x="${x}" y="${zero - 4}">—</text>`;
+    } else if (delta) {
+      shapes += `<rect x="${x - bar / 2}" y="${Math.min(zero, y(value))}" width="${bar}" height="${Math.abs(value) * scale}" fill="${value < 0 ? 'var(--tt-warning)' : 'var(--tt-metric)'}"/>`;
+    } else {
+      let sum = 0;
+      for (const s of series) {
+        sum += row[s.key];
+        shapes += `<rect x="${x - bar / 2}" y="${y(sum)}" width="${bar}" height="${row[s.key] * scale}" fill="${s.color}"/>`;
       }
     }
-    const hitW = Math.max(12, plotW / Math.max(1, rows.length));
-    rows.forEach((r, idx) => {
-      b += `<g class="plot-mark" data-trend-idx="${idx}"><rect class="context-hit" x="${(px(r.seq) - hitW / 2).toFixed(1)}" y="32" width="${hitW.toFixed(1)}" height="178"/></g>`;
-    });
-    totalSvg = `<svg viewBox="0 0 ${W} 238" role="img" aria-label="实报请求输入">${b}</svg>`;
-  }
-
-  let deltaSvg = '';
-  if (state.activeLayers.has('delta') && rows.length > 1) {
-    const deltas = rows.map(r => r.deltaBySource ? seriesKeys.reduce((n, key) => n + r.deltaBySource[key], 0) : null);
-    const limit = Math.max(1, ...deltas.map(v => Math.abs(v || 0)));
-    const axis = (y, label) => tx(leftPad - 8, y + 3, label, 'plot-axis', 'end');
-    let d = axis(18, '+' + fmt(limit)) + axis(70, '0') + axis(122, '−' + fmt(limit));
-    d += '<path class="plot-grid" d="M' + leftPad + ' 70H' + (W - rightPad) + '"/>';
-    const barW = Math.max(3, Math.min(14, plotW / rows.length * .62));
-    deltas.forEach((delta, i) => {
-      if (delta == null) return;
-      const size = Math.abs(delta) / limit * 50;
-      d += '<g class="plot-mark" data-trend-idx="' + i + '"><rect x="' + (px(rows[i].seq) - barW / 2).toFixed(1) + '" y="' + (delta >= 0 ? 70 - size : 70).toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + size.toFixed(1) + '" fill="' + (delta >= 0 ? '#5286bf' : '#bf8b32') + '"/></g>';
-    });
-    deltaSvg = '<div class="context-delta-label">与前一次请求的输入净变化 · 包含压缩带来的减少</div><svg viewBox="0 0 ' + W + ' 138" role="img" aria-label="相邻请求输入变化">' + d + '</svg>';
-  }
-
-  host.innerHTML = controlsHtml + totalSvg + deltaSvg;
+    if (showPeak && row.peak != null) shapes += `<path class="turn-peak" d="M${x - bar / 2} ${y(row.peak)}h${bar}"/>`;
+    if (row.checkpoints) shapes += `<g class="cut-marker"><title>${row.checkpoints} 次上下文压缩</title>
+      <path class="cut-line" d="M${x} ${top - 2}V${bottom}"/><g transform="translate(${x},${top - 8})">
+      <rect x="-8" y="-7" width="16" height="14" rx="3"/><path d="m-5.5-2.5 3.5 2.5-3.5 2.5m11-5L2 0l3.5 2.5"/></g></g>`;
+    if (i === rows.length - 1 || (i % tickEvery === 0 && (rows.length - 1 - i) * slot >= 48)) {
+      shapes += `<text class="plot-axis" text-anchor="middle" x="${x}" y="${bottom + 28}">${turnName(row.turn)}</text>`;
+    }
+    const active = row === selected;
+    return `<g role="button" tabindex="${active ? 0 : -1}" data-chart-turn="${row.turn}" class="plot-mark${active ? ' is-current' : ''}"
+      aria-label="${turnName(row.turn)}，${row.requests} 次请求，轮末输入 ${exact(row.windowTokens)}，查看本轮请求">${shapes}</g>`;
+  }).join('');
+  const sources = SERIES_META.map(s => `<button type="button" data-report-source="${s.key}" aria-pressed="${state.activeSources.has(s.key)}" style="--source-color:${s.color}"><i></i>${s.label}</button>`).join('');
+  const metrics = [['total','轮末输入'],['delta','轮间增减']].map(([key, label]) =>
+    `<button type="button" data-report-layer="${key}" aria-pressed="${state.trendMetric === key}">${label}</button>`).join('');
+  const scrollLeft = host.querySelector('.turn-plot')?.scrollLeft || 0;
+  const focusedTurn = host.contains(document.activeElement) ? document.activeElement.dataset.chartTurn : null;
+  const cpKey = rows.some(r => r.checkpoints) ? '<span class="cp-key">压缩</span>' : '';
+  host.innerHTML = `<div class="report-context-controls"><div class="report-source-toggles">${sources}${showPeak ? '<span class="peak-key">轮内峰值</span>' : ''}${cpKey}</div>
+    <div class="report-layer-toggles">${metrics}</div></div>
+    <div class="turn-plot"><svg role="group" aria-label="${delta ? '相邻轮末输入的净变化' : '每轮末次请求的实报输入与轮内峰值'}" viewBox="0 0 ${width} 204" style="width:${width}px">${chart}${bars}</svg></div>`;
+  host.querySelector('.turn-plot').scrollLeft = scrollLeft;
+  if (focusedTurn != null) host.querySelector(`[data-chart-turn="${Number(focusedTurn)}"]`)?.focus({ preventScroll: true });
+  renderTurnReadout(selected);
 }
 
 function renderNativeComparison(snap) {
@@ -776,8 +766,8 @@ function renderNativeComparison(snap) {
     return;
   }
   const a = comp.before, b = comp.after;
-  const labelA = snap.checkpoint ? `压缩后起点 (#${a.seq})` : `会话起点 (#${a.seq})`;
-  const labelB = `当前最新 (#${b.seq})`;
+  const labelA = `${snap.checkpoint ? '压缩后' : '起点'} · ${turnName(a.turn)} · #${a.seq ?? a.index}`;
+  const labelB = `最近 · ${turnName(b.turn)} · #${b.seq ?? b.index}`;
   $('fig-comparison-scope').textContent = `${labelA} → ${labelB}`;
 
   const totalA = SERIES_META.reduce((s, m) => s + (Number(a[m.key]) || 0), 0);
@@ -828,8 +818,8 @@ function renderNativeTopSteps(snap) {
     .map((r, idx) => {
       const catColor = 'var(--tt-metric)';
       const widthPct = Math.max(1, (r.d / maxD) * 100).toFixed(1);
-      return `<button type="button" class="report-bar-row" data-jump-step="${r.s}" ${r.retained ? '' : 'disabled'} title="${r.retained ? '定位来源片段' : '该请求的来源片段未保留在最近请求中'}">
-        <span class="report-bar-label"><small class="report-bar-rank">${String(idx + 1).padStart(2, '0')}</small>#${r.s} · ${esc(r.tl)}</span>
+      return `<button type="button" class="report-bar-row" data-open-turn="${r.t}" title="展开该轮请求">
+        <span class="report-bar-label"><small class="report-bar-rank">${idx + 1}</small>${turnName(r.t)} · #${r.s ?? '—'} · ${esc(r.tl)}</span>
         <span class="report-bar-track"><i style="left:0%;width:${widthPct}%;background:${catColor}"></i></span>
         <b>+${fmt(r.d)}</b>
         <small>${fmt(r.w)}</small>
@@ -844,22 +834,61 @@ function renderNativeTopSteps(snap) {
 }
 
 function renderSteps(snap) {
+  const select = $('step-turn'), turn = state.stepTurn;
+  if (select.dataset.version !== snap.version) {
+    select.innerHTML = `<option value="">全部轮次</option>` + snap.turnSeries.map(r =>
+      `<option value="${r.turn}">${turnName(r.turn)} · ${r.requests} 次请求</option>`).join('');
+    select.dataset.version = snap.version;
+  }
+  select.value = turn == null ? '' : String(turn);
+  renderToolEval(snap,turn);
+  if (turn != null && snap.turnDetail?.turn !== turn) {
+    $('step-feed').textContent = '正在读取本轮请求…';
+    return;
+  }
+  const rows = turn == null ? snap.recentSteps : snap.turnDetail.rows.map(r =>
+    ({ s: r.seq, index: r.index, t: r.turn, w: r.windowTokens, d: r.deltaTokens, tl: r.label, retained: r.retained, tps: r.tps, mode: r.mode })).reverse();
   const q = state.filter.trim().toLowerCase();
-  const list = (snap.recentSteps || []).filter((r) => !q || (r.tl || '').toLowerCase().includes(q) || `#${r.s}`.includes(q));
-  $('step-feed').innerHTML = list
-    .map(
-      (r) => `
-    <button type="button" class="step-row" data-jump-step="${r.s}" ${r.retained ? '' : 'disabled'} title="${r.retained ? '定位来源片段' : '该请求的来源片段未保留在最近请求中'}">
-      <span class="step-left"><span class="step-seq">#${r.s}</span><span class="step-tl">${esc(r.tl)}</span></span>
+  const list = rows.filter(r => !q || [r.tl, r.mode, '#' + (r.s ?? r.index)].join(' ').toLowerCase().includes(q));
+  let previous;
+  $('step-feed').innerHTML = list.map(r => {
+    const heading = previous === r.t ? '' : `<h3 class="step-heading">${turnName(r.t)}<small>净变化 / 输入</small></h3>`;
+    previous = r.t;
+    return heading + `<button type="button" class="step-row" data-jump-step="${r.s}" ${r.retained ? '' : 'disabled'} title="${esc(r.mode || '')} · ${speed(r.tps)} tok/s · ${r.retained ? '定位来源片段' : '来源片段未保留'}">
+      <span class="step-left"><span class="step-seq">#${r.s ?? r.index ?? '—'}</span><span class="step-tl">${esc(r.tl)}</span></span>
       <span class="step-right">${r.d == null ? '—' : (r.d >= 0 ? '+' : '−') + fmt(Math.abs(r.d))}<span class="step-win">${fmt(r.w)}</span></span>
-    </button>`
-    )
-    .join('');
+    </button>`;
+  }).join('') || '<p class="chart-caption">当前范围没有匹配的请求。</p>';
+}
+
+function renderToolEval(snap, turn) {
+  const evaluation = snap.toolEval, tools = (turn == null ? evaluation.all : evaluation.byTurn[turn]) || [];
+  const sum = key => tools.reduce((n,t) => n + t[key], 0);
+  const native = evaluation.source === 'steps', count = sum('calls'), errors = sum('error'), timed = sum('timed');
+  $('eval-source').textContent = native ? '宿主工具执行记录 · 耗时按单次执行累加' : '来自对话中的工具调用声明 · 执行结果与耗时未记录';
+  $('eval-summary').innerHTML = [['工具调用', count + ' 次'], ['工具种类', tools.length], ['记录报错', native ? errors + ' 次' : '—'], ['累计执行', timed ? speed(sum('seconds')) + ' 秒' : '—']]
+    .map(([label,value]) => `<div><small>${label}</small><strong>${value}</strong></div>`).join('');
+  const families = {read:'读取',write:'写入',command:'命令',search:'搜索',coordination:'协作',web:'网络',process:'进程',other:'其他'};
+  const sorted = [...tools].sort((a,b) => b.calls-a.calls || a.name.localeCompare(b.name));
+  $('tool-evaluation').innerHTML = count ? `<div class="eval-table-scroll"><table class="eval-tools"><thead><tr><th>工具</th><th>调用分布</th><th>宿主结果</th><th>平均执行</th></tr></thead><tbody>${sorted.map(t => {
+    const results = [[t.done,'完成'],[t.error,'报错'],[t.stopped,'中止'],[t.unknown,'未确认']].filter(([n]) => n)
+      .map(([n,label]) => label + ' ' + n).join(' · ');
+    return `<tr><th><strong>${esc(t.name)}</strong><small>${families[t.family] || '其他'}</small></th><td><div class="eval-volume"><i style="width:${t.calls/sorted[0].calls*100}%"></i></div>${t.calls} 次</td><td${t.error ? ' class="has-errors"' : ''}>${results}${t.errors.length ? '<small>' + t.errors.map(n => '#' + n).join(' · ') + '</small>' : ''}</td><td title="${t.timed} 次有计时">${t.timed ? speedSeconds(t.seconds/t.timed) + ' 秒' : '—'}</td></tr>`;
+  }).join('')}</tbody></table></div>` : '<p class="chart-caption">当前范围没有工具调用记录。</p>';
+  $('request-evidence').querySelector('summary').textContent = turn == null ? `最近 ${snap.recentSteps.length} 次请求` : '本轮请求明细';
+}
+
+function openTurn(turn) {
+  state.stepTurn = turn;
+  state.filter = '';
+  $('step-filter').value = '';
+  if (state.tab === 'steps') { renderSteps(state.snap); poll(); }
+  else { switchTab('steps'); $('step-turn').focus(); }
 }
 
 function renderAll() {
   if (!state.snap) return;
-  if (state.tab === 'curve') { renderNativeContextChart(state.snap); renderNativeComparison(state.snap); renderNativeTopSteps(state.snap); }
+  if (state.tab === 'curve') { renderNativeContextChart(state.snap); renderInlineTurn(state.snap); renderNativeComparison(state.snap); renderNativeTopSteps(state.snap); }
   if (state.tab === 'steps') renderSteps(state.snap);
 }
 
@@ -870,13 +899,97 @@ const USAGE_PARTS = [
 const exact = n => n == null ? '—' : n.toLocaleString('zh-CN');
 const speed = n => n == null ? '—' : n.toLocaleString('zh-CN', { maximumFractionDigits: 1 });
 
+function modelShare(tokens, total) {
+  if (tokens == null || !(total > 0)) return '—';
+  const percent = tokens / total * 100;
+  return percent > 0 && percent < .1 ? '<0.1%' : speed(percent) + '%';
+}
+
+function selectHeatCell(chat, family, modeName = '') {
+  const cell = modeName ? family.modes.find(m => m.name === modeName) : family;
+  if (!cell) return;
+  state.heatSelection = { id:chat.id, model:family.name, mode:modeName };
+  for (const btn of $('usage-conversations').querySelectorAll('[data-heat-model]')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.heatChat === chat.id &&
+      btn.dataset.heatModel === family.name && btn.dataset.heatMode === modeName));
+  }
+  const modes = modeName ? [cell] : family.modes;
+  const breakdown = modes.map(m => {
+    const label = [m.name,...m.roles].join(' · ');
+    const response = m.responseModels.length ? m.responseModels.join(' / ') : '响应模型未记录';
+    return `<li><span>${esc(label)}</span><b>${esc(modelShare(m.totalTokens, family.totalTokens))}</b>
+      <small>${esc(response)}</small></li>`;
+  }).join('');
+  $('heat-detail').innerHTML = `<div class="matrix-selection"><strong>${esc(chat.title || '未命名对话')} · ${esc(family.name)}${modeName ? ' · ' + esc(modeName) : ''}</strong>
+    <span>${exact(cell.requests)} 次请求</span><span>${exact(cell.totalTokens)} Token</span><span>${speed(cell.tps)} tok/s</span></div>
+    <div class="model-breakdown"><span>模型内占比</span><ul>${breakdown}</ul></div>`;
+}
+
+function renderModelMatrix(data) {
+  const catalogue = new Map();
+  for (const chat of data.conversations) {
+    for (const family of chat.modelUsage) {
+      if (!catalogue.has(family.name)) catalogue.set(family.name, {modes:new Set(), tokens:0});
+      const item = catalogue.get(family.name);
+      item.tokens += family.totalTokens ?? 0;
+      for (const m of family.modes) item.modes.add(m.name);
+    }
+  }
+  const groups = [...catalogue].map(([name, item]) => ({name, tokens:item.tokens,
+    modes:data.models.filter(mode => item.modes.has(mode))})).sort((a,b) =>
+      Number(a.name === '未记录模型') - Number(b.name === '未记录模型') || b.tokens-a.tokens || a.name.localeCompare(b.name,'zh-CN',{numeric:true}));
+  const canSplit = groups.some(g => g.modes.length > 1);
+  $('matrix-split-label').hidden = !canSplit;
+  const split = canSplit && $('matrix-split').checked;
+  const columns = groups.flatMap(g => (split ? g.modes : ['']).map(mode => ({family:g.name,mode})));
+  const pages = Math.max(1,Math.ceil(data.conversations.length / 10));
+  state.heatPage = Math.min(state.heatPage,pages-1);
+  const visible = data.conversations.slice(state.heatPage*10,state.heatPage*10+10);
+  $('heat-pages').innerHTML = pages > 1 ? `<button data-page="-1" ${state.heatPage ? '' : 'disabled'}>上一页</button><span>${state.heatPage+1} / ${pages}</span><button data-page="1" ${state.heatPage+1 < pages ? '' : 'disabled'}>下一页</button>` : '';
+  const rowSpan = split ? ' rowspan="2"' : '';
+  $('usage-columns').innerHTML = `<tr><th scope="col"${rowSpan}>对话</th>` + groups.map(g =>
+    `<th class="model-head" ${split ? 'scope="colgroup" colspan="' + g.modes.length + '"' : 'scope="col"'}>${esc(g.name)}</th>`).join('') +
+    `<th class="matrix-total" scope="col"${rowSpan}>${data.model ? '所选 Token' : '累计 Token'}</th></tr>` +
+    (split ? '<tr class="matrix-modes">' + columns.map(c => `<th scope="col">${esc(c.mode)}</th>`).join('') + '</tr>' : '');
+  $('usage-conversations').innerHTML = visible.map(chat => {
+    const name = chat.title || '未命名对话';
+    const families = new Map(chat.modelUsage.map(f => [f.name, f]));
+    const heat = columns.map(({family,mode}) => {
+      const model = families.get(family);
+      const cell = mode ? model?.modes.find(m => m.name === mode) : model;
+      if (!cell) return '<td class="matrix-empty" aria-label="无独立请求">—</td>';
+      const share = chat.allModeTokens > 0 ? cell.totalTokens / chat.allModeTokens : 0;
+      const percent = esc(modelShare(cell.totalTokens, chat.allModeTokens));
+      const level = !share ? 0 : share <= .1 ? 1 : share <= .3 ? 2 : share <= .65 ? 3 : 4;
+      const label = esc([family,mode].filter(Boolean).join(' · '));
+      return `<td class="matrix-value"><button type="button" class="heat-cell" data-level="${level}" data-heat-chat="${esc(chat.id)}"
+        data-heat-model="${esc(family)}" data-heat-mode="${esc(mode)}" aria-controls="heat-detail" aria-pressed="false"
+        aria-label="${esc(name)}，${label}，${exact(cell.requests)} 次请求，${exact(cell.totalTokens)} Token，占比 ${percent}"
+        title="${label} · ${exact(cell.totalTokens)} Token · ${exact(cell.requests)} 次请求"><span class="mobile-mode">${label}</span>${percent}</button></td>`;
+    }).join('');
+    return `<tr><th scope="row" class="chat-heading"><button type="button" data-usage-chat="${esc(chat.id)}" title="打开对话 · ${esc(name)}">${esc(name)} <i aria-hidden="true">↗</i></button>
+      <small>${exact(chat.requests)} 次请求 · ${speed(chat.tps)} tok/s${chat.children ? ' · 含子会话' : ''}</small></th>${heat}
+      <td class="matrix-total"><span class="mobile-token-label">Token </span>${exact(chat.totalTokens)}</td></tr>`;
+  }).join('');
+  const previous = state.heatSelection;
+  const chat = visible.find(c => c.id === previous?.id && c.modelUsage.length) || visible.find(c => c.modelUsage.length);
+  if (!chat) { state.heatSelection = null; $('heat-detail').replaceChildren(); return; }
+  const largest = rows => rows.reduce((a,b) => (a.totalTokens ?? -1) >= (b.totalTokens ?? -1) ? a : b);
+  const family = chat.modelUsage.find(f => f.name === previous?.model) || largest(chat.modelUsage);
+  const mode = split ? family.modes.find(m => m.name === previous?.mode) || largest(family.modes) : null;
+  selectHeatCell(chat, family, mode?.name);
+}
+
 function renderUsage(data) {
   const t = data.totals, chats = data.conversations;
   const select = $('usage-model');
-  select.innerHTML = '<option value="">全部模型</option>' + data.models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  const project = $('usage-project');
+  project.innerHTML = '<option value="">全部项目</option>' + data.projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  project.value = state.usageProject;
+  select.innerHTML = '<option value="">全部模式</option>' + data.models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
   select.value = data.model;
-  state.usageModel = data.model;
-  $('usage-scope').textContent = `本机全部历史 · ${exact(chats.length)} 个对话 · ${exact(t.requests)} 次请求`;
+  state.usageMode = data.model;
+  $('usage-scope').textContent = `${$('usage-days').selectedOptions[0].text} · ${exact(chats.length)} 个主对话 · ${exact(t.requests)} 次请求`;
   $('usage-content').classList.toggle('hidden', !chats.length);
   $('u-total').textContent = exact(t.totalTokens);
   $('u-total-note').textContent = t.completeRequests === t.requests && t.requests ? '含缓存读取与写入' : `${exact(t.completeRequests)} / ${exact(t.requests)} 次请求有完整用量`;
@@ -902,16 +1015,15 @@ function renderUsage(data) {
   $('u-largest-label').textContent = largest?.label || '占比';
   $('u-largest-share').textContent = largest?.share || '—';
 
-  const max = data.byModel[0]?.tps || 1;
-  $('usage-speeds').innerHTML = data.byModel.map(m => `<li>
-    <div><span>${esc(m.name)}</span><b>${speed(m.tps)}</b></div>
-    <div class="usage-speed-detail"><span class="usage-track"><i style="width:${(m.tps ?? 0) / max * 100}%"></i></span><small>${exact(m.timedRequests)} 次测速</small></div>
-    </li>`).join('') || '<li class="usage-empty">暂无模型记录</li>';
-  $('usage-conversations').innerHTML = chats.map(c => {
-    const name = c.title || '对话 ' + c.id.slice(0, 8);
-    return `<tr><th scope="row"><button type="button" data-usage-chat="${esc(c.id)}" title="查看对话 · ${esc(name)}"><span>${esc(name)}</span><i aria-hidden="true">↗</i></button></th><td>${exact(c.requests)}</td><td title="${exact(c.totalTokens)} Token">${exact(c.totalTokens)}</td><td>${speed(c.tps)}</td></tr>`;
-  }).join('');
+  const routes = data.speeds.filter(r => r.timedRequests);
+  const max = Math.max(1,...routes.map(r => r.tps));
+  $('usage-speeds').innerHTML = routes.map((r,i) => `<tr title="${esc([...r.raw,...r.responseModels].join(' · '))}">
+    <td>${routes[i-1]?.mode !== r.mode ? esc(r.mode) : `<span class="sr-mode">${esc(r.mode)}</span>`}</td><th scope="row">${esc(r.label)}</th>
+    <td><div class="rate"><span aria-hidden="true"><i style="width:${r.tps / max * 100}%"></i></span><b>${speed(r.tps)}</b></div></td>
+    <td>${exact(r.timedRequests)}</td></tr>`).join('') || '<tr><td colspan="4">当前范围暂无流式计时。</td></tr>';
+  renderModelMatrix(data);
   const notes = ['输出速度按有计时请求的输出 Token 总和除以流式生成总秒数计算。'];
+  if (data.undatedRequests) notes.push(`${data.undatedRequests} 次请求缺少日期，可在「全部时间」查看。`);
   if (data.sharedRequests) notes.push(`已合并 ${exact(data.sharedRequests)} 条具有相同响应 ID 的重复记录。`);
   if (data.transcriptChats) notes.push(`本机有 ${exact(data.transcriptChats)} 个对话使用 transcript，用量以已记录分项为准。`);
   if (data.unavailableChats) notes.push(`有 ${exact(data.unavailableChats)} 个对话暂不可读。`);
@@ -942,25 +1054,30 @@ function switchTab(nextTab) {
     $('panel-' + name).classList.toggle('hidden', name !== state.tab);
   }
   state.ccInstance?.setActive(state.tab === 'surface');
-  if (wasUsage !== isUsage) poll();
+  if (wasUsage !== isUsage || (nextTab === 'steps' && state.stepTurn != null && state.snap?.turnDetail?.turn !== state.stepTurn)) poll();
   renderAll();
 }
 
-let curveResizeTimer = 0;
-new ResizeObserver(() => {
+let curveResizeTimer = 0, curveWidth = 0;
+new ResizeObserver(([entry]) => {
   if (state.tab !== 'curve' || !state.snap) return;
+  if (curveWidth === entry.contentRect.width) return;
+  curveWidth = entry.contentRect.width;
   clearTimeout(curveResizeTimer);
-  curveResizeTimer = setTimeout(() => renderNativeContextChart(state.snap), 60);
+  curveResizeTimer = setTimeout(() => { if (state.tab === 'curve' && state.snap) renderNativeContextChart(state.snap); }, 60);
 }).observe($('fig-context-canvas'));
 
 let pollTimer, pollRequest, pollEpoch = 0;
 function clearSnapshot(message) {
   state.snap = null; state.etag = ''; state.mountedSession = null;
+  state.chartTurn = null; state.inlineTurn = null; state.stepTurn = null; state.filter = '';
+  $('step-filter').value = ''; delete $('step-turn').dataset.version;
   state.ccInstance?.destroy(); state.ccInstance = null;
   $('cc-host').textContent = message;
-  for (const id of ['m-win','m-hit','m-cp','m-out','m-win-sub','m-hit-sub','m-cp-sub','m-out-sub']) $(id).textContent = '—';
-  for (const id of ['fig-context-canvas','fig-comparison-canvas','fig-top-steps-canvas','step-feed']) $(id).replaceChildren();
+  for (const id of ['m-win','m-hit','m-cp','m-out','m-occupancy','m-tps','m-win-sub','m-hit-sub','m-cp-sub','m-out-sub','m-occupancy-sub','m-tps-sub']) $(id).textContent = '—';
+  for (const id of ['fig-context-canvas','fig-context-readout','inline-turn','fig-comparison-canvas','fig-top-steps-canvas','step-feed','eval-summary','eval-source','tool-evaluation']) $(id).replaceChildren();
   $('source-note').textContent = ''; $('step-count').textContent = '';
+  for (const id of ['source-note','m-win','window-metric','speed-metric']) $(id).removeAttribute('title');
 }
 async function poll() {
   clearTimeout(pollTimer);
@@ -972,25 +1089,30 @@ async function poll() {
   const timeout = setTimeout(() => controller.abort(), isUsage ? 60000 : 12000);
   try {
     if (isUsage) {
-      const qs = new URLSearchParams({ model: state.usageModel, etag: state.usage?.etag || '' });
+      const qs = new URLSearchParams({group:'mode',project:state.usageProject,days:state.usageDays, mode: state.usageMode, etag: state.usage?.etag || '' });
       const result = await getJson('/api/usage?' + qs, controller.signal);
       if (epoch !== pollEpoch) return;
       if (!result.unchanged) { state.usage = result; renderUsage(result); }
-      usageStatus(state.usage.conversations.length ? '' : '本机暂无 Antigravity 对话记录。', '已同步');
+      usageStatus(state.usage.conversations.length ? '' : '当前筛选范围没有请求记录。可调整项目、模式或时间。', '已同步');
       return;
     }
     const conv = state.selectedConv || window.sidecar?.conversationId || '';
-    const qs = new URLSearchParams({ conversationId: conv });
+    const qs = new URLSearchParams({ conversationId: conv, list:'all' });
+    if (state.tab === 'steps' && state.stepTurn != null) qs.set('turn', state.stepTurn);
+    if (state.tab === 'curve' && state.inlineTurn != null) qs.set('turn', state.inlineTurn);
     if (state.etag) qs.set('etag', state.etag);
     const res = await getJson('/api/context?' + qs, controller.signal);
     if (epoch !== pollEpoch) return;
     if (res.empty) {
       clearSnapshot('当前会话暂无请求记录，请选择要查看的会话。');
-      $('conv-select').innerHTML = '<option value="">当前会话</option>' + (res.conversations || []).map(c => '<option value="' + esc(c.id) + '">' + esc(c.shortId) + '</option>').join('');
+      $('conv-select').innerHTML = '<option value="">当前对话</option>' + (res.conversations || []).map(c => '<option value="' + esc(c.id) + '">' + esc(c.title || '未命名对话') + '</option>').join('');
       $('live-label').textContent = '暂无记录';
       if (chooseStartTab && !conv) switchTab('usage');
     } else {
-      if (!res.unchanged) { state.etag = res.etag; state.snap = res; }
+      if (!res.unchanged) {
+        state.etag = res.etag; state.snap = res;
+        if (state.stepTurn != null && !res.turnSeries.some(row => row.turn === state.stepTurn)) state.stepTurn = null;
+      }
       if (state.snap) {
         renderHeader(state.snap, res.conversations);
         if (!res.unchanged) { renderAll(); ensureNativeTreemapMounted(); state.ccInstance?.refresh(0); }
@@ -1032,6 +1154,24 @@ document.addEventListener('click', (e) => {
     switchTab(tabBtn.dataset.tab);
     return;
   }
+  const pager = e.target.closest('[data-page]');
+  if (pager && state.usage) { state.heatPage += Number(pager.dataset.page); renderModelMatrix(state.usage); return; }
+  const toggle = e.target.closest('[data-toggle-inline]');
+  if (toggle && state.inlineTurn === Number(toggle.dataset.toggleInline)) {
+    state.inlineTurn = null; renderNativeContextChart(state.snap); renderInlineTurn(state.snap); return;
+  }
+  const chartMark = e.target.closest('[data-chart-turn], [data-open-turn], [data-toggle-inline]');
+  if (chartMark && state.snap) {
+    openInline(Number(chartMark.dataset.chartTurn ?? chartMark.dataset.openTurn ?? chartMark.dataset.toggleInline));
+    return;
+  }
+  const heat = e.target.closest('[data-heat-model]');
+  if (heat && state.usage) {
+    const chat = state.usage.conversations.find(c => c.id === heat.dataset.heatChat);
+    const family = chat?.modelUsage.find(m => m.name === heat.dataset.heatModel);
+    if (family) selectHeatCell(chat, family, heat.dataset.heatMode);
+    return;
+  }
   const usageChat = e.target.closest('[data-usage-chat]');
   if (usageChat) {
     state.selectedConv = usageChat.dataset.usageChat;
@@ -1050,18 +1190,16 @@ document.addEventListener('click', (e) => {
       state.activeSources.add(key);
     }
     renderNativeContextChart(state.snap);
+    $('fig-context-canvas').querySelector(`[data-report-source="${key}"]`).focus({ preventScroll: true });
     return;
   }
 
   const layerBtn = e.target.closest('[data-report-layer]');
   if (layerBtn && state.snap) {
     const key = layerBtn.dataset.reportLayer;
-    if (state.activeLayers.has(key) && state.activeLayers.size > 1) {
-      state.activeLayers.delete(key);
-    } else {
-      state.activeLayers.add(key);
-    }
+    state.trendMetric = key;
     renderNativeContextChart(state.snap);
+    $('fig-context-canvas').querySelector(`[data-report-layer="${key}"]`).focus({ preventScroll: true });
     return;
   }
 
@@ -1078,14 +1216,19 @@ document.addEventListener('click', (e) => {
   }
 });
 
-$('fig-context-canvas').addEventListener('mousemove', (e) => {
-  const mark = e.target.closest('[data-trend-idx]');
-  if (!mark || !state.snap?.trendSeries) return;
-  const row = state.snap.trendSeries.filter(r => r.windowTokens != null)[Number(mark.dataset.trendIdx)];
-  if (!row) return;
-  const readout = $('fig-context-readout');
-  readout.dataset.state = 'active';
-  readout.innerHTML = `<strong>#${row.seq}</strong> (第 ${row.turn} 轮 · ${esc(row.at)}) · 实报输入 <strong>${fmt(row.windowTokens)}</strong> (读缓 ${fmt(row.cacheReadTokens)} + 新增输入 ${fmt(row.inputTokens)} + 缓存写入 ${fmt(row.cacheWriteTokens)} · 输出 ${fmt(row.outputTokens)}) · ${esc(row.label)}`;
+for (const event of ['pointerover', 'focusin']) $('fig-context-canvas').addEventListener(event, e => {
+  const mark = e.target.closest('[data-chart-turn]');
+  if (mark && state.inlineTurn == null) selectChartTurn(Number(mark.dataset.chartTurn));
+});
+$('fig-context-canvas').addEventListener('keydown', e => {
+  const mark = e.target.closest('[data-chart-turn]');
+  if (!mark) return;
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openInline(Number(mark.dataset.chartTurn)); return; }
+  const marks = [...$('fig-context-canvas').querySelectorAll('[data-chart-turn]')], i = marks.indexOf(mark);
+  const next = { ArrowLeft: i - 1, ArrowRight: i + 1, Home: 0, End: marks.length - 1 }[e.key];
+  if (next == null) return;
+  e.preventDefault(); const target = marks[Math.max(0, Math.min(marks.length - 1, next))];
+  target.focus(); if (state.inlineTurn != null) openInline(Number(target.dataset.chartTurn));
 });
 
 $('conv-select').addEventListener('change', (e) => {
@@ -1096,14 +1239,23 @@ $('conv-select').addEventListener('change', (e) => {
   poll();
 });
 
-$('usage-model').addEventListener('change', (e) => {
-  state.usageModel = e.target.value;
+$('matrix-split').addEventListener('change', () => {
+  if (state.usage) renderModelMatrix(state.usage);
+});
+
+for (const id of ['usage-model','usage-project','usage-days']) $(id).addEventListener('change', () => {
+  state.usageMode = id === 'usage-model' ? $('usage-model').value : '';
+  state.usageProject = $('usage-project').value;
+  state.usageDays = $('usage-days').value;
+  state.heatPage = 0;
   state.usage = null;
   $('usage-content').classList.add('hidden');
-  $('usage-scope').textContent = '本机 · 全部历史';
-  usageStatus('正在汇总所选模型…', '读取中');
+  $('usage-scope').textContent = $('usage-days').selectedOptions[0].text;
+  usageStatus('正在汇总所选范围…', '读取中');
   poll();
 });
+
+$('step-turn').addEventListener('change', e => openTurn(e.target.value === '' ? null : Number(e.target.value)));
 
 $('step-filter').addEventListener('input', (e) => {
   state.filter = e.target.value;

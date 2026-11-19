@@ -10,7 +10,7 @@ const source = fileURLToPath(new URL('../plugin/antigravity/', import.meta.url))
 export const INSTALL_FILES = [
   'plugin.json', 'assets/logo.svg',
   ...['sidecar.json', 'package.json', 'index.html', 'main.mjs', 'context-data.mjs', 'request-records.mjs', 'usage-data.mjs',
-    'app.js', 'styles.css', 'native/categories.mjs', 'fonts/Geist-Variable.woff2', 'fonts/GeistMono-Variable.woff2', 'fonts/LICENSE.txt']
+    'app.js', 'styles.css', 'native/categories.mjs', 'native/tool-behavior.mjs', 'fonts/Geist-Variable.woff2', 'fonts/GeistMono-Variable.woff2', 'fonts/LICENSE.txt']
     .map(name => 'sidecars/context_board/' + name),
 ];
 

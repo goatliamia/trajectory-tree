@@ -33,6 +33,16 @@
           <strong id="m-win" class="metric-v">—</strong>
           <span id="m-win-sub" class="metric-sub">—</span>
         </div>
+        <div class="metric-cell" id="window-metric">
+          <span class="metric-k">窗口占用</span>
+          <strong id="m-occupancy" class="metric-v">—</strong>
+          <span id="m-occupancy-sub" class="metric-sub">—</span>
+        </div>
+        <div class="metric-cell" id="speed-metric">
+          <span class="metric-k">最近请求速度</span>
+          <strong class="metric-v"><b id="m-tps">—</b> <small>tok/s</small></strong>
+          <span id="m-tps-sub" class="metric-sub">—</span>
+        </div>
         <div class="metric-cell">
           <span class="metric-k">累计缓存命中</span>
           <strong id="m-hit" class="metric-v is-good">—</strong>
@@ -56,7 +66,7 @@
       <nav class="tabs" role="tablist" aria-label="视图切换">
         <button type="button" role="tab" id="tab-surface" aria-controls="panel-surface" data-tab="surface" class="tab active" aria-selected="true">上下文构成</button>
         <button type="button" role="tab" id="tab-curve" aria-controls="panel-curve" data-tab="curve" class="tab" aria-selected="false" tabindex="-1">趋势与对照</button>
-        <button type="button" role="tab" id="tab-steps" aria-controls="panel-steps" data-tab="steps" class="tab" aria-selected="false" tabindex="-1">请求记录 <span id="step-count" class="tab-count"></span></button>
+        <button type="button" role="tab" id="tab-steps" aria-controls="panel-steps" data-tab="steps" class="tab" aria-selected="false" tabindex="-1">工具 Eval <span id="step-count" class="tab-count"></span></button>
         <button type="button" role="tab" id="tab-usage" aria-controls="panel-usage" data-tab="usage" class="tab" aria-selected="false" tabindex="-1">用量总览</button>
       </nav>
     </header>
@@ -71,11 +81,12 @@
       <section id="panel-curve" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-curve">
         <figure id="fig-context" class="report-figure">
           <div class="figure-head">
-            <strong>请求输入与相邻请求净变化</strong>
+            <strong>每轮上下文输入</strong>
             <span id="fig-context-scope">宿主记录用量</span>
           </div>
           <div id="fig-context-canvas" class="figure-canvas"></div>
-          <div id="fig-context-readout" class="figure-readout" data-state="idle">移动到图中记录，查看请求的输入、缓存、输出与调用工具。</div>
+          <div id="fig-context-readout" class="turn-readout"></div>
+          <div id="inline-turn" class="inline-turn"></div>
         </figure>
 
         <div class="curve-grid">
@@ -90,7 +101,7 @@
           <figure id="fig-top-steps" class="report-figure">
             <div class="figure-head">
               <strong>请求输入净增 Top 8</strong>
-              <span>仍在最近请求中的片段可定位</span>
+              <span>点选可查看所在轮次或保留的来源片段</span>
             </div>
             <div id="fig-top-steps-canvas" class="figure-canvas"></div>
           </figure>
@@ -99,19 +110,28 @@
 
       <!-- Tab 3: Live Step Feed -->
       <section id="panel-steps" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-steps">
-        <div class="search-row">
-          <input id="step-filter" type="search" class="search-input" aria-label="过滤请求记录" placeholder="过滤工具名或 #序号…" autocomplete="off">
-        </div>
-        <div id="step-feed" class="step-feed"></div>
+        <div class="eval-head"><h2>工具调用</h2><label>范围 <select id="step-turn" aria-label="工具评估范围"><option value="">全部轮次</option></select></label></div>
+        <p id="eval-source" class="chart-caption"></p>
+        <div id="eval-summary" class="eval-summary"></div>
+        <div id="tool-evaluation"></div>
+        <details id="request-evidence"><summary>请求明细</summary>
+          <input id="step-filter" type="search" class="search-input" aria-label="过滤请求记录" placeholder="搜索工具或请求序号…" autocomplete="off">
+          <div id="step-feed" class="step-feed"></div>
+        </details>
       </section>
 
       <section id="panel-usage" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-usage">
         <div class="usage-heading">
-          <div><h2>跨对话用量</h2><p id="usage-scope">本机 · 全部历史</p></div>
-          <label class="usage-filter">模型<select id="usage-model"><option value="">全部模型</option></select></label>
+          <div><h2>跨对话用量</h2><p id="usage-scope">最近 7 天</p></div>
+          <div class="usage-filters">
+            <label class="usage-filter">项目<select id="usage-project"><option value="">全部项目</option></select></label>
+            <label class="usage-filter">时间<select id="usage-days"><option value="1">今天</option><option value="7" selected>最近 7 天</option><option value="30">最近 30 天</option><option value="0">全部时间</option></select></label>
+            <label class="usage-filter">模式<select id="usage-model"><option value="">全部模式</option></select></label>
+          </div>
         </div>
         <p id="usage-message" class="usage-message" role="status">正在汇总本机请求记录…</p>
         <div id="usage-content" class="hidden">
+          <div class="usage-summary">
           <div class="usage-metrics">
             <div class="usage-total"><span>累计 Token</span><strong id="u-total">—</strong><small id="u-total-note"></small></div>
             <div title="有计时请求的输出 Token 之和 ÷ 对应流式生成秒数之和"><span>输出速度</span><strong><b id="u-tps">—</b> <em>tok/s</em></strong><small id="u-tps-note"></small></div>
@@ -128,15 +148,24 @@
               </div>
             </figure>
             <figure class="usage-card">
-              <figcaption>各模型输出速度 <small>tok/s</small></figcaption>
-              <ul id="usage-speeds" class="usage-speeds"></ul>
+              <figcaption>模型生成速度</figcaption>
+              <div class="speed-table-scroll"><table class="speed-table">
+                <thead><tr><th scope="col">模式</th><th scope="col">模型 / 角色</th><th scope="col">tok/s</th><th scope="col">计时请求</th></tr></thead>
+                <tbody id="usage-speeds"></tbody>
+              </table></div>
             </figure>
           </div>
-          <section class="usage-history">
-            <h3>对话明细 <small>按 Token 用量排序</small></h3>
-            <table><thead><tr><th scope="col">对话</th><th scope="col">请求</th><th scope="col">Token</th><th scope="col">tok/s</th></tr></thead>
-              <tbody id="usage-conversations"></tbody>
-            </table>
+          </div>
+          <section class="usage-history" aria-labelledby="matrix-title">
+            <div class="matrix-heading">
+              <h3 id="matrix-title">对话 × 模型</h3>
+              <div><small>占本对话的 Token 比例</small><label id="matrix-split-label" hidden><input type="checkbox" id="matrix-split" aria-controls="usage-columns usage-conversations">细分模式</label></div>
+            </div>
+            <div class="matrix-scroll" tabindex="0" role="region" aria-label="对话与模型用量热力图">
+              <table class="mode-matrix"><thead id="usage-columns"></thead><tbody id="usage-conversations"></tbody></table>
+            </div>
+            <div id="heat-pages" class="heat-pages"></div>
+            <div id="heat-detail" class="heat-detail" aria-live="polite"></div>
           </section>
           <p id="usage-footnote" class="usage-footnote"></p>
         </div>

@@ -41,7 +41,7 @@ const number = (map, key, fallback = 0) => {
   if (v > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Oversized protobuf integer');
   return Number(v);
 };
-const stepNumber = (map, key) => {
+const nonnegativeInt32 = (map, key) => {
   const v = map.get(key)?.find(v => v.wire === 0)?.value;
   if (v == null) return null;
   const value = Number(BigInt.asIntN(32, v));
@@ -69,13 +69,67 @@ function tokenCounts(usage) {
 }
 
 function durationSeconds(model, key) {
-  if (!model.has(key)) return null;
-  const duration = first(model, key);
+  const bytes = blobs(model, key)[0];
+  if (bytes == null) return null;
+  const duration = fields(bytes);
   const seconds = duration.get(1)?.[0]?.value ?? 0n;
   const nanos = duration.get(2)?.[0]?.value ?? 0n;
   if (typeof seconds !== 'bigint' || typeof nanos !== 'bigint' ||
       seconds > 315576000000n || nanos >= 1000000000n) return null;
   return Number(seconds) + Number(nanos) / 1e9;
+}
+
+function requestMetrics(model, usage) {
+  const mode = text(model, 21) || null;
+  const responseModel = text(model, 22) || text(model, 19) || null;
+  const modelId = number(usage, 1) || number(model, 3);
+  return { ...tokenCounts(usage), mode, responseModel,
+    model: mode || responseModel || (modelId ? '模型 #' + modelId : '未记录模型'),
+    firstTokenSeconds: durationSeconds(model, 11), streamSeconds: durationSeconds(model, 12) };
+}
+
+export function outputRate(tokens, seconds) {
+  return Number.isFinite(tokens) && tokens >= 0 && Number.isFinite(seconds) && seconds > 0 ? tokens / seconds : null;
+}
+
+// Host display names can describe either a selected intensity or a role within one coordinated run.
+export function requestRoute(displayName, responseModel) {
+  const raw = displayName?.trim() || '';
+  const parts = /^(.+?)\s+\(([^()]+)\)$/.exec(raw);
+  const family = parts?.[1], variant = parts?.[2];
+  if (family === 'Orchestrator' || variant === 'Orchestrator') {
+    const role = /(?:^|-)worker(?:-|$)/i.test(responseModel || '') ? '执行'
+      : /(?:^|-)orchestrator(?:-|$)/i.test(responseModel || '') ? '调度' : '';
+    const modelName = family === 'Orchestrator' ? variant : family;
+    return { mode: '协作', role, modelName, label: [role || '角色未记录', modelName].filter(Boolean).join(' · ') };
+  }
+  const intensity = intensities.get(variant);
+  const modelName = intensity ? family : responseModel?.trim() || (raw && !/^(?:auto|automatic|orchestrator|high|medium|low|未记录模式|自动)$/i.test(raw) ? raw : '未记录模型');
+  return { mode: intensity || raw || '未记录模式', role: '', modelName, label: modelName };
+}
+const intensities = new Map([['High','高强度'],['Medium','中强度'],['Low','低强度']]);
+
+function timestampMs(message, key) {
+  const ts = first(message, key), sec = number(ts, 1, null);
+  return sec > 0 && sec < 253402300800 ? sec * 1000 + number(ts, 2) / 1e6 : null;
+}
+
+function stepEvidence(db, includeTools) {
+  const times = new Map(), tools = [];
+  const columns = new Set(db.prepare('PRAGMA table_info(steps)').all().map(row => row.name));
+  if (!columns.has('idx') || !columns.has('metadata')) return { times, tools };
+  const status = columns.has('status') ? 'status' : 'NULL AS status';
+  for (const step of db.prepare('SELECT idx, metadata, ' + status + ' FROM steps').iterate()) {
+    const meta = fields(step.metadata || []), at = timestampMs(meta, 1);
+    if (at != null) times.set(step.idx, at);
+    if (!includeTools) continue;
+    const name = text(first(meta, 4), 2);
+    if (!name) continue;
+    const start = timestampMs(meta, 32), end = timestampMs(meta, 8);
+    tools.push({ seq: step.idx, name, outcome: ({3:'done', 6:'stopped', 7:'error', 12:'stopped'})[step.status] || 'unknown',
+      seconds: start != null && end != null && end >= start ? (end - start) / 1000 : null });
+  }
+  return { times, tools };
 }
 
 // Only the recorded counters, timing and identity are needed for the overview.
@@ -86,6 +140,7 @@ export async function readUsageRecords(path) {
   try {
     db.exec('BEGIN');
     const records = [], parents = new Set();
+    const { times } = stepEvidence(db, false);
     if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='parent_references'").get()) {
       for (const row of db.prepare('SELECT data FROM parent_references').iterate()) {
         const parentId = text(fields(row.data), 6); // The recorded parent conversation (cascade) ID.
@@ -93,15 +148,15 @@ export async function readUsageRecords(path) {
       }
     }
     for (const row of db.prepare('SELECT data FROM gen_metadata ORDER BY idx').iterate()) {
-      const model = first(fields(row.data), 1);
+      const record = fields(row.data), model = first(record, 1);
       if (!model.size) continue;
-      const usage = first(model, 4), modelId = number(usage, 1) || number(model, 3);
+      const usage = first(model, 4);
+      const start = first(model, 9), seq = integers(record, 2)[0] ?? nonnegativeInt32(start, 1);
       const responseId = text(usage, 11) || text(usage, 7);
       records.push({
+        seq, at: timestampMs(start, 4) ?? times.get(seq) ?? null,
         requestId: responseId ? number(usage, 6) + '/' + responseId : null,
-        model: text(model, 21) || text(model, 19) || text(model, 22) || (modelId ? '模型 #' + modelId : '未记录模型'),
-        ...tokenCounts(usage),
-        firstTokenSeconds: durationSeconds(model, 11), streamSeconds: durationSeconds(model, 12),
+        ...requestMetrics(model, usage),
       });
     }
     return { records, parents: [...parents] };
@@ -109,20 +164,23 @@ export async function readUsageRecords(path) {
 }
 
 export function decodeRequest(data, index) {
-  const record = fields(data), model = first(record, 1), usage = first(model, 4);
+  const record = fields(data), model = first(record, 1);
+  if (!model.size) return null;
+  const usage = first(model, 4);
   const start = first(model, 9), window = first(start, 10), time = first(start, 4);
   const indices = integers(record, 2);
   const request = {
     index, seq: indices[0] ?? number(start, 1, null),
-    checkpoint: stepNumber(start, 2),
+    checkpoint: nonnegativeInt32(start, 2),
     at: number(time, 1) > 0 ? new Date(number(time, 1) * 1000).toISOString() : '',
-    ...tokenCounts(usage),
-    contextWindow: number(window, 4, null),
+    ...requestMetrics(model, usage),
+    contextWindow: nonnegativeInt32(window, 4),
+    estimatedTokensUsed: nonnegativeInt32(window, 1),
     system: text(model, 1),
     sections: nested(model, 16).map(s => ({ title: text(s, 1), content: text(s, 2), tokenType: number(s, 6) })),
     tools: nested(model, 8).map(t => ({ name: text(t, 1), description: text(t, 2), schema: text(t, 3) })),
     messages: nested(model, 2).map(m => ({
-      source: number(m, 2), content: text(m, 3), seq: stepNumber(m, 18),
+      source: number(m, 2), content: text(m, 3), seq: nonnegativeInt32(m, 18),
       toolCallId: text(m, 7),
       calls: nested(m, 6).map(c => ({ id: text(c, 1), name: text(c, 2), args: text(c, 3) || text(c, 4) })),
     })),
@@ -134,11 +192,21 @@ export function decodeRequest(data, index) {
   return request;
 }
 
-export async function readRequests(path) {
+export async function readRequests(path, evidence) {
   const { DatabaseSync } = await import('node:sqlite');
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     db.exec('BEGIN');
-    return db.prepare('SELECT idx, data FROM gen_metadata ORDER BY idx').all().map(row => decodeRequest(row.data, row.idx));
+    const requests = [];
+    const { times, tools } = stepEvidence(db, Boolean(evidence));
+    if (evidence) evidence.tools = tools;
+    for (const row of db.prepare('SELECT idx, data FROM gen_metadata ORDER BY idx').iterate()) {
+      const request = decodeRequest(row.data, row.idx);
+      if (request) {
+        if (!request.at && times.has(request.seq)) request.at = new Date(times.get(request.seq)).toISOString();
+        requests.push(request);
+      }
+    }
+    return requests;
   } finally { db.close(); }
 }

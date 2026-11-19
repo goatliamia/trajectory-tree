@@ -179,9 +179,9 @@ host reports that the package declares no bundle.
 Without the host CLI:
 
 ```text
-1. pnpm pack                      # -> dsh-trajectory-tools-0.6.0.tgz
+1. pnpm pack                      # -> dsh-trajectory-tools-0.6.10.tgz
 2. in ~/.dsh/profiles/web/package.json:
-     dependencies:  "dsh-trajectory-tools": "file:<abs path>/dsh-trajectory-tools-0.6.0.tgz"
+     dependencies:  "dsh-trajectory-tools": "file:<abs path>/dsh-trajectory-tools-0.6.10.tgz"
      dsh.profile.bundles: append "dsh-trajectory-tools"
 3. pnpm install                   # in ~/.dsh/profiles/web
 4. restart `dsh web`              # host plugins do not hot-reload reliably
@@ -364,9 +364,9 @@ dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path
 不用宿主命令行时：
 
 ```text
-1. pnpm pack                      # 生成 dsh-trajectory-tools-0.6.0.tgz
+1. pnpm pack                      # 生成 dsh-trajectory-tools-0.6.10.tgz
 2. 在 ~/.dsh/profiles/web/package.json 中:
-     dependencies 增加 "dsh-trajectory-tools": "file:<绝对路径>/dsh-trajectory-tools-0.6.0.tgz"
+     dependencies 增加 "dsh-trajectory-tools": "file:<绝对路径>/dsh-trajectory-tools-0.6.10.tgz"
      dsh.profile.bundles 追加 "dsh-trajectory-tools"
 3. 在 ~/.dsh/profiles/web 下执行 pnpm install
 4. 重载/重启 `dsh web`             # host 插件不会可靠热更新
