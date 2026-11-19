@@ -63,8 +63,7 @@ Install into your DSH Web profile and restart DSH Web.
 dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path:/plugin/analysis-view"
 ```
 
-The `#path:` fragment names this package inside the repository; the repository URL on its own is
-rejected because the root has no `package.json`. To install from a local checkout instead:
+To install from a local checkout, run these commands from the repository root.
 
 ```sh
 npm pack ./plugin/analysis-view
@@ -147,7 +146,7 @@ The standalone `GET /analysis-view/trace?session=<id>` URL returns a self-contai
 dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path:/plugin/analysis-view"
 ```
 
-`#path:` 指向仓库里的这个包目录；直接填仓库地址装不上，因为根目录没有 `package.json`。要从本地检出安装：
+也可以在仓库根目录打包并安装。
 
 ```sh
 npm pack ./plugin/analysis-view

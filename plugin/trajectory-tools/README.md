@@ -172,11 +172,7 @@ reply should end with the two lines, and the host log gains one `compaction reco
 dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path:/plugin/trajectory-tools"
 ```
 
-The `#path:` fragment names this package inside the repository. The repository URL on its own is
-rejected: the root has no `package.json`, so pnpm resolves an empty `trajectory-tree@0.0.0` and the
-host reports that the package declares no bundle.
-
-Without the host CLI:
+To configure the Web profile manually, start in `plugin/trajectory-tools`.
 
 ```text
 1. pnpm pack                      # -> dsh-trajectory-tools-0.6.10.tgz
@@ -359,9 +355,7 @@ import { ENTRY_PROMPTS } from 'dsh-trajectory-tools/prompts';
 dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path:/plugin/trajectory-tools"
 ```
 
-`#path:` 指向仓库里的这个包目录。直接填仓库地址装不上：根目录没有 `package.json`，pnpm 只会装出一个空的 `trajectory-tree@0.0.0`，宿主会提示「这个包没有声明组合包」。
-
-不用宿主命令行时：
+手动配置 Web profile 时，先进入 `plugin/trajectory-tools` 目录。
 
 ```text
 1. pnpm pack                      # 生成 dsh-trajectory-tools-0.6.10.tgz

@@ -117,15 +117,13 @@ Antigravity 的「上下文与用量」侧栏可查看最近一次请求，也�
 <details>
 <summary><strong>DSH · 原生插件与分析面板</strong></summary>
 
-从 Git 直装，不需要先打包：
+从 Git 安装工具包和分析面板。
 
 ```sh
 dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path:/plugin/trajectory-tools" "https://github.com/goatliamia/trajectory-tree#path:/plugin/analysis-view"
 ```
 
-`#path:` 指向仓库里的包目录。直接填仓库地址装不上：根目录没有 `package.json`，pnpm 只会装出一个空的 `trajectory-tree@0.0.0`，DSH 会提示「这个包没有声明组合包」。
-
-或者从本地检出打包后安装：
+也可以在仓库根目录打包并安装。
 
 ```sh
 npm pack ./plugin/trajectory-tools

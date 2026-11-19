@@ -115,15 +115,13 @@ Antigravity's context and usage sidebar shows the latest request and aggregates 
 <details>
 <summary><strong>DSH · Native plugins and analysis panel</strong></summary>
 
-Install straight from Git instead of packing first:
+Install the tools and analysis panel from Git.
 
 ```sh
 dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path:/plugin/trajectory-tools" "https://github.com/goatliamia/trajectory-tree#path:/plugin/analysis-view"
 ```
 
-The `#path:` fragment names the package directory inside the repository. The repository URL alone does not install: the root has no `package.json`, so pnpm resolves an empty `trajectory-tree@0.0.0` and DSH reports that the package declares no bundle.
-
-Or pack a local checkout and install the archives:
+To install from a local checkout, run these commands from the repository root.
 
 ```sh
 npm pack ./plugin/trajectory-tools
