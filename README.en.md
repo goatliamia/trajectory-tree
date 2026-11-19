@@ -126,7 +126,7 @@ To install from a local checkout, run these commands from the repository root.
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.10.tgz ./dsh-analysis-view-0.11.1.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.11.tgz ./dsh-analysis-view-0.11.2.tgz
 ```
 
 Restart `dsh web`, then open **Eval** or use `/trajectory` for the current session's path. Choose a diagnostic question and select **Fill conversation** to append the draft to the composer. The plugins target the DSH 0.2.2 line; see the [host compatibility notes](docs/host-compatibility.md#dsh-version).
@@ -201,7 +201,7 @@ Use `/trajectory-tree:trajectory-view` or `/trajectory-tree:trajectory-eval` to 
 <details>
 <summary><strong>Antigravity · Context and usage frontend</strong></summary>
 
-Extract the `trajectory-tree` folder from the ZIP into `~/.gemini/config/plugins/`, or run the command below from the repository root. [Download Antigravity 1.2.3](https://github.com/goatliamia/trajectory-tree/releases/download/v0.2.8/trajectory-tree-antigravity-1.2.3.zip)
+Extract the `trajectory-tree` folder from the ZIP into `~/.gemini/config/plugins/`, or run the command below from the repository root. [Download Antigravity 1.2.4](https://github.com/goatliamia/trajectory-tree/releases/download/v0.2.9/trajectory-tree-antigravity-1.2.4.zip)
 
 ```sh
 node scripts/install-antigravity.mjs

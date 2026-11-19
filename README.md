@@ -128,7 +128,7 @@ dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path
 ```sh
 npm pack ./plugin/trajectory-tools
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-trajectory-tools-0.6.10.tgz ./dsh-analysis-view-0.11.1.tgz
+dsh plugin --profile web add ./dsh-trajectory-tools-0.6.11.tgz ./dsh-analysis-view-0.11.2.tgz
 ```
 
 重启 `dsh web`，在会话里打开「评估」或用 `/trajectory` 打开轨迹树。选好诊断问题后，点「填入对话」把草稿追加到当前输入框。插件面向 DSH 0.2.2 系列，逐包核对见[兼容与语言说明](docs/host-compatibility.md#dsh-version)。
@@ -203,7 +203,7 @@ claude --plugin-dir ./dist/trajectory-tree-claude
 <details>
 <summary><strong>Antigravity · 上下文与用量前端插件</strong></summary>
 
-将 ZIP 中的 `trajectory-tree` 目录解压到 `~/.gemini/config/plugins/`，或从仓库根目录运行下方命令。[下载 Antigravity 1.2.3 安装包](https://github.com/goatliamia/trajectory-tree/releases/download/v0.2.8/trajectory-tree-antigravity-1.2.3.zip)
+将 ZIP 中的 `trajectory-tree` 目录解压到 `~/.gemini/config/plugins/`，或从仓库根目录运行下方命令。[下载 Antigravity 1.2.4 安装包](https://github.com/goatliamia/trajectory-tree/releases/download/v0.2.9/trajectory-tree-antigravity-1.2.4.zip)
 
 ```sh
 node scripts/install-antigravity.mjs

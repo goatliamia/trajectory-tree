@@ -10,7 +10,7 @@
 
 ## 安装
 
-本机需要 Node.js 24+，`sidecar_sdk` 由 Antigravity 提供。将 ZIP 中的 `trajectory-tree` 目录解压到 `~/.gemini/config/plugins/`，然后刷新插件。[下载 Antigravity 1.2.3 安装包](https://github.com/goatliamia/trajectory-tree/releases/download/v0.2.8/trajectory-tree-antigravity-1.2.3.zip)
+本机需要 Node.js 24+，`sidecar_sdk` 由 Antigravity 提供。将 ZIP 中的 `trajectory-tree` 目录解压到 `~/.gemini/config/plugins/`，然后刷新插件。[下载 Antigravity 1.2.4 安装包](https://github.com/goatliamia/trajectory-tree/releases/download/v0.2.9/trajectory-tree-antigravity-1.2.4.zip)
 
 也可以从仓库根目录运行安装脚本。
 

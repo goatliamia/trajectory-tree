@@ -67,7 +67,7 @@ To install from a local checkout, run these commands from the repository root.
 
 ```sh
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-analysis-view-0.11.1.tgz
+dsh plugin --profile web add ./dsh-analysis-view-0.11.2.tgz
 ```
 
 ### Plugin settings
@@ -150,7 +150,7 @@ dsh plugin --profile web add "https://github.com/goatliamia/trajectory-tree#path
 
 ```sh
 npm pack ./plugin/analysis-view
-dsh plugin --profile web add ./dsh-analysis-view-0.11.1.tgz
+dsh plugin --profile web add ./dsh-analysis-view-0.11.2.tgz
 ```
 
 ### 插件设置

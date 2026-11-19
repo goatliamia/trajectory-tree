@@ -1,6 +1,6 @@
 {
   "name": "context_board",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "type": "module",
   "private": true,
   "engines": { "node": ">=24" },
