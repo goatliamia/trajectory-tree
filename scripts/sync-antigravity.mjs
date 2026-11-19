@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { CONTEXT_CATEGORIES } from '../docs/demo/layout-review/context-model.mjs';
+import { EVAL_PAGE_ASSETS } from '../plugin/analysis-view/lib/eval/render.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const sidecar = join(root, 'plugin/antigravity/sidecars/context_board');
@@ -53,10 +54,11 @@ export function syncAntigravity({ check = false } = {}) {
 
   const evalRuntimeFiles = [
     'data.mjs', 'render.mjs', 'code-data.mjs', 'findings.mjs', 'diagnostic-rules.mjs', 'dsh-command-evidence.mjs',
-    'index.html', 'style.css', 'themes.css', 'code-execution.css', 'code-execution.js',
-    'findings.css', 'findings.js', 'cache-compaction.css', 'cache-compaction.js', 'dashboard.js',
-    'editor.css', 'editor.html', 'diagnosis.js', 'diagnosis-gesture.js', 'diagnosis-trace.js',
+    ...EVAL_PAGE_ASSETS, 'diagnosis-gesture.js', 'diagnosis-trace.js',
   ];
+  const dshOnlyTraceModules = new Set([
+    'official-stats.mjs', 'request-context.mjs', 'tool-call-checks.mjs', 'usage.mjs',
+  ]);
 
   const output = new Map([
     ['app.js', `(()=>{\n"use strict";\n${ui}\n${modules.join('\n')}\n${read('plugin/antigravity/sidecars/context_board/app.src.js')}\n})();\n`],
@@ -73,10 +75,9 @@ export function syncAntigravity({ check = false } = {}) {
       'native/trace/models/' + name,
       read('plugin/analysis-view/lib/trace/models/' + name),
     ]),
-    ...listFiles('plugin/analysis-view/lib/trace/shared', ['.mjs', '.js', '.css']).map(name => [
-      'native/trace/shared/' + name,
-      read('plugin/analysis-view/lib/trace/shared/' + name),
-    ]),
+    ...listFiles('plugin/analysis-view/lib/trace/shared', ['.mjs', '.js', '.css'])
+      .filter(name => !dshOnlyTraceModules.has(name))
+      .map(name => ['native/trace/shared/' + name, read('plugin/analysis-view/lib/trace/shared/' + name)]),
     ...evalRuntimeFiles.map(name => [
       'native/eval/' + name,
       read('plugin/analysis-view/lib/eval/' + name),

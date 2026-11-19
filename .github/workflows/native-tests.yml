@@ -107,10 +107,16 @@ jobs:
           report/flow-test.mjs
       - name: Exercise the portable evidence tools and transports
         run: npm test --prefix plugin/portable-tools
-      - name: Build the three host packages and load their entrypoints
+      - name: Build the three host packages and render their packaged Eval page
         run: |
           for host in codex pi claude
           do
             node scripts/package-trajectory.mjs --host "$host"
             node "dist/trajectory-tree-$host/scripts/trajectory-view.mjs" --help
+            node --input-type=module --eval '
+              import assert from "node:assert/strict";
+              const { renderEvalPage } = await import(`./dist/trajectory-tree-${process.argv[1]}/plugin/analysis-view/lib/eval/render.mjs`);
+              const html = renderEvalPage({}, { mode: "portable", diagnosis: { session: "synthetic" } });
+              assert.match(html, /id="eval-data"/);
+            ' "$host"
           done

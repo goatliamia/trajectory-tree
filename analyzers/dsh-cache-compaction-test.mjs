@@ -119,3 +119,18 @@ test('post-compaction rereads require successful matching reads on either side',
   assert.equal(cache.compactions[0].postWindow.pureReReads, 1);
   assert.deepEqual(cache.compactions[0].postWindow.reReadItems.map(item => item.postReadSeq), [15]);
 });
+
+test('pruned read failures do not count as discarded file observations', () => {
+  const call = (seq, id, path) => ({ seq, type: 'tool/call', data: { callId: id, name: 'read', arguments: { path } } });
+  const result = (seq, id, isError = false) => ({ seq, type: 'tool/result', data: { callId: id, isError } });
+  const cache = analyzeDshCacheCompaction([
+    call(1, 'failed', '/project/missing.js'), result(2, 'failed', true),
+    call(3, 'read', '/project/seen.js'), result(4, 'read'),
+    { seq: 5, type: 'compaction/prune', data: { shadowedSeqs: [2, 4], shadowedTokenCount: 100 } },
+    call(6, 'first-success', '/project/missing.js'), result(7, 'first-success'),
+    call(8, 'reread', '/project/seen.js'), result(9, 'reread'),
+  ]);
+  assert.deepEqual(cache.prunePasses[0].prunedReadFiles.map(row => [row.originalResultSeq, row.firstReReadSeq]), [[4, 8]]);
+  assert.equal(cache.summary.prunedReadFiles, 1);
+  assert.equal(cache.summary.prunedReReadFiles, 1);
+});

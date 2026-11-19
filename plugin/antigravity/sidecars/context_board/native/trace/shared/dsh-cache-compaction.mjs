@@ -540,7 +540,7 @@ export function analyzeDshCacheCompaction(events, options = {}) {
       pass.shadowedTokenCount += pr.shadowedTokenCount;
       for (const sseq of pr.shadowedSeqs) {
         const tr = toolResultBySeq.get(sseq);
-        if (tr && isReadTool(tr.call.name) && tr.call.file?.norm) {
+        if (tr && !tr.outcome.isErr && isReadTool(tr.call.name) && tr.call.file?.norm) {
           const norm = tr.call.file.norm;
           if (!pass._seenReadPaths.has(norm)) {
             pass._seenReadPaths.add(norm);

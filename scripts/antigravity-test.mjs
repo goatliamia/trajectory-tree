@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import { decodeRequest } from '../plugin/antigravity/sidecars/context_board/request-records.mjs';
 import { projectContext, listConversations, buildConversationSnapshot } from '../plugin/antigravity/sidecars/context_board/context-data.mjs';
 import { createContextApi } from '../plugin/antigravity/sidecars/context_board/main.mjs';
@@ -334,11 +335,15 @@ test('800k estimated tokens stay out of list payloads while the body remains rea
   assert.equal(fullBodies.get('message-0'), body);
 });
 
-test('install contains only frontend runtime files and removes its own legacy skill', t => {
+test('the installed runtime loads in isolation and removes its own legacy skill', async t => {
   const root = mkdtempSync(join(tmpdir(), 'trajectory-antigravity-install-')); t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, 'skills/ctx'), { recursive: true }); writeFileSync(join(root, 'skills/ctx/SKILL.md'), 'sidecar://trajectory-tree/context_board/');
   installAntigravity(root);
-  for (const file of INSTALL_FILES) assert.ok(existsSync(join(root, file)), file);
+  for (const file of INSTALL_FILES) {
+    const path = join(root, file);
+    assert.ok(existsSync(path), file);
+    if (file.endsWith('.mjs')) await import(pathToFileURL(path));
+  }
   assert.ok(existsSync(join(root, 'sidecars/context_board/native/antigravity-adapter.mjs')));
   assert.ok(existsSync(join(root, 'sidecars/context_board/native/trace/presentation.mjs')));
   assert.ok(existsSync(join(root, 'sidecars/context_board/native/eval/render.mjs')));
@@ -351,7 +356,11 @@ test('traceHtml and evalHtml render official views with served fonts, checkpoint
   const f = fixture(t);
   writeFileSync(f.path, [
     { step_index: 0, type: 'USER_INPUT', content: 'Inspect readme', created_at: '2026-11-19T08:00:00Z' },
-    { step_index: 1, type: 'PLANNER_RESPONSE', content: 'Reading file', input_tokens: 1000, cache_read_tokens: 8000, output_tokens: 50, created_at: '2026-11-19T08:00:02Z', tool_calls: [{ id: 'c1', name: 'read_file', arguments: '{"Path":"/repo/README.md"}' }] },
+    { step_index: 1, type: 'PLANNER_RESPONSE', content: 'Reading file', input_tokens: 1000, cache_read_tokens: 8000, output_tokens: 50, created_at: '2026-11-19T08:00:02Z', tool_calls: [
+      { id: 'c1', name: 'read_file', arguments: '{"Path":"/repo/README.md"}' },
+      { id: 'c2', name: 'read_file', arguments: '{"Path":"/repo/LICENSE"}' },
+      { id: 'c3', name: 'run_command' },
+    ] },
     { step_index: 2, type: 'GENERIC', tool_call_id: 'c1', status: 'ERROR', error: 'file does not exist', created_at: '2026-11-19T08:00:03Z' },
     { step_index: 3, type: 'CHECKPOINT', content: 'Compacted summary', input_tokens: 500, cache_read_tokens: 100, output_tokens: 80, created_at: '2026-11-19T08:00:05Z' },
     { step_index: 4, type: 'PLANNER_RESPONSE', content: 'Done', input_tokens: 2000, cache_read_tokens: 1000, output_tokens: 40, created_at: '2026-11-19T08:00:08Z' },
@@ -375,8 +384,35 @@ test('traceHtml and evalHtml render official views with served fonts, checkpoint
   assert.deepEqual(dashboard.cacheCompaction.drops.map(drop => [drop.prevSeq, drop.seq, drop.lostCacheTokens]), [[1, 4, 7100]]);
   assert.equal(dashboard.cacheCompaction.compactions[0].shadowedTokenCount, null);
   assert.equal(dashboard.whole.files.count, 1);
-  assert.equal(dashboard.whole.tools.find(tool => tool.name === 'read_file').errors, 1);
+  const read = dashboard.whole.tools.find(tool => tool.name === 'read_file');
+  assert.deepEqual([read.calls, read.errors, read.unknown], [2, 1, 1]);
+  assert.equal(dashboard.whole.tools.find(tool => tool.name === 'run_command')?.unknown, 1);
   assert.doesNotMatch(await api.traceHtml({ session: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' }), /id="trace-data"/);
+});
+
+test('Antigravity recovery pairs failures with the first later success in the same turn', async t => {
+  const f = fixture(t);
+  const run = (seq, id, path, status = 'DONE') => [
+    { step_index: seq, type: 'PLANNER_RESPONSE', tool_calls: [{ id, name: 'read_file', arguments: { Path: path } }] },
+    { step_index: seq + 1, type: 'GENERIC', tool_call_id: id, status },
+  ];
+  writeFileSync(f.path, [
+    { step_index: 0, type: 'USER_INPUT', content: 'Read the files' },
+    ...run(1, 'earlier-success', '/repo/a'),
+    ...run(3, 'first-failure', '/repo/a', 'ERROR'),
+    ...run(5, 'second-failure', '/repo/a', 'ERROR'),
+    ...run(7, 'unmatched', '/repo/b', 'ERROR'),
+    ...run(9, 'first-recovery', '/repo/a'),
+    ...run(11, 'later-success', '/repo/a'),
+    { step_index: 13, type: 'USER_INPUT', content: 'Try again' },
+    ...run(14, 'next-turn', '/repo/b'),
+  ].map(row => JSON.stringify(row)).join('\n'));
+  const api = createContextApi({ dirs: [f.root], conversationId: conversation });
+  const trace = viewData(await api.traceHtml(), 'trace-data');
+  const { episodes } = trace.sessions[0].overview;
+  assert.deepEqual(episodes.map(episode => [episode.failureSeqs[0], episode.pairs[0]?.successSeq ?? null]), [
+    [4, 10], [6, 10], [8, null],
+  ]);
 });
 
 test('native views retry after a read lock and invalidate both views when the transcript changes', async t => {

@@ -7,6 +7,12 @@ import { toolColorRuntime, toolColorCss } from '../trace/shared/tool-colors.mjs'
 import { toolFeedbackRuntime, toolFeedbackCss } from '../trace/shared/tool-feedback.mjs';
 export { inlineTraceFonts } from '../trace/fonts.mjs';
 
+const styleFiles = ['style.css', 'themes.css', 'code-execution.css', 'findings.css', 'cache-compaction.css'];
+const scriptFiles = ['cache-compaction.js', 'dashboard.js', 'code-execution.js'];
+export const EVAL_PAGE_ASSETS = [
+  'index.html', ...styleFiles, 'findings.js', ...scriptFiles, 'editor.css', 'editor.html', 'diagnosis.js',
+];
+
 export const evalAsset = name => readFileSync(new URL(name, import.meta.url), 'utf8');
 export const embedJson = value => JSON.stringify(value).replaceAll('<', '\\u003c');
 const inline = script => '<script>\n' + script.replace(/<\/script/gi, '<\\/script') + '\n</script>';
@@ -31,7 +37,7 @@ export function renderEvalPage(data, { integrated = false, script = '', diagnosi
       const url = servedFontPath ? servedFontPath + file : geistFontUrl(file);
       return '@font-face{font-family:' + family + ';src:url(' + url + ") format('woff2');font-weight:100 900;font-display:swap}";
     }),
-    ...['style.css', 'themes.css', 'code-execution.css', 'findings.css', 'cache-compaction.css'].map(evalAsset),toolColorCss(),toolFeedbackCss(),
+    ...styleFiles.map(evalAsset), toolColorCss(), toolFeedbackCss(),
     integrated ? '.brand{display:none}.header-inner{justify-content:flex-end}.eval-native-details{margin-inline-end:auto}' : '',
     mode === 'antigravity' && !diagnosis ? '#eval-findings,[data-ce-findings],#ce-ask-group,#ce-ask-call{display:none!important}.ce-ref{pointer-events:none;text-decoration:none;cursor:default}' : '',
     '.eval-diagnosis-action + .eval-diagnosis-action{margin-inline-start:12px}',
@@ -52,7 +58,7 @@ export function renderEvalPage(data, { integrated = false, script = '', diagnosi
       i18nRuntime(locale, failureMessages), toolColorRuntime(), toolFeedbackRuntime(), failureViewRuntime(), findingsRuntime(), evalAsset('findings.js'), editorScript, detailsScript, script,
       native && toolSort ? 'window.__trajectoryEvalToolSort = ' + embedJson(toolSort) + ';' : '',
       section === 'code' ? 'window.__trajectoryEvalInitialSection = "code";' : '',
-      evalAsset('cache-compaction.js'), evalAsset('dashboard.js'), evalAsset('code-execution.js'),
+      ...scriptFiles.map(evalAsset),
     ].join('\n')));
 }
 

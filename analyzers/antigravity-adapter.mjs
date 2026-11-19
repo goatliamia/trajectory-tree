@@ -454,6 +454,32 @@ function splitUserAndInject(text) {
   return { userText: rest, injectText: metaChunks.join('\n') };
 }
 
+function pairTurnRecoveries(turn, episodesBySeq) {
+  // Calls are stored in source sequence order. The reverse pass keeps the
+  // nearest later successful call for each signature in this turn.
+  const nextReturned = new Map();
+  for (let stepIndex = turn.steps.length - 1; stepIndex >= 0; stepIndex--) {
+    const calls = turn.steps[stepIndex].calls;
+    for (let index = calls.length - 1; index >= 0; index--) {
+      const call = calls[index];
+      if (call.status === 'returned') {
+        nextReturned.set(call.signature, call);
+        continue;
+      }
+      const episode = episodesBySeq.get(call.seq);
+      const next = nextReturned.get(call.signature);
+      if (!episode || !next) continue;
+      Object.assign(episode, {
+        complete: true, confirmedCount: 1, unconfirmedCount: 0,
+        resolvedAt: next.end, summary: '同轮同参后续返回成功',
+        continuationMs: next.end - call.end,
+        pairs: [{ failedSeq: call.seq, successSeq: next.seq, successTime: next.end, successStart: next.start }],
+        sequence: [...episode.sequence, { kind: 'success', time: next.end, label: '同参操作成功', seqs: [next.seq] }],
+      });
+    }
+  }
+}
+
 export async function buildAntigravityDataset({ dbPath, transcriptPath, conversationId, title } = {}) {
   const trRows = transcriptRows(transcriptPath);
   let nativeUnavailable = false;
@@ -896,26 +922,10 @@ export async function buildAntigravityDataset({ dbPath, transcriptPath, conversa
     if (t && r.time != null) r.time = Math.max(t.start, Math.min(t.end, r.time));
   }
 
-  // Pair same-argument recovery within the same turn
-  for (const ep of episodes) {
-    const turn = turns[ep.turn - 1];
-    if (!turn) continue;
-    const calls = turn.steps.flatMap(s => s.calls);
-    const original = calls.find(c => c.seq === ep.failureSeqs[0]);
-    if (!original) continue;
-    const next = calls.find(c => c.seq > original.seq && c.signature === original.signature && c.status === 'returned');
-    if (next) {
-      Object.assign(ep, {
-        complete: true, confirmedCount: 1, unconfirmedCount: 0,
-        resolvedAt: next.end, summary: '同轮同参后续返回成功',
-        continuationMs: next.end - original.end,
-        pairs: [{ failedSeq: original.seq, successSeq: next.seq, successTime: next.end, successStart: next.start }],
-        sequence: [...ep.sequence, { kind: 'success', time: next.end, label: '同参操作成功', seqs: [next.seq] }],
-      });
-    }
+  for (const turn of turns) {
+    turn.calls = turn.steps.reduce((count, step) => count + step.calls.length, 0);
+    if (turn.errors) pairTurnRecoveries(turn, epByFailureSeq);
   }
-
-  for (const t of turns) t.calls = t.steps.reduce((n, s) => n + s.calls.length, 0);
 
   const cacheCompaction = buildAntigravityCacheCompaction({
     requests: requestObservations,

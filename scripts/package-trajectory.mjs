@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
 import {DIAGNOSIS_SKILLS} from '../skill/catalog.mjs';
+import {EVAL_PAGE_ASSETS} from '../plugin/analysis-view/lib/eval/render.mjs';
 
 const args=process.argv.slice(2),host=args.includes('--host')?args[args.indexOf('--host')+1]:'codex';
 if(!['codex','pi','claude'].includes(host))throw Error('Package host must be codex, pi or claude');
@@ -31,7 +32,7 @@ for (const name of ['page.html', 'page.js', 'shared/visual-tokens.css', 'shared/
   copy('plugin/analysis-view/lib/trace/' + name);
 }
 for(const name of ['pi-host.js','codex-host.js','claude-host.js'])copy('view/assets/'+name);
-for(const name of ['index.html','style.css','views.css','themes.css','editor.css','editor.html','diagnosis.js','diagnosis-gesture.js','diagnosis-trace.js','dashboard.js','code-execution.css','code-execution.js','findings.css','findings.js'])copy('plugin/analysis-view/lib/eval/'+name);
+for(const name of [...EVAL_PAGE_ASSETS,'views.css','diagnosis-gesture.js','diagnosis-trace.js'])copy('plugin/analysis-view/lib/eval/'+name);
 for(const name of ['page.html','style.css','occupancy.js','app.js'])copy('plugin/analysis-view/lib/eval/overview/'+name);
 if(host==='codex'||host==='claude')for(const name of [...DIAGNOSIS_SKILLS.map(s=>s.name),'trajectory-view','trajectory-eval']){
  const sourceRoot=join(root,'plugin',host,'skills',name);

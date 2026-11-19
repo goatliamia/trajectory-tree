@@ -76,14 +76,27 @@ function toolErrorDetails(episodes, calls, attributions) {
   return byTool;
 }
 
+function antigravityCalls(step) {
+  if (!step.declaredTools?.length) return step.calls;
+  const recorded = new Map();
+  for (const call of step.calls) {
+    const name = call.nativeName || call.name;
+    recorded.set(name, (recorded.get(name) ?? 0) + 1);
+  }
+  const calls = [...step.calls];
+  for (const name of step.declaredTools) {
+    const count = recorded.get(name) ?? 0;
+    if (count) recorded.set(name, count - 1);
+    else calls.push({ name, status: 'unknown', startSeq: null, resultSeq: null });
+  }
+  return calls;
+}
+
 function execution(turns, episodes, host, attributions) {
   const groups = new Map(), calls = [];
   for (const turn of turns) for (const step of turn.steps) {
-    const declarations = host === 'antigravity' ? step.declaredTools : null;
-    const effectiveCalls = !step.calls.length && declarations ? declarations.map(name => ({
-      name, status: 'unknown', startSeq: null, resultSeq: null,
-    })) : step.calls;
-    for (const call of effectiveCalls) {
+    const stepCalls = host === 'antigravity' ? antigravityCalls(step) : step.calls;
+    for (const call of stepCalls) {
       const name = (host === 'dsh' ? call.name : call.nativeName || call.name) ?? '';
       if (!groups.has(name)) groups.set(name, []);
       const row = { call, turn: turn.number, name };

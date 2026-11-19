@@ -3,8 +3,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
-import { createContextApi } from '../../plugin/antigravity/sidecars/context_board/main.mjs';
+import { installAntigravity } from '../../scripts/install-antigravity.mjs';
 
 test('chromium: Antigravity loads both native views through the sidecar bridge and retains mode shares', async t => {
   const root = mkdtempSync(join(tmpdir(), 'trajectory-turn-ui-'));
@@ -21,8 +22,9 @@ test('chromium: Antigravity loads both native views through the sidecar bridge a
         created_at: new Date(now - (92 - seq) * 1000).toISOString(), model: 'example-response', input_tokens: 90, output_tokens: 10,
         tool_calls:[{name:seq < 81 ? 'read_file':'write_file'}]});
   writeFileSync(join(logs, 'transcript_full.jsonl'), rows.map(r => JSON.stringify(r)).join('\n'));
+  const assets = join(installAntigravity(join(root, 'installed')), 'sidecars', 'context_board');
+  const { createContextApi } = await import(pathToFileURL(join(assets, 'main.mjs')));
   const api = createContextApi({dirs: [root], conversationId: id});
-  const assets = new URL('../../plugin/antigravity/sidecars/context_board/', import.meta.url);
   const browser = await chromium.launch(process.env.TRAJECTORY_BROWSER_CHANNEL ? {channel: process.env.TRAJECTORY_BROWSER_CHANNEL} : {});
   t.after(() => browser.close());
   const page = await browser.newPage({viewport: {width: 920, height: 800}});
@@ -51,7 +53,7 @@ test('chromium: Antigravity loads both native views through the sidecar bridge a
     const files = {'/': ['index.html','text/html'], '/app.js': ['app.js','text/javascript'], '/styles.css': ['styles.css','text/css'],
       '/fonts/Geist-Variable.woff2': ['fonts/Geist-Variable.woff2','font/woff2'], '/fonts/GeistMono-Variable.woff2': ['fonts/GeistMono-Variable.woff2','font/woff2']};
     const file = files[path];
-    return file ? route.fulfill({contentType: file[1], body: readFileSync(new URL(file[0], assets))}) : route.abort();
+    return file ? route.fulfill({contentType: file[1], body: readFileSync(join(assets, file[0]))}) : route.abort();
   });
   await page.goto('http://sidecar.invalid');
   await page.waitForFunction(() => document.querySelector('#m-win').textContent === '90');
